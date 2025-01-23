@@ -13,6 +13,8 @@ import {
   activateLayout,
 } from '../services/api';
 
+import RenameSeatsModal from './RenameSeatsModal';
+
 /** ---------- Data Interfaces ---------- **/
 
 interface LayoutData {
@@ -80,12 +82,9 @@ function measureExistingGap(
 }
 
 export default function SeatLayoutEditor() {
-  // Layout list & active selection
   const [allLayouts, setAllLayouts] = useState<LayoutData[]>([]);
   const [activeLayoutId, setActiveLayoutId] = useState<number | null>(null);
   const [layoutName, setLayoutName] = useState('New Layout');
-
-  // We store the seat sections (like layout.sections_data.sections)
   const [sections, setSections] = useState<SeatSection[]>([]);
 
   // Canvas sizing
@@ -112,14 +111,17 @@ export default function SeatLayoutEditor() {
   });
   const [seatCapacity, setSeatCapacity] = useState(1);
 
-  // On mount, load all layouts
+  // For the rename seats modal (now triggered within the section modal)
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameModalSeats, setRenameModalSeats] = useState<DBSeat[]>([]);
+  const [renameModalSectionName, setRenameModalSectionName] = useState('');
+
   useEffect(() => {
     async function loadLayouts() {
       try {
         const layouts = await fetchAllLayouts();
         setAllLayouts(layouts);
 
-        // Optionally auto-select the first layout
         if (layouts.length > 0) {
           const first = layouts[0];
           setActiveLayoutId(first.id);
@@ -133,7 +135,6 @@ export default function SeatLayoutEditor() {
     loadLayouts();
   }, []);
 
-  // Recompute bounding if layoutSize or sections changes
   useEffect(() => {
     if (layoutSize === 'auto') {
       computeAutoBounds();
@@ -176,7 +177,6 @@ export default function SeatLayoutEditor() {
 
   function handleSelectLayout(id: number) {
     if (id === 0) {
-      // new layout
       setActiveLayoutId(null);
       setLayoutName('New Layout');
       setSections([]);
@@ -425,7 +425,6 @@ export default function SeatLayoutEditor() {
     }
   }
 
-  /** Activate this layout => POST /layouts/:id/activate if we have an existing layoutId */
   async function handleActivateLayout() {
     if (!activeLayoutId) {
       alert('Cannot activate a layout that is not saved yet!');
@@ -433,12 +432,44 @@ export default function SeatLayoutEditor() {
     }
     try {
       const resp = await activateLayout(activeLayoutId);
-      // e.g. resp => { message: 'Layout activated' }
       alert(resp.message || 'Layout activated.');
     } catch (err) {
       console.error('Error activating layout:', err);
       alert('Failed to activate layout—check console.');
     }
+  }
+
+  // Handle seat rename flow (triggered from the Edit Section modal now)
+  function handleOpenRenameModal(sectionId: string) {
+    const sec = sections.find(s => s.id === sectionId);
+    if (!sec) return;
+    setRenameModalOpen(true);
+    setRenameModalSeats([...sec.seats]); // copy array
+    setRenameModalSectionName(sec.name);
+  }
+
+  function handleCloseRenameModal() {
+    setRenameModalOpen(false);
+    setRenameModalSeats([]);
+    setRenameModalSectionName('');
+  }
+
+  function handleRenameModalSave(updatedSeats: DBSeat[]) {
+    // We'll patch them into the correct section in local state
+    setSections(prev =>
+      prev.map(sec => {
+        if (sec.name === renameModalSectionName) {
+          return {
+            ...sec,
+            seats: updatedSeats,
+          };
+        }
+        return sec;
+      })
+    );
+    setRenameModalOpen(false);
+    setRenameModalSeats([]);
+    setRenameModalSectionName('');
   }
 
   // Zoom controls
@@ -597,6 +628,7 @@ export default function SeatLayoutEditor() {
                   {section.dbId ? ` (ID ${section.dbId})` : ''}
                 </span>
                 <div className="flex items-center space-x-1">
+                  {/* Edit Section button */}
                   <button
                     onClick={ev => {
                       ev.stopPropagation();
@@ -606,6 +638,7 @@ export default function SeatLayoutEditor() {
                   >
                     <Edit2 className="w-3 h-3 text-gray-500" />
                   </button>
+                  {/* Delete section button */}
                   <button
                     onClick={ev => {
                       ev.stopPropagation();
@@ -625,9 +658,7 @@ export default function SeatLayoutEditor() {
                   const seatX = seat.position_x * seatScale;
                   const seatY = seat.position_y * seatScale;
 
-                  // No seat.status -> default color
                   const seatColor = 'bg-green-500';
-
                   const seatKey = seat.id != null
                     ? `seat-${seat.id}`
                     : `temp-${section.id}-${idx}`;
@@ -771,13 +802,30 @@ export default function SeatLayoutEditor() {
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end space-x-2">
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              {/* 
+                Only show "Rename Seats" if we're editing an existing section with seats. 
+                If not editing or the seatCount is zero, hide it. 
+              */}
+              {editingSectionId && sections.find(s => s.id === editingSectionId)?.seats.length ? (
+                <button
+                  onClick={() => {
+                    // open rename seats modal for this editing section
+                    handleOpenRenameModal(editingSectionId!);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Rename Seats
+                </button>
+              ) : null}
+
               <button
                 onClick={() => setShowSectionDialog(false)}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
               >
                 Cancel
               </button>
+
               <button
                 onClick={createOrEditSection}
                 className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
@@ -787,6 +835,16 @@ export default function SeatLayoutEditor() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Rename seats modal */}
+      {renameModalOpen && (
+        <RenameSeatsModal
+          sectionName={renameModalSectionName}
+          seats={renameModalSeats}
+          onClose={handleCloseRenameModal}
+          onSave={handleRenameModalSave}
+        />
       )}
     </div>
   );

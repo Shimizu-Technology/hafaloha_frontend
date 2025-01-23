@@ -1,7 +1,7 @@
 // src/services/api.ts
 import axios from 'axios';
 
-// For Vite:
+// For Vite or similar bundlers:
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const apiClient = axios.create({ baseURL });
@@ -17,9 +17,7 @@ apiClient.interceptors.request.use((config) => {
 
 // ------------- Restaurant -------------
 export async function fetchRestaurant(id: number) {
-  // Make sure the backend returns :time_zone if it’s present in the restaurant model
   const resp = await apiClient.get(`/restaurants/${id}`);
-  // e.g. resp.data => { id, name, time_zone, ... }
   return resp.data;
 }
 
@@ -149,7 +147,6 @@ export async function fetchAvailability(date: string, partySize: number) {
   const resp = await apiClient.get('/availability', {
     params: { date, party_size: partySize },
   });
-  // e.g. return { slots: [...] }
   return resp.data;
 }
 
@@ -164,12 +161,43 @@ export async function signupUser(data: {
   restaurant_id?: number;
 }) {
   const resp = await apiClient.post('/signup', data);
-  // e.g. { jwt, user }
   return resp.data;
 }
 
 export async function loginUser(email: string, password: string) {
   const resp = await apiClient.post('/login', { email, password });
-  // e.g. { jwt, user }
+  return resp.data;
+}
+
+// ------------- Seats -------------
+/** Update a single seat by ID (existing) **/
+export async function updateSeat(
+  seatId: number,
+  updates: Partial<{
+    label: string;
+    position_x: number;
+    position_y: number;
+    capacity: number;
+  }>
+) {
+  const resp = await apiClient.patch(`/seats/${seatId}`, { seat: updates });
+  return resp.data;
+}
+
+/** Bulk update multiple seats in one request **/
+export async function bulkUpdateSeats(
+  seatUpdates: Array<{
+    id: number;
+    label?: string;
+    position_x?: number;
+    position_y?: number;
+    capacity?: number;
+  }>
+) {
+  // Example request body:
+  // { "seats": [ { "id": 1, "label": "A1" }, { "id": 2, "label": "B2", "capacity": 2 } ] }
+  const resp = await apiClient.post('/seats/bulk_update', {
+    seats: seatUpdates,
+  });
   return resp.data;
 }
