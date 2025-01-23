@@ -24,7 +24,6 @@ import {
 import {
   fetchReservations as apiFetchReservations,
   fetchWaitlistEntries as apiFetchWaitlist,
-  fetchSeatAllocations as apiFetchSeatAllocations,
   deleteReservation as apiDeleteReservation,
   updateReservation as apiUpdateReservation,
 } from '../services/api';
@@ -36,9 +35,9 @@ interface Reservation {
   contact_phone?: string;
   contact_email?: string;
   party_size?: number;
-  status?: string;               // "booked", "seated", "finished", etc.
-  seat_labels?: string[];
-  seat_preferences?: string[][]; // <-- NEW for seat prefs
+  status?: string;               // "booked", "reserved", "seated", "finished", etc.
+  seat_labels?: string[];        // NOW provided by the backend
+  seat_preferences?: string[][];
   start_time?: string;           // e.g. "2025-01-22T18:00:00Z"
 }
 
@@ -50,7 +49,7 @@ interface WaitlistEntry {
   party_size?: number;
   check_in_time?: string;
   status?: string; // "waiting", "seated", etc.
-  seat_labels?: string[];
+  seat_labels?: string[];        // NOW provided by the backend
 }
 
 /**
@@ -74,7 +73,7 @@ export default function StaffDashboard() {
   // The single source of truth for the date
   const [dateFilter, setDateFilter] = useState(getGuamDateString);
 
-  // Reservations & waitlist data (fetched each time dateFilter changes)
+  // Reservations & waitlist data
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [waitlist, setWaitlist]         = useState<WaitlistEntry[]>([]);
 
@@ -94,7 +93,6 @@ export default function StaffDashboard() {
     console.log('[StaffDashboard] fetchData() => dateFilter=', dateFilter);
     await fetchReservations();
     await fetchWaitlist();
-    await fetchOccupancyMap(); // optional, to merge seat labels
   }
 
   /** 1) Reservations (server filters by date) */
@@ -120,45 +118,6 @@ export default function StaffDashboard() {
       setWaitlist(data);
     } catch (err) {
       console.error('Error fetching waitlist:', err);
-    }
-  }
-
-  /** 3) occupant–seat map => merges seat_labels into reservations/waitlist */
-  async function fetchOccupancyMap() {
-    try {
-      const seatAllocs = await apiFetchSeatAllocations({ date: dateFilter });
-
-      const occupantSeatsMap: Record<string, string[]> = {};
-      seatAllocs.forEach((alloc: any) => {
-        const occupantKey = alloc.reservation_id
-          ? `reservation-${alloc.reservation_id}`
-          : `waitlist-${alloc.waitlist_entry_id}`;
-        occupantSeatsMap[occupantKey] = occupantSeatsMap[occupantKey] || [];
-        occupantSeatsMap[occupantKey].push(alloc.seat_label);
-      });
-
-      // Merge seat_labels into reservations
-      setReservations((prev) =>
-        prev.map((r) => {
-          const key = `reservation-${r.id}`;
-          return {
-            ...r,
-            seat_labels: occupantSeatsMap[key] || [],
-          };
-        })
-      );
-      // Merge seat_labels into waitlist
-      setWaitlist((prev) =>
-        prev.map((w) => {
-          const key = `waitlist-${w.id}`;
-          return {
-            ...w,
-            seat_labels: occupantSeatsMap[key] || [],
-          };
-        })
-      );
-    } catch (err) {
-      console.error('Error fetching seat_allocations:', err);
     }
   }
 
@@ -213,7 +172,6 @@ export default function StaffDashboard() {
 
   async function handleEditReservation(updated: Reservation) {
     try {
-      // Build patch data
       const patchData: any = {
         party_size:    updated.party_size,
         contact_name:  updated.contact_name,
@@ -221,17 +179,14 @@ export default function StaffDashboard() {
         contact_email: updated.contact_email,
         status:        updated.status,
       };
-
       // If seat preferences exist, send them too
       if (updated.seat_preferences) {
         patchData.seat_preferences = updated.seat_preferences;
       }
 
       await apiUpdateReservation(updated.id, patchData);
-
       // Re-fetch to see changes
       await fetchReservations();
-      await fetchOccupancyMap();
       setSelectedReservation(null);
     } catch (err) {
       console.error('Failed to update reservation:', err);
@@ -265,7 +220,6 @@ export default function StaffDashboard() {
     setShowCreateModal(false);
     // Refresh
     await fetchReservations();
-    await fetchOccupancyMap();
   }
 
   return (
@@ -412,7 +366,7 @@ export default function StaffDashboard() {
                     });
                     const dateTimeDisplay = `${dateStr}, ${timeStr}`;
 
-                    // show seat labels if occupant is seated
+                    // Now seat_labels are already included from the API.
                     const seatLabelText = res.seat_labels?.length
                       ? ` (Seated at ${res.seat_labels.join(', ')})`
                       : '';
