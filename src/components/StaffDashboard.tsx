@@ -1,3 +1,4 @@
+// src/components/StaffDashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
@@ -35,9 +36,10 @@ interface Reservation {
   contact_phone?: string;
   contact_email?: string;
   party_size?: number;
-  status?: string; // "booked", "seated", "finished", "canceled", etc.
+  status?: string;               // "booked", "seated", "finished", etc.
   seat_labels?: string[];
-  start_time?: string; // e.g. "2025-01-22T18:00:00Z"
+  seat_preferences?: string[][]; // <-- NEW for seat prefs
+  start_time?: string;           // e.g. "2025-01-22T18:00:00Z"
 }
 
 /** Waitlist shape. */
@@ -47,14 +49,13 @@ interface WaitlistEntry {
   contact_phone?: string;
   party_size?: number;
   check_in_time?: string;
-  status?: string; // "waiting", "seated", "removed", "no_show", etc.
+  status?: string; // "waiting", "seated", etc.
   seat_labels?: string[];
 }
 
 /**
  * Returns today's date in Guam as "YYYY-MM-DD" 
- * without re‐parsing. We use "en-CA" because that
- * locale defaults to "yyyy-MM-dd" format.
+ * using "en-CA" which defaults to yyyy-mm-dd.
  */
 function getGuamDateString(): string {
   return new Date().toLocaleDateString("en-CA", {
@@ -73,7 +74,7 @@ export default function StaffDashboard() {
   // The single source of truth for the date
   const [dateFilter, setDateFilter] = useState(getGuamDateString);
 
-  // Reservations & waitlist data (fetched each time `dateFilter` changes)
+  // Reservations & waitlist data (fetched each time dateFilter changes)
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [waitlist, setWaitlist]         = useState<WaitlistEntry[]>([]);
 
@@ -212,16 +213,23 @@ export default function StaffDashboard() {
 
   async function handleEditReservation(updated: Reservation) {
     try {
-      const patchData = {
+      // Build patch data
+      const patchData: any = {
         party_size:    updated.party_size,
         contact_name:  updated.contact_name,
         contact_phone: updated.contact_phone,
         contact_email: updated.contact_email,
         status:        updated.status,
       };
+
+      // If seat preferences exist, send them too
+      if (updated.seat_preferences) {
+        patchData.seat_preferences = updated.seat_preferences;
+      }
+
       await apiUpdateReservation(updated.id, patchData);
 
-      // Re-fetch
+      // Re-fetch to see changes
       await fetchReservations();
       await fetchOccupancyMap();
       setSelectedReservation(null);
@@ -449,7 +457,6 @@ export default function StaffDashboard() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {/* Potential statuses: "booked", "reserved", "seated", "finished", "canceled", "no_show", etc. */}
                           {res.status === 'booked' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
                                            rounded-full bg-orange-100 text-orange-800">
@@ -652,9 +659,9 @@ export default function StaffDashboard() {
         {activeTab === 'seating' && (
           <div className="bg-white shadow rounded-md p-4 mt-4">
             <FloorManager
-              date={dateFilter}                 // <--- pass parent's date
-              onDateChange={setDateFilter}      // <--- pass parent's setter
-              reservations={reservations}       // use parent’s data
+              date={dateFilter}
+              onDateChange={setDateFilter}
+              reservations={reservations}
               waitlist={waitlist}
               onRefreshData={handleRefreshAll}
               onTabChange={handleTabChange}

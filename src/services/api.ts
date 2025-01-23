@@ -48,11 +48,25 @@ export async function activateLayout(layoutId: number) {
 }
 
 // ------------- Reservations -------------
+interface UpdateReservationData {
+  party_size?: number;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  status?: string;
+  seat_preferences?: string[][]; // NEW: allow seat prefs
+}
+
 export async function fetchReservations(params?: { date?: string }) {
   const resp = await apiClient.get('/reservations', { params });
   return resp.data;
 }
 
+/**
+ * Creates a new reservation. 
+ * Optionally includes seat_preferences if the admin chooses 
+ * one or more seat preference sets.
+ */
 export async function createReservation(data: {
   restaurant_id?: number;
   start_time: string;
@@ -61,20 +75,18 @@ export async function createReservation(data: {
   contact_phone?: string;
   contact_email?: string;
   status?: string;
+  seat_preferences?: string[][];  // <-- ADDED OPTIONAL FIELD
 }) {
   const resp = await apiClient.post('/reservations', data);
   return resp.data;
 }
 
+/**
+ * Patch an existing reservation, optionally including seat_preferences.
+ */
 export async function updateReservation(
   id: number,
-  data: Partial<{
-    party_size: number;
-    contact_name: string;
-    contact_phone: string;
-    contact_email: string;
-    status: string;
-  }>
+  data: UpdateReservationData
 ) {
   const resp = await apiClient.patch(`/reservations/${id}`, data);
   return resp.data;
@@ -170,7 +182,6 @@ export async function loginUser(email: string, password: string) {
 }
 
 // ------------- Seats -------------
-/** Update a single seat by ID (existing) **/
 export async function updateSeat(
   seatId: number,
   updates: Partial<{
@@ -184,7 +195,7 @@ export async function updateSeat(
   return resp.data;
 }
 
-/** Bulk update multiple seats in one request **/
+/** Bulk update seats (optional) */
 export async function bulkUpdateSeats(
   seatUpdates: Array<{
     id: number;
@@ -194,8 +205,6 @@ export async function bulkUpdateSeats(
     capacity?: number;
   }>
 ) {
-  // Example request body:
-  // { "seats": [ { "id": 1, "label": "A1" }, { "id": 2, "label": "B2", "capacity": 2 } ] }
   const resp = await apiClient.post('/seats/bulk_update', {
     seats: seatUpdates,
   });

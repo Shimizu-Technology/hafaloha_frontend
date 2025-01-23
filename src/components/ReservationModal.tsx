@@ -1,7 +1,8 @@
 // src/components/ReservationModal.tsx
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { XCircle } from 'lucide-react';
-import type { Reservation } from '../types';
+import type { Reservation } from '../types'; // or define the interface locally
 
 interface Props {
   reservation: Reservation;
@@ -17,14 +18,47 @@ export default function ReservationModal({
   onEdit,
 }: Props) {
   const [isEditing, setIsEditing] = useState(false);
-  // We'll store local copies of fields if the user toggles edit mode
+
+  // Basic fields
   const [partySize, setPartySize] = useState(reservation.party_size || 1);
   const [contactName, setContactName] = useState(reservation.contact_name || '');
   const [contactPhone, setContactPhone] = useState(reservation.contact_phone || '');
   const [contactEmail, setContactEmail] = useState(reservation.contact_email || '');
   const [status, setStatus] = useState(reservation.status || 'booked');
 
+  // Up to 3 seat preference fields (each is a single string).
+  // We'll store them temporarily as strings like "A1,A2" or "A1 A2" and parse on Save.
+  const [pref1, setPref1] = useState('');
+  const [pref2, setPref2] = useState('');
+  const [pref3, setPref3] = useState('');
+
+  // On mount (or whenever reservation changes), we can set the initial preferences
+  useEffect(() => {
+    if (!reservation.seat_preferences) return;
+    // seat_preferences is an array of arrays, e.g. [["A1","A2"],["B5"]]
+    // We'll just join each sub-array with a comma for editing
+    const [p1, p2, p3] = reservation.seat_preferences;
+    setPref1(p1 ? p1.join(',') : '');
+    setPref2(p2 ? p2.join(',') : '');
+    setPref3(p3 ? p3.join(',') : '');
+  }, [reservation]);
+
+  // Helper: parse a string like "A1,A2" => ["A1","A2"]
+  function parseSeatPref(str: string): string[] {
+    // Trim, split by comma, remove empties
+    return str
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+
   const handleSave = () => {
+    // Convert pref1/2/3 into arrays
+    const seatPrefs: string[][] = [];
+    if (pref1.trim()) seatPrefs.push(parseSeatPref(pref1));
+    if (pref2.trim()) seatPrefs.push(parseSeatPref(pref2));
+    if (pref3.trim()) seatPrefs.push(parseSeatPref(pref3));
+
     onEdit({
       ...reservation,
       party_size: partySize,
@@ -32,6 +66,7 @@ export default function ReservationModal({
       contact_phone: contactPhone,
       contact_email: contactEmail,
       status: status,
+      seat_preferences: seatPrefs,
     });
   };
 
@@ -70,6 +105,12 @@ export default function ReservationModal({
         return (
           <span className="inline-block px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-semibold">
             seated
+          </span>
+        );
+      case 'reserved':
+        return (
+          <span className="inline-block px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold">
+            reserved
           </span>
         );
       default:
@@ -120,6 +161,20 @@ export default function ReservationModal({
               <span className="font-semibold mr-1">Status:</span>
               {statusChip(reservation.status)}
             </div>
+
+            {/* Read-only seat preferences */}
+            {reservation.seat_preferences && reservation.seat_preferences.length > 0 && (
+              <div>
+                <span className="font-semibold">Preferred Seats:</span>
+                <ul className="list-disc list-inside ml-4 text-sm mt-1">
+                  {reservation.seat_preferences.map((prefSet, idx) => (
+                    <li key={idx}>
+                      {prefSet.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         ) : (
           // Simple inline editing form
@@ -152,6 +207,7 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500"
                 >
                   <option value="booked">booked</option>
+                  <option value="reserved">reserved</option>
                   <option value="canceled">canceled</option>
                   <option value="seated">seated</option>
                 </select>
@@ -173,6 +229,44 @@ export default function ReservationModal({
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Seat Preferences Fields */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">
+                Seat Preference #1 (comma‐separated)
+              </label>
+              <input
+                type="text"
+                value={pref1}
+                onChange={(e) => setPref1(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500"
+                placeholder="e.g. A1,A2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">
+                Seat Preference #2 (optional)
+              </label>
+              <input
+                type="text"
+                value={pref2}
+                onChange={(e) => setPref2(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500"
+                placeholder="e.g. B1,B2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">
+                Seat Preference #3 (optional)
+              </label>
+              <input
+                type="text"
+                value={pref3}
+                onChange={(e) => setPref3(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500"
+                placeholder="e.g. C1"
               />
             </div>
           </div>
