@@ -3,36 +3,34 @@ import { XCircle } from 'lucide-react';
 
 interface Reservation {
   id: number;
-  contact_name?: string;
+  contact_name?:  string;
   contact_phone?: string;
   contact_email?: string;
-  party_size?: number;
-  status?: string;  
-  start_time?: string;
-  created_at?: string;  
+  party_size?:    number;
+  status?:        string;  
+  start_time?:    string;
+  created_at?:    string;  
   seat_preferences?: string[][]; 
-  seat_labels?: string[];        
+  seat_labels?:   string[];
 }
 
+/** 
+ * Props:
+ *  - onEdit, onDelete are optional but if provided, the modal shows Edit/Delete.
+ */
 interface Props {
   reservation: Reservation;
   onClose: () => void;
-  onEdit?: (updated: Reservation) => void;
+  onEdit?:   (updated: Reservation) => void;
   onDelete?: (id: number) => void;
 }
 
-/**
- * ReservationModal:
- * Displays "Guest Name, Phone, Email, Party, CreatedAt, Seat Prefs, seat_labels, etc."
- * Allows editing if onEdit is provided.
- */
 export default function ReservationModal({
   reservation,
   onClose,
   onEdit,
   onDelete,
 }: Props) {
-
   const [isEditing, setIsEditing] = useState(false);
 
   // Basic fields
@@ -42,7 +40,7 @@ export default function ReservationModal({
   const [contactEmail, setContactEmail] = useState(reservation.contact_email || '');
   const [status, setStatus]             = useState(reservation.status || 'booked');
 
-  // Up to 3 seat pref sets
+  // seat prefs
   const [pref1, setPref1] = useState('');
   const [pref2, setPref2] = useState('');
   const [pref3, setPref3] = useState('');
@@ -88,8 +86,6 @@ export default function ReservationModal({
 
   function handleSave() {
     if (!onEdit) return;
-
-    // parse seat prefs from the text fields
     const newPrefs: string[][] = [];
     if (pref1.trim()) newPrefs.push(pref1.split(',').map(s => s.trim()));
     if (pref2.trim()) newPrefs.push(pref2.split(',').map(s => s.trim()));
@@ -105,6 +101,24 @@ export default function ReservationModal({
       seat_preferences: newPrefs
     });
     setIsEditing(false);
+  }
+
+  // A small helper for color-coded status labels
+  function renderStatusPill(st?: string) {
+    const s = st || '';
+    let bg   = 'bg-gray-100', text = 'text-gray-800', label = s;
+    if      (s === 'booked')   { bg='bg-orange-100'; text='text-orange-800'; }
+    else if (s === 'reserved') { bg='bg-yellow-100'; text='text-yellow-800'; }
+    else if (s === 'seated')   { bg='bg-green-100';  text='text-green-800';  }
+    else if (s === 'finished') { bg='bg-gray-300';   text='text-gray-800';   }
+    else if (s === 'canceled') { bg='bg-red-100';    text='text-red-800';    }
+    else if (s === 'no_show')  { bg='bg-red-100';    text='text-red-800';    }
+
+    return (
+      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${bg} ${text}`}>
+        {label || 'N/A'}
+      </span>
+    );
   }
 
   return (
@@ -127,12 +141,8 @@ export default function ReservationModal({
             <div><strong>Party Size:</strong> {reservation.party_size ?? 'N/A'}</div>
             <div><strong>Phone:</strong> {reservation.contact_phone || 'N/A'}</div>
             <div><strong>Email:</strong> {reservation.contact_email || 'N/A'}</div>
-            <div>
-              <strong>Status:</strong>{' '}
-              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                {reservation.status}
-              </span>
-            </div>
+            <div><strong>Status:</strong> {renderStatusPill(reservation.status)}</div>
+
             {createdAtStr && (
               <div><strong>Created At:</strong> {createdAtStr}</div>
             )}
@@ -203,7 +213,9 @@ export default function ReservationModal({
                 <option value="booked">booked</option>
                 <option value="reserved">reserved</option>
                 <option value="seated">seated</option>
+                <option value="finished">finished</option>
                 <option value="canceled">canceled</option>
+                <option value="no_show">no_show</option>
               </select>
             </div>
             {/* seat prefs editing: pref1/pref2/pref3 */}

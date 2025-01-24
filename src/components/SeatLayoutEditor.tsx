@@ -97,7 +97,7 @@ export default function SeatLayoutEditor() {
   // Constants for table & seat geometry
   const TABLE_DIAMETER    = 80;    // px
   const TABLE_RADIUS      = TABLE_DIAMETER / 2;  // 40
-  const TABLE_OFFSET_Y    = 15;    // shift the table circle downward by 10 px
+  const TABLE_OFFSET_Y    = 15;    // shift table circle downward
   const SEAT_DIAMETER     = 64;    // px
   const SEAT_RADIUS       = SEAT_DIAMETER / 2;   // 32
   const SEAT_MARGIN       = 10;    // extra spacing so seats don't collide with table
@@ -297,7 +297,7 @@ export default function SeatLayoutEditor() {
           })
         );
       }
-      // If it’s a counter, or seatCount unchanged, do nothing more
+      // If it’s a counter or seatCount unchanged, do nothing more
     } else {
       // ----- Creating a brand new section -----
       const newSectionId = `section-${sections.length + 1}`;
@@ -306,7 +306,7 @@ export default function SeatLayoutEditor() {
       if (sectionConfig.type === 'table') {
         newSeats = layoutTableSeats(sectionConfig.seatCount, seatCapacity);
       } else {
-        // For "counter," do a linear approach
+        // For "counter," do a simple linear approach
         newSeats = layoutCounterSeats(
           sectionConfig.seatCount,
           sectionConfig.orientation,
@@ -599,6 +599,7 @@ export default function SeatLayoutEditor() {
               }}
               onMouseDown={e => handleDragStart(e, section.id)}
             >
+              {/** The table circle (if type==='table') */}
               {section.type === 'table' && (
                 <div
                   style={{
@@ -608,14 +609,13 @@ export default function SeatLayoutEditor() {
                     borderRadius: '50%',
                     backgroundColor: '#aaa',
                     opacity: 0.7,
-                    // We used to do: top: -TABLE_RADIUS
-                    // Now we nudge the table down by TABLE_OFFSET_Y
                     top:  -TABLE_RADIUS + TABLE_OFFSET_Y,
                     left: -TABLE_RADIUS,
+                    // Slightly lower zIndex than the seat header, so seats can appear behind it
+                    zIndex: 1,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    zIndex: 1,  // behind seat circles
                   }}
                 >
                   <span style={{ fontSize: 14, fontWeight: 600 }}>
@@ -624,10 +624,19 @@ export default function SeatLayoutEditor() {
                 </div>
               )}
 
-              {/* The small bar with edit/delete icons */}
+              {/* ---------- The small bar with edit/delete icons ---------- */}
+              {/*
+                We set a higher zIndex (e.g. 999) so this header bar is
+                on top of the seats. That way, it's always clickable.
+              */}
               <div
-                className="mb-1 flex items-center justify-between bg-white/80 rounded px-2 py-1 shadow"
-                style={{ position: 'relative', zIndex: 2, cursor: 'default' }}
+                className="bg-white/80 rounded px-2 py-1 shadow flex items-center justify-between"
+                style={{
+                  position: 'relative',
+                  zIndex: 999,
+                  cursor: 'default',
+                  marginBottom: '4px'
+                }}
               >
                 <span className="font-medium text-sm text-gray-700">
                   {section.name}
@@ -657,15 +666,13 @@ export default function SeatLayoutEditor() {
                 </div>
               </div>
 
-              {/* Render the seats */}
+              {/* ---------- Render the seats ---------- */}
               <div style={{ position: 'relative' }}>
                 {section.seats.map((seat, idx) => {
-                  // seat.position_x, seat.position_y is the seat's center around (0,0)
-                  // We shift by half the seat diameter so it centers properly
                   const diameter = SEAT_DIAMETER * seatScale;
-                  const leftPos  = seat.position_x - diameter / 2;
+                  const leftPos  = seat.position_x - (diameter / 2);
                   // Subtract TABLE_OFFSET_Y so seats appear slightly above the table circle
-                  const topPos   = seat.position_y - diameter / 2 - TABLE_OFFSET_Y;
+                  const topPos   = seat.position_y - (diameter / 2) - TABLE_OFFSET_Y;
 
                   return (
                     <div
@@ -676,7 +683,7 @@ export default function SeatLayoutEditor() {
                         top:  topPos,
                         width: diameter,
                         height: diameter,
-                        zIndex: 2,
+                        zIndex: 2, // behind the bar's 999
                       }}
                       className="
                         rounded-full flex items-center justify-center cursor-pointer
@@ -695,7 +702,7 @@ export default function SeatLayoutEditor() {
         </div>
       </div>
 
-      {/* Add section button */}
+      {/* ---------- Add Table button ---------- */}
       <button
         onClick={handleAddSection}
         className="flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 shadow-lg mt-4"
@@ -717,6 +724,7 @@ export default function SeatLayoutEditor() {
             <h3 className="text-lg font-semibold mb-4">
               {editingSectionId ? 'Edit Section' : 'Add Section'}
             </h3>
+
             <div className="space-y-4">
               {/* Section Name */}
               <div>
