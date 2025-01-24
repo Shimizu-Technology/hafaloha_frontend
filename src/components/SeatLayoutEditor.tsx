@@ -1,11 +1,10 @@
-// src/components/SeatLayoutEditor.tsx
 import React, { useEffect, useState } from 'react';
 import {
   Save, Trash2, Plus as LucidePlus, Settings, Edit2,
   Minus, Maximize, Power
 } from 'lucide-react';
 
-// Import your API helpers
+// Imagine these are your API helpers:
 import {
   fetchAllLayouts,
   createLayout,
@@ -27,12 +26,12 @@ interface LayoutData {
 }
 
 interface SeatSection {
-  id: string;   // "section-1" or DB ID as a string
+  id: string;          // e.g. "section-1" or DB ID as a string
   dbId?: number;
-  name: string;
+  name: string;        // "Table A" etc.
   type: 'counter' | 'table';
   orientation: 'vertical' | 'horizontal';
-  offsetX: number;
+  offsetX: number;     // The group's absolute position on canvas
   offsetY: number;
   seats: DBSeat[];
 }
@@ -40,8 +39,8 @@ interface SeatSection {
 interface DBSeat {
   id?: number;
   label?: string;
-  position_x: number;
-  position_y: number;
+  position_x: number;   // x of the seat center, relative to the table center
+  position_y: number;   // y of the seat center, relative to the table center
   capacity: number;
 }
 
@@ -60,27 +59,6 @@ const LAYOUT_PRESETS = {
   large:  { width: 3000, height: 1800, seatScale: 1.0 },
 };
 
-function seatLabelToNumber(label?: string): number {
-  if (!label) return 0;
-  const match = label.match(/#(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
-function measureExistingGap(
-  seatsAsc: DBSeat[],
-  orientation: 'vertical' | 'horizontal',
-  defaultSpacing = 70
-): number {
-  if (seatsAsc.length < 2) return defaultSpacing;
-  const secondLast = seatsAsc[seatsAsc.length - 2];
-  const last       = seatsAsc[seatsAsc.length - 1];
-  if (orientation === 'vertical') {
-    return Math.max(defaultSpacing, last.position_y - secondLast.position_y);
-  } else {
-    return Math.max(defaultSpacing, last.position_x - secondLast.position_x);
-  }
-}
-
 export default function SeatLayoutEditor() {
   const [allLayouts, setAllLayouts] = useState<LayoutData[]>([]);
   const [activeLayoutId, setActiveLayoutId] = useState<number | null>(null);
@@ -89,13 +67,13 @@ export default function SeatLayoutEditor() {
 
   // Canvas sizing
   const [layoutSize, setLayoutSize] = useState<'auto'|'small'|'medium'|'large'>('medium');
-  const [canvasWidth, setCanvasWidth]   = useState(2000);
+  const [canvasWidth,  setCanvasWidth]  = useState(2000);
   const [canvasHeight, setCanvasHeight] = useState(1200);
-  const [seatScale, setSeatScale]       = useState(1.0);
-  const [zoom, setZoom]                 = useState(1.0);
-  const [showGrid, setShowGrid]         = useState(true);
+  const [seatScale,    setSeatScale]    = useState(1.0);
+  const [zoom,         setZoom]         = useState(1.0);
+  const [showGrid,     setShowGrid]     = useState(true);
 
-  // Dragging
+  // Dragging an entire table/section
   const [isDragging, setIsDragging]           = useState(false);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [dragStart, setDragStart]             = useState<{ x: number; y: number } | null>(null);
@@ -111,13 +89,22 @@ export default function SeatLayoutEditor() {
   });
   const [seatCapacity, setSeatCapacity] = useState(1);
 
-  // For the rename seats modal (now triggered within the section modal)
+  // For the rename seats modal
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [renameModalSeats, setRenameModalSeats] = useState<DBSeat[]>([]);
   const [renameModalSectionName, setRenameModalSectionName] = useState('');
 
+  // Constants for table & seat geometry
+  const TABLE_DIAMETER    = 80;    // px
+  const TABLE_RADIUS      = TABLE_DIAMETER / 2;  // 40
+  const TABLE_OFFSET_Y    = 15;    // shift the table circle downward by 10 px
+  const SEAT_DIAMETER     = 64;    // px
+  const SEAT_RADIUS       = SEAT_DIAMETER / 2;   // 32
+  const SEAT_MARGIN       = 10;    // extra spacing so seats don't collide with table
+
+  /** On mount => load all layouts, pick the first if available. */
   useEffect(() => {
-    async function loadLayouts() {
+    (async () => {
       try {
         const layouts = await fetchAllLayouts();
         setAllLayouts(layouts);
@@ -131,10 +118,10 @@ export default function SeatLayoutEditor() {
       } catch (err) {
         console.error('Error loading layouts:', err);
       }
-    }
-    loadLayouts();
+    })();
   }, []);
 
+  /** Re-compute bounding box or set preset if layoutSize changes. */
   useEffect(() => {
     if (layoutSize === 'auto') {
       computeAutoBounds();
@@ -146,6 +133,7 @@ export default function SeatLayoutEditor() {
     }
   }, [layoutSize, sections]);
 
+  /** Auto-size the canvas to contain all seats/tables. */
   function computeAutoBounds() {
     if (sections.length === 0) {
       setCanvasWidth(1200);
@@ -156,6 +144,7 @@ export default function SeatLayoutEditor() {
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
+
     sections.forEach(sec => {
       sec.seats.forEach(seat => {
         const gx = sec.offsetX + seat.position_x;
@@ -165,6 +154,15 @@ export default function SeatLayoutEditor() {
         if (gy < minY) minY = gy;
         if (gy > maxY) maxY = gy;
       });
+      // Also account for the table circle
+      const tableLeft   = sec.offsetX - TABLE_RADIUS;
+      const tableRight  = sec.offsetX + TABLE_RADIUS;
+      const tableTop    = sec.offsetY - TABLE_RADIUS;
+      const tableBottom = sec.offsetY + TABLE_RADIUS;
+      if (tableLeft   < minX) minX = tableLeft;
+      if (tableRight  > maxX) maxX = tableRight;
+      if (tableTop    < minY) minY = tableTop;
+      if (tableBottom > maxY) maxY = tableBottom;
     });
 
     const margin = 200;
@@ -177,6 +175,7 @@ export default function SeatLayoutEditor() {
 
   function handleSelectLayout(id: number) {
     if (id === 0) {
+      // means "New Layout"
       setActiveLayoutId(null);
       setLayoutName('New Layout');
       setSections([]);
@@ -184,14 +183,14 @@ export default function SeatLayoutEditor() {
     }
     setActiveLayoutId(id);
 
-    const found = allLayouts.find((l) => l.id === id);
+    const found = allLayouts.find(l => l.id === id);
     if (found) {
       setLayoutName(found.name || 'Untitled Layout');
       setSections(found.sections_data.sections || []);
     }
   }
 
-  // Drag seat sections
+  // ---------------- Drag seat sections around the canvas ----------------
   function handleDragStart(e: React.MouseEvent, sectionId: string) {
     e.stopPropagation();
     setIsDragging(true);
@@ -223,14 +222,14 @@ export default function SeatLayoutEditor() {
     setDragStart(null);
   }
 
-  // Add/Edit seat sections
+  // ---------------- Add/Edit seat sections ----------------
   function handleAddSection() {
     setEditingSectionId(null);
     setSectionConfig({
-      name: `New Section ${sections.length + 1}`,
+      name: `New Table ${sections.length + 1}`,
       seatCount: 4,
-      type: 'counter',
-      orientation: 'vertical',
+      type: 'table',
+      orientation: 'horizontal',
     });
     setSeatCapacity(1);
     setShowSectionDialog(true);
@@ -259,9 +258,14 @@ export default function SeatLayoutEditor() {
     setSections(prev => prev.filter(s => s.id !== sectionId));
   }
 
+  /**
+   * Creates or updates a seat section.
+   * For "table": place seats on a circle around (0,0),
+   * with an angle offset so seat #1 is top-centered (-π/2).
+   */
   function createOrEditSection() {
     if (editingSectionId) {
-      // updating existing section
+      // ----- Updating existing section -----
       const oldSection = sections.find(s => s.id === editingSectionId);
       if (!oldSection) {
         setShowSectionDialog(false);
@@ -270,7 +274,7 @@ export default function SeatLayoutEditor() {
       const oldCount = oldSection.seats.length;
       const newCount = sectionConfig.seatCount;
 
-      // Update basic info
+      // Update the basic info
       setSections(prev =>
         prev.map(sec => {
           if (sec.id !== editingSectionId) return sec;
@@ -283,101 +287,31 @@ export default function SeatLayoutEditor() {
         })
       );
 
-      // If seatCount increased => add seats
-      if (newCount > oldCount) {
-        const seatsAsc = [...oldSection.seats].sort(
-          (a, b) => seatLabelToNumber(a.label) - seatLabelToNumber(b.label)
-        );
-        let maxLabelNum = 0;
-        let anchorX = 0, anchorY = 0;
-        if (seatsAsc.length > 0) {
-          const lastSeat = seatsAsc[seatsAsc.length - 1];
-          maxLabelNum    = seatLabelToNumber(lastSeat.label);
-          anchorX        = lastSeat.position_x;
-          anchorY        = lastSeat.position_y;
-        }
-        const gap = measureExistingGap(seatsAsc, sectionConfig.orientation, 70);
-
-        const seatsToAdd = newCount - oldCount;
-        const newSeats: DBSeat[] = [];
-        for (let i = 1; i <= seatsToAdd; i++) {
-          const newLabelNum = maxLabelNum + i;
-          let x = anchorX;
-          let y = anchorY;
-          if (sectionConfig.orientation === 'vertical') {
-            y += gap * i;
-          } else {
-            x += gap * i;
-          }
-          newSeats.push({
-            label: `Seat #${newLabelNum}`,
-            position_x: x,
-            position_y: y,
-            capacity: seatCapacity,
-          });
-        }
-
+      // If it's a table and seatCount changed, re-layout seats
+      if (sectionConfig.type === 'table' && newCount !== oldCount) {
+        const newSeats = layoutTableSeats(newCount, seatCapacity);
         setSections(prev =>
           prev.map(sec => {
             if (sec.id !== editingSectionId) return sec;
-            return { ...sec, seats: [...sec.seats, ...newSeats] };
-          })
-        );
-      } 
-      // If seatCount decreased => remove seats from "top"
-      else if (newCount < oldCount) {
-        const seatsToRemove = oldCount - newCount;
-        const seatsDesc = [...oldSection.seats].sort(
-          (a, b) => seatLabelToNumber(b.label) - seatLabelToNumber(a.label)
-        );
-        const toRemove = seatsDesc.slice(0, seatsToRemove);
-
-        setSections(prev =>
-          prev.map(sec => {
-            if (sec.id !== editingSectionId) return sec;
-            const filtered = sec.seats.filter(s => !toRemove.includes(s));
-            return { ...sec, seats: filtered };
+            return { ...sec, seats: newSeats };
           })
         );
       }
+      // If it’s a counter, or seatCount unchanged, do nothing more
     } else {
-      // brand new section
+      // ----- Creating a brand new section -----
       const newSectionId = `section-${sections.length + 1}`;
-      const newSeats: DBSeat[] = [];
+      let newSeats: DBSeat[] = [];
 
-      for (let i = 0; i < sectionConfig.seatCount; i++) {
-        const spacing = 70;
-        let posX = 0, posY = 0;
-
-        if (sectionConfig.type === 'counter') {
-          if (sectionConfig.orientation === 'vertical') {
-            posY = i * spacing;
-          } else {
-            posX = i * spacing;
-          }
-        } else {
-          // e.g. "table" arrangement
-          if (sectionConfig.orientation === 'vertical') {
-            // 2 columns
-            const colIndex = i % 2;
-            const rowIndex = Math.floor(i / 2);
-            posX = colIndex * spacing;
-            posY = rowIndex * spacing;
-          } else {
-            // horizontal orientation with rows
-            const rowIndex = i % 2;
-            const colIndex = Math.floor(i / 2);
-            posX = colIndex * spacing;
-            posY = rowIndex * spacing;
-          }
-        }
-
-        newSeats.push({
-          label: `Seat #${i + 1}`,
-          position_x: posX,
-          position_y: posY,
-          capacity: seatCapacity,
-        });
+      if (sectionConfig.type === 'table') {
+        newSeats = layoutTableSeats(sectionConfig.seatCount, seatCapacity);
+      } else {
+        // For "counter," do a linear approach
+        newSeats = layoutCounterSeats(
+          sectionConfig.seatCount,
+          sectionConfig.orientation,
+          seatCapacity
+        );
       }
 
       const newSection: SeatSection = {
@@ -395,23 +329,72 @@ export default function SeatLayoutEditor() {
     setShowSectionDialog(false);
   }
 
+  /** Layout seats in a circle around (0,0), seat #1 at top. */
+  function layoutTableSeats(seatCount: number, capacity: number): DBSeat[] {
+    const angleStep   = (2 * Math.PI) / seatCount;
+    const angleOffset = -Math.PI / 2;  // seat #1 top-center
+
+    // radius = tableRadius + seatRadius + margin
+    // e.g., 40 + 32 + 10 => ~82
+    const radius = TABLE_RADIUS + SEAT_RADIUS + SEAT_MARGIN;
+
+    const seats: DBSeat[] = [];
+    for (let i = 0; i < seatCount; i++) {
+      const angle = angleOffset + i * angleStep;
+      const x = Math.round(radius * Math.cos(angle));
+      const y = Math.round(radius * Math.sin(angle));
+
+      seats.push({
+        label: `Seat #${i + 1}`,
+        position_x: x,
+        position_y: y,
+        capacity,
+      });
+    }
+    return seats;
+  }
+
+  /** Layout seats in a linear "counter" style. */
+  function layoutCounterSeats(
+    seatCount: number,
+    orientation: 'vertical' | 'horizontal',
+    capacity: number
+  ): DBSeat[] {
+    const seats: DBSeat[] = [];
+    const spacing = 70;
+    for (let i = 0; i < seatCount; i++) {
+      let posX = 0, posY = 0;
+      if (orientation === 'vertical') {
+        posY = i * spacing;
+      } else {
+        posX = i * spacing;
+      }
+      seats.push({
+        label: `Seat #${i + 1}`,
+        position_x: posX,
+        position_y: posY,
+        capacity,
+      });
+    }
+    return seats;
+  }
+
+  /** Saves the layout (create or update). */
   async function handleSaveLayout() {
     try {
       const payload = {
         name: layoutName,
-        sections_data: {
-          sections,
-        },
+        sections_data: { sections },
       };
 
       if (activeLayoutId) {
-        // PATCH existing
+        // PATCH existing layout
         const updatedLayout = await updateLayout(activeLayoutId, payload);
         alert('Layout updated successfully!');
         setLayoutName(updatedLayout.name);
         setSections(updatedLayout.sections_data.sections || []);
       } else {
-        // POST new
+        // POST new layout
         const newLayout = await createLayout(payload);
         alert('Layout created!');
         setAllLayouts(prev => [...prev, newLayout]);
@@ -425,6 +408,7 @@ export default function SeatLayoutEditor() {
     }
   }
 
+  /** Activates the current layout. */
   async function handleActivateLayout() {
     if (!activeLayoutId) {
       alert('Cannot activate a layout that is not saved yet!');
@@ -439,7 +423,7 @@ export default function SeatLayoutEditor() {
     }
   }
 
-  // Handle seat rename flow (triggered from the Edit Section modal now)
+  /** Rename seats in a particular section. */
   function handleOpenRenameModal(sectionId: string) {
     const sec = sections.find(s => s.id === sectionId);
     if (!sec) return;
@@ -447,15 +431,12 @@ export default function SeatLayoutEditor() {
     setRenameModalSeats([...sec.seats]); // copy array
     setRenameModalSectionName(sec.name);
   }
-
   function handleCloseRenameModal() {
     setRenameModalOpen(false);
     setRenameModalSeats([]);
     setRenameModalSectionName('');
   }
-
   function handleRenameModalSave(updatedSeats: DBSeat[]) {
-    // We'll patch them into the correct section in local state
     setSections(prev =>
       prev.map(sec => {
         if (sec.name === renameModalSectionName) {
@@ -521,7 +502,7 @@ export default function SeatLayoutEditor() {
             onChange={e => setLayoutSize(e.target.value as 'auto'|'small'|'medium'|'large')}
             className="px-2 py-1 border border-gray-300 rounded"
           >
-            <option value="auto">Auto (by seats)</option>
+            <option value="auto">Auto</option>
             <option value="small">Small (1200×800)</option>
             <option value="medium">Medium (2000×1200)</option>
             <option value="large">Large (3000×1800)</option>
@@ -586,7 +567,7 @@ export default function SeatLayoutEditor() {
         )}
       </div>
 
-      {/* Scrollable container */}
+      {/* ---------- The main canvas ---------- */}
       <div
         className="border border-gray-200 rounded-lg overflow-auto"
         style={{ width: '100%', height: '80vh', minHeight: '600px' }}
@@ -613,12 +594,37 @@ export default function SeatLayoutEditor() {
               style={{
                 position: 'absolute',
                 left: section.offsetX,
-                top: section.offsetY,
+                top:  section.offsetY,
                 cursor: 'move',
               }}
               onMouseDown={e => handleDragStart(e, section.id)}
             >
-              {/* Section header */}
+              {section.type === 'table' && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    width:  TABLE_DIAMETER,
+                    height: TABLE_DIAMETER,
+                    borderRadius: '50%',
+                    backgroundColor: '#aaa',
+                    opacity: 0.7,
+                    // We used to do: top: -TABLE_RADIUS
+                    // Now we nudge the table down by TABLE_OFFSET_Y
+                    top:  -TABLE_RADIUS + TABLE_OFFSET_Y,
+                    left: -TABLE_RADIUS,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1,  // behind seat circles
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>
+                    {section.name}
+                  </span>
+                </div>
+              )}
+
+              {/* The small bar with edit/delete icons */}
               <div
                 className="mb-1 flex items-center justify-between bg-white/80 rounded px-2 py-1 shadow"
                 style={{ position: 'relative', zIndex: 2, cursor: 'default' }}
@@ -628,7 +634,7 @@ export default function SeatLayoutEditor() {
                   {section.dbId ? ` (ID ${section.dbId})` : ''}
                 </span>
                 <div className="flex items-center space-x-1">
-                  {/* Edit Section button */}
+                  {/* Edit button */}
                   <button
                     onClick={ev => {
                       ev.stopPropagation();
@@ -638,7 +644,7 @@ export default function SeatLayoutEditor() {
                   >
                     <Edit2 className="w-3 h-3 text-gray-500" />
                   </button>
-                  {/* Delete section button */}
+                  {/* Delete button */}
                   <button
                     onClick={ev => {
                       ev.stopPropagation();
@@ -651,38 +657,33 @@ export default function SeatLayoutEditor() {
                 </div>
               </div>
 
-              {/* Each seat */}
+              {/* Render the seats */}
               <div style={{ position: 'relative' }}>
                 {section.seats.map((seat, idx) => {
-                  const seatDiameter = 64 * seatScale;
-                  const seatX = seat.position_x * seatScale;
-                  const seatY = seat.position_y * seatScale;
-
-                  const seatColor = 'bg-green-500';
-                  const seatKey = seat.id != null
-                    ? `seat-${seat.id}`
-                    : `temp-${section.id}-${idx}`;
+                  // seat.position_x, seat.position_y is the seat's center around (0,0)
+                  // We shift by half the seat diameter so it centers properly
+                  const diameter = SEAT_DIAMETER * seatScale;
+                  const leftPos  = seat.position_x - diameter / 2;
+                  // Subtract TABLE_OFFSET_Y so seats appear slightly above the table circle
+                  const topPos   = seat.position_y - diameter / 2 - TABLE_OFFSET_Y;
 
                   return (
                     <div
-                      key={seatKey}
+                      key={seat.id ?? `temp-${section.id}-${idx}`}
                       style={{
                         position: 'absolute',
-                        left: seatX,
-                        top: seatY,
-                        width: seatDiameter,
-                        height: seatDiameter,
-                        zIndex: 1,
+                        left: leftPos,
+                        top:  topPos,
+                        width: diameter,
+                        height: diameter,
+                        zIndex: 2,
                       }}
-                      className={`
+                      className="
                         rounded-full flex items-center justify-center cursor-pointer
                         shadow-md text-white font-semibold text-sm
-                        hover:opacity-90
-                        ${seatColor}
-                      `}
-                      onClick={() => {
-                        console.log('Clicked seat:', seat.label || seat.id);
-                      }}
+                        bg-green-500 hover:opacity-90
+                      "
+                      onClick={() => console.log('Clicked seat:', seat.label)}
                     >
                       {seat.label ?? 'Seat'}
                     </div>
@@ -700,10 +701,10 @@ export default function SeatLayoutEditor() {
         className="flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 shadow-lg mt-4"
       >
         <LucidePlus className="w-4 h-4 mr-2" />
-        Add Section
+        Add Table
       </button>
 
-      {/* Dialog: Add/Edit Section */}
+      {/* ---------- Dialog: Add/Edit Section ---------- */}
       {showSectionDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded p-6 w-96 relative">
@@ -748,7 +749,7 @@ export default function SeatLayoutEditor() {
                 />
               </div>
 
-              {/* Section Type */}
+              {/* Section Type => "counter" or "table" */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Section Type
@@ -766,7 +767,7 @@ export default function SeatLayoutEditor() {
                 </select>
               </div>
 
-              {/* Orientation */}
+              {/* Orientation (if "counter") */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Orientation
@@ -797,20 +798,16 @@ export default function SeatLayoutEditor() {
                   className="w-full border border-gray-300 rounded px-3 py-2"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  e.g. 1 for a barstool, 4 for a table, etc.
+                  e.g. 1 for a barstool, 4 for a single table seat, etc.
                 </p>
               </div>
             </div>
 
             <div className="mt-6 flex flex-wrap justify-end gap-2">
-              {/* 
-                Only show "Rename Seats" if we're editing an existing section with seats. 
-                If not editing or the seatCount is zero, hide it. 
-              */}
-              {editingSectionId && sections.find(s => s.id === editingSectionId)?.seats.length ? (
+              {editingSectionId &&
+                sections.find(s => s.id === editingSectionId)?.seats.length ? (
                 <button
                   onClick={() => {
-                    // open rename seats modal for this editing section
                     handleOpenRenameModal(editingSectionId!);
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -837,7 +834,7 @@ export default function SeatLayoutEditor() {
         </div>
       )}
 
-      {/* Rename seats modal */}
+      {/* ---------- Rename seats modal ---------- */}
       {renameModalOpen && (
         <RenameSeatsModal
           sectionName={renameModalSectionName}
