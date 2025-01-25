@@ -1,4 +1,3 @@
-// src/components/ReservationFormModal.tsx
 import React, { useState, useEffect } from 'react';
 import { fetchAvailability, createReservation } from '../services/api';
 import SeatPreferenceWizard from './SeatPreferenceWizard';
@@ -10,8 +9,6 @@ interface Props {
 
 /**
  * Admin's "New Reservation" modal.
- * They can optionally open the "SeatPreferenceWizard" 
- * to pick up to 3 seat sets for seat_preferences.
  */
 export default function ReservationFormModal({ onClose, onSuccess }: Props) {
   const [date, setDate] = useState('');
@@ -25,11 +22,12 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
   // We'll store timeslots from /availability
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
-  // NEW: seat preferences
+  // seat preferences
   const [seatPreferences, setSeatPreferences] = useState<string[][]>([]);
-
-  // Show/hide seat wizard
   const [showSeatWizard, setShowSeatWizard] = useState(false);
+
+  // NEW: duration
+  const [duration, setDuration] = useState(60);
 
   // fetch timeslots whenever date or partySize changes
   useEffect(() => {
@@ -61,14 +59,11 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
       return;
     }
 
-    // e.g. "2025-01-20T18:00:00"
-    // We rely on the backend to parse it as local Guam time
     const start_time = `${date}T${time}:00`;
 
     try {
-      // We include seat_preferences if any
       await createReservation({
-        restaurant_id: 1, // or the admin's restaurant_id
+        restaurant_id: 1,
         start_time,
         party_size: partySize,
         contact_name: contactName,
@@ -76,9 +71,9 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
         contact_email: contactEmail,
         status: 'booked',
         seat_preferences: seatPreferences.length > 0 ? seatPreferences : undefined,
+        duration_minutes: duration, // <--- NEW
       });
 
-      // If successful, close + refresh the parent
       onSuccess();
     } catch (err) {
       console.error('Error creating reservation:', err);
@@ -86,7 +81,6 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
     }
   };
 
-  // Called by seat wizard upon finishing
   function handleSeatWizardSave(prefs: string[][]) {
     setSeatPreferences(prefs);
     setShowSeatWizard(false);
@@ -146,6 +140,22 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
                 {timeslots.map((slot) => (
                   <option key={slot} value={slot}>{slot}</option>
                 ))}
+              </select>
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(+e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500"
+              >
+                <option value={30}>30</option>
+                <option value={60}>60</option>
+                <option value={120}>120</option>
+                <option value={180}>180</option>
+                <option value={240}>240</option>
               </select>
             </div>
 

@@ -1,4 +1,3 @@
-// src/components/ReservationForm.tsx
 import React, { useState, useEffect } from 'react';
 import { Clock, Users, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -31,6 +30,9 @@ export default function ReservationForm() {
     email: '',
   });
 
+  // NEW: duration (minutes)
+  const [duration, setDuration] = useState(60);
+
   // We'll store the timeslots from /availability here:
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
@@ -39,7 +41,6 @@ export default function ReservationForm() {
 
   /**
    * Whenever `date` or `partySize` changes, fetch /availability
-   * so we can populate the time dropdown with valid slots.
    */
   useEffect(() => {
     async function getTimeslots() {
@@ -48,7 +49,6 @@ export default function ReservationForm() {
         return;
       }
       try {
-        // Call our API helper
         const data = await fetchAvailability(formData.date, formData.partySize);
         setTimeslots(data.slots || []);
       } catch (err) {
@@ -71,8 +71,6 @@ export default function ReservationForm() {
       return;
     }
 
-    // e.g. "2025-01-25T17:30:00"
-    // (We do not append +10:00, letting the backend parse as Guam local.)
     const start_time = `${formData.date}T${formData.time}:00`;
 
     // fallback logic for logged-in user’s data
@@ -97,12 +95,11 @@ export default function ReservationForm() {
         contact_phone: contactPhone,
         contact_email: contactEmail,
         restaurant_id: 1,
+        // NEW: pass duration_minutes
+        duration_minutes: duration,
       });
 
-      // If success
       setSuccess('Reservation created successfully!');
-      console.log('Reservation created:', newRes);
-
       // navigate to a confirmation page with the new reservation
       navigate('/reservation-confirmation', {
         state: { reservation: newRes },
@@ -120,7 +117,6 @@ export default function ReservationForm() {
       onSubmit={handleSubmit}
       className="w-full max-w-lg mx-auto bg-white rounded-lg shadow-lg p-6"
     >
-      {/* Error / Success Messages */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-4">
           {error}
@@ -193,6 +189,27 @@ export default function ReservationForm() {
               required
             />
           </div>
+        </div>
+
+        {/* DURATION MINUTES */}
+        <div className="space-y-2">
+          <label htmlFor="duration" className="block text-sm font-medium text-gray-700">
+            Duration (minutes)
+          </label>
+          <select
+            id="duration"
+            value={duration}
+            onChange={(e) => setDuration(+e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 
+                       rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          >
+            <option value={30}>30 min</option>
+            <option value={60}>1 hour</option>
+            <option value={90}>1.5 hours</option>
+            <option value={120}>2 hours</option>
+            <option value={180}>3 hours</option>
+            <option value={240}>4 hours</option>
+          </select>
         </div>
 
         {/* First Name */}

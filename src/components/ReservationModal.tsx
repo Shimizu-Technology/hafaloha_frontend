@@ -12,6 +12,7 @@ interface Reservation {
   created_at?:    string;  
   seat_preferences?: string[][]; 
   seat_labels?:   string[];
+  duration_minutes?: number; // <--- NEW
 }
 
 /** 
@@ -39,6 +40,11 @@ export default function ReservationModal({
   const [contactPhone, setContactPhone] = useState(reservation.contact_phone || '');
   const [contactEmail, setContactEmail] = useState(reservation.contact_email || '');
   const [status, setStatus]             = useState(reservation.status || 'booked');
+
+  // NEW: duration
+  const [duration, setDuration] = useState(
+    reservation.duration_minutes !== undefined ? reservation.duration_minutes : 60
+  );
 
   // seat prefs
   const [pref1, setPref1] = useState('');
@@ -98,7 +104,8 @@ export default function ReservationModal({
       contact_phone: contactPhone,
       contact_email: contactEmail,
       status,
-      seat_preferences: newPrefs
+      seat_preferences: newPrefs,
+      duration_minutes: duration, // <--- pass it back
     });
     setIsEditing(false);
   }
@@ -139,6 +146,7 @@ export default function ReservationModal({
             <div><strong>Guest:</strong> {reservation.contact_name || 'N/A'}</div>
             <div><strong>Date/Time:</strong> {startTimeStr || 'N/A'}</div>
             <div><strong>Party Size:</strong> {reservation.party_size ?? 'N/A'}</div>
+            <div><strong>Duration (min):</strong> {reservation.duration_minutes ?? 60}</div>
             <div><strong>Phone:</strong> {reservation.contact_phone || 'N/A'}</div>
             <div><strong>Email:</strong> {reservation.contact_email || 'N/A'}</div>
             <div><strong>Status:</strong> {renderStatusPill(reservation.status)}</div>
@@ -182,6 +190,17 @@ export default function ReservationModal({
                 type="number"
                 value={partySize}
                 onChange={(e) => setPartySize(+e.target.value || 1)}
+                className="w-full p-2 border border-gray-300 rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">Duration (minutes)</label>
+              <input
+                type="number"
+                min={30}
+                step={30}
+                value={duration}
+                onChange={(e) => setDuration(+e.target.value || 60)}
                 className="w-full p-2 border border-gray-300 rounded"
               />
             </div>

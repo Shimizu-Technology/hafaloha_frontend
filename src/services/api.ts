@@ -1,4 +1,3 @@
-// src/services/api.ts
 import axios from 'axios';
 
 // For Vite or similar bundlers:
@@ -54,7 +53,8 @@ interface UpdateReservationData {
   contact_phone?: string;
   contact_email?: string;
   status?: string;
-  seat_preferences?: string[][]; // NEW: allow seat prefs
+  seat_preferences?: string[][]; 
+  duration_minutes?: number;      // <--- NEW
 }
 
 export async function fetchReservations(params?: { date?: string }) {
@@ -64,8 +64,7 @@ export async function fetchReservations(params?: { date?: string }) {
 
 /**
  * Creates a new reservation. 
- * Optionally includes seat_preferences if the admin chooses 
- * one or more seat preference sets.
+ * Optionally includes seat_preferences and duration_minutes.
  */
 export async function createReservation(data: {
   restaurant_id?: number;
@@ -75,14 +74,15 @@ export async function createReservation(data: {
   contact_phone?: string;
   contact_email?: string;
   status?: string;
-  seat_preferences?: string[][];  // <-- ADDED OPTIONAL FIELD
+  seat_preferences?: string[][];
+  duration_minutes?: number;       // <--- NEW
 }) {
   const resp = await apiClient.post('/reservations', data);
   return resp.data;
 }
 
 /**
- * Patch an existing reservation, optionally including seat_preferences.
+ * Patch an existing reservation, optionally including seat_preferences + duration_minutes.
  */
 export async function updateReservation(
   id: number,
