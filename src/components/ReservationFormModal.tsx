@@ -1,38 +1,35 @@
+// src/components/ReservationFormModal.tsx
 import React, { useState, useEffect } from 'react';
-import { fetchAvailability, createReservation } from '../services/api';
-import SeatPreferenceWizard from './SeatPreferenceWizard';
+import { fetchAvailability, createReservation, fetchLayout } from '../services/api';
+import SeatPreferenceMapModal from './SeatPreferenceMapModal';
+import type { SeatSectionData } from './SeatLayoutCanvas';
 
 interface Props {
   onClose: () => void;
-  onSuccess: () => void; // if creation is successful
+  onSuccess: () => void;
 }
 
-/**
- * Admin's "New Reservation" modal.
- */
 export default function ReservationFormModal({ onClose, onSuccess }: Props) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
-  const [partySize, setPartySize] = useState<number>(2);
+  const [partySize, setPartySize] = useState(2);
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [duration, setDuration] = useState(60);
   const [error, setError] = useState('');
 
-  // We'll store timeslots from /availability
   const [timeslots, setTimeslots] = useState<string[]>([]);
+  const [allSets, setAllSets] = useState<string[][]>([[], [], []]);
+  const [showSeatMapModal, setShowSeatMapModal] = useState(false);
 
-  // seat preferences
-  const [seatPreferences, setSeatPreferences] = useState<string[][]>([]);
-  const [showSeatWizard, setShowSeatWizard] = useState(false);
+  const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
+  const [layoutLoading, setLayoutLoading] = useState(false);
 
-  // NEW: duration
-  const [duration, setDuration] = useState(60);
-
-  // fetch timeslots whenever date or partySize changes
+  // 1) Load timeslots
   useEffect(() => {
-    async function getTimeslots() {
-      if (!date || partySize < 1) {
+    async function loadTimes() {
+      if (!date || !partySize) {
         setTimeslots([]);
         return;
       }
@@ -44,12 +41,43 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
         setTimeslots([]);
       }
     }
-    getTimeslots();
+    loadTimes();
   }, [date, partySize]);
 
-  const handleCreate = async () => {
-    setError('');
+  // 2) Load layout
+  useEffect(() => {
+    async function loadLayout() {
+      setLayoutLoading(true);
+      try {
+        const layout = await fetchLayout(1); // or your current_layout_id
+        const sections: SeatSectionData[] = layout.seat_sections.map((sec: any) => ({
+          id: sec.id,
+          name: sec.name,
+          section_type: sec.section_type === 'table' ? 'table' : 'counter',
+          offset_x: sec.offset_x,
+          offset_y: sec.offset_y,
+          floor_number: sec.floor_number ?? sec.floorNumber ?? 1,
+          seats: sec.seats.map((s: any) => ({
+            id: s.id,
+            label: s.label || '',
+            position_x: s.position_x,
+            position_y: s.position_y,
+            capacity: s.capacity || 1,
+          })),
+        }));
+        setLayoutSections(sections);
+      } catch (err) {
+        console.error('Error fetching layout:', err);
+      } finally {
+        setLayoutLoading(false);
+      }
+    }
+    loadLayout();
+  }, []);
 
+  // 3) Create reservation => nest seat_preferences under "reservation"
+  async function handleCreate() {
+    setError('');
     if (!contactName) {
       setError('Guest name is required.');
       return;
@@ -61,30 +89,51 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
 
     const start_time = `${date}T${time}:00`;
 
-    try {
-      await createReservation({
-        restaurant_id: 1,
-        start_time,
-        party_size: partySize,
-        contact_name: contactName,
-        contact_phone: contactPhone,
-        contact_email: contactEmail,
-        status: 'booked',
-        seat_preferences: seatPreferences.length > 0 ? seatPreferences : undefined,
-        duration_minutes: duration, // <--- NEW
-      });
+    // If you only want the first set:
+    // const [option1] = allSets;
+    // const seat_prefs_for_db = option1.length ? [option1] : undefined;
 
+    // Or store all sets (filter out empty):
+    const seat_prefs_for_db = allSets.filter(arr => arr.length > 0);
+
+    try {
+      // The KEY: everything is nested under "reservation: {...}"
+      await createReservation({
+        reservation: {
+          restaurant_id: 1,
+          start_time,
+          party_size: partySize,
+          contact_name: contactName,
+          contact_phone: contactPhone,
+          contact_email: contactEmail,
+          status: 'booked',
+          seat_preferences: seat_prefs_for_db.length ? seat_prefs_for_db : [],
+          duration_minutes: duration,
+        },
+      });
       onSuccess();
     } catch (err) {
       console.error('Error creating reservation:', err);
       setError('Failed to create reservation. Check console or try again.');
     }
-  };
-
-  function handleSeatWizardSave(prefs: string[][]) {
-    setSeatPreferences(prefs);
-    setShowSeatWizard(false);
   }
+
+  function handleOpenSeatMap() {
+    if (!layoutSections.length) {
+      alert('Layout not loaded yet or no seats available.');
+      return;
+    }
+    setShowSeatMapModal(true);
+  }
+  function handleCloseSeatMap() {
+    setShowSeatMapModal(false);
+  }
+  function handleSeatMapSave(threeSets: string[][]) {
+    setAllSets(threeSets);
+    setShowSeatMapModal(false);
+  }
+
+  const [opt1, opt2, opt3] = allSets;
 
   return (
     <>
@@ -105,7 +154,7 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
           )}
 
           <div className="space-y-4">
-            {/* Date + Party Size */}
+            {/* Date + Party */}
             <div className="flex space-x-2">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -128,7 +177,7 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
               </div>
             </div>
 
-            {/* Time => dropdown from /availability */}
+            {/* Time */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
               <select
@@ -137,7 +186,7 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
                 className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500"
               >
                 <option value="">-- Select a time --</option>
-                {timeslots.map((slot) => (
+                {timeslots.map(slot => (
                   <option key={slot} value={slot}>{slot}</option>
                 ))}
               </select>
@@ -196,36 +245,31 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
               />
             </div>
 
-            {/* (Optional) Seat Preferences */}
+            {/* Seat Preferences => 3 sets */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Seat Preferences (Optional)
-              </label>
-              {seatPreferences.length > 0 ? (
-                <div className="p-2 bg-gray-50 border border-gray-200 rounded">
-                  <p className="text-sm text-gray-600">
-                    You have defined {seatPreferences.length} preference set(s).
-                  </p>
-                  {seatPreferences.map((set, idx) => (
-                    <p key={idx} className="text-xs text-gray-800">
-                      Choice #{idx + 1}: {set.join(', ')}
-                    </p>
-                  ))}
-                  <button
-                    onClick={() => setShowSeatWizard(true)}
-                    className="mt-2 text-xs text-blue-600 underline"
-                  >
-                    Edit Preferences
-                  </button>
-                </div>
-              ) : (
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seat Preferences (Optional)</label>
+              <div className="p-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
+                <p className="text-xs italic">
+                  Option 1: {opt1.length ? opt1.join(', ') : '(none)'}
+                </p>
+                <p className="text-xs italic">
+                  Option 2: {opt2.length ? opt2.join(', ') : '(none)'}
+                </p>
+                <p className="text-xs italic">
+                  Option 3: {opt3.length ? opt3.join(', ') : '(none)'}
+                </p>
                 <button
-                  onClick={() => setShowSeatWizard(true)}
-                  className="px-3 py-2 text-sm bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                  type="button"
+                  onClick={handleOpenSeatMap}
+                  className="mt-2 px-3 py-2 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                  disabled={layoutLoading}
                 >
-                  + Select Seat Preferences
+                  {opt1.length || opt2.length || opt3.length
+                    ? 'Edit Seat Preferences'
+                    : 'Select Seat Preferences'
+                  }
                 </button>
-              )}
+              </div>
             </div>
           </div>
 
@@ -247,15 +291,16 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
         </div>
       </div>
 
-      {/* Seat Preference Wizard overlay */}
-      {showSeatWizard && (
-        <SeatPreferenceWizard
+      {showSeatMapModal && (
+        <SeatPreferenceMapModal
           date={date}
           time={time}
+          duration={duration}
           partySize={partySize}
-          initialPreferences={seatPreferences}
-          onClose={() => setShowSeatWizard(false)}
-          onSave={handleSeatWizardSave}
+          sections={layoutSections}
+          initialPreferences={allSets}
+          onSave={handleSeatMapSave}
+          onClose={handleCloseSeatMap}
         />
       )}
     </>

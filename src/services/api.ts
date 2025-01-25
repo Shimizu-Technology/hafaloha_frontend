@@ -67,15 +67,18 @@ export async function fetchReservations(params?: { date?: string }) {
  * Optionally includes seat_preferences and duration_minutes.
  */
 export async function createReservation(data: {
-  restaurant_id?: number;
-  start_time: string;
-  party_size: number;
-  contact_name: string;
-  contact_phone?: string;
-  contact_email?: string;
-  status?: string;
-  seat_preferences?: string[][];
-  duration_minutes?: number;       // <--- NEW
+  reservation: {
+    restaurant_id?: number;
+    start_time: string;
+    party_size: number;
+    status?: string;
+    seat_preferences?: string[][];
+    duration_minutes?: number;
+    contact_name?: string;
+    contact_phone?: string;
+    contact_email?: string;
+    // etc
+  }
 }) {
   const resp = await apiClient.post('/reservations', data);
   return resp.data;
