@@ -5,6 +5,7 @@ import {
   Minus, Maximize, Power
 } from 'lucide-react';
 
+import { toast } from 'react-hot-toast';  // 1) Import toast
 import {
   fetchAllLayouts,
   fetchLayout,
@@ -12,6 +13,7 @@ import {
   updateLayout,
   activateLayout,
 } from '../services/api';
+
 import RenameSeatsModal from './RenameSeatsModal';
 
 /** ---------- Data Interfaces ---------- **/
@@ -86,19 +88,18 @@ export default function SeatLayoutEditor() {
   const [showSectionDialog, setShowSectionDialog] = useState(false);
   const [editingSectionId,  setEditingSectionId]  = useState<string | null>(null);
 
-  /** We still store name, type, orientation in a SectionConfig. 
-      But seatCount is also there. We'll keep a separate 'seatCountText' for free editing. */
+  // We'll store name, seatCount, etc. in SectionConfig
   const [sectionConfig, setSectionConfig] = useState<SectionConfig>({
     name: '',
-    seatCount: 4,   // stored as a number ultimately
+    seatCount: 4, 
     type: 'counter',
     orientation: 'vertical',
   });
 
-  /** We'll keep these 3 as strings for free‐form numeric input. */
-  const [seatCountText,       setSeatCountText]       = useState('4');
-  const [sectionFloorText,    setSectionFloorText]    = useState('1');
-  const [seatCapacityText,    setSeatCapacityText]    = useState('1');
+  // For numeric text fields
+  const [seatCountText,    setSeatCountText]    = useState('4');
+  const [sectionFloorText, setSectionFloorText] = useState('1');
+  const [seatCapacityText, setSeatCapacityText] = useState('1');
 
   // ---------- Geometry constants ----------
   const TABLE_DIAMETER = 80;
@@ -125,6 +126,7 @@ export default function SeatLayoutEditor() {
         }
       } catch (err) {
         console.error('Error loading layouts:', err);
+        toast.error('Failed to load layouts.');
       }
     })();
   }, []);
@@ -145,6 +147,7 @@ export default function SeatLayoutEditor() {
       setActiveFloor(floors.length > 0 ? floors[0] : 1);
     } catch (err) {
       console.error('Error loading layout ID=', id, err);
+      toast.error('Failed to load layout.');
     }
   }
 
@@ -223,7 +226,7 @@ export default function SeatLayoutEditor() {
   // ---------- Dragging sections (pointer events) ----------
   function handleDragStart(e: React.PointerEvent, sectionId: string) {
     if (!isEditMode) return; // If not in edit mode, ignore drag
-    e.preventDefault();      // Prevent touch scrolling
+    e.preventDefault();
     e.stopPropagation();
 
     setIsDragging(true);
@@ -275,7 +278,6 @@ export default function SeatLayoutEditor() {
   // ---------- Add/Edit seat sections ----------
   function handleAddSection() {
     setEditingSectionId(null);
-
     // Default new table to seatCount=4, floor=activeFloor, capacity=1
     setSectionConfig({
       name: `New Table ${sections.length + 1}`,
@@ -302,12 +304,8 @@ export default function SeatLayoutEditor() {
       orientation: sec.orientation,
     });
 
-    // floorNumber => text
     setSectionFloorText(String(sec.floorNumber || 1));
-    // seatCount => text
     setSeatCountText(String(sec.seats.length || 1));
-
-    // seatCapacity => first seat's capacity or 1
     if (sec.seats.length > 0) {
       setSeatCapacityText(String(sec.seats[0].capacity || 1));
     } else {
@@ -322,12 +320,11 @@ export default function SeatLayoutEditor() {
   }
 
   function createOrEditSection() {
-    // parse the numeric values
+    // parse numeric fields
     const finalFloor     = parseInt(sectionFloorText, 10) || 1;
     const finalSeatCount = parseInt(seatCountText, 10)    || 1;
     const finalCapacity  = parseInt(seatCapacityText, 10) || 1;
 
-    // store them into our SectionConfig so we can use them in seat layout
     const updatedConfig = {
       ...sectionConfig,
       seatCount: finalSeatCount,
@@ -409,7 +406,7 @@ export default function SeatLayoutEditor() {
 
   /** Layout seats in a circle for "table" type. */
   function layoutTableSeats(seatCount: number, capacity: number): DBSeat[] {
-    const angleStep   = (2 * Math.PI) / seatCount;
+    const angleStep = (2 * Math.PI) / seatCount;
     const angleOffset = -Math.PI / 2;
     const radius = TABLE_RADIUS + (SEAT_DIAMETER / 2) + SEAT_MARGIN;
 
@@ -469,7 +466,7 @@ export default function SeatLayoutEditor() {
       if (activeLayoutId) {
         // update existing
         const updatedLayout = await updateLayout(activeLayoutId, payload);
-        alert('Layout updated successfully!');
+        toast.success('Layout updated successfully!');
         setLayoutName(updatedLayout.name);
 
         const secWithFloors = (updatedLayout.sections_data.sections || []).map((sec: any) => ({
@@ -484,7 +481,7 @@ export default function SeatLayoutEditor() {
       } else {
         // create new
         const newLayout = await createLayout(payload);
-        alert('Layout created!');
+        toast.success('Layout created!');
         setAllLayouts(prev => [...prev, newLayout]);
         setActiveLayoutId(newLayout.id);
         setLayoutName(newLayout.name);
@@ -500,21 +497,21 @@ export default function SeatLayoutEditor() {
       }
     } catch (err) {
       console.error('Error saving layout:', err);
-      alert('Failed to save layout—check console.');
+      toast.error('Failed to save layout. Check console.');
     }
   }
 
   async function handleActivateLayout() {
     if (!activeLayoutId) {
-      alert('Cannot activate a layout that is not saved yet!');
+      toast.error('Cannot activate a layout that is not saved yet!');
       return;
     }
     try {
       const resp = await activateLayout(activeLayoutId);
-      alert(resp.message || 'Layout activated.');
+      toast.success(resp.message || 'Layout activated.');
     } catch (err) {
       console.error('Error activating layout:', err);
-      alert('Failed to activate layout—check console.');
+      toast.error('Failed to activate layout. Check console.');
     }
   }
 
@@ -530,13 +527,11 @@ export default function SeatLayoutEditor() {
     setRenameModalSeats([...sec.seats]);
     setRenameModalSectionName(sec.name);
   }
-
   function handleCloseRenameModal() {
     setRenameModalOpen(false);
     setRenameModalSeats([]);
     setRenameModalSectionName('');
   }
-
   function handleRenameModalSave(updatedSeats: DBSeat[]) {
     setSections(prev =>
       prev.map(sec => {

@@ -1,9 +1,11 @@
 // src/components/FloorManager.tsx
+
 import React, { useEffect, useState } from 'react';
 import {
   Edit2, LayoutDashboard, Minus, Maximize, Plus as LucidePlus, Settings,
 } from 'lucide-react';
 
+import { toast } from 'react-hot-toast'; // <-- 1) import toast
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -95,9 +97,7 @@ interface RestaurantData {
 }
 
 interface FloorManagerProps {
-  /** Currently selected date in "YYYY-MM-DD" format. */
-  date: string;
-  /** Callback when the user changes the date. Expects "YYYY-MM-DD". */
+  date: string;  // "YYYY-MM-DD"
   onDateChange: (newDate: string) => void;
   reservations: Reservation[];
   waitlist: WaitlistEntry[];
@@ -142,17 +142,17 @@ function formatYYYYMMDD(d: Date): string {
 /** get seat times from "now" or "18:00" if not the current date */
 function getSeatTimes(selectedDate: string, durationMinutes = 60) {
   const guamTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Guam' });
-  const guamNowStr = new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' });
-  const guamNow = new Date(guamNowStr);
+  const guamNowStr   = new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' });
+  const guamNow      = new Date(guamNowStr);
 
   const isToday = (selectedDate === guamTodayStr);
   if (isToday) {
     const start = guamNow;
-    const end = new Date(start.getTime() + durationMinutes * 60000);
+    const end   = new Date(start.getTime() + durationMinutes * 60000);
     return { start, end };
   } else {
     const start = new Date(`${selectedDate}T18:00:00`);
-    const end = new Date(start.getTime() + durationMinutes * 60000);
+    const end   = new Date(start.getTime() + durationMinutes * 60000);
     return { start, end };
   }
 }
@@ -173,11 +173,11 @@ export default function FloorManager({
 
   // seat map sizing
   const [layoutSize, setLayoutSize] = useState<'auto'|'small'|'medium'|'large'>('medium');
-  const [canvasWidth, setCanvasWidth] = useState(2000);
+  const [canvasWidth,  setCanvasWidth]  = useState(2000);
   const [canvasHeight, setCanvasHeight] = useState(1200);
-  const [seatScale, setSeatScale] = useState(1.0);
-  const [zoom, setZoom] = useState(1.0);
-  const [showGrid, setShowGrid] = useState(true);
+  const [seatScale,    setSeatScale]    = useState(1.0);
+  const [zoom,         setZoom]         = useState(1.0);
+  const [showGrid,     setShowGrid]     = useState(true);
 
   // Reservation detail modal
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
@@ -225,6 +225,7 @@ export default function FloorManager({
       }
     } catch (err) {
       console.error('[FloorManager] initLoad error:', err);
+      toast.error('Failed to load initial data.');
       setLayout(null);
       setSelectedLayoutId(null);
     } finally {
@@ -236,6 +237,7 @@ export default function FloorManager({
   useEffect(() => {
     if (!selectedLayoutId) return;
     fetchSeatAllocsForDate(selectedLayoutId, date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLayoutId, date]);
 
   async function fetchSeatAllocsForDate(layoutId: number, theDate: string) {
@@ -245,6 +247,7 @@ export default function FloorManager({
       setDateSeatAllocations(seatAllocs);
     } catch (err) {
       console.error('[FloorManager] fetchSeatAllocsForDate error:', err);
+      toast.error('Failed to load seat allocations.');
       setDateSeatAllocations([]);
     } finally {
       setLoading(false);
@@ -260,6 +263,7 @@ export default function FloorManager({
       await fetchSeatAllocsForDate(id, date);
     } catch (err) {
       console.error('[FloorManager] handleSelectLayout error:', err);
+      toast.error('Failed to load selected layout.');
       setLayout(null);
       setDateSeatAllocations([]);
     } finally {
@@ -289,9 +293,9 @@ export default function FloorManager({
 
   function computeAutoBounds() {
     if (!layout?.seat_sections) return;
-    let minX = Infinity; 
+    let minX = Infinity;
     let maxX = -Infinity;
-    let minY = Infinity; 
+    let minY = Infinity;
     let maxY = -Infinity;
 
     layout.seat_sections.forEach((sec) => {
@@ -313,7 +317,6 @@ export default function FloorManager({
     setSeatScale(1.0);
   }
 
-  /** occupant info for seat */
   function getOccupantInfo(seatId: number) {
     return dateSeatAllocations.find(a => a.seat_id === seatId && !a.released_at) || null;
   }
@@ -335,7 +338,7 @@ export default function FloorManager({
     if (!occupantId) return;
 
     let occupantPartySize = 1;
-    let occupantNameFull = 'Guest';
+    let occupantNameFull  = 'Guest';
     let matchedReservation: Reservation | undefined;
 
     if (typ === 'reservation') {
@@ -393,7 +396,7 @@ export default function FloorManager({
   async function handleSeatNow() {
     if (!seatWizard.active || !seatWizard.occupantId) return;
     if (seatWizard.selectedSeatIds.length !== seatWizard.occupantPartySize) {
-      alert(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
+      toast.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
       return;
     }
     const { start, end } = getSeatWizardStartEnd();
@@ -405,15 +408,16 @@ export default function FloorManager({
         start_time:    start.toISOString(),
         end_time:      end.toISOString(),
       });
+      toast.success('Seats assigned successfully!');
       handleCancelWizard();
       await refreshLayout();
     } catch (err: any) {
       console.error('[FloorManager] handleSeatNow error:', err);
       if (err.response?.status === 422) {
-        alert('Some seats are already taken. Please choose different seats.');
+        toast.error('Some seats are already taken. Please choose different seats.');
         await refreshLayout();
       } else {
-        alert('Seat occupant error—check console.');
+        toast.error('An error occurred while seating. Check console.');
       }
     }
   }
@@ -421,7 +425,7 @@ export default function FloorManager({
   async function handleReserveSeats() {
     if (!seatWizard.active || !seatWizard.occupantId) return;
     if (seatWizard.selectedSeatIds.length !== seatWizard.occupantPartySize) {
-      alert(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
+      toast.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
       return;
     }
     const { start, end } = getSeatWizardStartEnd();
@@ -433,43 +437,16 @@ export default function FloorManager({
         start_time:    start.toISOString(),
         end_time:      end.toISOString(),
       });
+      toast.success('Seats reserved successfully!');
       handleCancelWizard();
       await refreshLayout();
     } catch (err: any) {
       console.error('[FloorManager] handleReserveSeats error:', err);
       if (err.response?.status === 422) {
-        alert('Some seats are already reserved. Please choose different seats.');
+        toast.error('Some seats are already reserved. Please choose different seats.');
         await refreshLayout();
       } else {
-        alert('Reserve occupant error—check console.');
-      }
-    }
-  }
-
-  async function handleAssignFromPreference(seatLabels: string[]) {
-    if (!seatWizard.active || !seatWizard.occupantId) return;
-    if (!seatWizard.reservationData) return;
-    const r = seatWizard.reservationData;
-    const startTime = r.start_time || getSeatTimes(date, 60).start.toISOString();
-
-    try {
-      await seatAllocationReserve({
-        occupant_type: 'reservation',
-        occupant_id:   r.id,
-        seat_labels:   seatLabels,
-        start_time:    startTime,
-      });
-      await updateReservation(r.id, { status: 'reserved' });
-      alert(`Assigned seats: ${seatLabels.join(', ')}`);
-      handleCancelWizard();
-      await refreshLayout();
-    } catch (err: any) {
-      console.error('[FloorManager] handleAssignFromPreference error:', err);
-      if (err.response?.status === 422) {
-        alert('Some seats are taken. Please pick another option.');
-        await refreshLayout();
-      } else {
-        alert('Error assigning seats from preference. Check console.');
+        toast.error('An error occurred while reserving seats. Check console.');
       }
     }
   }
@@ -494,41 +471,45 @@ export default function FloorManager({
   async function handleFinishOccupant(occupantType: string, occupantId: number) {
     try {
       await seatAllocationFinish({ occupant_type: occupantType, occupant_id: occupantId });
+      toast.success('Seat finished (freed).');
       closeSeatDialog();
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleFinishOccupant error:', err);
-      alert('Finish occupant error—check console.');
+      toast.error('Failed to free seat. Check console.');
     }
   }
   async function handleNoShow(occupantType: string, occupantId: number) {
     try {
       await seatAllocationNoShow({ occupant_type: occupantType, occupant_id: occupantId });
+      toast.success('Marked as no-show.');
       closeSeatDialog();
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleNoShow error:', err);
-      alert('No-show occupant error—check console.');
+      toast.error('Failed to mark no-show. Check console.');
     }
   }
   async function handleArriveOccupant(occupantType: string, occupantId: number) {
     try {
       await seatAllocationArrive({ occupant_type: occupantType, occupant_id: occupantId });
+      toast.success('Occupant arrived and seated!');
       closeSeatDialog();
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleArriveOccupant error:', err);
-      alert('Arrive occupant error—check console.');
+      toast.error('Failed to seat occupant. Check console.');
     }
   }
   async function handleCancelOccupant(occupantType: string, occupantId: number) {
     try {
       await seatAllocationCancel({ occupant_type: occupantType, occupant_id: occupantId });
+      toast.success('Reservation canceled, seat freed.');
       closeSeatDialog();
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleCancelOccupant error:', err);
-      alert('Cancel occupant error—check console.');
+      toast.error('Failed to cancel occupant. Check console.');
     }
   }
 
@@ -538,11 +519,12 @@ export default function FloorManager({
   async function handleDeleteReservation(id: number) {
     try {
       await deleteReservation(id);
+      toast.success('Reservation deleted.');
       setSelectedReservation(null);
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleDeleteReservation error:', err);
-      alert('Delete reservation failed—check console.');
+      toast.error('Delete reservation failed. Check console.');
     }
   }
   async function handleEditReservation(updated: Reservation) {
@@ -558,17 +540,20 @@ export default function FloorManager({
         patchData.seat_preferences = updated.seat_preferences;
       }
       await updateReservation(updated.id, patchData);
+      toast.success('Reservation updated.');
       setSelectedReservation(null);
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleEditReservation error:', err);
-      alert('Update reservation failed—check console.');
+      toast.error('Update reservation failed. Check console.');
     }
   }
 
-  //
   // Build seat data for FloorTabs
-  //
+  function isPreferenceFree(seatLabels: string[]): boolean {
+    return seatLabels.every(lbl => seatLabelToStatus[lbl] === 'free');
+  }
+
   if (loading) {
     return <div>Loading layout data...</div>;
   }
@@ -593,7 +578,7 @@ export default function FloorManager({
     );
   }
 
-  // occupant statuses => seatLabel => occupant_status
+  /** occupant statuses => seatLabel => occupant_status */
   const seatLabelToStatus: Record<string, string> = {};
   layout.seat_sections.forEach((sec) => {
     sec.seats.forEach((seat) => {
@@ -601,10 +586,6 @@ export default function FloorManager({
       seatLabelToStatus[seat.label ?? ''] = occ?.occupant_status || 'free';
     });
   });
-
-  function isPreferenceFree(seatLabels: string[]): boolean {
-    return seatLabels.every(lbl => seatLabelToStatus[lbl] === 'free');
-  }
 
   const seatSections = layout.seat_sections.map((sec) => {
     return {
@@ -636,12 +617,12 @@ export default function FloorManager({
   ) {
     if (seatWizard.active) {
       if (seat.occupant_status !== 'free') {
-        alert(`Seat ${seat.label} is occupied or reserved.`);
+        toast.error(`Seat ${seat.label} is not free. It's occupied or reserved.`);
         return;
       }
       const alreadySelected = seatWizard.selectedSeatIds.includes(seat.id);
       if (!alreadySelected && seatWizard.selectedSeatIds.length >= seatWizard.occupantPartySize) {
-        alert(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
+        toast.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
         return;
       }
       toggleSelectedSeat(seat.id);
@@ -657,7 +638,7 @@ export default function FloorManager({
     <div>
       <h2 className="text-xl font-bold mb-2">Floor Manager</h2>
 
-      {/* Top controls => spacing! */}
+      {/* Top controls */}
       <div className="flex flex-wrap items-center gap-4 mb-4">
         {/* Date */}
         <div className="flex items-center gap-2">
@@ -718,7 +699,7 @@ export default function FloorManager({
           Grid
         </button>
 
-        {/* Zoom Controls => add spacing */}
+        {/* Zoom Controls */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => setZoom((z) => Math.max(z - 0.25, 0.25))}
@@ -786,7 +767,7 @@ export default function FloorManager({
               </h4>
               {seatWizard.reservationData.seat_preferences.map((prefSet, idx) => {
                 const joined = prefSet.join(', ');
-                const canAssign = isPreferenceFree(prefSet);
+                const canAssign = prefSet.every(lbl => seatLabelToStatus[lbl] === 'free');
                 return (
                   <div key={idx} className="mb-1">
                     Option {idx + 1}: {joined || '(none)'}
@@ -795,7 +776,33 @@ export default function FloorManager({
                         {' '}
                         {canAssign ? (
                           <button
-                            onClick={() => handleAssignFromPreference(prefSet)}
+                            onClick={async () => {
+                              try {
+                                // Similar to handleAssignSeatsFromOption
+                                if (!seatWizard.reservationData?.start_time) {
+                                  toast.error('No reservation start_time available.');
+                                  return;
+                                }
+                                await seatAllocationReserve({
+                                  occupant_type: 'reservation',
+                                  occupant_id:   seatWizard.reservationData.id,
+                                  seat_labels:   prefSet,
+                                  start_time:    seatWizard.reservationData.start_time,
+                                });
+                                await updateReservation(seatWizard.reservationData.id, { status: 'reserved' });
+                                toast.success(`Assigned seats: ${prefSet.join(', ')}`);
+                                handleCancelWizard();
+                                await refreshLayout();
+                              } catch (err: any) {
+                                console.error('Assign from preference error:', err);
+                                if (err.response?.status === 422) {
+                                  toast.error('Some seats are already taken.');
+                                  await refreshLayout();
+                                } else {
+                                  toast.error('Failed to assign seats from preference.');
+                                }
+                              }
+                            }}
                             className="ml-2 text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
                           >
                             Assign
@@ -823,7 +830,7 @@ export default function FloorManager({
         zoom={zoom}
         showGrid={showGrid}
         onSeatClick={handleSeatClick}
-        onSectionDrag={undefined}
+        onSectionDrag={undefined} // not in use here
         getFloorNumber={(sec) => sec.floor_number || 1}
       />
 
@@ -1004,7 +1011,7 @@ export default function FloorManager({
             } else {
               // occupant found => occupant status
               const occType = occupantAlloc.occupant_type || 'reservation';
-              const occId = occupantAlloc.occupant_id || 0;
+              const occId   = occupantAlloc.occupant_id || 0;
               const occName = occupantAlloc.occupant_name || 'someone';
               const occSize = occupantAlloc.occupant_party_size || 1;
               const occStatus = occupantAlloc.occupant_status;
@@ -1099,7 +1106,6 @@ export default function FloorManager({
           reservation={selectedReservation}
           onClose={() => setSelectedReservation(null)}
           onDelete={handleDeleteReservation}
-          onEdit={handleEditReservation}
           onRefreshData={refreshLayout}
         />
       )}

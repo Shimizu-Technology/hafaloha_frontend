@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { toast } from 'react-hot-toast'; // 1) Import toast from react-hot-toast
 
 import {
   fetchAvailability,
@@ -35,13 +36,11 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // A small helper that converts "HH:mm" (24h) => "h:mm AM/PM"
+  // A small helper to convert "HH:mm" (24h) => "h:mm AM/PM"
   function format12hSlot(slot: string) {
     const [hhStr, mmStr] = slot.split(':');
     const hh = parseInt(hhStr, 10);
     const mm = parseInt(mmStr, 10);
-
-    // Create a dummy date
     const d = new Date(2020, 0, 1, hh, mm);
     return d.toLocaleString('en-US', {
       hour: 'numeric',
@@ -56,28 +55,28 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   const [date, setDate] = useState(defaultDate || ''); // "YYYY-MM-DD"
   const [time, setTime] = useState('');
 
-  // Store party size as a string for free editing
+  // Party size as a string
   const [partySizeText, setPartySizeText] = useState('2');
 
-  // Basic contact fields
+  // Contact info
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('+1671'); // prefill with +1671
   const [contactEmail, setContactEmail] = useState('');
 
-  // Start with 60, or possibly override from restaurant
+  // Reservation duration
   const [duration, setDuration] = useState(60);
 
-  const [error, setError] = useState('');
+  // We'll store available timeslots here
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
-  // If timeslots = exactly 1 => hide the duration and default to a big number
+  // If there's exactly 1 timeslot, we hide duration & default to large
   const hideDuration = timeslots.length === 1;
 
   // Seat preferences
   const [allSets, setAllSets] = useState<string[][]>([[], [], []]);
   const [showSeatMapModal, setShowSeatMapModal] = useState(false);
 
-  // For seat layout
+  // Layout sections
   const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
   const [layoutLoading, setLayoutLoading] = useState(false);
 
@@ -162,28 +161,25 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   // ---------------------------
   // Handlers
   // ---------------------------
-  /** Filter out non-digits on Party Size input */
   function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
     const digitsOnly = e.target.value.replace(/\D/g, '');
     setPartySizeText(digitsOnly);
   }
 
   async function handleCreate() {
-    setError('');
-
+    // Basic validation
     if (!contactName) {
-      setError('Guest name is required.');
+      toast.error('Guest name is required.');
       return;
     }
     if (!date || !time) {
-      setError('Please pick a valid date/time.');
+      toast.error('Please pick a valid date/time.');
       return;
     }
 
-    // Parse party size from text
     const finalPartySize = parseInt(partySizeText, 10) || 1;
 
-    // Clean phone: if user leaves it as "+1671" => no phone
+    // phone cleanup
     let phoneVal = contactPhone.trim();
     const cleanedPhone = phoneVal.replace(/[-()\s]+/g, '');
     if (cleanedPhone === '+1671') {
@@ -207,14 +203,16 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
           duration_minutes: duration,
         },
       });
+
+      toast.success('Reservation created successfully!');
       onSuccess(); // e.g. close modal, reload data
     } catch (err) {
       console.error('Error creating reservation:', err);
-      setError('Failed to create reservation. Please try again.');
+      toast.error('Failed to create reservation. Please try again.');
     }
   }
 
-  // Seat Map
+  // Seat map actions
   function handleOpenSeatMap() {
     if (!layoutSections.length) {
       alert('Layout not loaded or no seats available.');
@@ -233,26 +231,13 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   const [opt1, opt2, opt3] = allSets;
   const parsedDate = date ? parseYYYYMMDD(date) : null;
 
-  // Helper to convert "HH:mm" => e.g. "5:30 PM"
-  function format12hSlot(slot: string) {
-    const [hhStr, mmStr] = slot.split(':');
-    const hh = parseInt(hhStr, 10);
-    const mm = parseInt(mmStr, 10);
-    const d = new Date(2020, 0, 1, hh, mm);
-    return d.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  }
-
   return (
     <>
       {/* Modal Overlay */}
       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
         {/* Modal Container */}
         <div className="relative bg-white max-w-lg w-full mx-4 rounded-lg shadow-lg">
-          {/* Scrollable content (in case of large form) */}
+          {/* Scrollable content */}
           <div className="p-6 max-h-[85vh] overflow-y-auto relative">
             {/* Close Button */}
             <button
@@ -262,18 +247,11 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
               ✕
             </button>
 
-            <h2 className="text-2xl font-bold mb-4 text-gray-900">
-              New Reservation
-            </h2>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900">New Reservation</h2>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-md mb-4">
-                {error}
-              </div>
-            )}
+            {/* Removed local error block, using toast.error instead */}
 
             <div className="space-y-4">
-
               {/* Date & Party in a 2-column grid */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Date */}
@@ -365,7 +343,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                   className="w-full p-2 border border-gray-300 rounded text-sm"
                 />
               </div>
-
+              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone
@@ -378,7 +356,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                   placeholder="+1671"
                 />
               </div>
-
+              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email

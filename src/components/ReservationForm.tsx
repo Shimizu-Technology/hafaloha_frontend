@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Clock, Users, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';   // 1) import toast
 import { fetchAvailability, createReservation } from '../services/api';
 
 interface ReservationFormData {
@@ -29,7 +30,7 @@ export default function ReservationForm() {
     time: '',
     firstName: '',
     lastName: '',
-    phone: initialPhone,  // Pre‐populate with +1671 if no user.phone
+    phone: initialPhone,
     email: '',
   });
 
@@ -39,20 +40,19 @@ export default function ReservationForm() {
   // Duration field
   const [duration, setDuration] = useState(60);
 
-  // We'll store the timeslots returned by /availability here
+  // We'll store timeslots from /availability here
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  // 2) Removed local error/success states
+  // const [error, setError] = useState('');
+  // const [success, setSuccess] = useState('');
 
   /** Convert partySizeText => number, fallback to 1 */
   function getPartySize(): number {
     return parseInt(partySizeText, 10) || 1;
   }
 
-  /**
-   * Whenever `formData.date` or `partySizeText` changes, fetch /availability
-   */
+  // Load timeslots whenever date or partySize changes
   useEffect(() => {
     async function getTimeslots() {
       if (!formData.date || !getPartySize()) {
@@ -70,18 +70,12 @@ export default function ReservationForm() {
     getTimeslots();
   }, [formData.date, partySizeText]);
 
-  /**
-   * Helper: convert "HH:mm" (24-hour) to 12-hour, e.g. "17:30" => "5:30 PM".
-   * We'll just pick an arbitrary date so we can parse hours/minutes.
-   */
+  // Convert "HH:mm" (24h) => "h:mm AM/PM"
   function format12hSlot(slot: string) {
     const [hhStr, mmStr] = slot.split(':');
     const hh = parseInt(hhStr, 10);
     const mm = parseInt(mmStr, 10);
-
-    // Construct a dummy Date (year=2020 to avoid leap year confusion, etc.)
     const d = new Date(2020, 0, 1, hh, mm);
-    // Format as 12-hour time
     return d.toLocaleString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -89,20 +83,20 @@ export default function ReservationForm() {
     });
   }
 
-  /** Form submission => createReservation */
+  // 3) Show toasts instead of local success/error
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
 
+    // Basic validation
     if (!formData.date || !formData.time) {
-      setError('Please pick a date and time.');
+      toast.error('Please pick a date and time.');
       return;
     }
 
-    // Combine date + chosen time into an ISO string
+    // combine date/time => ISO string
     const start_time = `${formData.date}T${formData.time}:00`;
 
+    // fallback logic
     const contactFirstName = formData.firstName.trim()
       || (user ? user.name?.split(' ')[0] ?? '' : '');
     const contactLastName  = formData.lastName.trim()
@@ -111,21 +105,21 @@ export default function ReservationForm() {
     const contactEmail     = formData.email.trim() || user?.email || '';
 
     if (!contactFirstName) {
-      setError('First name is required.');
+      toast.error('First name is required.');
       return;
     }
 
     // final numeric party size
     const finalPartySize = getPartySize();
 
-    // PHONE CLEANUP: If user left it as just "+1671", treat as no phone
+    // phone cleanup
     const cleanedPhone = contactPhone.replace(/[-()\s]+/g, '');
     if (cleanedPhone === '+1671') {
       contactPhone = '';
     }
 
     try {
-      // Create reservation via API
+      // create reservation
       const newRes = await createReservation({
         start_time,
         party_size: finalPartySize,
@@ -136,19 +130,18 @@ export default function ReservationForm() {
         duration_minutes: duration,
       });
 
-      setSuccess('Reservation created successfully!');
+      toast.success('Reservation created successfully!');
       navigate('/reservation-confirmation', {
         state: { reservation: newRes },
       });
     } catch (err) {
       console.error('Error creating reservation:', err);
-      setError('Failed to create reservation. Please try again.');
+      toast.error('Failed to create reservation. Please try again.');
     }
   };
 
   const isLoggedIn = !!user;
 
-  /** Filter out non‐digit characters in Party Size */
   function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
     const digitsOnly = e.target.value.replace(/\D/g, '');
     setPartySizeText(digitsOnly);
@@ -159,16 +152,8 @@ export default function ReservationForm() {
       onSubmit={handleSubmit}
       className="w-full max-w-lg mx-auto bg-white rounded-lg shadow-lg p-6"
     >
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-4">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-md mb-4">
-          {success}
-        </div>
-      )}
+      {/* 4) Removed the old “error/success” banner code */}
+      {/* Because we now rely on toast messages */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Date */}
@@ -189,7 +174,7 @@ export default function ReservationForm() {
           />
         </div>
 
-        {/* Time (Dropdown from timeslots) => convert each slot to 12-hour */}
+        {/* Time => 12-hour convert */}
         <div className="space-y-2">
           <label htmlFor="time" className="block text-sm font-medium text-gray-700">
             Time

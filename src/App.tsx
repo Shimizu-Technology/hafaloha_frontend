@@ -1,6 +1,7 @@
 // src/App.tsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { useAuth } from './context/AuthContext';
 
 import NavBar from './components/NavBar';
@@ -51,6 +52,8 @@ export default function App() {
           }
         />
       </Routes>
+
+      <Toaster position="top-right" reverseOrder={false} />
     </Router>
   );
 }

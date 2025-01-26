@@ -1,6 +1,8 @@
 // src/components/ReservationModal.tsx
+
 import React, { useEffect, useState } from 'react';
 import { XCircle } from 'lucide-react';
+import { toast } from 'react-hot-toast'; // 1) import toast
 import {
   fetchLayout,
   fetchSeatAllocations,
@@ -40,13 +42,13 @@ export default function ReservationModal({
   const [isEditing, setIsEditing] = useState(false);
 
   // Basic fields
-  const [guestName, setGuestName]   = useState(reservation.contact_name || '');
-  // Store the party size as a string for free‐form editing in edit mode
+  const [guestName, setGuestName] = useState(reservation.contact_name || '');
+  // Store the party size as a string for free editing in edit mode
   const [partySizeText, setPartySizeText] = useState(String(reservation.party_size || 1));
   const [contactPhone, setContactPhone]   = useState(reservation.contact_phone || '');
   const [contactEmail, setContactEmail]   = useState(reservation.contact_email || '');
-  const [status,     setStatus]           = useState(reservation.status || 'booked');
-  const [duration,   setDuration]         = useState(reservation.duration_minutes ?? 60);
+  const [status, setStatus]               = useState(reservation.status || 'booked');
+  const [duration, setDuration]           = useState(reservation.duration_minutes ?? 60);
 
   // If seat_preferences is populated, store it; else default to 3 empty arrays
   const [allSets, setAllSets] = useState<string[][]>(
@@ -54,7 +56,7 @@ export default function ReservationModal({
   );
 
   // Layout & seat allocations for the date
-  const [layoutSections, setLayoutSections]   = useState<SeatSectionData[]>([]);
+  const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
   const [occupiedSeatLabels, setOccupiedSeatLabels] = useState<Set<string>>(new Set());
 
   // For seat map modal
@@ -87,7 +89,7 @@ export default function ReservationModal({
       })
     : '';
 
-  // ---------- Load layout + seat allocations ----------
+  // ---------- Load layout + seat allocations for the reservation date ----------
   useEffect(() => {
     async function loadLayoutAndAllocations() {
       try {
@@ -126,10 +128,13 @@ export default function ReservationModal({
           // Make a set of currently occupied seat labels
           const occSet = new Set<string>();
           seatAllocs.forEach((alloc: any) => {
-            const s = alloc.occupant_status;
+            const occupantStatus = alloc.occupant_status;
             const released = alloc.released_at;
             // If not released & occupant_status is reserved/seated/occupied => taken
-            if (!released && (s === 'reserved' || s === 'seated' || s === 'occupied')) {
+            if (!released &&
+                (occupantStatus === 'reserved'
+                 || occupantStatus === 'seated'
+                 || occupantStatus === 'occupied')) {
               const lbl = seatIdToLabel[alloc.seat_id];
               if (lbl) occSet.add(lbl);
             }
@@ -138,6 +143,7 @@ export default function ReservationModal({
         }
       } catch (err) {
         console.error('Error loading data in ReservationModal:', err);
+        toast.error('Failed to load seat data.');
       }
     }
     loadLayoutAndAllocations();
@@ -154,7 +160,7 @@ export default function ReservationModal({
     return parseInt(partySizeText, 10) || 1;
   }
 
-  // ---------- Save changes ----------
+  // ---------- Save changes (Edit mode -> Update) ----------
   async function handleSave() {
     try {
       // Filter out empty seat-preference sets
@@ -170,19 +176,21 @@ export default function ReservationModal({
         duration_minutes: duration,
       });
 
+      toast.success('Reservation updated!');
       setIsEditing(false);
       onClose();
     } catch (err) {
       console.error('Failed to update reservation:', err);
-      alert('Error updating reservation. Check console.');
+      toast.error('Error updating reservation. Please try again.');
     }
   }
 
   // ---------- If user clicks Delete ----------
   function handleDelete() {
-    if (onDelete) {
-      onDelete(reservation.id);
-    }
+    if (!onDelete) return;
+    // You might show a confirm dialog, but let's assume it's handled upstream
+    onDelete(reservation.id);
+    toast.success('Reservation deleted.'); 
   }
 
   // ---------- Seat Map Modal ----------
@@ -201,11 +209,11 @@ export default function ReservationModal({
   async function handleAssignSeatsFromOption(optionIndex: number) {
     const seatLabels = reservation.seat_preferences?.[optionIndex];
     if (!seatLabels || seatLabels.length === 0) {
-      alert('No seats found in that preference.');
+      toast.error('No seats found in that preference.');
       return;
     }
     if (!reservation.start_time) {
-      alert('This reservation has no start_time, cannot assign seats.');
+      toast.error('This reservation has no start_time, cannot assign seats.');
       return;
     }
 
@@ -219,17 +227,17 @@ export default function ReservationModal({
       // Then update the reservation to "reserved"
       await updateReservation(reservation.id, { status: 'reserved' });
 
-      alert(`Assigned seats from Option ${optionIndex + 1}!`);
-      // optional: if there's a parent re-fetch function:
+      toast.success(`Assigned seats from Option ${optionIndex + 1}!`);
+      // optional: if there's a parent re-fetch function
       if (onRefreshData) {
         onRefreshData();
       }
     } catch (err: any) {
       console.error('Error assigning seats:', err);
       if (err.response?.status === 422) {
-        alert('Some seats are already taken. Please choose another preference.');
+        toast.error('Some seats are already taken. Choose another preference.');
       } else {
-        alert('Failed to assign seats. Check console.');
+        toast.error('Failed to assign seats. Check console.');
       }
     }
   }
@@ -239,9 +247,10 @@ export default function ReservationModal({
     return seatLabels.every((lbl) => !occupiedSeatLabels.has(lbl));
   }
 
-  // Format the seat preferences
+  // seat_preferences from the server
   const seatPrefs = reservation.seat_preferences || [];
 
+  // ---------- Render ----------
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
       <div className="relative bg-white max-w-md w-full mx-4 rounded-lg shadow-lg">
@@ -257,36 +266,53 @@ export default function ReservationModal({
 
           <h2 className="text-2xl font-bold mb-4 text-gray-900">Reservation Details</h2>
 
-          {/* ==================== VIEW MODE ==================== */}
           {!isEditing ? (
+            /* ==================== VIEW MODE ==================== */
             <div className="space-y-3 text-gray-700">
+              {/* Guest */}
               <div>
                 <strong>Guest:</strong> {reservation.contact_name || '(none)'}
               </div>
+              {/* Start time */}
               <div>
                 <strong>Date/Time:</strong> {startTimeStr || '(none)'}
               </div>
+              {/* Party size */}
               <div>
                 <strong>Party Size:</strong> {reservation.party_size ?? '(none)'}
               </div>
+              {/* Duration */}
               <div>
                 <strong>Duration (min):</strong> {reservation.duration_minutes ?? 60}
               </div>
+              {/* Phone */}
               <div>
                 <strong>Phone:</strong> {reservation.contact_phone || '(none)'}
               </div>
+              {/* Email */}
               <div>
                 <strong>Email:</strong> {reservation.contact_email || '(none)'}
               </div>
+              {/* Status */}
               <div>
                 <strong>Status:</strong>{' '}
                 <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-800">
                   {reservation.status || 'N/A'}
                 </span>
               </div>
-              {createdAtStr && (
+              {/* Created At */}
+              {reservation.created_at && (
                 <div>
-                  <strong>Created At:</strong> {createdAtStr}
+                  <strong>Created At:</strong>{' '}
+                  {new Date(reservation.created_at).toLocaleString('en-US', {
+                    timeZone: 'Pacific/Guam',
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })}
                 </div>
               )}
 
@@ -297,7 +323,9 @@ export default function ReservationModal({
                   seatPrefs.map((arr, idx) => {
                     const joined = arr.join(', ');
                     const canAssign =
-                      reservation.status === 'booked' && arr.length > 0 && isOptionFullyFree(arr);
+                      reservation.status === 'booked' &&
+                      arr.length > 0 &&
+                      isOptionFullyFree(arr);
 
                     return (
                       <div key={idx} className="my-1">
@@ -332,7 +360,7 @@ export default function ReservationModal({
                 </div>
               ) : null}
 
-              {/* View Mode Buttons */}
+              {/* View mode buttons */}
               <div className="mt-6 flex justify-end space-x-2">
                 <button
                   onClick={() => setIsEditing(true)}
@@ -369,8 +397,7 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
-
-              {/* Party Size => text-based for free editing */}
+              {/* Party Size => text-based numeric */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Party Size</label>
                 <input
@@ -379,11 +406,9 @@ export default function ReservationModal({
                   pattern="[0-9]*"
                   value={partySizeText}
                   onChange={handlePartySizeChange}
-                  placeholder="1"
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
-
               {/* Duration (minutes) */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Duration (minutes)</label>
@@ -396,7 +421,6 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
-
               {/* Phone */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Phone</label>
@@ -407,7 +431,6 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
-
               {/* Email */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Email</label>
@@ -418,7 +441,6 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
-
               {/* Status */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Status</label>
@@ -435,7 +457,6 @@ export default function ReservationModal({
                   <option value="no_show">no_show</option>
                 </select>
               </div>
-
               {/* seat_preferences => up to 3 sets => staff can open seat map if needed */}
               <div>
                 <label className="block text-sm font-semibold mb-1">
@@ -457,7 +478,7 @@ export default function ReservationModal({
                 </div>
               </div>
 
-              {/* Edit Mode Buttons */}
+              {/* Edit mode buttons */}
               <div className="mt-6 flex justify-end space-x-2">
                 <button
                   onClick={handleSave}
