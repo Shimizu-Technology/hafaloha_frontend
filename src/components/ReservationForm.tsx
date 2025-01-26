@@ -19,13 +19,19 @@ export default function ReservationForm() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // We'll keep the rest of the fields in formData
+  // If user has a phone in their profile, use that. Otherwise default to "+1671".
+  // (If you never want to override the user's stored phone, remove this logic.)
+  const initialPhone = user?.phone && user.phone.trim() !== ''
+    ? user.phone
+    : '+1671';
+
+  // We'll keep most fields in formData
   const [formData, setFormData] = useState<ReservationFormData>({
     date: '',
     time: '',
     firstName: '',
     lastName: '',
-    phone: '',
+    phone: initialPhone,  // Pre‐populate with +1671 if no user.phone
     email: '',
   });
 
@@ -85,9 +91,10 @@ export default function ReservationForm() {
       || (user ? user.name?.split(' ')[0] ?? '' : '');
     const contactLastName  = formData.lastName.trim()
       || (user ? user.name?.split(' ')[1] ?? '' : '');
-    const contactPhone     = formData.phone.trim() || user?.phone || '';
+    let contactPhone       = formData.phone.trim(); // We'll further clean up below
     const contactEmail     = formData.email.trim() || user?.email || '';
 
+    // If no first name at all => error
     if (!contactFirstName) {
       setError('First name is required.');
       return;
@@ -95,6 +102,13 @@ export default function ReservationForm() {
 
     // final numeric party size
     const finalPartySize = getPartySize();
+
+    // --- PHONE CLEANUP: If user left it as just '+1671' (plus optional spaces/dashes) => no phone ---
+    // remove typical separators
+    const cleanedPhone = contactPhone.replace(/[-()\s]+/g, '');
+    if (cleanedPhone === '+1671') {
+      contactPhone = ''; // treat as no phone
+    }
 
     try {
       // Create the reservation via API
@@ -265,7 +279,7 @@ export default function ReservationForm() {
           />
         </div>
 
-        {/* Phone */}
+        {/* Phone (prepopulated with +1671 unless user already has a phone) */}
         <div className="space-y-2">
           <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
             Phone {isLoggedIn ? '(Optional)' : '(Required)'}
@@ -275,7 +289,7 @@ export default function ReservationForm() {
             <input
               type="tel"
               id="phone"
-              placeholder={isLoggedIn ? user?.phone ?? '' : 'Enter your phone number'}
+              placeholder={isLoggedIn ? user?.phone ?? '' : '+1671'}
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               className="w-full pl-10 pr-3 py-2 border border-gray-300 

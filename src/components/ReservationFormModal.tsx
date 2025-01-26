@@ -40,12 +40,13 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   // ---------------------------
   const [date, setDate] = useState(defaultDate || ''); // "YYYY-MM-DD"
   const [time, setTime] = useState('');
-  
+
   // Store party size as a string so user can edit freely
   const [partySizeText, setPartySizeText] = useState('2');
 
   const [contactName, setContactName] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
+  // Prepopulate phone with +1671 for convenience
+  const [contactPhone, setContactPhone] = useState('+1671');
   const [contactEmail, setContactEmail] = useState('');
 
   // Start with 60, then possibly override
@@ -168,6 +169,14 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     // Parse party size from text, fallback to 1 if empty/invalid
     const finalPartySize = parseInt(partySizeText, 10) || 1;
 
+    // Clean up phone: if user left it as +1671 only => treat as empty
+    let phoneValue = contactPhone.trim();
+    // remove spaces/dashes
+    const cleanedPhone = phoneValue.replace(/[-()\s]+/g, '');
+    if (cleanedPhone === '+1671') {
+      phoneValue = '';
+    }
+
     const start_time = `${date}T${time}:00`;
     const seat_prefs_for_db = allSets.filter((arr) => arr.length > 0);
 
@@ -178,7 +187,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
           start_time,
           party_size: finalPartySize,
           contact_name: contactName,
-          contact_phone: contactPhone,
+          contact_phone: phoneValue,
           contact_email: contactEmail,
           status: 'booked',
           seat_preferences: seat_prefs_for_db,
@@ -330,6 +339,8 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                   className="w-full p-2 border border-gray-300 rounded text-sm"
                 />
               </div>
+
+              {/* Phone => default '+1671' */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone
@@ -339,8 +350,11 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded text-sm"
+                  placeholder="+1671"
                 />
               </div>
+
+              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
