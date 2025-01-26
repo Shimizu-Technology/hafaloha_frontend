@@ -1,3 +1,4 @@
+// src/services/api.ts
 import axios from 'axios';
 
 // For Vite or similar bundlers:
@@ -53,8 +54,8 @@ interface UpdateReservationData {
   contact_phone?: string;
   contact_email?: string;
   status?: string;
-  seat_preferences?: string[][]; 
-  duration_minutes?: number;      // <--- NEW
+  seat_preferences?: string[][];
+  duration_minutes?: number; // <--- NEW
 }
 
 export async function fetchReservations(params?: { date?: string }) {
@@ -63,7 +64,7 @@ export async function fetchReservations(params?: { date?: string }) {
 }
 
 /**
- * Creates a new reservation. 
+ * Creates a new reservation.
  * Optionally includes seat_preferences and duration_minutes.
  */
 export async function createReservation(data: {
@@ -123,6 +124,10 @@ export async function fetchSeatAllocations(params?: { date?: string }) {
   return resp.data;
 }
 
+/**
+ * seatAllocationMultiCreate:
+ *  - Typically used for seating multiple seats at once.
+ */
 export async function seatAllocationMultiCreate(allocationData: any) {
   const resp = await apiClient.post('/seat_allocations/multi_create', {
     seat_allocation: allocationData,
@@ -130,7 +135,20 @@ export async function seatAllocationMultiCreate(allocationData: any) {
   return resp.data;
 }
 
-export async function seatAllocationReserve(allocationData: any) {
+/**
+ * seatAllocationReserve:
+ *  - If your backend allows passing seat_labels instead of seat_ids,
+ *    you can do so here. Otherwise, do seat label→ID conversion or
+ *    use a specialized “assign_from_preference” endpoint.
+ */
+export async function seatAllocationReserve(allocationData: {
+  occupant_type: 'reservation' | 'waitlist';
+  occupant_id: number;
+  seat_labels?: string[];
+  seat_ids?: number[];
+  start_time: string;
+  end_time?: string; // optional if your backend calculates it
+}) {
   const resp = await apiClient.post('/seat_allocations/reserve', {
     seat_allocation: allocationData,
   });
