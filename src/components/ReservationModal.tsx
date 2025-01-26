@@ -40,12 +40,13 @@ export default function ReservationModal({
   const [isEditing, setIsEditing] = useState(false);
 
   // Basic fields
-  const [guestName, setGuestName]       = useState(reservation.contact_name || '');
-  const [partySize, setPartySize]       = useState(reservation.party_size || 1);
-  const [contactPhone, setContactPhone] = useState(reservation.contact_phone || '');
-  const [contactEmail, setContactEmail] = useState(reservation.contact_email || '');
-  const [status, setStatus]             = useState(reservation.status || 'booked');
-  const [duration, setDuration]         = useState(reservation.duration_minutes ?? 60);
+  const [guestName, setGuestName]   = useState(reservation.contact_name || '');
+  // Store the party size as a string for free‐form editing in edit mode
+  const [partySizeText, setPartySizeText] = useState(String(reservation.party_size || 1));
+  const [contactPhone, setContactPhone]   = useState(reservation.contact_phone || '');
+  const [contactEmail, setContactEmail]   = useState(reservation.contact_email || '');
+  const [status,     setStatus]           = useState(reservation.status || 'booked');
+  const [duration,   setDuration]         = useState(reservation.duration_minutes ?? 60);
 
   // If seat_preferences is populated, store it; else default to 3 empty arrays
   const [allSets, setAllSets] = useState<string[][]>(
@@ -53,7 +54,7 @@ export default function ReservationModal({
   );
 
   // Layout & seat allocations for the date
-  const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
+  const [layoutSections, setLayoutSections]   = useState<SeatSectionData[]>([]);
   const [occupiedSeatLabels, setOccupiedSeatLabels] = useState<Set<string>>(new Set());
 
   // For seat map modal
@@ -86,7 +87,7 @@ export default function ReservationModal({
       })
     : '';
 
-  // 1) Load layout + seat allocations for the reservation date
+  // ---------- Load layout + seat allocations ----------
   useEffect(() => {
     async function loadLayoutAndAllocations() {
       try {
@@ -125,11 +126,10 @@ export default function ReservationModal({
           // Make a set of currently occupied seat labels
           const occSet = new Set<string>();
           seatAllocs.forEach((alloc: any) => {
-            const status = alloc.occupant_status;
+            const s = alloc.occupant_status;
             const released = alloc.released_at;
             // If not released & occupant_status is reserved/seated/occupied => taken
-            if (!released &&
-                (status === 'reserved' || status === 'seated' || status === 'occupied')) {
+            if (!released && (s === 'reserved' || s === 'seated' || s === 'occupied')) {
               const lbl = seatIdToLabel[alloc.seat_id];
               if (lbl) occSet.add(lbl);
             }
@@ -143,7 +143,18 @@ export default function ReservationModal({
     loadLayoutAndAllocations();
   }, [reservation.start_time]);
 
-  /** Save changes (e.g., guestName, phone, seat prefs, etc.) */
+  // ---------- Digit-only filter for Party Size (in edit mode) ----------
+  function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    setPartySizeText(digitsOnly);
+  }
+
+  // Convert partySizeText -> number
+  function getPartySize(): number {
+    return parseInt(partySizeText, 10) || 1;
+  }
+
+  // ---------- Save changes ----------
   async function handleSave() {
     try {
       // Filter out empty seat-preference sets
@@ -151,13 +162,14 @@ export default function ReservationModal({
 
       await updateReservation(reservation.id, {
         contact_name:   guestName,
-        party_size:     partySize,
+        party_size:     getPartySize(),
         contact_phone:  contactPhone,
         contact_email:  contactEmail,
         status,
         seat_preferences,
         duration_minutes: duration,
       });
+
       setIsEditing(false);
       onClose();
     } catch (err) {
@@ -166,14 +178,14 @@ export default function ReservationModal({
     }
   }
 
-  /** If user clicks Delete */
+  // ---------- If user clicks Delete ----------
   function handleDelete() {
     if (onDelete) {
       onDelete(reservation.id);
     }
   }
 
-  /** Open/close the seat map modal */
+  // ---------- Seat Map Modal ----------
   function handleOpenSeatMap() {
     setShowSeatMapModal(true);
   }
@@ -185,9 +197,7 @@ export default function ReservationModal({
     setShowSeatMapModal(false);
   }
 
-  /**
-   * Attempt seat assignment from a preference set
-   */
+  // ---------- Attempt seat assignment from a preference set ----------
   async function handleAssignSeatsFromOption(optionIndex: number) {
     const seatLabels = reservation.seat_preferences?.[optionIndex];
     if (!seatLabels || seatLabels.length === 0) {
@@ -247,8 +257,8 @@ export default function ReservationModal({
 
           <h2 className="text-2xl font-bold mb-4 text-gray-900">Reservation Details</h2>
 
+          {/* ==================== VIEW MODE ==================== */}
           {!isEditing ? (
-            /* ==================== VIEW MODE ==================== */
             <div className="space-y-3 text-gray-700">
               <div>
                 <strong>Guest:</strong> {reservation.contact_name || '(none)'}
@@ -321,6 +331,30 @@ export default function ReservationModal({
                   <strong>Current Seats:</strong> {reservation.seat_labels.join(', ')}
                 </div>
               ) : null}
+
+              {/* View Mode Buttons */}
+              <div className="mt-6 flex justify-end space-x-2">
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                >
+                  Edit
+                </button>
+                {onDelete && (
+                  <button
+                    onClick={handleDelete}
+                    className="px-4 py-2 bg-orange-200 text-orange-900 rounded hover:bg-orange-300"
+                  >
+                    Delete
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           ) : (
             /* ==================== EDIT MODE ==================== */
@@ -335,18 +369,21 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
-              {/* Party Size */}
+
+              {/* Party Size => text-based for free editing */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Party Size</label>
                 <input
-                  type="number"
-                  min={1}
-                  value={partySize}
-                  onChange={(e) => setPartySize(+e.target.value || 1)}
-                  onFocus={(e) => e.target.select()}  // <-- Highlight entire value on focus
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={partySizeText}
+                  onChange={handlePartySizeChange}
+                  placeholder="1"
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
+
               {/* Duration (minutes) */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Duration (minutes)</label>
@@ -359,6 +396,7 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
+
               {/* Phone */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Phone</label>
@@ -369,6 +407,7 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
+
               {/* Email */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Email</label>
@@ -379,6 +418,7 @@ export default function ReservationModal({
                   className="w-full p-2 border border-gray-300 rounded"
                 />
               </div>
+
               {/* Status */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Status</label>
@@ -416,36 +456,9 @@ export default function ReservationModal({
                   </button>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Bottom Buttons */}
-          <div className="mt-6 flex justify-end space-x-2">
-            {!isEditing ? (
-              <>
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-                >
-                  Edit
-                </button>
-                {onDelete && (
-                  <button
-                    onClick={handleDelete}
-                    className="px-4 py-2 bg-orange-200 text-orange-900 rounded hover:bg-orange-300"
-                  >
-                    Delete
-                  </button>
-                )}
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-                >
-                  Close
-                </button>
-              </>
-            ) : (
-              <>
+              {/* Edit Mode Buttons */}
+              <div className="mt-6 flex justify-end space-x-2">
                 <button
                   onClick={handleSave}
                   className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
@@ -458,9 +471,9 @@ export default function ReservationModal({
                 >
                   Cancel
                 </button>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -470,7 +483,8 @@ export default function ReservationModal({
           date={reservation.start_time ? reservation.start_time.slice(0, 10) : ''}
           time={reservation.start_time ? reservation.start_time.slice(11, 16) : ''}
           duration={duration}
-          partySize={partySize}
+          // parse string-based party size => number for seat map
+          partySize={getPartySize()}
           sections={layoutSections}
           initialPreferences={allSets}
           onSave={handleSeatMapSave}

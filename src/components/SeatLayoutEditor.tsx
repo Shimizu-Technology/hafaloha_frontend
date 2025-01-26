@@ -5,7 +5,6 @@ import {
   Minus, Maximize, Power
 } from 'lucide-react';
 
-// Must have a fetchLayout(id): GET /layouts/:id that returns the "rebuilt" data
 import {
   fetchAllLayouts,
   fetchLayout,
@@ -13,7 +12,6 @@ import {
   updateLayout,
   activateLayout,
 } from '../services/api';
-
 import RenameSeatsModal from './RenameSeatsModal';
 
 /** ---------- Data Interfaces ---------- **/
@@ -47,8 +45,8 @@ interface DBSeat {
 }
 
 interface SectionConfig {
-  name: string;
-  seatCount: number;
+  name: string;            // e.g. "Table 3"
+  seatCount: number;       // numeric seat count
   type: 'counter' | 'table';
   orientation: 'vertical' | 'horizontal';
 }
@@ -87,14 +85,20 @@ export default function SeatLayoutEditor() {
   // ---------- Add/Edit Section dialog ----------
   const [showSectionDialog, setShowSectionDialog] = useState(false);
   const [editingSectionId,  setEditingSectionId]  = useState<string | null>(null);
+
+  /** We still store name, type, orientation in a SectionConfig. 
+      But seatCount is also there. We'll keep a separate 'seatCountText' for free editing. */
   const [sectionConfig, setSectionConfig] = useState<SectionConfig>({
     name: '',
-    seatCount: 4,
+    seatCount: 4,   // stored as a number ultimately
     type: 'counter',
     orientation: 'vertical',
   });
-  const [seatCapacity, setSeatCapacity] = useState(1);
-  const [sectionFloorNumber, setSectionFloorNumber] = useState<number>(1);
+
+  /** We'll keep these 3 as strings for free‐form numeric input. */
+  const [seatCountText,       setSeatCountText]       = useState('4');
+  const [sectionFloorText,    setSectionFloorText]    = useState('1');
+  const [seatCapacityText,    setSeatCapacityText]    = useState('1');
 
   // ---------- Geometry constants ----------
   const TABLE_DIAMETER = 80;
@@ -228,7 +232,7 @@ export default function SeatLayoutEditor() {
   }
 
   function handleDragMove(e: React.PointerEvent) {
-    if (!isEditMode) return; // If not in edit mode, ignore
+    if (!isEditMode) return;
     if (!isDragging || !dragStart || !selectedSection) return;
 
     const dx = e.clientX - dragStart.x;
@@ -248,23 +252,41 @@ export default function SeatLayoutEditor() {
   }
 
   function handleDragEnd() {
-    if (!isEditMode) return; // If not in edit mode, ignore
+    if (!isEditMode) return;
     setIsDragging(false);
     setSelectedSection(null);
     setDragStart(null);
   }
 
+  // ---------- Numeric filters for text fields ----------
+  function handleSeatCountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, '');
+    setSeatCountText(digits);
+  }
+  function handleFloorNumberChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, '');
+    setSectionFloorText(digits);
+  }
+  function handleSeatCapacityChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, '');
+    setSeatCapacityText(digits);
+  }
+
   // ---------- Add/Edit seat sections ----------
   function handleAddSection() {
     setEditingSectionId(null);
+
+    // Default new table to seatCount=4, floor=activeFloor, capacity=1
     setSectionConfig({
       name: `New Table ${sections.length + 1}`,
       seatCount: 4,
       type: 'table',
       orientation: 'horizontal',
     });
-    setSectionFloorNumber(activeFloor);
-    setSeatCapacity(1);
+    setSeatCountText('4');
+    setSectionFloorText(String(activeFloor));
+    setSeatCapacityText('1');
+
     setShowSectionDialog(true);
   }
 
@@ -279,13 +301,19 @@ export default function SeatLayoutEditor() {
       type: sec.type,
       orientation: sec.orientation,
     });
-    setSectionFloorNumber(sec.floorNumber || 1);
 
+    // floorNumber => text
+    setSectionFloorText(String(sec.floorNumber || 1));
+    // seatCount => text
+    setSeatCountText(String(sec.seats.length || 1));
+
+    // seatCapacity => first seat's capacity or 1
     if (sec.seats.length > 0) {
-      setSeatCapacity(sec.seats[0].capacity);
+      setSeatCapacityText(String(sec.seats[0].capacity || 1));
     } else {
-      setSeatCapacity(1);
+      setSeatCapacityText('1');
     }
+
     setShowSectionDialog(true);
   }
 
@@ -294,6 +322,17 @@ export default function SeatLayoutEditor() {
   }
 
   function createOrEditSection() {
+    // parse the numeric values
+    const finalFloor     = parseInt(sectionFloorText, 10) || 1;
+    const finalSeatCount = parseInt(seatCountText, 10)    || 1;
+    const finalCapacity  = parseInt(seatCapacityText, 10) || 1;
+
+    // store them into our SectionConfig so we can use them in seat layout
+    const updatedConfig = {
+      ...sectionConfig,
+      seatCount: finalSeatCount,
+    };
+
     if (editingSectionId) {
       // update existing
       const oldSection = sections.find(s => s.id === editingSectionId);
@@ -301,8 +340,9 @@ export default function SeatLayoutEditor() {
         setShowSectionDialog(false);
         return;
       }
+
       const oldCount = oldSection.seats.length;
-      const newCount = sectionConfig.seatCount;
+      const newCount = finalSeatCount;
 
       // basic updates
       setSections(prev =>
@@ -310,25 +350,25 @@ export default function SeatLayoutEditor() {
           if (sec.id !== editingSectionId) return sec;
           return {
             ...sec,
-            name: sectionConfig.name,
-            type: sectionConfig.type,
-            orientation: sectionConfig.orientation,
-            floorNumber: sectionFloorNumber,
+            name: updatedConfig.name,
+            type: updatedConfig.type,
+            orientation: updatedConfig.orientation,
+            floorNumber: finalFloor,
           };
         })
       );
 
       // If seatCount changed => re‐layout seats
-      if (sectionConfig.type === 'table' && newCount !== oldCount) {
-        const newSeats = layoutTableSeats(newCount, seatCapacity);
+      if (updatedConfig.type === 'table' && newCount !== oldCount) {
+        const newSeats = layoutTableSeats(newCount, finalCapacity);
         setSections(prev =>
           prev.map(sec => {
             if (sec.id !== editingSectionId) return sec;
             return { ...sec, seats: newSeats };
           })
         );
-      } else if (sectionConfig.type === 'counter' && newCount !== oldCount) {
-        const newSeats = layoutCounterSeats(newCount, sectionConfig.orientation, seatCapacity);
+      } else if (updatedConfig.type === 'counter' && newCount !== oldCount) {
+        const newSeats = layoutCounterSeats(newCount, updatedConfig.orientation, finalCapacity);
         setSections(prev =>
           prev.map(sec => {
             if (sec.id !== editingSectionId) return sec;
@@ -341,24 +381,24 @@ export default function SeatLayoutEditor() {
       const newSectionId = `section-${sections.length + 1}`;
       let newSeats: DBSeat[] = [];
 
-      if (sectionConfig.type === 'table') {
-        newSeats = layoutTableSeats(sectionConfig.seatCount, seatCapacity);
+      if (updatedConfig.type === 'table') {
+        newSeats = layoutTableSeats(finalSeatCount, finalCapacity);
       } else {
         newSeats = layoutCounterSeats(
-          sectionConfig.seatCount,
-          sectionConfig.orientation,
-          seatCapacity
+          finalSeatCount,
+          updatedConfig.orientation,
+          finalCapacity
         );
       }
 
       const newSection: SeatSection = {
         id: newSectionId,
-        name: sectionConfig.name,
-        type: sectionConfig.type,
-        orientation: sectionConfig.orientation,
+        name: updatedConfig.name,
+        type: updatedConfig.type,
+        orientation: updatedConfig.orientation,
         offsetX: 100,
         offsetY: 100,
-        floorNumber: sectionFloorNumber,
+        floorNumber: finalFloor,
         seats: newSeats,
       };
       setSections(prev => [...prev, newSection]);
@@ -413,7 +453,7 @@ export default function SeatLayoutEditor() {
     return seats;
   }
 
-  /** Save layout => create or update. */
+  // ---------- Save Layout ----------
   async function handleSaveLayout() {
     try {
       const payload = {
@@ -478,7 +518,7 @@ export default function SeatLayoutEditor() {
     }
   }
 
-  // ---------- Rename seats modal handlers ----------
+  // ---------- Rename seats modal ----------
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [renameModalSeats, setRenameModalSeats] = useState<DBSeat[]>([]);
   const [renameModalSectionName, setRenameModalSectionName] = useState('');
@@ -660,7 +700,7 @@ export default function SeatLayoutEditor() {
           width: '100%',
           height: '80vh',
           minHeight: '600px',
-          touchAction: 'none', // critical for allowing pointer drags on touch devices
+          touchAction: 'none', // so pointer events handle dragging on touch
         }}
         onPointerMove={handleDragMove}
         onPointerUp={handleDragEnd}
@@ -758,7 +798,7 @@ export default function SeatLayoutEditor() {
                   {section.seats.map((seat, idx) => {
                     const diameter = SEAT_DIAMETER * seatScale;
                     const leftPos  = seat.position_x - diameter / 2;
-                    // For a table, shift seats up
+                    // For a table, shift seats upward a bit
                     const topPos   = seat.position_y - diameter / 2 - TABLE_OFFSET_Y;
 
                     return (
@@ -829,16 +869,17 @@ export default function SeatLayoutEditor() {
                 />
               </div>
 
-              {/* Floor Number */}
+              {/* Floor Number => text-based numeric */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Floor Number
                 </label>
                 <input
-                  type="number"
-                  min={1}
-                  value={sectionFloorNumber}
-                  onChange={(e) => setSectionFloorNumber(Number(e.target.value) || 1)}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={sectionFloorText}
+                  onChange={handleFloorNumberChange}
                   className="w-full border border-gray-300 rounded px-3 py-2"
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -846,20 +887,17 @@ export default function SeatLayoutEditor() {
                 </p>
               </div>
 
-              {/* Seat Count */}
+              {/* Seat Count => text-based numeric */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Number of Seats
                 </label>
                 <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={sectionConfig.seatCount}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10) || 1;
-                    setSectionConfig((prev) => ({ ...prev, seatCount: val }));
-                  }}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={seatCountText}
+                  onChange={handleSeatCountChange}
                   className="w-full border border-gray-300 rounded px-3 py-2"
                 />
               </div>
@@ -904,16 +942,17 @@ export default function SeatLayoutEditor() {
                 </select>
               </div>
 
-              {/* Seat Capacity */}
+              {/* Seat Capacity => text-based numeric */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Seat Capacity
                 </label>
                 <input
-                  type="number"
-                  min={1}
-                  value={seatCapacity}
-                  onChange={(e) => setSeatCapacity(Number(e.target.value) || 1)}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={seatCapacityText}
+                  onChange={handleSeatCapacityChange}
                   className="w-full border border-gray-300 rounded px-3 py-2"
                 />
                 <p className="text-xs text-gray-500 mt-1">

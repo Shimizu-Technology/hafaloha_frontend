@@ -40,7 +40,10 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   // ---------------------------
   const [date, setDate] = useState(defaultDate || ''); // "YYYY-MM-DD"
   const [time, setTime] = useState('');
-  const [partySize, setPartySize] = useState(2);
+  
+  // Store party size as a string so user can edit freely
+  const [partySizeText, setPartySizeText] = useState('2');
+
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -51,7 +54,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   const [error, setError] = useState('');
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
-  // If timeslots = exactly 1 => we hide the duration field & default a big duration
+  // If timeslots = exactly 1 => hide duration & default a big duration
   const hideDuration = timeslots.length === 1;
 
   // For seat preferences
@@ -83,13 +86,16 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
 
   // 2) Load timeslots whenever date or partySize changes
   useEffect(() => {
+    // Convert partySizeText to a number
+    const sizeNum = parseInt(partySizeText, 10) || 1;
+
     async function loadTimes() {
-      if (!date || !partySize) {
+      if (!date || !sizeNum) {
         setTimeslots([]);
         return;
       }
       try {
-        const data = await fetchAvailability(date, partySize);
+        const data = await fetchAvailability(date, sizeNum);
         setTimeslots(data.slots || []);
       } catch (err) {
         console.error('Error fetching availability:', err);
@@ -97,7 +103,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
       }
     }
     loadTimes();
-  }, [date, partySize]);
+  }, [date, partySizeText]);
 
   // 3) If only one timeslot => forcibly set a large duration
   useEffect(() => {
@@ -139,8 +145,14 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   }, []);
 
   // ---------------------------
-  // Actions
+  // Handlers
   // ---------------------------
+  /** Filter out non-digits on Party Size input */
+  function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    setPartySizeText(digitsOnly);
+  }
+
   async function handleCreate() {
     setError('');
 
@@ -153,6 +165,9 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
       return;
     }
 
+    // Parse party size from text, fallback to 1 if empty/invalid
+    const finalPartySize = parseInt(partySizeText, 10) || 1;
+
     const start_time = `${date}T${time}:00`;
     const seat_prefs_for_db = allSets.filter((arr) => arr.length > 0);
 
@@ -161,7 +176,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
         reservation: {
           restaurant_id: 1,
           start_time,
-          party_size: partySize,
+          party_size: finalPartySize,
           contact_name: contactName,
           contact_phone: contactPhone,
           contact_email: contactEmail,
@@ -246,17 +261,18 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                   />
                 </div>
 
-                {/* Party Size */}
+                {/* Party Size => text-based numeric filtering */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Party Size
                   </label>
                   <input
-                    type="number"
-                    min={1}
-                    value={partySize}
-                    onChange={(e) => setPartySize(+e.target.value)}
-                    onFocus={(e) => e.target.select()}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={partySizeText}
+                    onChange={handlePartySizeChange}
+                    placeholder="2"
                     className="w-full p-2 border border-gray-300 rounded text-sm"
                   />
                 </div>
@@ -391,7 +407,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
           date={date}
           time={time}
           duration={duration}
-          partySize={partySize}
+          partySize={parseInt(partySizeText || '1', 10)}
           sections={layoutSections}
           initialPreferences={allSets}
           onSave={handleSeatMapSave}

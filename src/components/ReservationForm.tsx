@@ -1,15 +1,14 @@
 // src/components/ReservationForm.tsx
+
 import React, { useState, useEffect } from 'react';
 import { Clock, Users, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
 import { fetchAvailability, createReservation } from '../services/api';
 
 interface ReservationFormData {
-  date: string;       // "YYYY-MM-DD"
-  time: string;       // e.g. "17:30"
-  partySize: number;
+  date: string;  // "YYYY-MM-DD"
+  time: string;  // e.g. "17:30"
   firstName: string;
   lastName: string;
   phone: string;
@@ -20,17 +19,20 @@ export default function ReservationForm() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // We'll keep the rest of the fields in formData
   const [formData, setFormData] = useState<ReservationFormData>({
     date: '',
     time: '',
-    partySize: 1,
     firstName: '',
     lastName: '',
     phone: '',
     email: '',
   });
 
-  // Additional field for how long a reservation lasts
+  // Store party size as a string for free‐form editing
+  const [partySizeText, setPartySizeText] = useState('1');
+
+  // Additional field: how long a reservation lasts
   const [duration, setDuration] = useState(60);
 
   // We'll store timeslots from /availability here
@@ -39,17 +41,22 @@ export default function ReservationForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // parse partySizeText => number
+  function getPartySize(): number {
+    return parseInt(partySizeText, 10) || 1;
+  }
+
   /**
-   * Whenever date or partySize changes, fetch /availability
+   * Whenever `formData.date` or `partySizeText` changes, fetch /availability
    */
   useEffect(() => {
     async function getTimeslots() {
-      if (!formData.date || !formData.partySize) {
+      if (!formData.date || !getPartySize()) {
         setTimeslots([]);
         return;
       }
       try {
-        const data = await fetchAvailability(formData.date, formData.partySize);
+        const data = await fetchAvailability(formData.date, getPartySize());
         setTimeslots(data.slots || []);
       } catch (err) {
         console.error('Error fetching availability:', err);
@@ -57,8 +64,9 @@ export default function ReservationForm() {
       }
     }
     getTimeslots();
-  }, [formData.date, formData.partySize]);
+  }, [formData.date, partySizeText]);
 
+  // Submit the form => createReservation
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -72,7 +80,7 @@ export default function ReservationForm() {
 
     const start_time = `${formData.date}T${formData.time}:00`;
 
-    // fallback logic for logged-in user's data
+    // fallback logic for logged‐in user's data
     const contactFirstName = formData.firstName.trim()
       || (user ? user.name?.split(' ')[0] ?? '' : '');
     const contactLastName  = formData.lastName.trim()
@@ -85,11 +93,14 @@ export default function ReservationForm() {
       return;
     }
 
+    // final numeric party size
+    const finalPartySize = getPartySize();
+
     try {
       // Create the reservation via API
       const newRes = await createReservation({
         start_time,
-        party_size: formData.partySize,
+        party_size: finalPartySize,
         contact_name: [contactFirstName, contactLastName].filter(Boolean).join(' '),
         contact_phone: contactPhone,
         contact_email: contactEmail,
@@ -108,7 +119,14 @@ export default function ReservationForm() {
     }
   };
 
+  // Just a helper so we don't sprinkle `!!user` everywhere
   const isLoggedIn = !!user;
+
+  /** Filter out non‐digit characters in Party Size */
+  function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    setPartySizeText(digitsOnly);
+  }
 
   return (
     <form
@@ -136,7 +154,9 @@ export default function ReservationForm() {
             type="date"
             id="date"
             value={formData.date}
-            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, date: e.target.value })
+            }
             className="w-full px-3 py-2 border border-gray-300 
                        rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             required
@@ -153,20 +173,24 @@ export default function ReservationForm() {
             <select
               id="time"
               value={formData.time}
-              onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, time: e.target.value })
+              }
               className="w-full pl-10 pr-3 py-2 border border-gray-300 
                          rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               required
             >
               <option value="">-- Select a time --</option>
               {timeslots.map((slot) => (
-                <option key={slot} value={slot}>{slot}</option>
+                <option key={slot} value={slot}>
+                  {slot}
+                </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Party Size */}
+        {/* Party Size: text-based numeric filtering */}
         <div className="space-y-2">
           <label htmlFor="partySize" className="block text-sm font-medium text-gray-700">
             Party Size
@@ -174,16 +198,13 @@ export default function ReservationForm() {
           <div className="relative">
             <Users className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
             <input
-              type="number"
+              type="text"
               id="partySize"
-              min="1"
-              max="20"
-              value={formData.partySize}
-              onChange={(e) =>
-                setFormData({ ...formData, partySize: parseInt(e.target.value, 10) || 1 })
-              }
-              // Highlight existing value on focus (mobile-friendly)
-              onFocus={(e) => e.target.select()}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={partySizeText}
+              onChange={handlePartySizeChange}
+              placeholder="1"
               className="w-full pl-10 pr-3 py-2 border border-gray-300 
                          rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               required
