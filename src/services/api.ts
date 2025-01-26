@@ -2,13 +2,13 @@
 
 import axios from 'axios';
 
-// For Vite or similar bundlers, baseURL might come from an .env or defaults to localhost.
+// Depending on your environment setup, you might have a VITE_API_URL or fallback to localhost:
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Create an Axios instance
 export const apiClient = axios.create({ baseURL });
 
-// Interceptor: attach JWT on every request (if present in localStorage)
+// Automatically attach the JWT token from localStorage, if present
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token && config.headers) {
@@ -17,24 +17,14 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// -------------------------------------------------------------------
-// 1) Restaurant: fetch & update (for Admin Settings, etc.)
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// RESTAURANT
+// ─────────────────────────────────────────────────────────────────
 export async function fetchRestaurant(id: number) {
   const resp = await apiClient.get(`/restaurants/${id}`);
   return resp.data;
 }
 
-/**
- * Update a restaurant's fields by ID.
- * 
- * Example shape:
- *   {
- *     default_reservation_length: 60,
- *     admin_settings: { someRule: true }
- *     // plus any other fields you permit on the backend
- *   }
- */
 export async function updateRestaurant(id: number, data: any) {
   const resp = await apiClient.patch(`/restaurants/${id}`, {
     restaurant: data,
@@ -42,9 +32,9 @@ export async function updateRestaurant(id: number, data: any) {
   return resp.data;
 }
 
-// -------------------------------------------------------------------
-// 2) Layouts
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// LAYOUTS
+// ─────────────────────────────────────────────────────────────────
 export async function fetchAllLayouts() {
   const resp = await apiClient.get('/layouts');
   return resp.data;
@@ -70,9 +60,9 @@ export async function activateLayout(layoutId: number) {
   return resp.data;
 }
 
-// -------------------------------------------------------------------
-// 3) Reservations
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// RESERVATIONS
+// ─────────────────────────────────────────────────────────────────
 interface UpdateReservationData {
   party_size?: number;
   contact_name?: string;
@@ -80,7 +70,7 @@ interface UpdateReservationData {
   contact_email?: string;
   status?: string;
   seat_preferences?: string[][];
-  duration_minutes?: number; // optional field
+  duration_minutes?: number;
 }
 
 export async function fetchReservations(params?: { date?: string }) {
@@ -88,10 +78,6 @@ export async function fetchReservations(params?: { date?: string }) {
   return resp.data;
 }
 
-/**
- * Creates a new reservation.
- * Optionally includes seat_preferences, duration_minutes, etc.
- */
 export async function createReservation(data: {
   reservation: {
     restaurant_id?: number;
@@ -109,9 +95,6 @@ export async function createReservation(data: {
   return resp.data;
 }
 
-/**
- * Patch an existing reservation, optionally including seat_preferences + duration_minutes.
- */
 export async function updateReservation(id: number, data: UpdateReservationData) {
   const resp = await apiClient.patch(`/reservations/${id}`, data);
   return resp.data;
@@ -121,9 +104,9 @@ export async function deleteReservation(id: number) {
   await apiClient.delete(`/reservations/${id}`);
 }
 
-// -------------------------------------------------------------------
-// 4) Waitlist
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// WAITLIST
+// ─────────────────────────────────────────────────────────────────
 export async function fetchWaitlistEntries(params?: { date?: string }) {
   const resp = await apiClient.get('/waitlist_entries', { params });
   return resp.data;
@@ -141,18 +124,14 @@ export async function createWaitlistEntry(data: {
   return resp.data;
 }
 
-// -------------------------------------------------------------------
-// 5) Seat Allocations
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// SEAT ALLOCATIONS
+// ─────────────────────────────────────────────────────────────────
 export async function fetchSeatAllocations(params?: { date?: string }) {
   const resp = await apiClient.get('/seat_allocations', { params });
   return resp.data;
 }
 
-/**
- * seatAllocationMultiCreate:
- *  - Typically used for seating multiple seats at once.
- */
 export async function seatAllocationMultiCreate(allocationData: any) {
   const resp = await apiClient.post('/seat_allocations/multi_create', {
     seat_allocation: allocationData,
@@ -160,11 +139,6 @@ export async function seatAllocationMultiCreate(allocationData: any) {
   return resp.data;
 }
 
-/**
- * seatAllocationReserve:
- *  - If your backend allows seat_labels, pass them. 
- *  - Or do seat IDs or a specialized “assign_from_preference” endpoint.
- */
 export async function seatAllocationReserve(allocationData: {
   occupant_type: 'reservation' | 'waitlist';
   occupant_id: number;
@@ -199,9 +173,9 @@ export async function seatAllocationArrive(payload: { occupant_type: string; occ
   return resp.data;
 }
 
-// -------------------------------------------------------------------
-// 6) Availability
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// AVAILABILITY
+// ─────────────────────────────────────────────────────────────────
 export async function fetchAvailability(date: string, partySize: number) {
   const resp = await apiClient.get('/availability', {
     params: { date, party_size: partySize },
@@ -209,9 +183,9 @@ export async function fetchAvailability(date: string, partySize: number) {
   return resp.data;
 }
 
-// -------------------------------------------------------------------
-// 7) Auth Calls
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────────────────────────────
 export async function signupUser(data: {
   first_name: string;
   last_name: string;
@@ -230,9 +204,9 @@ export async function loginUser(email: string, password: string) {
   return resp.data;
 }
 
-// -------------------------------------------------------------------
-// 8) Seats
-// -------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────
+// SEATS
+// ─────────────────────────────────────────────────────────────────
 export async function updateSeat(
   seatId: number,
   updates: Partial<{
@@ -246,7 +220,6 @@ export async function updateSeat(
   return resp.data;
 }
 
-/** Bulk update seats (optional) */
 export async function bulkUpdateSeats(
   seatUpdates: Array<{
     id: number;
@@ -262,25 +235,43 @@ export async function bulkUpdateSeats(
   return resp.data;
 }
 
-// -------------------------------------------------------------------
-// 9) Operating Hours
-// -------------------------------------------------------------------
-/**
- * GET /admin/operating_hours => returns an array of OperatingHour
- *  e.g. [{ id, restaurant_id, day_of_week, open_time, close_time, closed }, ... ]
- */
+// ─────────────────────────────────────────────────────────────────
+// OPERATING HOURS
+// ─────────────────────────────────────────────────────────────────
 export async function fetchOperatingHours() {
   const resp = await apiClient.get('/admin/operating_hours');
   return resp.data;
 }
 
-/**
- * PATCH /admin/operating_hours/:id => update a single OperatingHour
- * Body: { operating_hour: { open_time: "09:00:00", close_time: "17:00:00", closed: false } }
- */
 export async function updateOperatingHour(id: number, data: any) {
   const resp = await apiClient.patch(`/admin/operating_hours/${id}`, {
     operating_hour: data,
   });
   return resp.data;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SPECIAL EVENTS
+// ─────────────────────────────────────────────────────────────────
+export async function fetchSpecialEvents() {
+  const resp = await apiClient.get('/admin/special_events');
+  return resp.data;
+}
+
+export async function createSpecialEvent(data: any) {
+  const resp = await apiClient.post('/admin/special_events', {
+    special_event: data,
+  });
+  return resp.data;
+}
+
+export async function updateSpecialEvent(id: number, data: any) {
+  const resp = await apiClient.patch(`/admin/special_events/${id}`, {
+    special_event: data,
+  });
+  return resp.data;
+}
+
+export async function deleteSpecialEvent(id: number) {
+  await apiClient.delete(`/admin/special_events/${id}`);
 }
