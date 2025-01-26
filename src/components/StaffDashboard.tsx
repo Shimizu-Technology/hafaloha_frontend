@@ -1,4 +1,5 @@
 // src/components/StaffDashboard.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
@@ -238,12 +239,19 @@ export default function StaffDashboard() {
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      {/* Tabs */}
+      {/* Tabs: use horizontal scroll on smaller screens */}
       <div className="max-w-7xl mx-auto px-4 mt-6">
-        <div className="bg-white rounded-md shadow p-3 flex items-center space-x-2">
+        <div className="
+          bg-white rounded-md shadow 
+          p-3 flex 
+          items-center 
+          space-x-2
+          overflow-x-auto  /* allow horizontal scroll if needed on small screens */
+        ">
+          {/* Each tab is flex-shrink-0 so they don't get squashed */}
           <button
             onClick={() => setActiveTab('reservations')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'reservations'
                 ? 'bg-orange-50 text-orange-700 border border-orange-300'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -253,7 +261,7 @@ export default function StaffDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('waitlist')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'waitlist'
                 ? 'bg-orange-50 text-orange-700 border border-orange-300'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -263,7 +271,7 @@ export default function StaffDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('seating')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'seating'
                 ? 'bg-orange-50 text-orange-700 border border-orange-300'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -273,7 +281,7 @@ export default function StaffDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('layout')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'layout'
                 ? 'bg-orange-50 text-orange-700 border border-orange-300'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -281,10 +289,9 @@ export default function StaffDashboard() {
           >
             Layout
           </button>
-          {/* NEW SETTINGS TAB */}
           <button
             onClick={() => setActiveTab('settings')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'settings'
                 ? 'bg-orange-50 text-orange-700 border border-orange-300'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -315,6 +322,7 @@ export default function StaffDashboard() {
                                  rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     />
                   </div>
+
                   {/* Date nav */}
                   <div className="flex items-center space-x-2">
                     <button
@@ -364,8 +372,9 @@ export default function StaffDashboard() {
             </div>
 
             {/* Reservations table */}
+            {/* We add a min-w so columns don’t get squashed on smaller devices */}
             <div className="overflow-x-auto mt-4">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <table className="min-w-[700px] table-auto divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">
@@ -538,7 +547,8 @@ export default function StaffDashboard() {
             </div>
 
             <div className="overflow-x-auto mt-4">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
+              {/* set a min-w to keep columns from squashing */}
+              <table className="min-w-[700px] table-auto divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">
@@ -570,7 +580,10 @@ export default function StaffDashboard() {
                       : '';
 
                     return (
-                      <tr key={w.id} className="hover:bg-gray-50">
+                      <tr
+                        key={w.id}
+                        className="hover:bg-gray-50 cursor-pointer"
+                      >
                         <td className="px-6 py-4 text-gray-900 whitespace-nowrap">
                           <div className="flex items-center">
                             <Clock className="h-4 w-4 text-gray-400 mr-2" />
@@ -700,7 +713,7 @@ export default function StaffDashboard() {
         <ReservationFormModal
           onClose={handleCloseCreateModal}
           onSuccess={handleCreateReservationSuccess}
-          defaultDate={dateFilter}  // <--- pass the currently displayed date
+          defaultDate={dateFilter}  // pass the currently displayed date
         />
       )}
     </div>

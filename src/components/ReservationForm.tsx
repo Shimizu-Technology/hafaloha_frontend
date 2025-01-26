@@ -1,9 +1,9 @@
+// src/components/ReservationForm.tsx
 import React, { useState, useEffect } from 'react';
 import { Clock, Users, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-// IMPORT API helpers
 import { fetchAvailability, createReservation } from '../services/api';
 
 interface ReservationFormData {
@@ -30,17 +30,17 @@ export default function ReservationForm() {
     email: '',
   });
 
-  // NEW: duration (minutes)
+  // Additional field for how long a reservation lasts
   const [duration, setDuration] = useState(60);
 
-  // We'll store the timeslots from /availability here:
+  // We'll store timeslots from /availability here
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   /**
-   * Whenever `date` or `partySize` changes, fetch /availability
+   * Whenever date or partySize changes, fetch /availability
    */
   useEffect(() => {
     async function getTimeslots() {
@@ -56,7 +56,6 @@ export default function ReservationForm() {
         setTimeslots([]);
       }
     }
-
     getTimeslots();
   }, [formData.date, formData.partySize]);
 
@@ -73,7 +72,7 @@ export default function ReservationForm() {
 
     const start_time = `${formData.date}T${formData.time}:00`;
 
-    // fallback logic for logged-in user’s data
+    // fallback logic for logged-in user's data
     const contactFirstName = formData.firstName.trim()
       || (user ? user.name?.split(' ')[0] ?? '' : '');
     const contactLastName  = formData.lastName.trim()
@@ -95,7 +94,6 @@ export default function ReservationForm() {
         contact_phone: contactPhone,
         contact_email: contactEmail,
         restaurant_id: 1,
-        // NEW: pass duration_minutes
         duration_minutes: duration,
       });
 
@@ -184,6 +182,8 @@ export default function ReservationForm() {
               onChange={(e) =>
                 setFormData({ ...formData, partySize: parseInt(e.target.value, 10) || 1 })
               }
+              // Highlight existing value on focus (mobile-friendly)
+              onFocus={(e) => e.target.select()}
               className="w-full pl-10 pr-3 py-2 border border-gray-300 
                          rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               required

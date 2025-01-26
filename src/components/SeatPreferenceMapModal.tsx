@@ -1,5 +1,4 @@
 // src/components/SeatPreferenceMapModal.tsx
-
 import React, { useEffect, useState } from 'react';
 import { X, Minus, Plus, Maximize, Settings } from 'lucide-react';
 
@@ -13,20 +12,20 @@ import { fetchSeatAllocations } from '../services/api';
 interface SeatPreferenceMapModalProps {
   /** The date we’re booking, e.g. "2025-01-25". */
   date: string;
-  /** Time in "HH:mm" for occupant checks, if you want. Optional. */
+  /** Time in "HH:mm" for occupant checks, if needed. Optional. */
   time?: string;
-  /** Duration in minutes, if you want occupant checks for that timeslot. Optional. */
+  /** Duration in minutes, if needed for occupant checks. Optional. */
   duration?: number;
 
   /**
-   * The overall seat layout, including floor_number in each section.
-   * We'll separate them by floor in the UI.
+   * The seat layout (possibly multiple floors).
+   * Each section has floor_number to distinguish floors.
    */
   sections: (SeatSectionData & { floor_number?: number })[];
 
   /**
-   * Up to 3 seat‐preference sets if editing an existing reservation.
-   * e.g. [ ["Seat #1","Seat #2"], ["A1","A2"], [] ]
+   * Up to 3 seat‐preference sets if editing an existing reservation,
+   * e.g. [ ["Seat #1","Seat #2"], ["A1","A2"], [] ].
    */
   initialPreferences?: string[][];
 
@@ -35,10 +34,10 @@ interface SeatPreferenceMapModalProps {
    */
   partySize: number;
 
-  /** Called when staff hits "Save." We pass back all 3 sets. */
+  /** Called when user hits “Save.” We pass back all 3 sets. */
   onSave: (preferences: string[][]) => void;
 
-  /** Called when staff hits "Cancel" or outside the modal. */
+  /** Called when user hits “Cancel” or outside the modal. */
   onClose: () => void;
 }
 
@@ -53,31 +52,35 @@ export default function SeatPreferenceMapModal({
   onClose,
 }: SeatPreferenceMapModalProps) {
   // occupant data => seatId => occupantStatus + occupantName
-  const [seatAllocations, setSeatAllocations] = useState<Record<number, { status: string; name?: string }>>({});
+  const [seatAllocations, setSeatAllocations] =
+    useState<Record<number, { status: string; name?: string }>>({});
   const [loading, setLoading] = useState(true);
 
-  // Collect floors from the “floor_number”
-  const floorNumbers = Array.from(new Set(sections.map(s => s.floor_number ?? 1))).sort((a, b) => a - b);
+  // Distinguish floors from sections
+  const floorNumbers = Array.from(new Set(
+    sections.map(s => s.floor_number ?? 1)
+  )).sort((a, b) => a - b);
   const [activeFloor, setActiveFloor] = useState(floorNumbers[0] || 1);
 
-  // Zoom / grid
+  // Zoom / grid toggles
   const [zoom, setZoom] = useState(1.0);
   const [showGrid, setShowGrid] = useState(true);
 
-  // seatPreferences => up to 3 sets => seatPreferences[0..2]
+  // Up to 3 preference sets => seatPreferences[0..2]
   const [seatPreferences, setSeatPreferences] = useState<string[][]>([...initialPreferences]);
 
-  // activeOptionIndex => which of the 3 sets is currently being highlighted
+  // which preference set is “active”?
   const [activeOptionIndex, setActiveOptionIndex] = useState(0);
 
-  // 1) Load occupant data
+  // 1) Load occupant data from server
   useEffect(() => {
     async function loadAllocations() {
       setLoading(true);
       try {
-        // If daily occupant checks are enough:
+        // For daily occupant checks:
         const seatAllocs = await fetchSeatAllocations({ date });
         const seatMap: Record<number, { status: string; name?: string }> = {};
+
         seatAllocs.forEach((alloc: any) => {
           if (!alloc.released_at) {
             seatMap[alloc.seat_id] = {
@@ -96,28 +99,27 @@ export default function SeatPreferenceMapModal({
     loadAllocations();
   }, [date, time, duration]);
 
-  // 2) Filter sections for the activeFloor
-  const sectionsForActiveFloor = sections.filter(s => (s.floor_number ?? 1) === activeFloor);
+  // Filter sections by activeFloor
+  const sectionsForActiveFloor = sections.filter(
+    s => (s.floor_number ?? 1) === activeFloor
+  );
 
-  // 3) Build display => occupant status + "isSelected"
+  // Build display => occupant status + isSelected
   const displaySections = sectionsForActiveFloor.map(sec => {
     const mappedSeats = sec.seats.map(seat => {
       const occupant = seatAllocations[seat.id];
       const occupant_status = occupant ? occupant.status : 'free';
-      // highlight seats only in the currently active set
+
+      // highlight seats if they’re in the currently active preference set
       const currentSet = seatPreferences[activeOptionIndex] || [];
       const isSelected = currentSet.includes(seat.label);
 
-      return {
-        ...seat,
-        occupant_status,
-        isSelected,
-      };
+      return { ...seat, occupant_status, isSelected };
     });
     return { ...sec, seats: mappedSeats };
   });
 
-  // 4) seat click => toggle seat if occupant_status is free + haven't exceeded partySize
+  // seat click => toggle seat if occupant_status = free + within partySize limit
   function handleSeatClick(seat: DBSeat) {
     const occupant = seatAllocations[seat.id];
     const occupantStatus = occupant ? occupant.status : 'free';
@@ -130,14 +132,14 @@ export default function SeatPreferenceMapModal({
       const clone = [...prev];
       const currentSet = clone[activeOptionIndex] || [];
 
-      // If seat already in that set => remove it
+      // If seat is already in the set => remove
       if (currentSet.includes(seat.label)) {
         clone[activeOptionIndex] = currentSet.filter(lbl => lbl !== seat.label);
         return clone;
       }
-      // else add it if not exceeding partySize
+      // else add seat if we haven’t exceeded partySize
       if (currentSet.length >= partySize) {
-        alert(`For Option ${activeOptionIndex+1}, you can only select up to ${partySize} seat(s).`);
+        alert(`Option ${activeOptionIndex+1} can only have up to ${partySize} seat(s).`);
         return prev; // no change
       }
       clone[activeOptionIndex] = [...currentSet, seat.label];
@@ -150,7 +152,7 @@ export default function SeatPreferenceMapModal({
     setActiveFloor(floorNum);
   }
 
-  // Switch seat option
+  // Switch seat‐option set
   function handleOptionTabClick(idx: number) {
     setActiveOptionIndex(idx);
     setSeatPreferences(prev => {
@@ -160,7 +162,7 @@ export default function SeatPreferenceMapModal({
     });
   }
 
-  // Zoom
+  // Zoom functions
   function zoomIn() {
     setZoom(z => Math.min(z + 0.25, 5.0));
   }
@@ -171,11 +173,12 @@ export default function SeatPreferenceMapModal({
     setZoom(1.0);
   }
 
-  // 5) onSave => pass all seatPreferences
+  // Save => return all seatPreferences
   function handleSave() {
     onSave(seatPreferences);
   }
 
+  // Loading overlay
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -188,8 +191,8 @@ export default function SeatPreferenceMapModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+      {/* Container */}
       <div className="relative bg-white w-full max-w-5xl rounded-lg shadow-lg p-4">
-
         {/* Close button */}
         <button
           onClick={onClose}
@@ -198,21 +201,26 @@ export default function SeatPreferenceMapModal({
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-semibold mb-2">Select Seat Preferences</h2>
+        <h2 className="text-xl font-semibold mb-2">
+          Select Seat Preferences
+        </h2>
         <p className="text-sm text-gray-600 mb-4">
-          Pick up to 3 seat‐preference options for the customer.
-          Occupied/reserved seats are red or yellow.
+          Pick up to 3 seat‐preference options for the customer. 
+          Occupied/reserved seats are red or yellow. 
           Each option can have up to {partySize} seat(s).
         </p>
 
         {/* Option tabs */}
         <div className="flex items-center space-x-2 mb-4">
-          {[0,1,2].map((idx) => (
+          {[0,1,2].map(idx => (
             <button
               key={idx}
               onClick={() => handleOptionTabClick(idx)}
               className={`px-3 py-1 rounded 
-                ${activeOptionIndex === idx ? 'bg-orange-200' : 'bg-gray-100 hover:bg-gray-200'}
+                ${activeOptionIndex === idx
+                  ? 'bg-orange-200 text-gray-800'
+                  : 'bg-gray-100 hover:bg-gray-200'
+                }
               `}
             >
               Option {idx+1}
@@ -220,50 +228,70 @@ export default function SeatPreferenceMapModal({
           ))}
         </div>
 
-        {/* Floor tabs (if more than 1 floor) */}
+        {/* Floor tabs */}
         {floorNumbers.length > 1 && (
           <div className="flex items-center space-x-2 mb-4">
-            {floorNumbers.map(f => (
+            {floorNumbers.map(floorNum => (
               <button
-                key={f}
-                onClick={() => handleFloorTabClick(f)}
+                key={floorNum}
+                onClick={() => handleFloorTabClick(floorNum)}
                 className={`px-3 py-1 rounded 
-                  ${activeFloor === f ? 'bg-orange-50 text-orange-700 border border-orange-300' : 'bg-gray-100 hover:bg-gray-200'}
+                  ${activeFloor === floorNum
+                    ? 'bg-orange-50 text-orange-700 border border-orange-300'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                  }
                 `}
               >
-                Floor {f}
+                Floor {floorNum}
               </button>
             ))}
           </div>
         )}
 
-        {/* Zoom + Grid controls */}
+        {/* Zoom & Grid controls */}
         <div className="flex items-center space-x-2 mb-4">
           <button
             onClick={() => setShowGrid(!showGrid)}
-            className={`px-2 py-1 text-sm rounded border ${
-              showGrid ? 'bg-orange-50 text-orange-700 border-orange-300' : 'bg-gray-100 text-gray-600'
-            }`}
+            className={`px-2 py-1 text-sm rounded border 
+              ${showGrid
+                ? 'bg-orange-50 text-orange-700 border-orange-300'
+                : 'bg-gray-100 text-gray-600'} 
+            `}
           >
             <Settings className="inline w-4 h-4 mr-1" />
             Grid
           </button>
           <div className="flex items-center space-x-2">
-            <button onClick={zoomOut} className="p-1 bg-gray-100 rounded hover:bg-gray-200" title="Zoom Out">
+            <button
+              onClick={zoomOut}
+              className="p-1 bg-gray-100 rounded hover:bg-gray-200"
+              title="Zoom Out"
+            >
               <Minus className="w-4 h-4" />
             </button>
             <span className="w-10 text-center">{(zoom * 100).toFixed(0)}%</span>
-            <button onClick={zoomIn} className="p-1 bg-gray-100 rounded hover:bg-gray-200" title="Zoom In">
+            <button
+              onClick={zoomIn}
+              className="p-1 bg-gray-100 rounded hover:bg-gray-200"
+              title="Zoom In"
+            >
               <Plus className="w-4 h-4" />
             </button>
-            <button onClick={zoomReset} className="p-1 bg-gray-100 rounded hover:bg-gray-200" title="Reset Zoom">
+            <button
+              onClick={zoomReset}
+              className="p-1 bg-gray-100 rounded hover:bg-gray-200"
+              title="Reset Zoom"
+            >
               <Maximize className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* The seat map */}
-        <div className="border border-gray-200 rounded mb-4" style={{height: '60vh', minHeight: 400}}>
+        {/* Seat map container => fixed height so it's scrollable horizontally if needed */}
+        <div
+          className="border border-gray-200 rounded mb-4"
+          style={{ height: '60vh', minHeight: '400px' }}
+        >
           {sectionsForActiveFloor.length === 0 ? (
             <div className="p-4 text-gray-500">
               No sections found for this floor.
@@ -275,13 +303,13 @@ export default function SeatPreferenceMapModal({
               zoom={zoom}
               showGrid={showGrid}
               sections={displaySections}
-              onSeatClick={(seat) => handleSeatClick(seat)}
+              onSeatClick={seat => handleSeatClick(seat)}
               onSectionDrag={undefined}
             />
           )}
         </div>
 
-        {/* Summary of the 3 sets */}
+        {/* Summary of the 3 seat sets */}
         <div className="border-t border-gray-200 pt-3 text-sm">
           {seatPreferences.map((arr, idx) => (
             <div key={idx} className="mb-1">
@@ -291,7 +319,7 @@ export default function SeatPreferenceMapModal({
           ))}
         </div>
 
-        {/* Bottom buttons */}
+        {/* Footer buttons */}
         <div className="mt-4 flex justify-end space-x-2">
           <button
             onClick={onClose}

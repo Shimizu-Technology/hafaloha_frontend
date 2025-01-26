@@ -15,13 +15,13 @@ import type { SeatSectionData } from './SeatLayoutCanvas';
 interface Props {
   onClose: () => void;
   onSuccess: () => void;
-  defaultDate?: string; // optional, e.g. "2025-01-26"
+  defaultDate?: string; // e.g. "2025-01-26"
 }
 
 export default function ReservationFormModal({ onClose, onSuccess, defaultDate }: Props) {
-  // --------------------------------------------
-  // Helpers for date parsing & formatting
-  // --------------------------------------------
+  // ---------------------------
+  // Date Parsing & Formatting
+  // ---------------------------
   function parseYYYYMMDD(dateStr: string): Date | null {
     if (!dateStr) return null;
     const [year, month, day] = dateStr.split('-').map(Number);
@@ -34,16 +34,18 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
-  // --------------------------------------------
 
-  const [date, setDate] = useState(defaultDate || '');  // "YYYY-MM-DD"
+  // ---------------------------
+  // State
+  // ---------------------------
+  const [date, setDate] = useState(defaultDate || ''); // "YYYY-MM-DD"
   const [time, setTime] = useState('');
   const [partySize, setPartySize] = useState(2);
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
 
-  // Start with 60, then override with restaurant.default_reservation_length
+  // Start with 60, then possibly override
   const [duration, setDuration] = useState(60);
 
   const [error, setError] = useState('');
@@ -60,6 +62,10 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
   const [layoutLoading, setLayoutLoading] = useState(false);
 
+  // ---------------------------
+  // Effects
+  // ---------------------------
+
   // 1) Load default reservation length from the restaurant
   useEffect(() => {
     async function loadRestaurant() {
@@ -69,7 +75,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
           setDuration(rest.default_reservation_length);
         }
       } catch (err) {
-        console.error('Error fetching restaurant for default length:', err);
+        console.error('Error fetching restaurant:', err);
       }
     }
     loadRestaurant();
@@ -86,7 +92,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
         const data = await fetchAvailability(date, partySize);
         setTimeslots(data.slots || []);
       } catch (err) {
-        console.error('Availability fetch error:', err);
+        console.error('Error fetching availability:', err);
         setTimeslots([]);
       }
     }
@@ -96,8 +102,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   // 3) If only one timeslot => forcibly set a large duration
   useEffect(() => {
     if (hideDuration) {
-      // e.g. 12 hours = 720 minutes
-      setDuration(720);
+      setDuration(720); // e.g. 12 hours
     }
   }, [hideDuration]);
 
@@ -106,7 +111,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     async function loadLayout() {
       setLayoutLoading(true);
       try {
-        const layout = await fetchLayout(1); // or use the active layout ID
+        const layout = await fetchLayout(1); // or active layout ID
         // transform layout data into SeatSectionData
         const sections: SeatSectionData[] = layout.seat_sections.map((sec: any) => ({
           id: sec.id,
@@ -120,8 +125,8 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
             label: s.label,
             position_x: s.position_x,
             position_y: s.position_y,
-            capacity: s.capacity ?? 1
-          }))
+            capacity: s.capacity ?? 1,
+          })),
         }));
         setLayoutSections(sections);
       } catch (err) {
@@ -133,7 +138,9 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     loadLayout();
   }, []);
 
-  // 5) Actually create the reservation
+  // ---------------------------
+  // Actions
+  // ---------------------------
   async function handleCreate() {
     setError('');
 
@@ -163,204 +170,222 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
           duration_minutes: duration,
         },
       });
-      onSuccess(); // e.g. close modal, reload reservations, etc.
+      onSuccess(); // e.g. close modal, reload data
     } catch (err) {
       console.error('Error creating reservation:', err);
       setError('Failed to create reservation. Please try again.');
     }
   }
 
-  // 6) Seat Map
+  // Seat Map
   function handleOpenSeatMap() {
     if (!layoutSections.length) {
-      alert('Layout not loaded yet or no seats available.');
+      alert('Layout not loaded or no seats available.');
       return;
     }
     setShowSeatMapModal(true);
   }
-
   function handleCloseSeatMap() {
     setShowSeatMapModal(false);
   }
-
   function handleSeatMapSave(threeSets: string[][]) {
     setAllSets(threeSets);
     setShowSeatMapModal(false);
   }
 
-  // For easier display
   const [opt1, opt2, opt3] = allSets;
-
-  // Convert "YYYY-MM-DD" => Date or null
   const parsedDate = date ? parseYYYYMMDD(date) : null;
 
   return (
     <>
+      {/* Modal Overlay */}
       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-        <div className="bg-white w-full max-w-md rounded-lg shadow-lg p-6 relative">
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-          <h2 className="text-2xl font-bold mb-4 text-gray-900">New Reservation</h2>
+        {/* Modal Container */}
+        <div className="relative bg-white max-w-lg w-full mx-4 rounded-lg shadow-lg">
+          {/* Scrollable content (in case of large form) */}
+          <div className="p-6 max-h-[85vh] overflow-y-auto relative">
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-md mb-4">
-              {error}
-            </div>
-          )}
+            <h2 className="text-2xl font-bold mb-4 text-gray-900">
+              New Reservation
+            </h2>
 
-          <div className="space-y-4">
-            {/* Date & Party */}
-            <div className="flex space-x-2">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                {/* Use react-datepicker instead of <input type="date" /> */}
-                <DatePicker
-                  selected={parsedDate || undefined}  // undefined if null
-                  onChange={(selected: Date | null) => {
-                    if (selected) {
-                      setDate(formatYYYYMMDD(selected));
-                    } else {
-                      setDate('');
-                    }
-                  }}
-                  dateFormat="MM/dd/yyyy"
-                  className="w-full p-2 border border-gray-300 rounded text-sm"
-                  placeholderText="Select date"
-                />
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-md mb-4">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+
+              {/* Date & Party in a 2-column grid => uniform widths */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date
+                  </label>
+                  <DatePicker
+                    selected={parsedDate || undefined}
+                    onChange={(selected: Date | null) => {
+                      if (selected) {
+                        setDate(formatYYYYMMDD(selected));
+                      } else {
+                        setDate('');
+                      }
+                    }}
+                    dateFormat="MM/dd/yyyy"
+                    className="w-full p-2 border border-gray-300 rounded text-sm"
+                    placeholderText="Select date"
+                  />
+                </div>
+
+                {/* Party Size */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Party Size
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={partySize}
+                    onChange={(e) => setPartySize(+e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full p-2 border border-gray-300 rounded text-sm"
+                  />
+                </div>
               </div>
 
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={partySize}
-                  onChange={(e) => setPartySize(+e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
-                />
-              </div>
-            </div>
-
-            {/* Time */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-              <select
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded"
-              >
-                <option value="">-- Select a time --</option>
-                {timeslots.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {slot}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Duration => hide if exactly 1 timeslot */}
-            {!hideDuration && (
+              {/* Time */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration (minutes)
+                  Time
                 </label>
                 <select
-                  value={duration}
-                  onChange={(e) => setDuration(+e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded text-sm"
                 >
-                  {[30, 60, 90, 120, 180, 240, 360, 480, 720].map((val) => (
-                    <option key={val} value={val}>
-                      {val}
+                  <option value="">-- Select a time --</option>
+                  {timeslots.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {slot}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
 
-            {/* Contact info */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Guest Name</label>
-              <input
-                type="text"
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
-                required
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-              <input
-                type="tel"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input
-                type="email"
-                value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
+              {/* Duration => hide if exactly 1 timeslot */}
+              {!hideDuration && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Duration (minutes)
+                  </label>
+                  <select
+                    value={duration}
+                    onChange={(e) => setDuration(+e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded text-sm"
+                  >
+                    {[30, 60, 90, 120, 180, 240, 360, 480, 720].map((val) => (
+                      <option key={val} value={val}>
+                        {val}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-            {/* Seat preferences */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Seat Preferences (Optional)
-              </label>
-              <div className="p-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
-                <p className="text-xs italic">
-                  Option 1: {opt1.length ? opt1.join(', ') : '(none)'}
-                </p>
-                <p className="text-xs italic">
-                  Option 2: {opt2.length ? opt2.join(', ') : '(none)'}
-                </p>
-                <p className="text-xs italic">
-                  Option 3: {opt3.length ? opt3.join(', ') : '(none)'}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleOpenSeatMap}
-                  className="mt-2 px-3 py-1 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-                  disabled={layoutLoading}
-                >
-                  {opt1.length || opt2.length || opt3.length
-                    ? 'Edit Seat Preferences'
-                    : 'Select Seat Preferences'}
-                </button>
+              {/* Contact info */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Guest Name
+                </label>
+                <input
+                  type="text"
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  required
+                  className="w-full p-2 border border-gray-300 rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded text-sm"
+                />
+              </div>
+
+              {/* Seat preferences */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Seat Preferences (Optional)
+                </label>
+                <div className="p-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
+                  <p className="text-xs italic">
+                    Option 1: {allSets[0].length ? allSets[0].join(', ') : '(none)'}
+                  </p>
+                  <p className="text-xs italic">
+                    Option 2: {allSets[1].length ? allSets[1].join(', ') : '(none)'}
+                  </p>
+                  <p className="text-xs italic">
+                    Option 3: {allSets[2].length ? allSets[2].join(', ') : '(none)'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleOpenSeatMap}
+                    className="mt-2 px-3 py-1 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                    disabled={layoutLoading}
+                  >
+                    {allSets.some(a => a.length)
+                      ? 'Edit Seat Preferences'
+                      : 'Select Seat Preferences'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Action buttons */}
-          <div className="mt-6 flex justify-end space-x-2">
-            <button
-              onClick={handleCreate}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-            >
-              Create
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-            >
-              Cancel
-            </button>
+            {/* Action buttons */}
+            <div className="mt-6 flex justify-end space-x-2">
+              <button
+                onClick={handleCreate}
+                className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+              >
+                Create
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Seat Preference Map Modal */}
+      {/* Seat Map Modal */}
       {showSeatMapModal && (
         <SeatPreferenceMapModal
           date={date}
