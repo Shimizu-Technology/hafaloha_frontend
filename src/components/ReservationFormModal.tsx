@@ -1,6 +1,8 @@
 // src/components/ReservationFormModal.tsx
-
 import React, { useState, useEffect } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
 import {
   fetchAvailability,
   createReservation,
@@ -13,11 +15,28 @@ import type { SeatSectionData } from './SeatLayoutCanvas';
 interface Props {
   onClose: () => void;
   onSuccess: () => void;
-  defaultDate?: string; // optional
+  defaultDate?: string; // optional, e.g. "2025-01-26"
 }
 
 export default function ReservationFormModal({ onClose, onSuccess, defaultDate }: Props) {
-  const [date, setDate] = useState(defaultDate || '');
+  // --------------------------------------------
+  // Helpers for date parsing & formatting
+  // --------------------------------------------
+  function parseYYYYMMDD(dateStr: string): Date | null {
+    if (!dateStr) return null;
+    const [year, month, day] = dateStr.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+  }
+  function formatYYYYMMDD(d: Date): string {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  // --------------------------------------------
+
+  const [date, setDate] = useState(defaultDate || '');  // "YYYY-MM-DD"
   const [time, setTime] = useState('');
   const [partySize, setPartySize] = useState(2);
   const [contactName, setContactName] = useState('');
@@ -172,6 +191,9 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   // For easier display
   const [opt1, opt2, opt3] = allSets;
 
+  // Convert "YYYY-MM-DD" => Date or null
+  const parsedDate = date ? parseYYYYMMDD(date) : null;
+
   return (
     <>
       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -196,13 +218,22 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
             <div className="flex space-x-2">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                {/* Use react-datepicker instead of <input type="date" /> */}
+                <DatePicker
+                  selected={parsedDate || undefined}  // undefined if null
+                  onChange={(selected: Date | null) => {
+                    if (selected) {
+                      setDate(formatYYYYMMDD(selected));
+                    } else {
+                      setDate('');
+                    }
+                  }}
+                  dateFormat="MM/dd/yyyy"
+                  className="w-full p-2 border border-gray-300 rounded text-sm"
+                  placeholderText="Select date"
                 />
               </div>
+
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
                 <input

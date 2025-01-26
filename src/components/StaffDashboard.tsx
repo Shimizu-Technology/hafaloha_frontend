@@ -1,5 +1,4 @@
 // src/components/StaffDashboard.tsx
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
@@ -21,6 +20,10 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+
+// Date picker
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 // Import your API helpers:
 import {
@@ -59,6 +62,17 @@ function getGuamDateString(): string {
   return new Date().toLocaleDateString('en-CA', {
     timeZone: 'Pacific/Guam',
   });
+}
+
+/** Safely parse a "YYYY-MM-DD" string into a Date, fallback to today if invalid. */
+function parseDateFilter(dateStr: string): Date {
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+/** Format a Date object into "YYYY-MM-DD". */
+function formatYYYYMMDD(dateObj: Date): string {
+  return dateObj.toISOString().split('T')[0];
 }
 
 export default function StaffDashboard() {
@@ -196,14 +210,14 @@ export default function StaffDashboard() {
 
   // Date arrow nav => changes dateFilter => triggers new fetch
   function handlePrevDay() {
-    const current = new Date(dateFilter);
+    const current = parseDateFilter(dateFilter);
     current.setDate(current.getDate() - 1);
-    setDateFilter(current.toISOString().split('T')[0]);
+    setDateFilter(formatYYYYMMDD(current));
   }
   function handleNextDay() {
-    const current = new Date(dateFilter);
+    const current = parseDateFilter(dateFilter);
     current.setDate(current.getDate() + 1);
-    setDateFilter(current.toISOString().split('T')[0]);
+    setDateFilter(formatYYYYMMDD(current));
   }
 
   // Creating a new reservation => open the ReservationFormModal
@@ -218,6 +232,9 @@ export default function StaffDashboard() {
     // Refresh the list
     await fetchReservations();
   }
+
+  // Parse our dateFilter => Date for react-datepicker
+  const parsedDate = parseDateFilter(dateFilter);
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -307,16 +324,24 @@ export default function StaffDashboard() {
                     >
                       <ChevronLeft className="w-4 h-4 text-gray-600" />
                     </button>
+
+                    {/* The date picker w/ Filter icon */}
                     <div className="relative">
                       <Filter className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                      <input
-                        type="date"
-                        value={dateFilter}
-                        onChange={(e) => setDateFilter(e.target.value)}
+                      <DatePicker
+                        selected={parsedDate}
+                        onChange={(date: Date | null) => {
+                          if (!date) return;
+                          setDateFilter(formatYYYYMMDD(date));
+                        }}
+                        dateFormat="MM/dd/yyyy"
+                        popperProps={{ strategy: 'fixed' }}
                         className="pl-10 pr-4 py-2 w-36 border border-gray-300 
-                                   rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                   rounded-md focus:ring-2 focus:ring-orange-500 
+                                   focus:border-orange-500 text-sm"
                       />
                     </div>
+
                     <button
                       onClick={handleNextDay}
                       className="p-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
