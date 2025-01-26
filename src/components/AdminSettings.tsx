@@ -1,23 +1,39 @@
 // src/components/AdminSettings.tsx
 
 import React, { useState, useEffect } from 'react';
-import { fetchRestaurant, updateRestaurant } from '../services/api';
+import { 
+  fetchRestaurant, 
+  updateRestaurant,
+  fetchOperatingHours,
+  updateOperatingHour
+} from '../services/api';
 
+/** Basic Restaurant shape, for general settings */
 interface Restaurant {
   id: number;
-  name: string;
-  opening_time?: string;  // e.g. "2000-01-01 17:00:00 +1000"
-  closing_time?: string;  // e.g. "2000-01-01 21:00:00 +1000"
   default_reservation_length?: number;
   admin_settings?: Record<string, any>;
 }
 
+/** OperatingHour shape from the backend */
+interface OperatingHour {
+  id: number;
+  restaurant_id: number;
+  day_of_week: number;  // 0=Sunday..6=Saturday
+  open_time: string | null;
+  close_time: string | null;
+  closed: boolean;
+}
+
 /**
- * Parses a Rails DB time like "2000-01-01 17:00:00 +1000" into "HH:MM" (24h).
- * If it fails, returns an empty string.
+ * ShortTime util:
+ * Convert "2000-01-01 09:00:00 +1000" => "09:00" if possible.
+ * If parse fails, tries a fallback regex. If that fails, returns "".
  */
-function parseDbTime(dbTime: string): string {
-  // Try constructing a Date and reading hours/minutes
+function shortTime(dbTime: string | null): string {
+  if (!dbTime) return '';
+
+  // 1) Try new Date(...)
   const d = new Date(dbTime);
   if (!isNaN(d.getTime())) {
     const hh = String(d.getHours()).padStart(2, '0');
@@ -25,98 +41,112 @@ function parseDbTime(dbTime: string): string {
     return `${hh}:${mm}`;
   }
 
-  // Fallback: If new Date() doesn't parse well, attempt a regex
-  const match = dbTime.match(/(\d{2}):(\d{2}):\d{2}/);
-  if (match) {
-    return `${match[1]}:${match[2]}`;
-  }
-
-  return '';
+  // 2) Fallback: find HH:MM by regex
+  const match = dbTime.match(/\d{2}:\d{2}/);
+  return match ? match[0] : '';
 }
+
+// Day-of-week labels
+const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
 export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
 
-  // The fields we are editing
-  const [openTime, setOpenTime]     = useState('');  // e.g. "17:00"
-  const [closeTime, setCloseTime]   = useState('');  // e.g. "21:00"
+  // ----- General Settings fields -----
   const [defaultLength, setDefaultLength] = useState(60);
-
-  // Admin settings JSON string
   const [adminSettings, setAdminSettings] = useState('');
 
+  // ----- Operating Hours local state -----
+  // We'll store an array of draft operating hours that we only save on "Save Settings"
+  const [draftHours, setDraftHours] = useState<OperatingHour[]>([]);
+
+  // On mount, load everything
   useEffect(() => {
-    loadRestaurantData();
+    loadAllData();
   }, []);
 
-  async function loadRestaurantData() {
+  async function loadAllData() {
     setLoading(true);
     setError('');
     setSuccess('');
-
     try {
-      // Hardcoded ID=1; adapt if multiple restaurants
+      // 1) Load restaurant => fill defaultLength & adminSettings JSON
       const rest: Restaurant = await fetchRestaurant(1);
-
-      // Convert DB times to "HH:MM"
-      if (rest.opening_time) {
-        setOpenTime(parseDbTime(rest.opening_time));
-      }
-      if (rest.closing_time) {
-        setCloseTime(parseDbTime(rest.closing_time));
-      }
       if (rest.default_reservation_length) {
         setDefaultLength(rest.default_reservation_length);
       }
-
-      // If the server returns admin_settings as an object, convert to JSON
       if (rest.admin_settings) {
         setAdminSettings(JSON.stringify(rest.admin_settings, null, 2));
       }
 
+      // 2) Load operating hours => store them in draftHours
+      const oh = await fetchOperatingHours();
+      setDraftHours(oh);
     } catch (err) {
-      console.error('Error loading restaurant data:', err);
-      setError('Failed to load settings.');
+      console.error('Error loading settings:', err);
+      setError('Failed to load admin settings or operating hours.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleSave(e: React.FormEvent) {
+  /**
+   * For Operating Hour input changes, we just update `draftHours`
+   * without calling the backend yet.
+   */
+  function handleOHChange(hourId: number, field: keyof OperatingHour, value: any) {
+    setDraftHours((prev) => {
+      return prev.map((oh) => {
+        if (oh.id !== hourId) return oh;
+        return { ...oh, [field]: value };
+      });
+    });
+  }
+
+  /**
+   * Single “Save Settings” button that:
+   * 1) Saves the general restaurant fields (defaultLength, adminSettings)
+   * 2) Saves each operating hour row to the server
+   */
+  async function handleSaveAll(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setSuccess('');
 
     try {
-      // Attempt to parse adminSettings JSON
-      let parsedAdminSettings: any = {};
+      // 1) Parse adminSettings JSON (if present)
+      let parsedAdmin: any = {};
       if (adminSettings.trim()) {
         try {
-          parsedAdminSettings = JSON.parse(adminSettings);
+          parsedAdmin = JSON.parse(adminSettings);
         } catch (parseErr) {
           setError('Invalid JSON in Admin Settings field.');
           return;
         }
       }
 
-      // For the DB, we typically append ":00" to make "HH:MM:SS"
-      const openWithSeconds  = openTime ? openTime + ':00' : '';
-      const closeWithSeconds = closeTime ? closeTime + ':00' : '';
-
-      // Call the API
+      // 2) Update the Restaurant (general settings)
       await updateRestaurant(1, {
-        opening_time: openWithSeconds,
-        closing_time: closeWithSeconds,
         default_reservation_length: Number(defaultLength),
-        admin_settings: parsedAdminSettings,
+        admin_settings: parsedAdmin,
       });
 
-      setSuccess('Settings saved successfully!');
+      // 3) Update each OperatingHour in a loop
+      //    (Or you could do a Promise.all if you want parallel calls.)
+      for (const oh of draftHours) {
+        await updateOperatingHour(oh.id, {
+          open_time: oh.open_time,
+          close_time: oh.close_time,
+          closed: oh.closed,
+        });
+      }
+
+      setSuccess('All settings saved successfully!');
     } catch (err) {
       console.error('Error saving settings:', err);
-      setError('Failed to save settings. Check console.');
+      setError('Failed to save some or all settings. Check console.');
     }
   }
 
@@ -125,82 +155,141 @@ export default function AdminSettings() {
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-bold mb-4">Admin Settings</h2>
-
+    <div className="p-4 space-y-6">
+      {/* Alerts */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded mb-4">
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded">
           {error}
         </div>
       )}
       {success && (
-        <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-2 rounded mb-4">
+        <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-2 rounded">
           {success}
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-4 max-w-lg">
-        {/* Opening Time */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            Opening Time
-          </label>
-          <input
-            type="time"
-            value={openTime}
-            onChange={(e) => setOpenTime(e.target.value)}
-            className="border border-gray-300 rounded p-2 w-44"
-          />
-        </div>
+      {/* Single form that wraps everything */}
+      <form onSubmit={handleSaveAll} className="space-y-8">
 
-        {/* Closing Time */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            Closing Time
-          </label>
-          <input
-            type="time"
-            value={closeTime}
-            onChange={(e) => setCloseTime(e.target.value)}
-            className="border border-gray-300 rounded p-2 w-44"
-          />
-        </div>
+        {/* ───────────────────────────────────────────────────────────────── */}
+        {/* 1) OPERATING HOURS SECTION */}
+        {/* ───────────────────────────────────────────────────────────────── */}
+        <section className="bg-white p-4 rounded shadow">
+          <h2 className="text-xl font-bold mb-4">Operating Hours</h2>
 
-        {/* Default Reservation Length */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            Default Reservation Length (minutes)
-          </label>
-          <input
-            type="number"
-            min={15}
-            step={15}
-            value={defaultLength}
-            onChange={(e) => setDefaultLength(+e.target.value)}
-            className="border border-gray-300 rounded p-2 w-44"
-          />
-        </div>
+          {draftHours.length === 0 ? (
+            <p className="text-sm text-gray-600">
+              No operating hours found. You might seed them first.
+            </p>
+          ) : (
+            <table className="min-w-full border border-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left">Day</th>
+                  <th className="px-4 py-2 text-left">Open Time</th>
+                  <th className="px-4 py-2 text-left">Close Time</th>
+                  <th className="px-4 py-2 text-left">Closed?</th>
+                </tr>
+              </thead>
+              <tbody>
+                {draftHours.map((oh) => {
+                  // Convert "2000-01-01 09:00:00 +1000" => "09:00" for display
+                  const openVal  = shortTime(oh.open_time);
+                  const closeVal = shortTime(oh.close_time);
 
-        {/* Admin Settings (JSON) */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            Admin Settings (JSON)
-          </label>
-          <textarea
-            value={adminSettings}
-            onChange={(e) => setAdminSettings(e.target.value)}
-            rows={6}
-            className="w-full border border-gray-300 rounded p-2 font-mono text-sm"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            You can store additional config in JSON format (e.g. special rules).
-          </p>
-        </div>
+                  return (
+                    <tr key={oh.id} className="border-t border-gray-200">
+                      <td className="px-4 py-2">
+                        {DAY_NAMES[oh.day_of_week] || `Day ${oh.day_of_week}`}
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="time"
+                          disabled={oh.closed}
+                          value={openVal}
+                          onChange={(e) => {
+                            const newVal = e.target.value ? e.target.value + ':00' : null;
+                            handleOHChange(oh.id, 'open_time', newVal);
+                          }}
+                          className="border border-gray-300 rounded p-1 w-32"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="time"
+                          disabled={oh.closed}
+                          value={closeVal}
+                          onChange={(e) => {
+                            const newVal = e.target.value ? e.target.value + ':00' : null;
+                            handleOHChange(oh.id, 'close_time', newVal);
+                          }}
+                          className="border border-gray-300 rounded p-1 w-32"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={oh.closed}
+                          onChange={(e) => {
+                            handleOHChange(oh.id, 'closed', e.target.checked);
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
 
-        <div className="pt-2">
+        {/* ───────────────────────────────────────────────────────────────── */}
+        {/* 2) GENERAL SETTINGS SECTION */}
+        {/* ───────────────────────────────────────────────────────────────── */}
+        <section className="bg-white p-4 rounded shadow">
+          <h2 className="text-xl font-bold mb-4">General Settings</h2>
+
+          <div className="space-y-4 max-w-lg">
+            {/* Default Reservation Length */}
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Default Reservation Length (minutes)
+              </label>
+              <input
+                type="number"
+                min={15}
+                step={15}
+                value={defaultLength}
+                onChange={(e) => setDefaultLength(+e.target.value)}
+                className="border border-gray-300 rounded p-2 w-44"
+              />
+            </div>
+
+            {/* Admin Settings (JSON) */}
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Admin Settings (JSON)
+              </label>
+              <textarea
+                value={adminSettings}
+                onChange={(e) => setAdminSettings(e.target.value)}
+                rows={6}
+                className="w-full border border-gray-300 rounded p-2 font-mono text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                You can store additional config in JSON format (e.g. special rules).
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ───────────────────────────────────────────────────────────────── */}
+        {/* SINGLE SAVE BUTTON (Saves both Hours + General in handleSaveAll) */}
+        {/* ───────────────────────────────────────────────────────────────── */}
+        <div>
           <button
             type="submit"
-            className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+            className="px-6 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
           >
             Save Settings
           </button>

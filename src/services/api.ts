@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 
-// For Vite or similar bundlers, baseURL comes from an .env variable or defaults to localhost.
+// For Vite or similar bundlers, baseURL might come from an .env or defaults to localhost.
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Create an Axios instance
@@ -27,16 +27,13 @@ export async function fetchRestaurant(id: number) {
 
 /**
  * Update a restaurant's fields by ID.
- * Expects an object like:
+ * 
+ * Example shape:
  *   {
- *     opening_time: "17:00:00",
- *     closing_time: "21:00:00",
  *     default_reservation_length: 60,
- *     admin_settings: { specialRules: true }
+ *     admin_settings: { someRule: true }
  *     // plus any other fields you permit on the backend
  *   }
- * On the Rails side, make sure `params.require(:restaurant).permit(...)`
- * includes these fields. 
  */
 export async function updateRestaurant(id: number, data: any) {
   const resp = await apiClient.patch(`/restaurants/${id}`, {
@@ -83,7 +80,7 @@ interface UpdateReservationData {
   contact_email?: string;
   status?: string;
   seat_preferences?: string[][];
-  duration_minutes?: number; // <--- optional field
+  duration_minutes?: number; // optional field
 }
 
 export async function fetchReservations(params?: { date?: string }) {
@@ -93,7 +90,7 @@ export async function fetchReservations(params?: { date?: string }) {
 
 /**
  * Creates a new reservation.
- * Optionally includes seat_preferences and duration_minutes.
+ * Optionally includes seat_preferences, duration_minutes, etc.
  */
 export async function createReservation(data: {
   reservation: {
@@ -106,7 +103,6 @@ export async function createReservation(data: {
     contact_name?: string;
     contact_phone?: string;
     contact_email?: string;
-    // etc
   }
 }) {
   const resp = await apiClient.post('/reservations', data);
@@ -166,9 +162,8 @@ export async function seatAllocationMultiCreate(allocationData: any) {
 
 /**
  * seatAllocationReserve:
- *  - If your backend allows passing seat_labels instead of seat_ids,
- *    you can do so here. Otherwise, do seat label→ID conversion or
- *    use a specialized “assign_from_preference” endpoint.
+ *  - If your backend allows seat_labels, pass them. 
+ *  - Or do seat IDs or a specialized “assign_from_preference” endpoint.
  */
 export async function seatAllocationReserve(allocationData: {
   occupant_type: 'reservation' | 'waitlist';
@@ -176,7 +171,7 @@ export async function seatAllocationReserve(allocationData: {
   seat_labels?: string[];
   seat_ids?: number[];
   start_time: string;
-  end_time?: string; // optional if your backend calculates it
+  end_time?: string;
 }) {
   const resp = await apiClient.post('/seat_allocations/reserve', {
     seat_allocation: allocationData,
@@ -215,7 +210,7 @@ export async function fetchAvailability(date: string, partySize: number) {
 }
 
 // -------------------------------------------------------------------
-// 7) Auth Calls (Signup / Login)
+// 7) Auth Calls
 // -------------------------------------------------------------------
 export async function signupUser(data: {
   first_name: string;
@@ -263,6 +258,29 @@ export async function bulkUpdateSeats(
 ) {
   const resp = await apiClient.post('/seats/bulk_update', {
     seats: seatUpdates,
+  });
+  return resp.data;
+}
+
+// -------------------------------------------------------------------
+// 9) Operating Hours
+// -------------------------------------------------------------------
+/**
+ * GET /admin/operating_hours => returns an array of OperatingHour
+ *  e.g. [{ id, restaurant_id, day_of_week, open_time, close_time, closed }, ... ]
+ */
+export async function fetchOperatingHours() {
+  const resp = await apiClient.get('/admin/operating_hours');
+  return resp.data;
+}
+
+/**
+ * PATCH /admin/operating_hours/:id => update a single OperatingHour
+ * Body: { operating_hour: { open_time: "09:00:00", close_time: "17:00:00", closed: false } }
+ */
+export async function updateOperatingHour(id: number, data: any) {
+  const resp = await apiClient.patch(`/admin/operating_hours/${id}`, {
+    operating_hour: data,
   });
   return resp.data;
 }
