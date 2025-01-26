@@ -1,5 +1,4 @@
 // src/components/ReservationForm.tsx
-
 import React, { useState, useEffect } from 'react';
 import { Clock, Users, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -19,8 +18,7 @@ export default function ReservationForm() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // If user has a phone in their profile, use that. Otherwise default to "+1671".
-  // (If you never want to override the user's stored phone, remove this logic.)
+  // If user has a phone in their profile, use that. Otherwise default to "+1671"
   const initialPhone = user?.phone && user.phone.trim() !== ''
     ? user.phone
     : '+1671';
@@ -35,19 +33,19 @@ export default function ReservationForm() {
     email: '',
   });
 
-  // Store party size as a string for free‐form editing
+  // Party size as a string for free‐form editing
   const [partySizeText, setPartySizeText] = useState('1');
 
-  // Additional field: how long a reservation lasts
+  // Duration field
   const [duration, setDuration] = useState(60);
 
-  // We'll store timeslots from /availability here
+  // We'll store the timeslots returned by /availability here
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // parse partySizeText => number
+  /** Convert partySizeText => number, fallback to 1 */
   function getPartySize(): number {
     return parseInt(partySizeText, 10) || 1;
   }
@@ -72,29 +70,46 @@ export default function ReservationForm() {
     getTimeslots();
   }, [formData.date, partySizeText]);
 
-  // Submit the form => createReservation
+  /**
+   * Helper: convert "HH:mm" (24-hour) to 12-hour, e.g. "17:30" => "5:30 PM".
+   * We'll just pick an arbitrary date so we can parse hours/minutes.
+   */
+  function format12hSlot(slot: string) {
+    const [hhStr, mmStr] = slot.split(':');
+    const hh = parseInt(hhStr, 10);
+    const mm = parseInt(mmStr, 10);
+
+    // Construct a dummy Date (year=2020 to avoid leap year confusion, etc.)
+    const d = new Date(2020, 0, 1, hh, mm);
+    // Format as 12-hour time
+    return d.toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
+  /** Form submission => createReservation */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    // Combine date + chosen time into an ISO string for `start_time`
     if (!formData.date || !formData.time) {
       setError('Please pick a date and time.');
       return;
     }
 
+    // Combine date + chosen time into an ISO string
     const start_time = `${formData.date}T${formData.time}:00`;
 
-    // fallback logic for logged‐in user's data
     const contactFirstName = formData.firstName.trim()
       || (user ? user.name?.split(' ')[0] ?? '' : '');
     const contactLastName  = formData.lastName.trim()
       || (user ? user.name?.split(' ')[1] ?? '' : '');
-    let contactPhone       = formData.phone.trim(); // We'll further clean up below
+    let contactPhone       = formData.phone.trim();
     const contactEmail     = formData.email.trim() || user?.email || '';
 
-    // If no first name at all => error
     if (!contactFirstName) {
       setError('First name is required.');
       return;
@@ -103,15 +118,14 @@ export default function ReservationForm() {
     // final numeric party size
     const finalPartySize = getPartySize();
 
-    // --- PHONE CLEANUP: If user left it as just '+1671' (plus optional spaces/dashes) => no phone ---
-    // remove typical separators
+    // PHONE CLEANUP: If user left it as just "+1671", treat as no phone
     const cleanedPhone = contactPhone.replace(/[-()\s]+/g, '');
     if (cleanedPhone === '+1671') {
-      contactPhone = ''; // treat as no phone
+      contactPhone = '';
     }
 
     try {
-      // Create the reservation via API
+      // Create reservation via API
       const newRes = await createReservation({
         start_time,
         party_size: finalPartySize,
@@ -123,7 +137,6 @@ export default function ReservationForm() {
       });
 
       setSuccess('Reservation created successfully!');
-      // navigate to a confirmation page with the new reservation
       navigate('/reservation-confirmation', {
         state: { reservation: newRes },
       });
@@ -133,7 +146,6 @@ export default function ReservationForm() {
     }
   };
 
-  // Just a helper so we don't sprinkle `!!user` everywhere
   const isLoggedIn = !!user;
 
   /** Filter out non‐digit characters in Party Size */
@@ -177,7 +189,7 @@ export default function ReservationForm() {
           />
         </div>
 
-        {/* Time (Dropdown from timeslots) */}
+        {/* Time (Dropdown from timeslots) => convert each slot to 12-hour */}
         <div className="space-y-2">
           <label htmlFor="time" className="block text-sm font-medium text-gray-700">
             Time
@@ -187,9 +199,7 @@ export default function ReservationForm() {
             <select
               id="time"
               value={formData.time}
-              onChange={(e) =>
-                setFormData({ ...formData, time: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, time: e.target.value })}
               className="w-full pl-10 pr-3 py-2 border border-gray-300 
                          rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               required
@@ -197,14 +207,14 @@ export default function ReservationForm() {
               <option value="">-- Select a time --</option>
               {timeslots.map((slot) => (
                 <option key={slot} value={slot}>
-                  {slot}
+                  {format12hSlot(slot)}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Party Size: text-based numeric filtering */}
+        {/* Party Size */}
         <div className="space-y-2">
           <label htmlFor="partySize" className="block text-sm font-medium text-gray-700">
             Party Size
@@ -226,7 +236,7 @@ export default function ReservationForm() {
           </div>
         </div>
 
-        {/* DURATION MINUTES */}
+        {/* Duration */}
         <div className="space-y-2">
           <label htmlFor="duration" className="block text-sm font-medium text-gray-700">
             Duration (minutes)
@@ -279,7 +289,7 @@ export default function ReservationForm() {
           />
         </div>
 
-        {/* Phone (prepopulated with +1671 unless user already has a phone) */}
+        {/* Phone */}
         <div className="space-y-2">
           <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
             Phone {isLoggedIn ? '(Optional)' : '(Required)'}

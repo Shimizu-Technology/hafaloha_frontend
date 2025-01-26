@@ -35,30 +35,45 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     return `${yyyy}-${mm}-${dd}`;
   }
 
+  // A small helper that converts "HH:mm" (24h) => "h:mm AM/PM"
+  function format12hSlot(slot: string) {
+    const [hhStr, mmStr] = slot.split(':');
+    const hh = parseInt(hhStr, 10);
+    const mm = parseInt(mmStr, 10);
+
+    // Create a dummy date
+    const d = new Date(2020, 0, 1, hh, mm);
+    return d.toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
   // ---------------------------
   // State
   // ---------------------------
   const [date, setDate] = useState(defaultDate || ''); // "YYYY-MM-DD"
   const [time, setTime] = useState('');
 
-  // Store party size as a string so user can edit freely
+  // Store party size as a string for free editing
   const [partySizeText, setPartySizeText] = useState('2');
 
+  // Basic contact fields
   const [contactName, setContactName] = useState('');
-  // Prepopulate phone with +1671 for convenience
-  const [contactPhone, setContactPhone] = useState('+1671');
+  const [contactPhone, setContactPhone] = useState('+1671'); // prefill with +1671
   const [contactEmail, setContactEmail] = useState('');
 
-  // Start with 60, then possibly override
+  // Start with 60, or possibly override from restaurant
   const [duration, setDuration] = useState(60);
 
   const [error, setError] = useState('');
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
-  // If timeslots = exactly 1 => hide duration & default a big duration
+  // If timeslots = exactly 1 => hide the duration and default to a big number
   const hideDuration = timeslots.length === 1;
 
-  // For seat preferences
+  // Seat preferences
   const [allSets, setAllSets] = useState<string[][]>([[], [], []]);
   const [showSeatMapModal, setShowSeatMapModal] = useState(false);
 
@@ -87,14 +102,13 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
 
   // 2) Load timeslots whenever date or partySize changes
   useEffect(() => {
-    // Convert partySizeText to a number
     const sizeNum = parseInt(partySizeText, 10) || 1;
+    if (!date || !sizeNum) {
+      setTimeslots([]);
+      return;
+    }
 
     async function loadTimes() {
-      if (!date || !sizeNum) {
-        setTimeslots([]);
-        return;
-      }
       try {
         const data = await fetchAvailability(date, sizeNum);
         setTimeslots(data.slots || []);
@@ -118,7 +132,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     async function loadLayout() {
       setLayoutLoading(true);
       try {
-        const layout = await fetchLayout(1); // or active layout ID
+        const layout = await fetchLayout(1);
         // transform layout data into SeatSectionData
         const sections: SeatSectionData[] = layout.seat_sections.map((sec: any) => ({
           id: sec.id,
@@ -166,15 +180,14 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
       return;
     }
 
-    // Parse party size from text, fallback to 1 if empty/invalid
+    // Parse party size from text
     const finalPartySize = parseInt(partySizeText, 10) || 1;
 
-    // Clean up phone: if user left it as +1671 only => treat as empty
-    let phoneValue = contactPhone.trim();
-    // remove spaces/dashes
-    const cleanedPhone = phoneValue.replace(/[-()\s]+/g, '');
+    // Clean phone: if user leaves it as "+1671" => no phone
+    let phoneVal = contactPhone.trim();
+    const cleanedPhone = phoneVal.replace(/[-()\s]+/g, '');
     if (cleanedPhone === '+1671') {
-      phoneValue = '';
+      phoneVal = '';
     }
 
     const start_time = `${date}T${time}:00`;
@@ -187,7 +200,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
           start_time,
           party_size: finalPartySize,
           contact_name: contactName,
-          contact_phone: phoneValue,
+          contact_phone: phoneVal,
           contact_email: contactEmail,
           status: 'booked',
           seat_preferences: seat_prefs_for_db,
@@ -220,6 +233,19 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   const [opt1, opt2, opt3] = allSets;
   const parsedDate = date ? parseYYYYMMDD(date) : null;
 
+  // Helper to convert "HH:mm" => e.g. "5:30 PM"
+  function format12hSlot(slot: string) {
+    const [hhStr, mmStr] = slot.split(':');
+    const hh = parseInt(hhStr, 10);
+    const mm = parseInt(mmStr, 10);
+    const d = new Date(2020, 0, 1, hh, mm);
+    return d.toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
   return (
     <>
       {/* Modal Overlay */}
@@ -248,7 +274,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
 
             <div className="space-y-4">
 
-              {/* Date & Party in a 2-column grid => uniform widths */}
+              {/* Date & Party in a 2-column grid */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Date */}
                 <div>
@@ -270,7 +296,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                   />
                 </div>
 
-                {/* Party Size => text-based numeric filtering */}
+                {/* Party Size */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Party Size
@@ -287,7 +313,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                 </div>
               </div>
 
-              {/* Time */}
+              {/* Time => 12-hour dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Time
@@ -300,7 +326,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                   <option value="">-- Select a time --</option>
                   {timeslots.map((slot) => (
                     <option key={slot} value={slot}>
-                      {slot}
+                      {format12hSlot(slot)}
                     </option>
                   ))}
                 </select>
@@ -340,7 +366,6 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                 />
               </div>
 
-              {/* Phone => default '+1671' */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone
@@ -354,7 +379,6 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                 />
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
