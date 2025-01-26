@@ -1,4 +1,5 @@
 // src/components/StaffDashboard.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,6 +8,7 @@ import SeatLayoutEditor from './SeatLayoutEditor';
 import ReservationModal from './ReservationModal';
 import ReservationFormModal from './ReservationFormModal';
 import FloorManager from './FloorManager';
+import AdminSettings from './AdminSettings'; // For the "Settings" tab
 
 // Icons
 import {
@@ -35,10 +37,10 @@ interface Reservation {
   contact_phone?: string;
   contact_email?: string;
   party_size?: number;
-  status?: string;               // "booked", "reserved", "seated", "finished", etc.
-  seat_labels?: string[];        // NOW provided by the backend
+  status?: string;  // "booked", "reserved", "seated", etc.
+  seat_labels?: string[];
   seat_preferences?: string[][];
-  start_time?: string;           // e.g. "2025-01-22T18:00:00Z"
+  start_time?: string; // e.g. "2025-01-22T18:00:00Z"
 }
 
 /** Waitlist shape. */
@@ -49,40 +51,37 @@ interface WaitlistEntry {
   party_size?: number;
   check_in_time?: string;
   status?: string; // "waiting", "seated", etc.
-  seat_labels?: string[];        // NOW provided by the backend
+  seat_labels?: string[];
 }
 
-/**
- * Returns today's date in Guam as "YYYY-MM-DD" 
- * using "en-CA" which defaults to yyyy-mm-dd.
- */
+/** Returns today's date in Guam as "YYYY-MM-DD". */
 function getGuamDateString(): string {
-  return new Date().toLocaleDateString("en-CA", {
-    timeZone: "Pacific/Guam",
+  return new Date().toLocaleDateString('en-CA', {
+    timeZone: 'Pacific/Guam',
   });
 }
 
 export default function StaffDashboard() {
   const { user } = useAuth();
 
-  // Tabs: 'reservations' | 'waitlist' | 'seating' | 'layout'
-  const [activeTab, setActiveTab] = useState<'reservations'|'waitlist'|'seating'|'layout'>(
-    'reservations'
-  );
+  // Tabs: 'reservations' | 'waitlist' | 'seating' | 'layout' | 'settings'
+  const [activeTab, setActiveTab] = useState<
+    'reservations' | 'waitlist' | 'seating' | 'layout' | 'settings'
+  >('reservations');
 
-  // The single source of truth for the date
+  // The single source of truth for the date currently being displayed
   const [dateFilter, setDateFilter] = useState(getGuamDateString);
 
-  // Reservations & waitlist data
+  // Data
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [waitlist, setWaitlist]         = useState<WaitlistEntry[]>([]);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
 
   // Searching
   const [searchTerm, setSearchTerm] = useState('');
 
   // For editing/creating reservations
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
-  const [showCreateModal, setShowCreateModal]         = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // On mount or whenever dateFilter changes => fetch reservations & waitlist
   useEffect(() => {
@@ -90,7 +89,6 @@ export default function StaffDashboard() {
   }, [dateFilter]);
 
   async function fetchData() {
-    console.log('[StaffDashboard] fetchData() => dateFilter=', dateFilter);
     await fetchReservations();
     await fetchWaitlist();
   }
@@ -121,19 +119,20 @@ export default function StaffDashboard() {
     }
   }
 
-  // Handy “refresh everything” callback if we want to re-fetch after seating changes
+  // Handy “refresh everything” callback
   async function handleRefreshAll() {
     await fetchData();
   }
 
   // Tab switch
   function handleTabChange(tab: string) {
+    // Cast to our union type
     setActiveTab(tab as any);
   }
 
-  // Searching (front-end filter by name/phone/email)
+  // Searching
   const searchedReservations = reservations.filter((r) => {
-    const name  = r.contact_name?.toLowerCase() ?? '';
+    const name = r.contact_name?.toLowerCase() ?? '';
     const phone = r.contact_phone ?? '';
     const email = r.contact_email?.toLowerCase() ?? '';
     const searchLower = searchTerm.toLowerCase();
@@ -148,13 +147,10 @@ export default function StaffDashboard() {
     const wName = w.contact_name?.toLowerCase() ?? '';
     const wPhone = w.contact_phone ?? '';
     const searchLower = searchTerm.toLowerCase();
-    return (
-      wName.includes(searchLower) ||
-      wPhone.includes(searchTerm)
-    );
+    return wName.includes(searchLower) || wPhone.includes(searchTerm);
   });
 
-  // Reservation row click => open modal
+  // Reservation row click => open detail modal
   function handleRowClick(res: Reservation) {
     setSelectedReservation(res);
   }
@@ -163,6 +159,7 @@ export default function StaffDashboard() {
   async function handleDeleteReservation(id: number) {
     try {
       await apiDeleteReservation(id);
+      // Remove from local state
       setReservations((prev) => prev.filter((r) => r.id !== id));
       setSelectedReservation(null);
     } catch (err) {
@@ -173,18 +170,18 @@ export default function StaffDashboard() {
   async function handleEditReservation(updated: Reservation) {
     try {
       const patchData: any = {
-        party_size:    updated.party_size,
-        contact_name:  updated.contact_name,
+        party_size: updated.party_size,
+        contact_name: updated.contact_name,
         contact_phone: updated.contact_phone,
         contact_email: updated.contact_email,
-        status:        updated.status,
+        status: updated.status,
       };
       // If seat preferences exist, send them too
       if (updated.seat_preferences) {
         patchData.seat_preferences = updated.seat_preferences;
       }
-
       await apiUpdateReservation(updated.id, patchData);
+
       // Re-fetch to see changes
       await fetchReservations();
       setSelectedReservation(null);
@@ -209,7 +206,7 @@ export default function StaffDashboard() {
     setDateFilter(current.toISOString().split('T')[0]);
   }
 
-  // Creating a new reservation
+  // Creating a new reservation => open the ReservationFormModal
   function handleCreateNewReservation() {
     setShowCreateModal(true);
   }
@@ -218,7 +215,7 @@ export default function StaffDashboard() {
   }
   async function handleCreateReservationSuccess() {
     setShowCreateModal(false);
-    // Refresh
+    // Refresh the list
     await fetchReservations();
   }
 
@@ -267,13 +264,25 @@ export default function StaffDashboard() {
           >
             Layout
           </button>
+          {/* NEW SETTINGS TAB */}
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-orange-50 text-orange-700 border border-orange-300'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Settings
+          </button>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* ---------- RESERVATIONS TAB ---------- */}
+        {/* ---------- Reservations Tab ---------- */}
         {activeTab === 'reservations' && (
           <div className="bg-white shadow rounded-md p-4">
+            {/* Date filter / search */}
             <div className="border-b border-gray-200 bg-gray-50 rounded-md p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-col sm:flex-row items-center gap-3 flex-1">
@@ -317,7 +326,7 @@ export default function StaffDashboard() {
                     </button>
                   </div>
                 </div>
-                {/* New reservation button */}
+                {/* New Reservation button */}
                 <div className="flex justify-end">
                   <button
                     onClick={handleCreateNewReservation}
@@ -329,7 +338,7 @@ export default function StaffDashboard() {
               </div>
             </div>
 
-            {/* Reservations table => server already filtered by date, so only front-end search here */}
+            {/* Reservations table */}
             <div className="overflow-x-auto mt-4">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
@@ -366,9 +375,9 @@ export default function StaffDashboard() {
                     });
                     const dateTimeDisplay = `${dateStr}, ${timeStr}`;
 
-                    // Now seat_labels are already included from the API.
+                    // seat_labels
                     const seatLabelText = res.seat_labels?.length
-                      ? ` (Seated at ${res.seat_labels.join(', ')})`
+                      ? `(Seated at ${res.seat_labels.join(', ')})`
                       : '';
 
                     return (
@@ -411,43 +420,50 @@ export default function StaffDashboard() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
+                          {/* Status badges */}
                           {res.status === 'booked' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-orange-100 text-orange-800">
+                              rounded-full bg-orange-100 text-orange-800"
+                            >
                               booked
                             </span>
                           )}
                           {res.status === 'reserved' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-yellow-100 text-yellow-800">
+                              rounded-full bg-yellow-100 text-yellow-800"
+                            >
                               reserved
                             </span>
                           )}
                           {res.status === 'seated' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-green-100 text-green-800">
+                              rounded-full bg-green-100 text-green-800"
+                            >
                               seated
                             </span>
                           )}
                           {res.status === 'finished' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-gray-300 text-gray-800">
+                              rounded-full bg-gray-300 text-gray-800"
+                            >
                               finished
                             </span>
                           )}
                           {res.status === 'canceled' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-red-100 text-red-800">
+                              rounded-full bg-red-100 text-red-800"
+                            >
                               canceled
                             </span>
                           )}
                           {res.status === 'no_show' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-red-100 text-red-800">
+                              rounded-full bg-red-100 text-red-800"
+                            >
                               no_show
                             </span>
                           )}
-                          {/* fallback if custom status */}
+                          {/* fallback for any other statuses */}
                           {![
                             'booked',
                             'reserved',
@@ -457,7 +473,8 @@ export default function StaffDashboard() {
                             'no_show',
                           ].includes(res.status ?? '') && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-gray-100 text-gray-800">
+                              rounded-full bg-gray-100 text-gray-800"
+                            >
                               {res.status ?? 'N/A'}
                             </span>
                           )}
@@ -490,7 +507,7 @@ export default function StaffDashboard() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-2 w-full border border-gray-300 
-                             rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 />
               </div>
             </div>
@@ -524,7 +541,7 @@ export default function StaffDashboard() {
                       : joined.toLocaleString();
 
                     const seatLabelText = w.seat_labels?.length
-                      ? ` (Seated at ${w.seat_labels.join(', ')})`
+                      ? `(Seated at ${w.seat_labels.join(', ')})`
                       : '';
 
                     return (
@@ -562,25 +579,29 @@ export default function StaffDashboard() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           {w.status === 'waiting' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-yellow-100 text-yellow-800">
+                              rounded-full bg-yellow-100 text-yellow-800"
+                            >
                               waiting
                             </span>
                           )}
                           {w.status === 'seated' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-green-100 text-green-800">
+                              rounded-full bg-green-100 text-green-800"
+                            >
                               seated
                             </span>
                           )}
                           {w.status === 'removed' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-gray-200 text-gray-800">
+                              rounded-full bg-gray-200 text-gray-800"
+                            >
                               removed
                             </span>
                           )}
                           {w.status === 'no_show' && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-red-100 text-red-800">
+                              rounded-full bg-red-100 text-red-800"
+                            >
                               no_show
                             </span>
                           )}
@@ -588,7 +609,8 @@ export default function StaffDashboard() {
                             w.status ?? ''
                           ) && (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold 
-                                           rounded-full bg-gray-100 text-gray-800">
+                              rounded-full bg-gray-100 text-gray-800"
+                            >
                               {w.status || 'N/A'}
                             </span>
                           )}
@@ -629,9 +651,16 @@ export default function StaffDashboard() {
             <SeatLayoutEditor />
           </div>
         )}
+
+        {/* ---------- SETTINGS TAB ---------- */}
+        {activeTab === 'settings' && (
+          <div className="bg-white shadow rounded-md p-4">
+            <AdminSettings />
+          </div>
+        )}
       </div>
 
-      {/* Reservation Modal (edit/delete) */}
+      {/* Reservation detail Modal */}
       {selectedReservation && (
         <ReservationModal
           reservation={selectedReservation}
@@ -641,11 +670,12 @@ export default function StaffDashboard() {
         />
       )}
 
-      {/* New Reservation Modal */}
+      {/* New Reservation Modal => pass dateFilter as defaultDate */}
       {showCreateModal && (
         <ReservationFormModal
           onClose={handleCloseCreateModal}
           onSuccess={handleCreateReservationSuccess}
+          defaultDate={dateFilter}  // <--- pass the currently displayed date
         />
       )}
     </div>

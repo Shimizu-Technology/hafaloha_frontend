@@ -1,32 +1,62 @@
 // src/components/ReservationFormModal.tsx
+
 import React, { useState, useEffect } from 'react';
-import { fetchAvailability, createReservation, fetchLayout } from '../services/api';
+import { fetchAvailability, createReservation, fetchLayout, fetchRestaurant } from '../services/api';
 import SeatPreferenceMapModal from './SeatPreferenceMapModal';
 import type { SeatSectionData } from './SeatLayoutCanvas';
 
 interface Props {
   onClose: () => void;
   onSuccess: () => void;
+  // We add this new prop to pre-fill the date
+  defaultDate?: string;
 }
 
-export default function ReservationFormModal({ onClose, onSuccess }: Props) {
-  const [date, setDate] = useState('');
+export default function ReservationFormModal({ onClose, onSuccess, defaultDate }: Props) {
+  // For date, initialize with defaultDate if provided, else empty string
+  const [date, setDate] = useState(defaultDate || '');
   const [time, setTime] = useState('');
   const [partySize, setPartySize] = useState(2);
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+
+  // Start with 60, then override with restaurant.default_reservation_length
   const [duration, setDuration] = useState(60);
+
   const [error, setError] = useState('');
 
+  // Time slots from /availability
   const [timeslots, setTimeslots] = useState<string[]>([]);
+
+  // Up to 3 seat preference sets
   const [allSets, setAllSets] = useState<string[][]>([[], [], []]);
   const [showSeatMapModal, setShowSeatMapModal] = useState(false);
 
+  // For seat map layout
   const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
   const [layoutLoading, setLayoutLoading] = useState(false);
 
-  // 1) Load timeslots
+  // ─────────────────────────────────────────────────────────────────────────
+  // 1) Fetch restaurant => set default_reservation_length to duration
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    async function loadRestaurant() {
+      try {
+        const rest = await fetchRestaurant(1);
+        if (rest.default_reservation_length) {
+          setDuration(rest.default_reservation_length);
+        }
+      } catch (err) {
+        console.error('Error fetching restaurant for default length:', err);
+      }
+    }
+    loadRestaurant();
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2) Load timeslots whenever date or partySize changes
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function loadTimes() {
       if (!date || !partySize) {
@@ -44,12 +74,14 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
     loadTimes();
   }, [date, partySize]);
 
-  // 2) Load layout
+  // ─────────────────────────────────────────────────────────────────────────
+  // 3) Load seat layout (for seat preferences) once
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function loadLayout() {
       setLayoutLoading(true);
       try {
-        const layout = await fetchLayout(1); // or your current_layout_id
+        const layout = await fetchLayout(1); // or your active layout ID
         const sections: SeatSectionData[] = layout.seat_sections.map((sec: any) => ({
           id: sec.id,
           name: sec.name,
@@ -75,9 +107,12 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
     loadLayout();
   }, []);
 
-  // 3) Create reservation => nest seat_preferences under "reservation"
+  // ─────────────────────────────────────────────────────────────────────────
+  // 4) Create Reservation
+  // ─────────────────────────────────────────────────────────────────────────
   async function handleCreate() {
     setError('');
+
     if (!contactName) {
       setError('Guest name is required.');
       return;
@@ -87,17 +122,13 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
       return;
     }
 
+    // e.g. "2025-01-26T17:00:00"
     const start_time = `${date}T${time}:00`;
 
-    // If you only want the first set:
-    // const [option1] = allSets;
-    // const seat_prefs_for_db = option1.length ? [option1] : undefined;
-
-    // Or store all sets (filter out empty):
-    const seat_prefs_for_db = allSets.filter(arr => arr.length > 0);
+    // Filter out empty seat preference sets
+    const seat_prefs_for_db = allSets.filter((arr) => arr.length > 0);
 
     try {
-      // The KEY: everything is nested under "reservation: {...}"
       await createReservation({
         reservation: {
           restaurant_id: 1,
@@ -107,7 +138,7 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
           contact_phone: contactPhone,
           contact_email: contactEmail,
           status: 'booked',
-          seat_preferences: seat_prefs_for_db.length ? seat_prefs_for_db : [],
+          seat_preferences: seat_prefs_for_db,
           duration_minutes: duration,
         },
       });
@@ -118,6 +149,9 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 5) Seat Preference Map
+  // ─────────────────────────────────────────────────────────────────────────
   function handleOpenSeatMap() {
     if (!layoutSections.length) {
       alert('Layout not loaded yet or no seats available.');
@@ -125,20 +159,27 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
     }
     setShowSeatMapModal(true);
   }
+
   function handleCloseSeatMap() {
     setShowSeatMapModal(false);
   }
+
   function handleSeatMapSave(threeSets: string[][]) {
     setAllSets(threeSets);
     setShowSeatMapModal(false);
   }
 
+  // Just for the seat preference UI
   const [opt1, opt2, opt3] = allSets;
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 6) Render
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
         <div className="bg-white w-full max-w-md rounded-lg shadow-lg p-6 relative">
+          {/* Close Button */}
           <button
             onClick={onClose}
             className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
@@ -187,14 +228,18 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
               >
                 <option value="">-- Select a time --</option>
                 {timeslots.map(slot => (
-                  <option key={slot} value={slot}>{slot}</option>
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
                 ))}
               </select>
             </div>
 
             {/* Duration */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Duration (minutes)
+              </label>
               <select
                 value={duration}
                 onChange={(e) => setDuration(+e.target.value)}
@@ -202,6 +247,7 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
               >
                 <option value={30}>30</option>
                 <option value={60}>60</option>
+                <option value={90}>90</option>
                 <option value={120}>120</option>
                 <option value={180}>180</option>
                 <option value={240}>240</option>
@@ -245,9 +291,11 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
               />
             </div>
 
-            {/* Seat Preferences => 3 sets */}
+            {/* Seat Preferences => up to 3 sets */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Seat Preferences (Optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Seat Preferences (Optional)
+              </label>
               <div className="p-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
                 <p className="text-xs italic">
                   Option 1: {opt1.length ? opt1.join(', ') : '(none)'}
@@ -291,6 +339,7 @@ export default function ReservationFormModal({ onClose, onSuccess }: Props) {
         </div>
       </div>
 
+      {/* If seat map is open */}
       {showSeatMapModal && (
         <SeatPreferenceMapModal
           date={date}

@@ -1,12 +1,14 @@
 // src/services/api.ts
+
 import axios from 'axios';
 
-// For Vite or similar bundlers:
+// For Vite or similar bundlers, baseURL comes from an .env variable or defaults to localhost.
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+// Create an Axios instance
 export const apiClient = axios.create({ baseURL });
 
-// === Add this interceptor so EVERY request sends our JWT if available ===
+// Interceptor: attach JWT on every request (if present in localStorage)
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token && config.headers) {
@@ -15,13 +17,37 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// ------------- Restaurant -------------
+// -------------------------------------------------------------------
+// 1) Restaurant: fetch & update (for Admin Settings, etc.)
+// -------------------------------------------------------------------
 export async function fetchRestaurant(id: number) {
   const resp = await apiClient.get(`/restaurants/${id}`);
   return resp.data;
 }
 
-// ------------- Layouts -------------
+/**
+ * Update a restaurant's fields by ID.
+ * Expects an object like:
+ *   {
+ *     opening_time: "17:00:00",
+ *     closing_time: "21:00:00",
+ *     default_reservation_length: 60,
+ *     admin_settings: { specialRules: true }
+ *     // plus any other fields you permit on the backend
+ *   }
+ * On the Rails side, make sure `params.require(:restaurant).permit(...)`
+ * includes these fields. 
+ */
+export async function updateRestaurant(id: number, data: any) {
+  const resp = await apiClient.patch(`/restaurants/${id}`, {
+    restaurant: data,
+  });
+  return resp.data;
+}
+
+// -------------------------------------------------------------------
+// 2) Layouts
+// -------------------------------------------------------------------
 export async function fetchAllLayouts() {
   const resp = await apiClient.get('/layouts');
   return resp.data;
@@ -47,7 +73,9 @@ export async function activateLayout(layoutId: number) {
   return resp.data;
 }
 
-// ------------- Reservations -------------
+// -------------------------------------------------------------------
+// 3) Reservations
+// -------------------------------------------------------------------
 interface UpdateReservationData {
   party_size?: number;
   contact_name?: string;
@@ -55,7 +83,7 @@ interface UpdateReservationData {
   contact_email?: string;
   status?: string;
   seat_preferences?: string[][];
-  duration_minutes?: number; // <--- NEW
+  duration_minutes?: number; // <--- optional field
 }
 
 export async function fetchReservations(params?: { date?: string }) {
@@ -88,10 +116,7 @@ export async function createReservation(data: {
 /**
  * Patch an existing reservation, optionally including seat_preferences + duration_minutes.
  */
-export async function updateReservation(
-  id: number,
-  data: UpdateReservationData
-) {
+export async function updateReservation(id: number, data: UpdateReservationData) {
   const resp = await apiClient.patch(`/reservations/${id}`, data);
   return resp.data;
 }
@@ -100,7 +125,9 @@ export async function deleteReservation(id: number) {
   await apiClient.delete(`/reservations/${id}`);
 }
 
-// ------------- Waitlist -------------
+// -------------------------------------------------------------------
+// 4) Waitlist
+// -------------------------------------------------------------------
 export async function fetchWaitlistEntries(params?: { date?: string }) {
   const resp = await apiClient.get('/waitlist_entries', { params });
   return resp.data;
@@ -118,7 +145,9 @@ export async function createWaitlistEntry(data: {
   return resp.data;
 }
 
-// ------------- Seat Allocations -------------
+// -------------------------------------------------------------------
+// 5) Seat Allocations
+// -------------------------------------------------------------------
 export async function fetchSeatAllocations(params?: { date?: string }) {
   const resp = await apiClient.get('/seat_allocations', { params });
   return resp.data;
@@ -175,7 +204,9 @@ export async function seatAllocationArrive(payload: { occupant_type: string; occ
   return resp.data;
 }
 
-// ------------- Availability -------------
+// -------------------------------------------------------------------
+// 6) Availability
+// -------------------------------------------------------------------
 export async function fetchAvailability(date: string, partySize: number) {
   const resp = await apiClient.get('/availability', {
     params: { date, party_size: partySize },
@@ -183,7 +214,9 @@ export async function fetchAvailability(date: string, partySize: number) {
   return resp.data;
 }
 
-// ------------- Auth Calls -------------
+// -------------------------------------------------------------------
+// 7) Auth Calls (Signup / Login)
+// -------------------------------------------------------------------
 export async function signupUser(data: {
   first_name: string;
   last_name: string;
@@ -202,7 +235,9 @@ export async function loginUser(email: string, password: string) {
   return resp.data;
 }
 
-// ------------- Seats -------------
+// -------------------------------------------------------------------
+// 8) Seats
+// -------------------------------------------------------------------
 export async function updateSeat(
   seatId: number,
   updates: Partial<{
