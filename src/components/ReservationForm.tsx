@@ -249,6 +249,7 @@ export default function ReservationForm() {
             "
             placeholderText="Select date"
             required
+            shouldCloseOnSelect
           />
         </div>
 
