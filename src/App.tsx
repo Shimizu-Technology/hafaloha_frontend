@@ -14,7 +14,6 @@ import HomePage from './components/HomePage';
 import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
 import ProfilePage from './components/ProfilePage';
-import ReservationConfirmationPage from './components/ReservationConfirmationPage';
 
 // The parent layout for /dashboard:
 import StaffDashboard from './components/StaffDashboard';
@@ -43,7 +42,6 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route path="/reservation-confirmation" element={<ReservationConfirmationPage />} />
 
         {/* Protected routes */}
         <Route
