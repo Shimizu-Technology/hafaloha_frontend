@@ -3,18 +3,17 @@
 import React from 'react';
 import AdminSettings from '../AdminSettings';
 
-/**
- * The "Settings" tab in the StaffDashboard also
- * just rendered <AdminSettings /> with no extra logic.
- */
 export default function SettingsTab() {
   return (
-    <div className="bg-white shadow rounded-md p-4">
-      {/* Optional heading if you want it: */}
-      <h2 className="text-xl font-bold mb-4">Admin Settings</h2>
+    <div className="bg-white shadow rounded-md">
+      {/* Subtle pink top bar with heading */}
+      <div className="border-b border-gray-200 bg-hafaloha-pink/5 rounded-t-md px-4 py-3">
+      </div>
 
-      {/* The same AdminSettings component that was rendered in StaffDashboard */}
-      <AdminSettings />
+      {/* Main content */}
+      <div className="p-4">
+        <AdminSettings />
+      </div>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+// src/components/FloorTabs.tsx
+
 import React, { useState } from 'react';
 import SeatLayoutCanvas, { SeatSectionData, DBSeat } from './SeatLayoutCanvas';
 
@@ -37,21 +39,24 @@ export default function FloorTabs({
     <div>
       {/* Tab Buttons */}
       <div className="flex space-x-2 mb-4">
-        {floorNumbers.map(floorNum => (
-          <button
-            key={floorNum}
-            onClick={() => setActiveFloor(floorNum)}
-            className={`px-4 py-2 rounded 
-              ${
-                floorNum === activeFloor
-                  ? 'bg-orange-50 text-orange-700 border border-orange-300'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }
-            `}
-          >
-            Floor {floorNum}
-          </button>
-        ))}
+        {floorNumbers.map(floorNum => {
+          const isActive = floorNum === activeFloor;
+          return (
+            <button
+              key={floorNum}
+              onClick={() => setActiveFloor(floorNum)}
+              className={`
+                px-4 py-2 rounded transition-colors
+                ${isActive
+                  ? 'bg-hafaloha-pink/10 text-hafaloha-pink border border-hafaloha-pink/20'
+                  : 'bg-gray-100 text-gray-700 hover:bg-hafaloha-pink/5'
+                }
+              `}
+            >
+              Floor {floorNum}
+            </button>
+          );
+        })}
       </div>
 
       {/* Render seat layout for the active floor */}

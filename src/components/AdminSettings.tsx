@@ -1,7 +1,10 @@
 // src/components/AdminSettings.tsx
-
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-hot-toast'; // 1) Import toast
+import { toast } from 'react-hot-toast';
+
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
 import {
   fetchRestaurant,
   updateRestaurant,
@@ -12,9 +15,6 @@ import {
   deleteSpecialEvent,
   updateOperatingHour,
 } from '../services/api';
-
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
 
 /** Basic Restaurant shape (including current_seat_count for the UI) */
 interface Restaurant {
@@ -58,7 +58,7 @@ function parseDateString(dateStr: string | null): Date | null {
   return null;
 }
 
-/** Convert a Date => "YYYY-MM-DD" or null if no date */
+/** Convert Date => "YYYY-MM-DD" or null if no date */
 function formatDateYYYYMMDD(d: Date | null): string | null {
   if (!d) return null;
   const yyyy = d.getFullYear();
@@ -67,7 +67,7 @@ function formatDateYYYYMMDD(d: Date | null): string | null {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/** Convert a DB time string => "HH:MM" for <input type="time" />. */
+/** Convert a DB time string => "HH:MM" for <input type="time" /> */
 function shortTime(dbTime: string | null): string {
   if (!dbTime) return '';
   let parseStr = dbTime;
@@ -96,7 +96,7 @@ function toDbTime(inputTime: string): string | null {
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
 export default function AdminSettings() {
-  // We removed local `error`/`success` states in favor of toast
+  // Loading indicator
   const [loading, setLoading] = useState(true);
 
   // General
@@ -109,10 +109,10 @@ export default function AdminSettings() {
   // Special Events
   const [draftEvents, setDraftEvents] = useState<SpecialEvent[]>([]);
 
-  // Advanced toggle for "Private Only" & "Max Capacity"
+  // Toggle for advanced event options
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // We'll store seatCount from the restaurant to pre-fill max_capacity for new events
+  // We'll store seatCount from the restaurant to pre-fill new events
   const [seatCount, setSeatCount] = useState(0);
 
   useEffect(() => {
@@ -123,6 +123,7 @@ export default function AdminSettings() {
     setLoading(true);
     try {
       const rest: Restaurant = await fetchRestaurant(1);
+
       if (rest.default_reservation_length) {
         setDefaultLength(rest.default_reservation_length);
       }
@@ -149,6 +150,7 @@ export default function AdminSettings() {
         _deleted:          false,
       })) as SpecialEvent[];
       setDraftEvents(mapped);
+
     } catch (err) {
       console.error('Error loading settings:', err);
       toast.error('Failed to load settings.');
@@ -157,24 +159,24 @@ export default function AdminSettings() {
     }
   }
 
+  // Operating Hours changes
   function handleOHChange(hourId: number, field: keyof OperatingHour, value: any) {
     setDraftHours((prev) =>
       prev.map((oh) => (oh.id === hourId ? { ...oh, [field]: value } : oh))
     );
   }
 
+  // Special Events changes
   function handleEventChange(eventId: number, field: keyof SpecialEvent, value: any) {
     setDraftEvents((prev) =>
       prev.map((ev) => (ev.id === eventId ? { ...ev, [field]: value } : ev))
     );
   }
-
   function handleDeleteEvent(eventId: number) {
     setDraftEvents((prev) =>
       prev.map((ev) => (ev.id === eventId ? { ...ev, _deleted: true } : ev))
     );
   }
-
   function handleAddEvent() {
     const newEvent: SpecialEvent = {
       id: 0,
@@ -183,12 +185,13 @@ export default function AdminSettings() {
       end_time: null,
       closed: false,
       exclusive_booking: false,
-      max_capacity: seatCount, // e.g. default to current seatCount
+      max_capacity: seatCount,
       description: '',
     };
     setDraftEvents((prev) => [...prev, newEvent]);
   }
 
+  // Save all
   async function handleSaveAll() {
     try {
       // Parse adminSettings from JSON
@@ -202,15 +205,14 @@ export default function AdminSettings() {
         }
       }
 
-      // Build Restaurant Payload
+      // 1) Update restaurant
       const restaurantPayload = {
         default_reservation_length: Number(defaultLength),
         admin_settings: parsedAdmin,
       };
-      // Update restaurant
       await updateRestaurant(1, restaurantPayload);
 
-      // Update Operating Hours
+      // 2) Update operating hours
       for (const oh of draftHours) {
         await updateOperatingHour(oh.id, {
           open_time:  oh.open_time,
@@ -219,12 +221,12 @@ export default function AdminSettings() {
         });
       }
 
-      // Special Events => new, updated, deleted
+      // 3) Special events
       const toCreate = draftEvents.filter(ev => ev.id === 0 && !ev._deleted);
       const toUpdate = draftEvents.filter(ev => ev.id !== 0 && !ev._deleted);
       const toDelete = draftEvents.filter(ev => ev.id !== 0 && ev._deleted);
 
-      // 4.1) Create
+      // 3.1) Create
       for (const ev of toCreate) {
         const payload = {
           event_date:       formatDateYYYYMMDD(ev.event_date_obj),
@@ -238,7 +240,7 @@ export default function AdminSettings() {
         await createSpecialEvent(payload);
       }
 
-      // 4.2) Update
+      // 3.2) Update
       for (const ev of toUpdate) {
         const payload = {
           event_date:       formatDateYYYYMMDD(ev.event_date_obj),
@@ -252,13 +254,12 @@ export default function AdminSettings() {
         await updateSpecialEvent(ev.id, payload);
       }
 
-      // 4.3) Delete
+      // 3.3) Delete
       for (const ev of toDelete) {
         await deleteSpecialEvent(ev.id);
       }
 
       toast.success('All settings saved successfully!');
-      // Reload to see updated data
       loadAllData();
     } catch (err) {
       console.error('Error saving settings:', err);
@@ -271,293 +272,300 @@ export default function AdminSettings() {
   }
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="space-y-8">
-        {/* 1) Operating Hours */}
-        <section className="bg-white p-4 rounded shadow">
-          <h2 className="text-xl font-bold mb-4">Operating Hours</h2>
-          <div className="overflow-x-auto">
-            {draftHours.length === 0 ? (
-              <p className="text-sm text-gray-600">No operating hours found.</p>
-            ) : (
-              <table className="min-w-full table-auto border border-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-sm">Day</th>
-                    <th className="px-4 py-2 text-left text-sm">Open Time</th>
-                    <th className="px-4 py-2 text-left text-sm">Close Time</th>
-                    <th className="px-4 py-2 text-left text-sm">Closed?</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {draftHours.map((oh) => {
-                    const openVal  = shortTime(oh.open_time);
-                    const closeVal = shortTime(oh.close_time);
-                    return (
-                      <tr key={oh.id} className="border-b last:border-b-0">
-                        <td className="px-4 py-2 text-sm">
-                          {DAY_NAMES[oh.day_of_week] ?? `Day ${oh.day_of_week}`}
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            type="time"
-                            disabled={oh.closed}
-                            value={openVal}
-                            onChange={(e) => {
-                              const newVal = toDbTime(e.target.value);
-                              handleOHChange(oh.id, 'open_time', newVal);
-                            }}
-                            className="border border-gray-300 rounded p-1 w-32 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            type="time"
-                            disabled={oh.closed}
-                            value={closeVal}
-                            onChange={(e) => {
-                              const newVal = toDbTime(e.target.value);
-                              handleOHChange(oh.id, 'close_time', newVal);
-                            }}
-                            className="border border-gray-300 rounded p-1 w-32 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={oh.closed}
-                            onChange={(e) =>
-                              handleOHChange(oh.id, 'closed', e.target.checked)
-                            }
-                            title="If checked, no reservations allowed this day"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
+    <div className="bg-white shadow rounded-md">
+      {/* Pink-tinted header */}
+      <div className="border-b border-gray-200 bg-hafaloha-pink/5 rounded-t-md px-4 py-3">
+        <h2 className="text-xl font-bold text-gray-900">Admin Settings</h2>
+      </div>
 
-        {/* 2) Special Events */}
-        <section className="bg-white p-4 rounded shadow">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Special Events</h2>
-            <button
-              onClick={handleAddEvent}
-              type="button"
-              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-            >
-              + Add Event
-            </button>
-          </div>
+      <div className="p-4 space-y-6">
+        <div className="space-y-8">
+          {/* 1) Operating Hours */}
+          <section className="bg-white p-4 rounded shadow">
+            <h2 className="text-xl font-bold mb-4">Operating Hours</h2>
+            <div className="overflow-x-auto">
+              {draftHours.length === 0 ? (
+                <p className="text-sm text-gray-600">No operating hours found.</p>
+              ) : (
+                <table className="min-w-full table-auto border border-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-sm">Day</th>
+                      <th className="px-4 py-2 text-left text-sm">Open Time</th>
+                      <th className="px-4 py-2 text-left text-sm">Close Time</th>
+                      <th className="px-4 py-2 text-left text-sm">Closed?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draftHours.map((oh) => {
+                      const openVal  = shortTime(oh.open_time);
+                      const closeVal = shortTime(oh.close_time);
+                      return (
+                        <tr key={oh.id} className="border-b last:border-b-0">
+                          <td className="px-4 py-2 text-sm">
+                            {DAY_NAMES[oh.day_of_week] ?? `Day ${oh.day_of_week}`}
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="time"
+                              disabled={oh.closed}
+                              value={openVal}
+                              onChange={(e) => {
+                                const newVal = toDbTime(e.target.value);
+                                handleOHChange(oh.id, 'open_time', newVal);
+                              }}
+                              className="border border-gray-300 rounded p-1 w-32 text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="time"
+                              disabled={oh.closed}
+                              value={closeVal}
+                              onChange={(e) => {
+                                const newVal = toDbTime(e.target.value);
+                                handleOHChange(oh.id, 'close_time', newVal);
+                              }}
+                              className="border border-gray-300 rounded p-1 w-32 text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={oh.closed}
+                              onChange={(e) =>
+                                handleOHChange(oh.id, 'closed', e.target.checked)
+                              }
+                              title="If checked, no reservations allowed this day"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
 
-          <div className="mb-4">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showAdvanced}
-                onChange={() => setShowAdvanced(!showAdvanced)}
-                className="mr-2"
-              />
-              <span className="text-sm text-gray-700">Show Advanced Options</span>
-            </label>
-          </div>
+          {/* 2) Special Events */}
+          <section className="bg-white p-4 rounded shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Special Events</h2>
+              <button
+                onClick={handleAddEvent}
+                type="button"
+                className="px-3 py-1 bg-hafaloha-pink text-white text-sm rounded hover:bg-hafaloha-coral"
+              >
+                + Add Event
+              </button>
+            </div>
 
-          <div className="overflow-x-auto">
-            {draftEvents.length === 0 ? (
-              <p className="text-sm text-gray-600">No special events found.</p>
-            ) : (
-              <table className="min-w-full table-auto border border-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 py-2 text-left text-sm">Event Date</th>
-                    <th
-                      className="px-2 py-2 text-left text-sm"
-                      title="Fully close the restaurant?"
-                    >
-                      Fully Closed?
-                    </th>
-                    {showAdvanced && (
+            <div className="mb-4">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAdvanced}
+                  onChange={() => setShowAdvanced(!showAdvanced)}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">Show Advanced Options</span>
+              </label>
+            </div>
+
+            <div className="overflow-x-auto">
+              {draftEvents.length === 0 ? (
+                <p className="text-sm text-gray-600">No special events found.</p>
+              ) : (
+                <table className="min-w-full table-auto border border-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2 py-2 text-left text-sm">Event Date</th>
                       <th
                         className="px-2 py-2 text-left text-sm"
-                        title="No other bookings if checked."
+                        title="Fully close the restaurant?"
                       >
-                        Private Only
+                        Fully Closed?
                       </th>
-                    )}
-                    {showAdvanced && (
-                      <th
-                        className="px-2 py-2 text-left text-sm"
-                        title="Max capacity for the day."
-                      >
-                        Max Guests
-                      </th>
-                    )}
-                    <th className="px-2 py-2 text-left text-sm">Start</th>
-                    <th className="px-2 py-2 text-left text-sm">End</th>
-                    <th className="px-2 py-2 text-left text-sm">Description</th>
-                    <th className="px-2 py-2 text-sm"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {draftEvents.map((ev, idx) => {
-                    if (ev._deleted) return null;
-                    const rowKey = ev.id !== 0 ? `event-${ev.id}` : `new-${idx}`;
-                    return (
-                      <tr key={rowKey} className="border-b last:border-b-0">
-                        <td className="px-2 py-2">
-                          <DatePicker
-                            selected={ev.event_date_obj}
-                            onChange={(date: Date | null) => {
-                              handleEventChange(ev.id, 'event_date_obj', date);
-                            }}
-                            dateFormat="MM/dd/yyyy"
-                            isClearable
-                            placeholderText="Pick a date"
-                            className="border border-gray-300 rounded px-2 py-1 text-sm"
-                          />
-                        </td>
-                        <td className="px-2 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={ev.closed}
-                            onChange={(e) =>
-                              handleEventChange(ev.id, 'closed', e.target.checked)
-                            }
-                          />
-                        </td>
-                        {showAdvanced && (
+                      {showAdvanced && (
+                        <th
+                          className="px-2 py-2 text-left text-sm"
+                          title="No other bookings if checked."
+                        >
+                          Private Only
+                        </th>
+                      )}
+                      {showAdvanced && (
+                        <th
+                          className="px-2 py-2 text-left text-sm"
+                          title="Max capacity for the day."
+                        >
+                          Max Guests
+                        </th>
+                      )}
+                      <th className="px-2 py-2 text-left text-sm">Start</th>
+                      <th className="px-2 py-2 text-left text-sm">End</th>
+                      <th className="px-2 py-2 text-left text-sm">Description</th>
+                      <th className="px-2 py-2 text-sm" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draftEvents.map((ev, idx) => {
+                      if (ev._deleted) return null;
+                      const rowKey = ev.id !== 0 ? `event-${ev.id}` : `new-${idx}`;
+                      return (
+                        <tr key={rowKey} className="border-b last:border-b-0">
+                          <td className="px-2 py-2">
+                            <DatePicker
+                              selected={ev.event_date_obj}
+                              onChange={(date: Date | null) => {
+                                handleEventChange(ev.id, 'event_date_obj', date);
+                              }}
+                              dateFormat="MM/dd/yyyy"
+                              isClearable
+                              placeholderText="Pick a date"
+                              className="border border-gray-300 rounded px-2 py-1 text-sm"
+                            />
+                          </td>
                           <td className="px-2 py-2 text-center">
                             <input
                               type="checkbox"
-                              checked={ev.exclusive_booking}
+                              checked={ev.closed}
                               onChange={(e) =>
-                                handleEventChange(ev.id, 'exclusive_booking', e.target.checked)
+                                handleEventChange(ev.id, 'closed', e.target.checked)
                               }
                             />
                           </td>
-                        )}
-                        {showAdvanced && (
-                          <td className="px-2 py-2 w-20">
-                            <input
-                              type="number"
-                              min={0}
-                              value={ev.max_capacity}
-                              onChange={(e) =>
-                                handleEventChange(ev.id, 'max_capacity', +e.target.value)
-                              }
-                              className="border border-gray-300 rounded p-1 w-full text-sm"
-                            />
-                          </td>
-                        )}
-                        <td className="px-2 py-2">
-                          <input
-                            type="time"
-                            disabled={ev.closed}
-                            value={shortTime(ev.start_time)}
-                            onChange={(e) =>
-                              handleEventChange(ev.id, 'start_time', toDbTime(e.target.value))
-                            }
-                            className="border border-gray-300 rounded p-1 w-20 text-sm"
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <input
-                            type="time"
-                            disabled={ev.closed}
-                            value={shortTime(ev.end_time)}
-                            onChange={(e) =>
-                              handleEventChange(ev.id, 'end_time', toDbTime(e.target.value))
-                            }
-                            className="border border-gray-300 rounded p-1 w-20 text-sm"
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <input
-                            type="text"
-                            value={ev.description || ''}
-                            onChange={(e) =>
-                              handleEventChange(ev.id, 'description', e.target.value)
-                            }
-                            className="border border-gray-300 rounded p-1 w-48 text-sm"
-                          />
-                        </td>
-                        <td className="px-2 py-2 text-right">
-                          {ev.id !== 0 ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteEvent(ev.id)}
-                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-                            >
-                              Delete
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDraftEvents((prev) => prev.filter((x) => x !== ev))
-                              }
-                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-                            >
-                              Remove
-                            </button>
+                          {showAdvanced && (
+                            <td className="px-2 py-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={ev.exclusive_booking}
+                                onChange={(e) =>
+                                  handleEventChange(ev.id, 'exclusive_booking', e.target.checked)
+                                }
+                              />
+                            </td>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        {/* 3) General Settings */}
-        <section className="bg-white p-4 rounded shadow">
-          <h2 className="text-xl font-bold mb-4">General Settings</h2>
-          <div className="space-y-4 max-w-lg">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Default Reservation Length (minutes)
-              </label>
-              <input
-                type="number"
-                min={15}
-                step={15}
-                value={defaultLength}
-                onChange={(e) => setDefaultLength(+e.target.value)}
-                className="border border-gray-300 rounded p-2 w-44 text-sm"
-              />
+                          {showAdvanced && (
+                            <td className="px-2 py-2 w-20">
+                              <input
+                                type="number"
+                                min={0}
+                                value={ev.max_capacity}
+                                onChange={(e) =>
+                                  handleEventChange(ev.id, 'max_capacity', +e.target.value)
+                                }
+                                className="border border-gray-300 rounded p-1 w-full text-sm"
+                              />
+                            </td>
+                          )}
+                          <td className="px-2 py-2">
+                            <input
+                              type="time"
+                              disabled={ev.closed}
+                              value={shortTime(ev.start_time)}
+                              onChange={(e) =>
+                                handleEventChange(ev.id, 'start_time', toDbTime(e.target.value))
+                              }
+                              className="border border-gray-300 rounded p-1 w-20 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="time"
+                              disabled={ev.closed}
+                              value={shortTime(ev.end_time)}
+                              onChange={(e) =>
+                                handleEventChange(ev.id, 'end_time', toDbTime(e.target.value))
+                              }
+                              className="border border-gray-300 rounded p-1 w-20 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={ev.description || ''}
+                              onChange={(e) =>
+                                handleEventChange(ev.id, 'description', e.target.value)
+                              }
+                              className="border border-gray-300 rounded p-1 w-48 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            {ev.id !== 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteEvent(ev.id)}
+                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                              >
+                                Delete
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDraftEvents((prev) => prev.filter((x) => x !== ev))
+                                }
+                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Admin Settings (JSON)
-              </label>
-              <textarea
-                value={adminSettings}
-                onChange={(e) => setAdminSettings(e.target.value)}
-                rows={6}
-                className="w-full border border-gray-300 rounded p-2 font-mono text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Additional config in JSON format (e.g. special rules).
-              </p>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        {/* Save Button */}
-        <div>
-          <button
-            type="button"
-            onClick={handleSaveAll}
-            className="px-6 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-          >
-            Save Settings
-          </button>
+          {/* 3) General Settings */}
+          <section className="bg-white p-4 rounded shadow">
+            <h2 className="text-xl font-bold mb-4">General Settings</h2>
+            <div className="space-y-4 max-w-lg">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Default Reservation Length (minutes)
+                </label>
+                <input
+                  type="number"
+                  min={15}
+                  step={15}
+                  value={defaultLength}
+                  onChange={(e) => setDefaultLength(+e.target.value)}
+                  className="border border-gray-300 rounded p-2 w-44 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Admin Settings (JSON)
+                </label>
+                <textarea
+                  value={adminSettings}
+                  onChange={(e) => setAdminSettings(e.target.value)}
+                  rows={6}
+                  className="w-full border border-gray-300 rounded p-2 font-mono text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Additional config in JSON format (e.g. special rules).
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* 4) Save Button */}
+          <div>
+            <button
+              type="button"
+              onClick={handleSaveAll}
+              className="px-6 py-2 bg-hafaloha-pink text-white rounded font-semibold hover:bg-hafaloha-coral"
+            >
+              Save Settings
+            </button>
+          </div>
         </div>
       </div>
     </div>

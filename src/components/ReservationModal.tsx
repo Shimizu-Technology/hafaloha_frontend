@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { XCircle } from 'lucide-react';
-import { toast } from 'react-hot-toast'; // 1) import toast
+import { toast } from 'react-hot-toast';
+
 import {
   fetchLayout,
   fetchSeatAllocations,
@@ -130,11 +131,13 @@ export default function ReservationModal({
           seatAllocs.forEach((alloc: any) => {
             const occupantStatus = alloc.occupant_status;
             const released = alloc.released_at;
-            // If not released & occupant_status is reserved/seated/occupied => taken
-            if (!released &&
-                (occupantStatus === 'reserved'
-                 || occupantStatus === 'seated'
-                 || occupantStatus === 'occupied')) {
+            // If not released & occupant_status in [reserved, seated, occupied], seat is taken
+            if (
+              !released &&
+              (occupantStatus === 'reserved' ||
+               occupantStatus === 'seated' ||
+               occupantStatus === 'occupied')
+            ) {
               const lbl = seatIdToLabel[alloc.seat_id];
               if (lbl) occSet.add(lbl);
             }
@@ -188,9 +191,9 @@ export default function ReservationModal({
   // ---------- If user clicks Delete ----------
   function handleDelete() {
     if (!onDelete) return;
-    // You might show a confirm dialog, but let's assume it's handled upstream
+    // Usually you'd confirm with the user first
     onDelete(reservation.id);
-    toast.success('Reservation deleted.'); 
+    toast.success('Reservation deleted.');
   }
 
   // ---------- Seat Map Modal ----------
@@ -221,14 +224,14 @@ export default function ReservationModal({
       await seatAllocationReserve({
         occupant_type: 'reservation',
         occupant_id:   reservation.id,
-        seat_labels:   seatLabels,
+        seat_labels,
         start_time:    reservation.start_time,
       });
       // Then update the reservation to "reserved"
       await updateReservation(reservation.id, { status: 'reserved' });
 
       toast.success(`Assigned seats from Option ${optionIndex + 1}!`);
-      // optional: if there's a parent re-fetch function
+      // optional: re-fetch data if the parent passes onRefreshData
       if (onRefreshData) {
         onRefreshData();
       }
@@ -250,9 +253,8 @@ export default function ReservationModal({
   // seat_preferences from the server
   const seatPrefs = reservation.seat_preferences || [];
 
-  // ---------- Render ----------
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="relative bg-white max-w-md w-full mx-4 rounded-lg shadow-lg">
         {/* Scrollable container */}
         <div className="p-6 max-h-[85vh] overflow-y-auto relative">
@@ -264,10 +266,12 @@ export default function ReservationModal({
             <XCircle className="w-6 h-6" />
           </button>
 
-          <h2 className="text-2xl font-bold mb-4 text-gray-900">Reservation Details</h2>
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">
+            Reservation Details
+          </h2>
 
           {!isEditing ? (
-            /* ==================== VIEW MODE ==================== */
+            // ==================== VIEW MODE ====================
             <div className="space-y-3 text-gray-700">
               {/* Guest */}
               <div>
@@ -296,23 +300,14 @@ export default function ReservationModal({
               {/* Status */}
               <div>
                 <strong>Status:</strong>{' '}
-                <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-800">
+                <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-hafaloha-pink/10 text-hafaloha-pink">
                   {reservation.status || 'N/A'}
                 </span>
               </div>
               {/* Created At */}
               {reservation.created_at && (
                 <div>
-                  <strong>Created At:</strong>{' '}
-                  {new Date(reservation.created_at).toLocaleString('en-US', {
-                    timeZone: 'Pacific/Guam',
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true,
-                  })}
+                  <strong>Created At:</strong> {createdAtStr}
                 </div>
               )}
 
@@ -329,13 +324,21 @@ export default function ReservationModal({
 
                     return (
                       <div key={idx} className="my-1">
-                        <span className="font-semibold mr-1">Option {idx + 1}:</span>
+                        <span className="font-semibold mr-1">
+                          Option {idx + 1}:
+                        </span>
                         {joined || '(none)'}
                         {/* If seats exist & are free => show "Assign" */}
                         {canAssign && (
                           <button
                             onClick={() => handleAssignSeatsFromOption(idx)}
-                            className="ml-2 text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                            className="
+                              ml-2 text-xs px-2 py-1
+                              bg-hafaloha-teal/10
+                              text-hafaloha-teal
+                              rounded
+                              hover:bg-hafaloha-teal/20
+                            "
                           >
                             Assign
                           </button>
@@ -356,7 +359,8 @@ export default function ReservationModal({
               {/* seat_labels => currently assigned seats */}
               {reservation.seat_labels?.length ? (
                 <div>
-                  <strong>Current Seats:</strong> {reservation.seat_labels.join(', ')}
+                  <strong>Current Seats:</strong>{' '}
+                  {reservation.seat_labels.join(', ')}
                 </div>
               ) : null}
 
@@ -364,14 +368,14 @@ export default function ReservationModal({
               <div className="mt-6 flex justify-end space-x-2">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                  className="px-4 py-2 bg-hafaloha-pink text-white rounded hover:bg-hafaloha-coral"
                 >
                   Edit
                 </button>
                 {onDelete && (
                   <button
                     onClick={handleDelete}
-                    className="px-4 py-2 bg-orange-200 text-orange-900 rounded hover:bg-orange-300"
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
                   >
                     Delete
                   </button>
@@ -385,69 +389,105 @@ export default function ReservationModal({
               </div>
             </div>
           ) : (
-            /* ==================== EDIT MODE ==================== */
+            // ==================== EDIT MODE ====================
             <div className="space-y-4 text-gray-700">
               {/* Guest Name */}
               <div>
-                <label className="block text-sm font-semibold mb-1">Guest Name</label>
+                <label className="block text-sm font-semibold mb-1">
+                  Guest Name
+                </label>
                 <input
                   type="text"
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  className="
+                    w-full p-2 border border-gray-300
+                    rounded
+                    focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  "
                 />
               </div>
               {/* Party Size => text-based numeric */}
               <div>
-                <label className="block text-sm font-semibold mb-1">Party Size</label>
+                <label className="block text-sm font-semibold mb-1">
+                  Party Size
+                </label>
                 <input
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={partySizeText}
                   onChange={handlePartySizeChange}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  className="
+                    w-full p-2 border border-gray-300
+                    rounded
+                    focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  "
                 />
               </div>
               {/* Duration (minutes) */}
               <div>
-                <label className="block text-sm font-semibold mb-1">Duration (minutes)</label>
+                <label className="block text-sm font-semibold mb-1">
+                  Duration (minutes)
+                </label>
                 <input
                   type="number"
                   min={30}
                   step={30}
                   value={duration}
                   onChange={(e) => setDuration(+e.target.value || 60)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  className="
+                    w-full p-2 border border-gray-300
+                    rounded
+                    focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  "
                 />
               </div>
               {/* Phone */}
               <div>
-                <label className="block text-sm font-semibold mb-1">Phone</label>
+                <label className="block text-sm font-semibold mb-1">
+                  Phone
+                </label>
                 <input
                   type="tel"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  className="
+                    w-full p-2 border border-gray-300
+                    rounded
+                    focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  "
                 />
               </div>
               {/* Email */}
               <div>
-                <label className="block text-sm font-semibold mb-1">Email</label>
+                <label className="block text-sm font-semibold mb-1">
+                  Email
+                </label>
                 <input
                   type="email"
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  className="
+                    w-full p-2 border border-gray-300
+                    rounded
+                    focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  "
                 />
               </div>
               {/* Status */}
               <div>
-                <label className="block text-sm font-semibold mb-1">Status</label>
+                <label className="block text-sm font-semibold mb-1">
+                  Status
+                </label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  className="
+                    w-full p-2 border border-gray-300
+                    rounded
+                    focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  "
                 >
                   <option value="booked">booked</option>
                   <option value="reserved">reserved</option>
@@ -471,7 +511,12 @@ export default function ReservationModal({
                   <button
                     type="button"
                     onClick={handleOpenSeatMap}
-                    className="mt-2 px-3 py-2 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                    className="
+                      mt-2 px-3 py-2 bg-gray-100
+                      border border-gray-300
+                      rounded hover:bg-gray-200
+                      text-sm
+                    "
                   >
                     Edit Seat Preferences
                   </button>
@@ -482,13 +527,25 @@ export default function ReservationModal({
               <div className="mt-6 flex justify-end space-x-2">
                 <button
                   onClick={handleSave}
-                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                  className="
+                    px-4 py-2
+                    bg-hafaloha-pink
+                    text-white
+                    rounded
+                    hover:bg-hafaloha-coral
+                  "
                 >
                   Save
                 </button>
                 <button
                   onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                  className="
+                    px-4 py-2
+                    bg-gray-200
+                    text-gray-800
+                    rounded
+                    hover:bg-gray-300
+                  "
                 >
                   Cancel
                 </button>

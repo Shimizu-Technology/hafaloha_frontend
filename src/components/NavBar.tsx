@@ -1,4 +1,3 @@
-// src/components/NavBar.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X, Phone, User } from 'lucide-react';
@@ -8,14 +7,10 @@ export default function NavBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Controls the mobile side drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // For user info or sign in
   const [showDropdown, setShowDropdown] = useState(false);
-
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Close user dropdown if user clicks outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -36,14 +31,13 @@ export default function NavBar() {
     navigate('/login');
   };
 
-  // Display name for logged‐in user
   const displayName = user?.first_name && user?.last_name
     ? `${user.first_name} ${user.last_name}`
     : user?.email || 'Admin User';
 
-  const phoneNumber = '671-649-7560';
+  // Real phone number here, make sure it's in a valid format for "tel"
+  const phoneNumber = '+16719893444';  // example: +1 (671) 989-3444, no spaces or parentheses
 
-  // Closes the entire mobile drawer
   function closeDrawer() {
     setDrawerOpen(false);
   }
@@ -52,35 +46,38 @@ export default function NavBar() {
     <header className="bg-white shadow-sm">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          {/* Left side: Brand */}
+          {/* Left side: Brand/Logo */}
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
-              <span className="text-2xl font-bold text-orange-600">
-                Rotary Sushi
+              <span className="text-2xl font-bold text-hafaloha-pink">
+                Håfaloha
               </span>
             </Link>
           </div>
 
-          {/* Middle: phone number always visible */}
-          <div className="flex items-center space-x-2 text-orange-600">
+          {/* Middle: phone number => clickable */}
+          <div className="flex items-center space-x-2 text-hafaloha-pink">
             <Phone className="w-5 h-5" />
-            <span className="font-medium">{phoneNumber}</span>
+            {/* Wrap the phone number in an anchor with tel: */}
+            <a 
+              href={`tel:${phoneNumber}`} 
+              className="font-medium hover:text-hafaloha-coral transition-colors"
+            >
+              +1 (671) 989-3444
+            </a>
           </div>
 
-          {/* Right side: desktop user menu or hamburger */}
+          {/* Right side: Desktop user menu or hamburger */}
           <div className="flex items-center">
-            {/* Desktop user menu (≥ md) */}
             <div className="hidden md:flex items-center space-x-4">
               {!user ? (
-                // If not logged in => show Sign In
                 <Link
                   to="/login"
-                  className="text-orange-600 hover:text-orange-700 font-medium"
+                  className="text-hafaloha-pink hover:text-hafaloha-coral font-medium"
                 >
                   Sign In
                 </Link>
               ) : (
-                // If logged in => user dropdown
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setShowDropdown(!showDropdown)}
@@ -88,7 +85,6 @@ export default function NavBar() {
                   >
                     <User className="w-5 h-5" />
                     <span>{displayName}</span>
-                    {/* caret */}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       className={`h-4 w-4 transform transition-transform duration-200 ${
@@ -152,25 +148,21 @@ export default function NavBar() {
         </div>
       </div>
 
-      {/* MOBILE DRAWER (only visible if drawerOpen===true) */}
+      {/* MOBILE DRAWER */}
       {drawerOpen && (
         <div className="fixed inset-0 z-50 flex">
-          {/* backdrop overlay */}
           <div
             className="absolute inset-0 bg-black bg-opacity-40"
             onClick={closeDrawer}
           />
-          {/* the drawer panel */}
           <div className="relative bg-white w-64 max-w-full h-full shadow-lg">
-            {/* drawer header */}
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              {/* brand */}
               <Link
                 to="/"
-                className="text-xl font-bold text-orange-600"
+                className="text-xl font-bold text-hafaloha-pink"
                 onClick={closeDrawer}
               >
-                Rotary Sushi
+                Håfaloha
               </Link>
               <button
                 onClick={closeDrawer}
@@ -180,19 +172,23 @@ export default function NavBar() {
               </button>
             </div>
 
-            {/* drawer body */}
             <div className="px-4 py-4 space-y-4">
-              {/* phone number always visible */}
-              <div className="flex items-center text-orange-600 space-x-2">
+              {/* phone number => clickable in mobile drawer */}
+              <div className="flex items-center text-hafaloha-pink space-x-2">
                 <Phone className="w-5 h-5" />
-                <span className="font-medium">{phoneNumber}</span>
+                <a 
+                  href={`tel:${phoneNumber}`} 
+                  className="font-medium hover:text-hafaloha-coral transition-colors"
+                >
+                  +1 (671) 989-3444
+                </a>
               </div>
 
               {!user ? (
                 <Link
                   to="/login"
                   onClick={closeDrawer}
-                  className="block text-orange-600 hover:text-orange-700 font-medium"
+                  className="block text-hafaloha-pink hover:text-hafaloha-coral font-medium"
                 >
                   Sign In
                 </Link>

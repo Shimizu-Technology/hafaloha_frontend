@@ -75,7 +75,7 @@ export default function ReservationConfirmationPage() {
           </p>
           <p>
             We look forward to serving you at{' '}
-            <span className="font-semibold">Rotary Sushi</span>!
+            <span className="font-semibold">Hafaloha</span>!
           </p>
         </div>
 

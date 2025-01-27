@@ -9,7 +9,7 @@ import {
 } from '../../services/api';
 
 export default function SeatingTab() {
-  // Use the global date
+  // Use the global date from context
   const { date, setDate } = useDateFilter();
 
   // Data arrays for reservations & waitlist
@@ -23,7 +23,7 @@ export default function SeatingTab() {
 
   async function fetchData() {
     try {
-      // Reservations
+      // 1) Reservations
       const resData = await apiFetchReservations({ date });
       const sorted = resData.slice().sort((a: any, b: any) => {
         const dateA = new Date(a.start_time || '').getTime();
@@ -32,7 +32,7 @@ export default function SeatingTab() {
       });
       setReservations(sorted);
 
-      // Waitlist
+      // 2) Waitlist
       const wlData = await apiFetchWaitlist({ date });
       setWaitlist(wlData);
     } catch (err) {
@@ -45,10 +45,10 @@ export default function SeatingTab() {
     await fetchData();
   }
 
-  // If FloorManager wants to switch tabs (e.g. to “layout”), do it here:
+  // If FloorManager wants to switch tabs (e.g., to “layout”), do it here:
   function handleTabChange(tab: string) {
-    // Example: you could do `navigate(`/dashboard/${tab}`)` if you like
     console.log('FloorManager asked to switch tab:', tab);
+    // e.g. navigate(`/dashboard/${tab}`);
   }
 
   // The FloorManager’s onDateChange => set the global date
@@ -57,17 +57,21 @@ export default function SeatingTab() {
   }
 
   return (
-    <div className="bg-white shadow rounded-md p-4">
-      <h2 className="text-xl font-bold mb-4">Seating</h2>
+    <div className="bg-white shadow rounded-md">
+      {/* Subtle pink top bar with a heading */}
+      <div className="border-b border-gray-200 bg-hafaloha-pink/5 rounded-t-md px-4 py-3">
+      </div>
 
-      <FloorManager
-        date={date}
-        onDateChange={handleDateChange}
-        reservations={reservations}
-        waitlist={waitlist}
-        onRefreshData={handleRefreshAll}
-        onTabChange={handleTabChange}
-      />
+      <div className="p-4">
+        <FloorManager
+          date={date}
+          onDateChange={handleDateChange}
+          reservations={reservations}
+          waitlist={waitlist}
+          onRefreshData={handleRefreshAll}
+          onTabChange={handleTabChange}
+        />
+      </div>
     </div>
   );
 }

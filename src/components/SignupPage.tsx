@@ -56,28 +56,54 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div
+      className="
+        min-h-screen
+        bg-gradient-to-br
+        from-pink-100/60 /* subtle pink gradient */
+        to-white
+        relative
+        px-4
+        py-8 /* Slightly less vertical padding so content appears higher */
+        sm:px-6
+        lg:px-8
+      "
+    >
+      {/* Optional faint pattern overlay */}
       <div className="absolute inset-0 z-0 opacity-10 pointer-events-none">
-        {/* optional background pattern */}
+        {/* e.g., wave or subtle pattern */}
       </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="flex justify-center">
-          <div className="w-20 h-20 bg-orange-600 rounded-full flex items-center justify-center shadow-lg 
-                         transform hover:rotate-180 transition-transform duration-500">
+      <div className="relative z-10 w-full max-w-md mx-auto mt-16 sm:mt-20">
+        {/* Logo or icon */}
+        <div className="flex justify-center mb-6">
+          <div
+            className="
+              w-20 h-20
+              bg-hafaloha-pink
+              rounded-full
+              flex
+              items-center
+              justify-center
+              shadow-lg
+              transform
+              hover:rotate-180
+              transition-transform
+              duration-500
+            "
+          >
             <Utensils className="h-10 w-10 text-white" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Create an Account
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Sign up to manage reservations and seating
-        </p>
-      </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 relative overflow-hidden">
+        <div className="bg-white py-8 px-6 shadow-md rounded-lg">
+          <h2 className="text-center text-2xl font-bold text-gray-900">
+            Create an Account
+          </h2>
+          <p className="mt-1 text-center text-sm text-gray-600">
+            Sign up to manage reservations and seating
+          </p>
+
           {/* Success or Errors */}
           {success && (
             <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-md mb-4">
@@ -92,17 +118,21 @@ export default function SignupPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             {/* First Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-base font-medium text-gray-700 mb-1">
                 First Name
               </label>
               <input
                 type="text"
                 placeholder="John"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                           focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="
+                  w-full px-3 py-3 text-base
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                "
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 required
@@ -111,14 +141,18 @@ export default function SignupPage() {
 
             {/* Last Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-base font-medium text-gray-700 mb-1">
                 Last Name
               </label>
               <input
                 type="text"
                 placeholder="Doe"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                           focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="
+                  w-full px-3 py-3 text-base
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                "
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 required
@@ -127,14 +161,18 @@ export default function SignupPage() {
 
             {/* Phone (optional) */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-base font-medium text-gray-700 mb-1">
                 Phone (Optional)
               </label>
               <input
                 type="tel"
                 placeholder="(Optional) Phone number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                           focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="
+                  w-full px-3 py-3 text-base
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                "
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
               />
@@ -142,14 +180,18 @@ export default function SignupPage() {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-base font-medium text-gray-700 mb-1">
                 Email
               </label>
               <input
                 type="email"
                 placeholder="john@example.com"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                           focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="
+                  w-full px-3 py-3 text-base
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                "
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -158,14 +200,18 @@ export default function SignupPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-base font-medium text-gray-700 mb-1">
                 Password
               </label>
               <input
                 type="password"
                 placeholder="Enter a strong password"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                           focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="
+                  w-full px-3 py-3 text-base
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                "
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -174,14 +220,18 @@ export default function SignupPage() {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-base font-medium text-gray-700 mb-1">
                 Confirm Password
               </label>
               <input
                 type="password"
                 placeholder="Confirm Password"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                           focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="
+                  w-full px-3 py-3 text-base
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                "
                 value={passwordConfirmation}
                 onChange={(e) => setPasswordConfirmation(e.target.value)}
                 required
@@ -192,12 +242,27 @@ export default function SignupPage() {
             <div>
               <button
                 type="submit"
-                className="group relative w-full flex justify-center py-2 px-4 rounded-md 
-                           shadow-sm text-sm font-medium text-white bg-orange-600 
-                           hover:bg-orange-700 focus:outline-none"
+                className="
+                  relative
+                  w-full
+                  flex
+                  justify-center
+                  px-4 py-3
+                  text-base font-medium
+                  text-white
+                  bg-hafaloha-pink
+                  hover:bg-hafaloha-coral
+                  rounded-md
+                  shadow-sm
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-offset-2
+                  focus:ring-hafaloha-pink
+                  transition-colors
+                "
               >
                 <span className="absolute right-3 inset-y-0 flex items-center">
-                  <ChevronRight className="h-5 w-5 text-orange-300 group-hover:text-orange-200 transition-colors" />
+                  <ChevronRight className="h-5 w-5 text-pink-200 group-hover:text-pink-100 transition-colors" />
                 </span>
                 Sign Up
               </button>
@@ -207,7 +272,14 @@ export default function SignupPage() {
           {/* Link to Login */}
           <div className="mt-4 text-center text-sm text-gray-600">
             Already have an account?{' '}
-            <Link to="/login" className="text-orange-600 hover:text-orange-700 font-medium">
+            <Link
+              to="/login"
+              className="
+                text-hafaloha-pink
+                hover:text-hafaloha-coral
+                font-medium
+              "
+            >
               Sign In
             </Link>
           </div>

@@ -1,20 +1,18 @@
 // src/components/SeatPreferenceMapModal.tsx
 import React, { useEffect, useState } from 'react';
 import { X, Minus, Plus, Maximize, Settings } from 'lucide-react';
-
 import SeatLayoutCanvas, {
   DBSeat,
   SeatSectionData,
 } from './SeatLayoutCanvas';
-
 import { fetchSeatAllocations } from '../services/api';
 
 interface SeatPreferenceMapModalProps {
   /** The date we’re booking, e.g. "2025-01-25". */
   date: string;
-  /** Time in "HH:mm" for occupant checks, if needed. Optional. */
+  /** Time in "HH:mm" for occupant checks, if needed. */
   time?: string;
-  /** Duration in minutes, if needed for occupant checks. Optional. */
+  /** Duration in minutes for occupant checks (optional). */
   duration?: number;
 
   /**
@@ -57,9 +55,9 @@ export default function SeatPreferenceMapModal({
   const [loading, setLoading] = useState(true);
 
   // Distinguish floors from sections
-  const floorNumbers = Array.from(new Set(
-    sections.map(s => s.floor_number ?? 1)
-  )).sort((a, b) => a - b);
+  const floorNumbers = Array.from(
+    new Set(sections.map((s) => s.floor_number ?? 1))
+  ).sort((a, b) => a - b);
   const [activeFloor, setActiveFloor] = useState(floorNumbers[0] || 1);
 
   // Zoom / grid toggles
@@ -69,10 +67,10 @@ export default function SeatPreferenceMapModal({
   // Up to 3 preference sets => seatPreferences[0..2]
   const [seatPreferences, setSeatPreferences] = useState<string[][]>([...initialPreferences]);
 
-  // which preference set is “active”?
+  // Which preference set is “active”?
   const [activeOptionIndex, setActiveOptionIndex] = useState(0);
 
-  // 1) Load occupant data from server
+  // ============== Load occupant data from server ==============
   useEffect(() => {
     async function loadAllocations() {
       setLoading(true);
@@ -82,6 +80,7 @@ export default function SeatPreferenceMapModal({
         const seatMap: Record<number, { status: string; name?: string }> = {};
 
         seatAllocs.forEach((alloc: any) => {
+          // Only mark seats as occupied if not released
           if (!alloc.released_at) {
             seatMap[alloc.seat_id] = {
               status: alloc.occupant_status ?? 'occupied',
@@ -101,12 +100,12 @@ export default function SeatPreferenceMapModal({
 
   // Filter sections by activeFloor
   const sectionsForActiveFloor = sections.filter(
-    s => (s.floor_number ?? 1) === activeFloor
+    (s) => (s.floor_number ?? 1) === activeFloor
   );
 
   // Build display => occupant status + isSelected
-  const displaySections = sectionsForActiveFloor.map(sec => {
-    const mappedSeats = sec.seats.map(seat => {
+  const displaySections = sectionsForActiveFloor.map((sec) => {
+    const mappedSeats = sec.seats.map((seat) => {
       const occupant = seatAllocations[seat.id];
       const occupant_status = occupant ? occupant.status : 'free';
 
@@ -128,18 +127,20 @@ export default function SeatPreferenceMapModal({
       return;
     }
 
-    setSeatPreferences(prev => {
+    setSeatPreferences((prev) => {
       const clone = [...prev];
       const currentSet = clone[activeOptionIndex] || [];
 
       // If seat is already in the set => remove
       if (currentSet.includes(seat.label)) {
-        clone[activeOptionIndex] = currentSet.filter(lbl => lbl !== seat.label);
+        clone[activeOptionIndex] = currentSet.filter((lbl) => lbl !== seat.label);
         return clone;
       }
       // else add seat if we haven’t exceeded partySize
       if (currentSet.length >= partySize) {
-        alert(`Option ${activeOptionIndex+1} can only have up to ${partySize} seat(s).`);
+        alert(
+          `Option ${activeOptionIndex + 1} can only have up to ${partySize} seat(s).`
+        );
         return prev; // no change
       }
       clone[activeOptionIndex] = [...currentSet, seat.label];
@@ -155,19 +156,19 @@ export default function SeatPreferenceMapModal({
   // Switch seat‐option set
   function handleOptionTabClick(idx: number) {
     setActiveOptionIndex(idx);
-    setSeatPreferences(prev => {
+    setSeatPreferences((prev) => {
       const clone = [...prev];
       if (!clone[idx]) clone[idx] = [];
       return clone;
     });
   }
 
-  // Zoom functions
+  // Zoom controls
   function zoomIn() {
-    setZoom(z => Math.min(z + 0.25, 5.0));
+    setZoom((z) => Math.min(z + 0.25, 5.0));
   }
   function zoomOut() {
-    setZoom(z => Math.max(z - 0.25, 0.25));
+    setZoom((z) => Math.max(z - 0.25, 0.25));
   }
   function zoomReset() {
     setZoom(1.0);
@@ -178,7 +179,7 @@ export default function SeatPreferenceMapModal({
     onSave(seatPreferences);
   }
 
-  // Loading overlay
+  // If still loading occupant data
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -190,73 +191,77 @@ export default function SeatPreferenceMapModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      {/* Container */}
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      {/* Modal Container */}
       <div className="relative bg-white w-full max-w-5xl rounded-lg shadow-lg p-4">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-semibold mb-2">
+        <h2 className="text-xl font-semibold mb-2 text-gray-900">
           Select Seat Preferences
         </h2>
         <p className="text-sm text-gray-600 mb-4">
-          Pick up to 3 seat‐preference options for the customer. 
-          Occupied/reserved seats are red or yellow. 
-          Each option can have up to {partySize} seat(s).
+          Pick up to 3 seat‐preference options for the customer.<br />
+          Occupied/reserved seats are shown in red/yellow. Each option can
+          have up to {partySize} seat(s).
         </p>
 
-        {/* Option tabs */}
+        {/* Option Tabs */}
         <div className="flex items-center space-x-2 mb-4">
-          {[0,1,2].map(idx => (
-            <button
-              key={idx}
-              onClick={() => handleOptionTabClick(idx)}
-              className={`px-3 py-1 rounded 
-                ${activeOptionIndex === idx
-                  ? 'bg-orange-200 text-gray-800'
-                  : 'bg-gray-100 hover:bg-gray-200'
+          {[0, 1, 2].map((idx) => {
+            const isActive = activeOptionIndex === idx;
+            return (
+              <button
+                key={idx}
+                onClick={() => handleOptionTabClick(idx)}
+                className={
+                  isActive
+                    ? 'px-3 py-1 rounded border border-hafaloha-pink bg-hafaloha-pink/10 text-hafaloha-pink'
+                    : 'px-3 py-1 rounded bg-gray-100 hover:bg-gray-200'
                 }
-              `}
-            >
-              Option {idx+1}
-            </button>
-          ))}
+              >
+                Option {idx + 1}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Floor tabs */}
+        {/* Floor Tabs (if multiple floors) */}
         {floorNumbers.length > 1 && (
           <div className="flex items-center space-x-2 mb-4">
-            {floorNumbers.map(floorNum => (
-              <button
-                key={floorNum}
-                onClick={() => handleFloorTabClick(floorNum)}
-                className={`px-3 py-1 rounded 
-                  ${activeFloor === floorNum
-                    ? 'bg-orange-50 text-orange-700 border border-orange-300'
-                    : 'bg-gray-100 hover:bg-gray-200'
+            {floorNumbers.map((floorNum) => {
+              const isActive = activeFloor === floorNum;
+              return (
+                <button
+                  key={floorNum}
+                  onClick={() => handleFloorTabClick(floorNum)}
+                  className={
+                    isActive
+                      ? 'px-3 py-1 rounded border border-hafaloha-pink bg-hafaloha-pink/10 text-hafaloha-pink'
+                      : 'px-3 py-1 rounded bg-gray-100 hover:bg-gray-200'
                   }
-                `}
-              >
-                Floor {floorNum}
-              </button>
-            ))}
+                >
+                  Floor {floorNum}
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* Zoom & Grid controls */}
+        {/* Zoom & Grid Controls */}
         <div className="flex items-center space-x-2 mb-4">
           <button
             onClick={() => setShowGrid(!showGrid)}
-            className={`px-2 py-1 text-sm rounded border 
-              ${showGrid
-                ? 'bg-orange-50 text-orange-700 border-orange-300'
-                : 'bg-gray-100 text-gray-600'} 
-            `}
+            className={`px-2 py-1 text-sm rounded border ${
+              showGrid
+                ? 'border-hafaloha-pink bg-hafaloha-pink/10 text-hafaloha-pink'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
             <Settings className="inline w-4 h-4 mr-1" />
             Grid
@@ -269,7 +274,9 @@ export default function SeatPreferenceMapModal({
             >
               <Minus className="w-4 h-4" />
             </button>
-            <span className="w-10 text-center">{(zoom * 100).toFixed(0)}%</span>
+            <span className="w-10 text-center">
+              {(zoom * 100).toFixed(0)}%
+            </span>
             <button
               onClick={zoomIn}
               className="p-1 bg-gray-100 rounded hover:bg-gray-200"
@@ -287,7 +294,7 @@ export default function SeatPreferenceMapModal({
           </div>
         </div>
 
-        {/* Seat map container => fixed height so it's scrollable horizontally if needed */}
+        {/* Seat Map Canvas */}
         <div
           className="border border-gray-200 rounded mb-4"
           style={{ height: '60vh', minHeight: '400px' }}
@@ -303,7 +310,7 @@ export default function SeatPreferenceMapModal({
               zoom={zoom}
               showGrid={showGrid}
               sections={displaySections}
-              onSeatClick={seat => handleSeatClick(seat)}
+              onSeatClick={(seat) => handleSeatClick(seat)}
               onSectionDrag={undefined}
             />
           )}
@@ -313,13 +320,13 @@ export default function SeatPreferenceMapModal({
         <div className="border-t border-gray-200 pt-3 text-sm">
           {seatPreferences.map((arr, idx) => (
             <div key={idx} className="mb-1">
-              <strong>Option {idx+1}:</strong>{' '}
+              <strong>Option {idx + 1}:</strong>{' '}
               {arr.length ? arr.join(', ') : '(none)'}
             </div>
           ))}
         </div>
 
-        {/* Footer buttons */}
+        {/* Footer Buttons */}
         <div className="mt-4 flex justify-end space-x-2">
           <button
             onClick={onClose}
@@ -329,7 +336,7 @@ export default function SeatPreferenceMapModal({
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+            className="px-4 py-2 bg-hafaloha-pink hover:bg-hafaloha-coral text-white rounded"
           >
             Save
           </button>

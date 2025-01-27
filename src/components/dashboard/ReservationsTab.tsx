@@ -4,7 +4,7 @@ import { Search, Filter, ChevronLeft, ChevronRight, Users, Phone, Mail } from 'l
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
-import { useDateFilter } from '../../context/DateFilterContext'; // <-- Use our context
+import { useDateFilter } from '../../context/DateFilterContext';
 import ReservationModal from '../ReservationModal';
 import ReservationFormModal from '../ReservationFormModal';
 
@@ -14,14 +14,14 @@ import {
   updateReservation as apiUpdateReservation,
 } from '../../services/api';
 
-/** The shape of a Reservation from the server. */
+/** Shape of a Reservation. */
 interface Reservation {
   id: number;
   contact_name?: string;
   contact_phone?: string;
   contact_email?: string;
   party_size?: number;
-  status?: string; // "booked", "reserved", "seated", etc.
+  status?: string; // "booked", "seated", etc.
   seat_labels?: string[];
   seat_preferences?: string[][];
   start_time?: string; // e.g. "2025-01-22T18:00:00Z"
@@ -37,16 +37,12 @@ function formatYYYYMMDD(dateObj: Date): string {
 }
 
 export default function ReservationsTab() {
-  // Instead of local state, we use the “global date” from our context:
+  // From context, we have a “global” date filter
   const { date, setDate } = useDateFilter();
 
-  // Data
   const [reservations, setReservations] = useState<Reservation[]>([]);
-
-  // Searching
   const [searchTerm, setSearchTerm] = useState('');
 
-  // For editing/creating reservations
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -70,7 +66,7 @@ export default function ReservationsTab() {
     }
   }
 
-  // Searching logic
+  // Searching
   const searchedReservations = reservations.filter((r) => {
     const name  = r.contact_name?.toLowerCase() ?? '';
     const phone = r.contact_phone ?? '';
@@ -83,16 +79,16 @@ export default function ReservationsTab() {
     );
   });
 
-  // Row click => open detail modal
+  // Row click => open detail
   function handleRowClick(res: Reservation) {
     setSelectedReservation(res);
   }
 
-  // Date arrow nav => changes the “global” date
+  // Date nav => previous/next day
   function handlePrevDay() {
     const current = parseDateFilter(date);
     current.setDate(current.getDate() - 1);
-    setDate(formatYYYYMMDD(current)); // updates context => triggers re‐fetch
+    setDate(formatYYYYMMDD(current));
   }
   function handleNextDay() {
     const current = parseDateFilter(date);
@@ -112,7 +108,7 @@ export default function ReservationsTab() {
     await fetchReservations();
   }
 
-  // Delete or Edit a reservation
+  // Delete or Edit an existing reservation
   async function handleDeleteReservation(id: number) {
     try {
       await apiDeleteReservation(id);
@@ -146,13 +142,13 @@ export default function ReservationsTab() {
     setSelectedReservation(null);
   }
 
-  // Convert context’s date => Date object for react-datepicker
+  // Convert date => Date object for DatePicker
   const parsedDate = parseDateFilter(date);
 
   return (
     <div className="bg-white shadow rounded-md p-4">
-      {/* Date filter / search */}
-      <div className="border-b border-gray-200 bg-gray-50 rounded-md p-4">
+      {/* Top toolbar with search + date nav */}
+      <div className="border-b border-gray-200 bg-hafaloha-pink/5 rounded-md p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col sm:flex-row items-center gap-3 flex-1">
             {/* Search */}
@@ -163,8 +159,13 @@ export default function ReservationsTab() {
                 placeholder="Search reservations..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 
-                           rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="
+                  pl-10 pr-4 py-2 w-full
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  text-sm
+                "
               />
             </div>
 
@@ -172,7 +173,12 @@ export default function ReservationsTab() {
             <div className="flex items-center space-x-2">
               <button
                 onClick={handlePrevDay}
-                className="p-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                className="
+                  p-2 bg-gray-200
+                  rounded
+                  hover:bg-hafaloha-pink/10
+                  transition-colors
+                "
                 title="Previous day"
               >
                 <ChevronLeft className="w-4 h-4 text-gray-600" />
@@ -185,30 +191,50 @@ export default function ReservationsTab() {
                   selected={parsedDate}
                   onChange={(selectedDate: Date | null) => {
                     if (!selectedDate) return;
-                    setDate(formatYYYYMMDD(selectedDate)); // global date
+                    setDate(formatYYYYMMDD(selectedDate));
                   }}
                   dateFormat="MM/dd/yyyy"
                   popperProps={{ strategy: 'fixed' }}
-                  className="pl-10 pr-4 py-2 w-36 border border-gray-300 
-                             rounded-md focus:ring-2 focus:ring-orange-500 
-                             focus:border-orange-500 text-sm"
+                  className="
+                    pl-10 pr-4 py-2 w-36
+                    border border-gray-300
+                    rounded-md
+                    focus:ring-2 focus:ring-hafaloha-pink
+                    focus:border-hafaloha-pink
+                    text-sm
+                  "
                 />
               </div>
 
               <button
                 onClick={handleNextDay}
-                className="p-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                className="
+                  p-2 bg-gray-200
+                  rounded
+                  hover:bg-hafaloha-pink/10
+                  transition-colors
+                "
                 title="Next day"
               >
                 <ChevronRight className="w-4 h-4 text-gray-600" />
               </button>
             </div>
           </div>
+
           {/* New Reservation button */}
           <div className="flex justify-end">
             <button
               onClick={handleCreateNewReservation}
-              className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-md hover:bg-orange-700"
+              className="
+                px-4 py-2
+                bg-hafaloha-pink
+                hover:bg-hafaloha-coral
+                text-white
+                text-sm
+                font-medium
+                rounded-md
+                transition-colors
+              "
             >
               + New Reservation
             </button>
@@ -218,7 +244,8 @@ export default function ReservationsTab() {
 
       {/* Reservations table */}
       <div className="overflow-x-auto mt-4">
-        <table className="min-w-[700px] table-auto divide-y divide-gray-200 text-sm">
+        {/* 1) Remove min-w, add w-full so it spans entire container on desktop */}
+        <table className="w-full table-auto divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">
@@ -258,7 +285,7 @@ export default function ReservationsTab() {
               return (
                 <tr
                   key={res.id}
-                  className="hover:bg-gray-50 cursor-pointer"
+                  className="hover:bg-hafaloha-pink/5 cursor-pointer"
                   onClick={() => handleRowClick(res)}
                 >
                   <td className="px-6 py-4 text-gray-900 whitespace-nowrap">
@@ -293,7 +320,6 @@ export default function ReservationsTab() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {/* Show colored badges for each status */}
                     {renderStatusBadge(res.status)}
                   </td>
                 </tr>
@@ -325,34 +351,37 @@ export default function ReservationsTab() {
         <ReservationFormModal
           onClose={handleCloseCreateModal}
           onSuccess={handleCreateReservationSuccess}
-          defaultDate={date} // pass the “global” date
+          defaultDate={date}
         />
       )}
     </div>
   );
 }
 
-/** Helper to show a color-coded badge for each reservation status. */
+/** Show color-coded badges in brand style. */
 function renderStatusBadge(status?: string) {
   switch (status) {
     case 'booked':
+      // Pink for "booked"
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-orange-100 text-orange-800">
+          rounded-full bg-hafaloha-pink/20 text-hafaloha-pink">
           booked
         </span>
       );
     case 'reserved':
+      // Coral for "reserved"
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-yellow-100 text-yellow-800">
+          rounded-full bg-hafaloha-coral/20 text-hafaloha-coral">
           reserved
         </span>
       );
     case 'seated':
+      // Teal for "seated"
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-green-100 text-green-800">
+          rounded-full bg-hafaloha-teal/20 text-hafaloha-teal">
           seated
         </span>
       );
@@ -364,6 +393,7 @@ function renderStatusBadge(status?: string) {
         </span>
       );
     case 'canceled':
+      // Red for "canceled"
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
           rounded-full bg-red-100 text-red-800">
@@ -371,6 +401,7 @@ function renderStatusBadge(status?: string) {
         </span>
       );
     case 'no_show':
+      // Also red
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
           rounded-full bg-red-100 text-red-800">
@@ -378,6 +409,7 @@ function renderStatusBadge(status?: string) {
         </span>
       );
     default:
+      // Fallback
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
           rounded-full bg-gray-100 text-gray-800">
