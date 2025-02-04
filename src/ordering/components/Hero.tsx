@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ReservationModal } from './reservation/ReservationModal';
-import heroImage from '../assets/hafaloha_hero.jpg'; // adjusted import if needed
+import heroImage from '../assets/hafaloha_hero.jpg';
 
 export function Hero() {
   const [showReservationModal, setShowReservationModal] = useState(false);
@@ -27,23 +27,29 @@ export function Hero() {
         </p>
         <div className="mt-10 space-x-4">
           <Link
-            to="/ordering/menu"  // <-- updated to an absolute path in /ordering
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-gray-900 bg-[#c1902f] hover:bg-[#d4a43f] transition-colors duration-150"
+            to="/ordering/menu"
+            className="inline-flex items-center px-6 py-3 border border-transparent
+                       text-base font-medium rounded-md text-gray-900 bg-[#c1902f]
+                       hover:bg-[#d4a43f] transition-colors duration-150"
           >
             Order Now
           </Link>
           <button
             onClick={() => setShowReservationModal(true)}
-            className="inline-flex items-center px-6 py-3 border-2 border-[#c1902f] text-base font-medium rounded-md text-white hover:bg-[#c1902f] transition-colors duration-150"
+            className="inline-flex items-center px-6 py-3 border-2 border-[#c1902f]
+                       text-base font-medium rounded-md text-white hover:bg-[#c1902f]
+                       transition-colors duration-150"
           >
             Book Your Table
           </button>
         </div>
       </div>
 
-      {showReservationModal && (
-        <ReservationModal onClose={() => setShowReservationModal(false)} />
-      )}
+      {/* Always render the modal, pass isOpen */}
+      <ReservationModal
+        isOpen={showReservationModal}
+        onClose={() => setShowReservationModal(false)}
+      />
     </div>
   );
 }
