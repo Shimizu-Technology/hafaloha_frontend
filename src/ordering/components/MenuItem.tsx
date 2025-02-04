@@ -1,5 +1,4 @@
 // src/ordering/components/MenuItem.tsx
-
 import React from 'react';
 import { Plus } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
@@ -13,12 +12,14 @@ export function MenuItem({ item }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
 
   function handleAddToCart() {
+    // Include any fields you want to use in the cart (like image_url, description, etc.)
     addToCart(
       {
         id: item.id,
         name: item.name,
         price: item.price,
-        // add other fields if needed
+        image_url: item.image_url,       // <-- important: pass image_url
+        description: item.description,   // <-- optional if you want it in cart
       },
       1 // default quantity
     );
@@ -26,8 +27,9 @@ export function MenuItem({ item }: MenuItemProps) {
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[380px]">
+      {/* Use the same field that actually holds the URL from your DB */}
       <img
-        src={item.image}
+        src={item.image_url}
         alt={item.name}
         className="w-full h-48 object-cover"
       />
@@ -36,10 +38,6 @@ export function MenuItem({ item }: MenuItemProps) {
           <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
           <p className="mt-1 text-sm text-gray-500">{item.description}</p>
         </div>
-        {/* 
-          Bottom area: stack by default, side-by-side at md>=768px,
-          plus a bit more gap and spacing. 
-        */}
         <div className="mt-auto pt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <span className="text-lg font-semibold text-gray-900">
             ${Number(item.price).toFixed(2)}

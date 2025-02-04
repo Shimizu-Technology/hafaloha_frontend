@@ -1,27 +1,21 @@
 // src/ordering/components/CartPage.tsx
-
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, Minus, Plus } from 'lucide-react';
-import { useOrderStore } from '../store/orderStore'; // <-- import from the store
+import { useOrderStore } from '../store/orderStore';
 import type { CartItem } from '../types/menu';
 
 export function CartPage() {
-  // Pull cart data & methods from your zustand store
   const navigate = useNavigate();
-  const {
-    cartItems,              // array of CartItem
-    setCartQuantity,        // method to update item quantity
-    removeFromCart,         // method to remove an item
-  } = useOrderStore();
+  const { cartItems, setCartQuantity, removeFromCart } = useOrderStore();
 
-  // Compute total on the fly
+  // Calculate cart total
   const total = cartItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
 
-  // If empty, show a message
+  // If cart is empty, show a message
   if (cartItems.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-16 text-center">
@@ -29,7 +23,9 @@ export function CartPage() {
         <p className="text-gray-600 mb-8">Add some delicious items to get started!</p>
         <Link
           to="/ordering/menu"
-          className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#c1902f] hover:bg-[#d4a43f]"
+          className="inline-flex items-center px-6 py-3 border border-transparent 
+                     text-base font-medium rounded-md text-white 
+                     bg-[#c1902f] hover:bg-[#d4a43f]"
         >
           Browse Menu
         </Link>
@@ -49,23 +45,23 @@ export function CartPage() {
           {cartItems.map((item: CartItem) => (
             <div
               key={item.id}
-              className="flex flex-col sm:flex-row sm:items-start space-y-4 sm:space-y-0 sm:space-x-4 py-6 border-b"
+              className="flex flex-col sm:flex-row sm:items-start 
+                         space-y-4 sm:space-y-0 sm:space-x-4 py-6 border-b"
             >
               {/* Item image */}
               <img
-                src={item.image}
+                src={item.image_url}              // <-- same field from the store
                 alt={item.name}
                 className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
               />
 
-              {/* Item details */}
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg font-medium text-gray-900">
                   {item.name}
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  {item.description}
-                </p>
+                {item.description && (
+                  <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+                )}
 
                 {/* Customizations, if any */}
                 {item.customizations && (
@@ -78,7 +74,6 @@ export function CartPage() {
                   </div>
                 )}
 
-                {/* Quantity + Remove */}
                 <div className="flex items-center justify-between mt-4">
                   <div className="flex items-center border rounded-md">
                     <button
@@ -87,9 +82,7 @@ export function CartPage() {
                     >
                       <Minus className="h-4 w-4" />
                     </button>
-                    <span className="px-4 py-2 border-x">
-                      {item.quantity}
-                    </span>
+                    <span className="px-4 py-2 border-x">{item.quantity}</span>
                     <button
                       className="p-2 text-gray-600 hover:text-gray-900"
                       onClick={() => setCartQuantity(item.id, item.quantity + 1)}
