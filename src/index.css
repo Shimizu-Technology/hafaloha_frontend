@@ -1,3 +1,22 @@
+/* src/index.css */
+
+/* Import the Google font from the Ordering side */
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
+
+/* Tailwind layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Custom classes from the Ordering side */
+.font-display {
+  font-family: 'Pacifico', cursive;
+}
+
+.tropical-pattern {
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg width='52' height='26' ... %3C/svg%3E");
+}
+
+/* If Reservations had any special classes, add them here too, or move them
+   into domain-specific .css if you prefer. */
