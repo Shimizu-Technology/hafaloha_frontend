@@ -1,12 +1,18 @@
-// src/lib/api.ts
-const API_BASE_URL = 'http://localhost:3000';
+// src/ordering/lib/api.ts
 
+// 1) Dynamically choose base URL from environment or fallback
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+/**
+ * Re-usable fetch wrapper for GET/POST/PATCH/DELETE using the chosen base URL
+ * and automatically attaching the Authorization header from localStorage.
+ */
 export const api = {
   async get(endpoint: string) {
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
     });
     if (!res.ok) {
       throw new Error(await res.text());
@@ -19,9 +25,9 @@ export const api = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
     if (!res.ok) {
       throw new Error(await res.text());
@@ -34,9 +40,9 @@ export const api = {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
     if (!res.ok) {
       throw new Error(await res.text());
@@ -48,8 +54,8 @@ export const api = {
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
     });
     if (!res.ok) {
       throw new Error(await res.text());
@@ -65,37 +71,34 @@ export const api = {
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       method,
       headers: {
-        // Let the browser set the Content-Type boundary
-        Authorization: `Bearer ${localStorage.getItem('token')}`
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
       },
-      body: formData
+      body: formData,
     });
     if (!res.ok) {
       throw new Error(await res.text());
     }
     return res.json();
-  }
+  },
 };
 
 /**
- * A convenience method for the special menu_items/:id/upload_image endpoint
+ * A convenience method for the special `menu_items/:id/upload_image` endpoint
  */
 export async function uploadMenuItemImage(itemId: string, file: File) {
   const formData = new FormData();
-  // The Rails controller typically expects params[:image], or (with strong params) params[:menu_item][:image].
-  // But in your code you do def upload_image => file = params[:image].
-  // If it needs 'menu_item[image]', adjust accordingly. If it expects just 'image', keep this:
+  // If your Rails code expects `params[:image]`, just do this:
   formData.append('image', file);
 
   const res = await fetch(`${API_BASE_URL}/menu_items/${itemId}/upload_image`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
+      Authorization: `Bearer ${localStorage.getItem('token')}`,
     },
-    body: formData
+    body: formData,
   });
   if (!res.ok) {
     throw new Error(await res.text());
   }
-  return res.json(); // returns the updated MenuItem, presumably with { image_url: ... }
+  return res.json(); // returns updated MenuItem object (with new image_url)
 }
