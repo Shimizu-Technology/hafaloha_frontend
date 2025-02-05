@@ -169,7 +169,6 @@ export function MenuManager() {
                   onChange={e => setEditingItem({ ...editingItem, description: e.target.value })}
                   className="w-full px-4 py-2 border rounded-md"
                   rows={3}
-                  required
                 />
               </div>
 
