@@ -1,3 +1,4 @@
+// src/ordering/store/authStore.ts
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import type { User } from '../types/auth';
@@ -25,7 +26,7 @@ export const useAuthStore = create<AuthStore>((set) => {
     signIn: async (email, password) => {
       set({ loading: true, error: null });
       try {
-        // For example, Rails might return { jwt, user } with user.role = 'admin' or 'customer'
+        // For example, Rails might return { jwt, user } with e.g. user.role
         const { jwt, user } = await api.post('/login', { email, password });
 
         // Save JWT and user to localStorage
@@ -43,12 +44,11 @@ export const useAuthStore = create<AuthStore>((set) => {
     signUp: async (email, password, name) => {
       set({ loading: true, error: null });
       try {
-        // Adjust fields if your backend requires them (Rails could also accept role or restaurant_id, etc.)
+        // Suppose we split "Full Name" into first/last
         const nameParts = name.trim().split(' ');
         const first_name = nameParts[0] || '';
         const last_name = nameParts.slice(1).join(' ') || '';
 
-        // Suppose the server returns { jwt, user: {..., role: "admin" or "customer"} }
         const { jwt, user } = await api.post('/signup', {
           email,
           password,

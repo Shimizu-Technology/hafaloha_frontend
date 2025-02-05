@@ -1,14 +1,14 @@
 // src/ordering/components/CheckoutPage.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreditCard, Mail, Phone, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+import { useAuthStore } from '../store/authStore';  // We import our auth store
 import { usePromoStore } from '../store/promoStore';
 import { useOrderStore } from '../store/orderStore';
 import { PickupInfo } from './location/PickupInfo';
 
-// Define our form data shape
 interface CheckoutFormData {
   name: string;
   email: string;
@@ -23,45 +23,76 @@ interface CheckoutFormData {
 export function CheckoutPage() {
   const navigate = useNavigate();
 
-  // 1) Grab cart items & the addOrder method from the store
+  // 1) Access the user from authStore (could be null if no one is logged in)
+  const { user } = useAuthStore();
+
+  // 2) Grab cart items & addOrder method
   const cartItems = useOrderStore((state) => state.cartItems);
   const addOrder = useOrderStore((state) => state.addOrder);
 
-  // 2) Also get promo logic from promoStore if you want discount handling
+  // 3) Promo code logic
   const { validatePromoCode, applyDiscount } = usePromoStore();
 
-  // 3) Compute the raw total from the cart
+  // 4) Calculate the raw total
   const rawTotal = cartItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
 
-  // 4) Local state for form fields & final total
-  const [formData, setFormData] = useState<CheckoutFormData>({
-    name: '',
-    email: '',
-    phone: '',
+  // 5) Build an initial form state that uses user if available
+  const initialFormData: CheckoutFormData = {
+    // Use user.first_name & user.last_name from your backend
+    name: user ? `${user.first_name} ${user.last_name}` : '',
+    email: user?.email || '',
+    phone: user?.phone || '',
     cardNumber: '',
     expiryDate: '',
     cvv: '',
     specialInstructions: '',
     promoCode: ''
-  });
+  };
+
+  // 6) Our local state
+  const [formData, setFormData] = useState<CheckoutFormData>(initialFormData);
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
 
+  /**
+   * If the user logs in or out while on the checkout page,
+   * we can update the contact fields accordingly.
+   */
+  useEffect(() => {
+    if (user) {
+      // Populate from user
+      setFormData((prev) => ({
+        ...prev,
+        name: `${user.first_name} ${user.last_name}`,
+        email: user.email,
+        phone: user.phone,
+      }));
+    } else {
+      // If user logs out (or we never had one), clear them
+      setFormData((prev) => ({
+        ...prev,
+        name: '',
+        email: '',
+        phone: '',
+      }));
+    }
+  }, [user]);
+
   // =============== HANDLERS =================
 
-  // Whenever user types in a form field
-  const handleInputChange = (
+  // Update local formData whenever any field changes
+  function handleInputChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  ) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  }
 
-  // When user clicks "Apply" for promo code
-  const handleApplyPromo = () => {
+  // Apply promo code
+  function handleApplyPromo() {
     const isValid = validatePromoCode(formData.promoCode);
     if (isValid) {
       const discounted = applyDiscount(rawTotal, formData.promoCode);
@@ -71,26 +102,22 @@ export function CheckoutPage() {
     } else {
       toast.error('Invalid or expired promo code');
     }
-  };
+  }
 
-  // When user clicks "Place Order"
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Submit the order
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      // 1) Call addOrder from the store
       const newOrder = await addOrder(
         cartItems,
         finalTotal,
         formData.specialInstructions
       );
 
-      // 2) newOrder => your backend response; assume it has `id` or `order_number`
       toast.success('Order placed successfully!');
 
-      // Example "estimated time" for pickup
       const estimatedTime = '20–25 min';
 
-      // 3) If route is a sibling, do a relative navigate
       navigate('/ordering/order-confirmation', {
         state: {
           orderId: newOrder.id || '12345',
@@ -102,7 +129,7 @@ export function CheckoutPage() {
       console.error('Failed to create order:', err);
       toast.error('Failed to place order. Please try again.');
     }
-  };
+  }
 
   // =============== RENDER ===================
   return (
@@ -119,7 +146,10 @@ export function CheckoutPage() {
               <div className="space-y-4">
                 {/* Full Name */}
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="name"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     <User className="inline-block w-4 h-4 mr-2" />
                     Full Name
                   </label>
@@ -130,13 +160,17 @@ export function CheckoutPage() {
                     required
                     value={formData.name}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md
+                      focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
 
                 {/* Email */}
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     <Mail className="inline-block w-4 h-4 mr-2" />
                     Email
                   </label>
@@ -147,13 +181,17 @@ export function CheckoutPage() {
                     required
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md
+                      focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
 
                 {/* Phone */}
                 <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="phone"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     <Phone className="inline-block w-4 h-4 mr-2" />
                     Phone
                   </label>
@@ -164,7 +202,8 @@ export function CheckoutPage() {
                     required
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md
+                      focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
               </div>
@@ -176,7 +215,10 @@ export function CheckoutPage() {
               <div className="space-y-4">
                 {/* Card Number */}
                 <div>
-                  <label htmlFor="cardNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="cardNumber"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     <CreditCard className="inline-block w-4 h-4 mr-2" />
                     Card Number
                   </label>
@@ -185,17 +227,21 @@ export function CheckoutPage() {
                     id="cardNumber"
                     name="cardNumber"
                     required
+                    placeholder="1234 5678 9012 3456"
                     value={formData.cardNumber}
                     onChange={handleInputChange}
-                    placeholder="1234 5678 9012 3456"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md
+                      focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
 
                 {/* Expiry / CVV */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="expiryDate" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label
+                      htmlFor="expiryDate"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
                       Expiry Date
                     </label>
                     <input
@@ -203,14 +249,18 @@ export function CheckoutPage() {
                       id="expiryDate"
                       name="expiryDate"
                       required
+                      placeholder="MM/YY"
                       value={formData.expiryDate}
                       onChange={handleInputChange}
-                      placeholder="MM/YY"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md
+                        focus:ring-[#c1902f] focus:border-[#c1902f]"
                     />
                   </div>
                   <div>
-                    <label htmlFor="cvv" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label
+                      htmlFor="cvv"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
                       CVV
                     </label>
                     <input
@@ -218,10 +268,11 @@ export function CheckoutPage() {
                       id="cvv"
                       name="cvv"
                       required
+                      placeholder="123"
                       value={formData.cvv}
                       onChange={handleInputChange}
-                      placeholder="123"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md
+                        focus:ring-[#c1902f] focus:border-[#c1902f]"
                     />
                   </div>
                 </div>
@@ -236,7 +287,8 @@ export function CheckoutPage() {
                 value={formData.specialInstructions}
                 onChange={handleInputChange}
                 placeholder="Any special requests or notes for your order?"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+                className="w-full px-4 py-2 border border-gray-300 rounded-md
+                  focus:ring-[#c1902f] focus:border-[#c1902f]"
                 rows={3}
               />
             </div>
@@ -258,13 +310,15 @@ export function CheckoutPage() {
                     name="promoCode"
                     value={formData.promoCode}
                     onChange={handleInputChange}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                     placeholder="Enter promo code"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md
+                      focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                   <button
                     type="button"
                     onClick={handleApplyPromo}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                    className="px-4 py-2 bg-gray-100 text-gray-700
+                      rounded-md hover:bg-gray-200"
                   >
                     Apply
                   </button>
@@ -275,20 +329,22 @@ export function CheckoutPage() {
               <div className="flex justify-between items-center mb-4">
                 <span className="text-lg font-medium">Total</span>
                 <div className="text-right">
-                  {/* If a promo was applied, show the old price as strikethrough */}
                   {appliedPromo && (
                     <span className="block text-sm text-gray-500 line-through">
                       ${rawTotal.toFixed(2)}
                     </span>
                   )}
-                  <span className="text-2xl font-bold">${finalTotal.toFixed(2)}</span>
+                  <span className="text-2xl font-bold">
+                    ${finalTotal.toFixed(2)}
+                  </span>
                 </div>
               </div>
 
               {/* Submit => Place Order */}
               <button
                 type="submit"
-                className="w-full bg-[#c1902f] text-white py-3 px-4 rounded-md hover:bg-[#d4a43f] transition-colors duration-200"
+                className="w-full bg-[#c1902f] text-white py-3 px-4
+                  rounded-md hover:bg-[#d4a43f] transition-colors duration-200"
               >
                 Place Order
               </button>
@@ -296,7 +352,7 @@ export function CheckoutPage() {
           </form>
         </div>
 
-        {/* RIGHT COLUMN: e.g. pickup or location info */}
+        {/* RIGHT COLUMN */}
         <div className="lg:col-span-5 mt-8 lg:mt-0">
           <PickupInfo />
         </div>
