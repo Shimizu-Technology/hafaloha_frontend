@@ -6,17 +6,22 @@ import type { Order } from '../types/order';
 import type { CartItem } from '../types/menu'; // e.g. { id, name, price, quantity, customizations? }
 
 interface OrderStore {
-  /** Existing order-related state and methods */
   orders: Order[];
   loading: boolean;
   error: string | null;
   fetchOrders: () => Promise<void>;
-  addOrder: (items: CartItem[], total: number, specialInstructions?: string) => Promise<void>;
+
+  /** Creates a new order in the backend and returns it. */
+  addOrder: (
+    items: CartItem[],
+    total: number,
+    specialInstructions?: string
+  ) => Promise<Order>;
+
   updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
   getOrderHistory: (userId: string) => Order[];
 
-  /** New cart-related state and methods */
-  cartItems: CartItem[]; 
+  cartItems: CartItem[];
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
   removeFromCart: (itemId: string) => void;
   setCartQuantity: (itemId: string, quantity: number) => void;
@@ -62,13 +67,21 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
       };
 
       const newOrder = await api.post('/orders', payload);
-      // Add newly created order to local state
-      set({ orders: [...get().orders, newOrder], loading: false });
 
-      // Optionally clear the cart after a successful order
+      // Add newly created order to local state
+      set({
+        orders: [...get().orders, newOrder],
+        loading: false,
+      });
+
+      // Optionally clear the cart
       set({ cartItems: [] });
+
+      // Return the newly created order
+      return newOrder;
     } catch (err: any) {
       set({ error: err.message, loading: false });
+      throw err;
     }
   },
 
@@ -98,12 +111,11 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
   // -------------------------
   cartItems: [],
 
-  // Example addToCart: merges quantity if item already exists
   addToCart: (item, quantity = 1) => {
     set((state) => {
       const existing = state.cartItems.find((ci) => ci.id === item.id);
       if (existing) {
-        // Increase existing item’s quantity
+        // Increase existing item's quantity
         return {
           cartItems: state.cartItems.map((ci) =>
             ci.id === item.id
@@ -112,12 +124,9 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
           ),
         };
       } else {
-        // Add a new cart item
+        // Add new cart item
         return {
-          cartItems: [
-            ...state.cartItems,
-            { ...item, quantity },
-          ],
+          cartItems: [...state.cartItems, { ...item, quantity }],
         };
       }
     });
@@ -129,7 +138,6 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
     }));
   },
 
-  // Sets a specific item’s quantity (removes if quantity <= 0)
   setCartQuantity: (itemId, quantity) => {
     if (quantity <= 0) {
       set((state) => ({

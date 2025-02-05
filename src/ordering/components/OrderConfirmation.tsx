@@ -1,14 +1,23 @@
+// src/ordering/components/OrderConfirmation.tsx
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle, Clock } from 'lucide-react';
 
-interface OrderConfirmationProps {
-  orderId: string;
-  estimatedTime: string;
-  total: number;
-}
+export function OrderConfirmation() {
+  // Grab data from location state
+  const { state } = useLocation() as {
+    state?: {
+      orderId?: string;
+      estimatedTime?: string;
+      total?: number;
+    };
+  };
 
-export function OrderConfirmation({ orderId, estimatedTime, total }: OrderConfirmationProps) {
+  // Fallback if any are missing
+  const orderId = state?.orderId || 'N/A';
+  const estimatedTime = state?.estimatedTime || '15-20 mins';
+  const total = state?.total ?? 0;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       <div className="max-w-xl mx-auto text-center">
@@ -43,14 +52,18 @@ export function OrderConfirmation({ orderId, estimatedTime, total }: OrderConfir
 
         <div className="space-x-4">
           <Link
-            to="/menu"
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#c1902f] hover:bg-[#d4a43f]"
+            to="/ordering/menu"
+            className="inline-flex items-center px-6 py-3 border border-transparent
+                       text-base font-medium rounded-md text-white bg-[#c1902f]
+                       hover:bg-[#d4a43f]"
           >
             Order More
           </Link>
           <Link
-            to="/"
-            className="inline-flex items-center px-6 py-3 border border-[#c1902f] text-base font-medium rounded-md text-[#c1902f] hover:bg-gray-50"
+            to="/ordering"
+            className="inline-flex items-center px-6 py-3 border border-[#c1902f]
+                       text-base font-medium rounded-md text-[#c1902f]
+                       hover:bg-gray-50"
           >
             Return Home
           </Link>
