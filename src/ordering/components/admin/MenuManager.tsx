@@ -1,6 +1,6 @@
 // src/components/admin/MenuManager.tsx
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Save, Settings } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { categories } from '../../data/menu';
@@ -18,8 +18,7 @@ interface MenuItemFormData {
   menu_id?: number;
   image: string;
   imageFile?: File | null;
-
-  // We'll use 0 or 24
+  // We'll use 0 or 24 (or any integer) for advanced notice
   advance_notice_hours: number;
 }
 
@@ -72,7 +71,7 @@ export function MenuManager() {
     image: '',
     imageFile: null,
     menu_id: 1,
-    advance_notice_hours: 0 // default: no extra notice
+    advance_notice_hours: 0, // default to 0 hours
   };
 
   // --------------------------------------
@@ -88,8 +87,7 @@ export function MenuManager() {
       image: item.image,
       imageFile: null,
       menu_id: item.menu_id,
-
-      // If the server's JSON includes advance_notice_hours, use it; else default to 0
+      // If server’s JSON includes advance_notice_hours, use it
       advance_notice_hours: (item as any).advance_notice_hours ?? 0,
     });
     setIsEditing(true);
@@ -114,7 +112,7 @@ export function MenuManager() {
       // Update existing
       await updateMenuItem(editingItem.id, editingItem);
 
-      // If user selected a new file, upload
+      // If user selected a new file, upload it
       if (editingItem.imageFile) {
         const updated = await uploadMenuItemImage(
           editingItem.id.toString(),
@@ -141,12 +139,13 @@ export function MenuManager() {
   };
 
   // --------------------------------------
-  // Manage Options modal
+  // Manage Options (now triggered from the modal)
   // --------------------------------------
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
     setOptionsModalOpen(true);
   };
+
   const handleCloseOptionsModal = () => {
     setOptionsModalOpen(false);
     setOptionsModalItem(null);
@@ -297,7 +296,6 @@ export function MenuManager() {
                   id="requires24"
                   checked={editingItem.advance_notice_hours >= 24}
                   onChange={(e) => {
-                    // If checked, set 24 hours; if unchecked, set 0
                     const newVal = e.target.checked ? 24 : 0;
                     setEditingItem({
                       ...editingItem,
@@ -350,6 +348,21 @@ export function MenuManager() {
                 )}
               </div>
 
+              {/* Manage Options Button (only if item already has an ID) */}
+              {editingItem.id && (
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleManageOptions(editingItem as unknown as MenuItem)
+                    }
+                    className="px-4 py-2 border rounded-md hover:bg-gray-50"
+                  >
+                    Manage Options
+                  </button>
+                </div>
+              )}
+
               {/* Submit/Cancel Buttons */}
               <div className="flex justify-end space-x-2 pt-4">
                 <button
@@ -391,7 +404,6 @@ export function MenuManager() {
               <div>
                 <h3 className="text-lg font-semibold">{item.name}</h3>
                 <p className="text-sm text-gray-600">{item.description}</p>
-                {/* If > 0, show notice in red text */}
                 {(item as any).advance_notice_hours >= 24 && (
                   <p className="text-xs text-red-600 mt-1">
                     Requires 24 hours notice
@@ -406,14 +418,8 @@ export function MenuManager() {
                   <span className="text-lg font-semibold">
                     ${Number(item.price).toFixed(2)}
                   </span>
-                  {/* Manage Option Groups */}
-                  <button
-                    onClick={() => handleManageOptions(item)}
-                    className="p-2 text-gray-600 hover:text-[#c1902f]"
-                    title="Manage Option Groups"
-                  >
-                    <Settings className="h-5 w-5" />
-                  </button>
+
+                  {/* Remove the old "Settings" button entirely */}
                   {/* Edit Item */}
                   <button
                     onClick={() => handleEdit(item)}
@@ -437,9 +443,12 @@ export function MenuManager() {
         ))}
       </div>
 
-      {/* OptionGroups Modal */}
+      {/* OptionGroups Modal (pops up if admin clicks "Manage Options" inside the item form) */}
       {optionsModalOpen && optionsModalItem && (
-        <OptionGroupsModal item={optionsModalItem} onClose={handleCloseOptionsModal} />
+        <OptionGroupsModal
+          item={optionsModalItem}
+          onClose={handleCloseOptionsModal}
+        />
       )}
     </div>
   );
@@ -465,13 +474,16 @@ function OptionGroupsModal({
   const [newGroupRequired, setNewGroupRequired] = useState(false);
 
   // For inline create option
-  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(null);
+  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(
+    null
+  );
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
 
   useEffect(() => {
     // Fetch once on mount
     fetchGroups();
+    // eslint-disable-next-line
   }, [item.id]);
 
   // -------------------------------------
@@ -491,8 +503,7 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // Helpers to update local state partially
-  // (no re-fetch => no flash)
+  // Local state helpers (no re-fetch => no flash)
   // -------------------------------------
   const replaceGroupInState = (updated: OptionGroup) => {
     setOptionGroups(current =>
@@ -542,7 +553,7 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // CREATE OptionGroup (inline form)
+  // CREATE OptionGroup
   // -------------------------------------
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
@@ -566,7 +577,7 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // UPDATE OptionGroup (partial update)
+  // UPDATE OptionGroup
   // -------------------------------------
   const handleUpdateGroup = async (
     group: OptionGroup,
@@ -574,13 +585,9 @@ function OptionGroupsModal({
   ) => {
     try {
       const updated = { ...group, ...changes };
-      // Immediately update local state => smooth
       replaceGroupInState(updated);
 
-      // Then call server
       const serverGroup = await api.patch(`/option_groups/${group.id}`, changes);
-
-      // Optionally re-sync in case server changed something
       replaceGroupInState(serverGroup);
     } catch (err) {
       console.error(err);
@@ -593,10 +600,7 @@ function OptionGroupsModal({
   const handleDeleteGroup = async (groupId: number) => {
     if (!window.confirm('Delete this option group?')) return;
     try {
-      // Remove from local first => immediate
       removeGroupInState(groupId);
-
-      // Then server call
       await api.delete(`/option_groups/${groupId}`);
     } catch (err) {
       console.error(err);
@@ -604,7 +608,7 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // CREATE Option (inline form)
+  // CREATE Option
   // -------------------------------------
   const startCreatingOption = (groupId: number) => {
     setCreatingOptionGroupId(groupId);
@@ -626,7 +630,6 @@ function OptionGroupsModal({
           additional_price: newOptionPrice
         }
       );
-
       addOptionToState(groupId, createdOption);
       setCreatingOptionGroupId(null);
       setNewOptionName('');
@@ -643,7 +646,7 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // UPDATE Option (partial update)
+  // UPDATE Option
   // -------------------------------------
   const handleUpdateOption = async (
     groupId: number,
@@ -651,11 +654,9 @@ function OptionGroupsModal({
     changes: Partial<OptionRow>
   ) => {
     try {
-      // local partial update => smooth
       const updatedOpt = { ...option, ...changes };
       replaceOptionInState(groupId, updatedOpt);
 
-      // server call
       const serverOpt = await api.patch(`/options/${option.id}`, changes);
       replaceOptionInState(groupId, serverOpt);
     } catch (err) {
@@ -676,6 +677,9 @@ function OptionGroupsModal({
     }
   };
 
+  // -------------------------------------
+  // Render the OptionGroups modal
+  // -------------------------------------
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
@@ -734,8 +738,7 @@ function OptionGroupsModal({
                   onClick={handleCreateGroup}
                   className="px-2 py-1 bg-[#c1902f] text-white text-sm rounded hover:bg-[#d4a43f]"
                 >
-                  <Plus className="h-4 w-4 mr-1 inline-block" />
-                  Create Group
+                  + Create Group
                 </button>
               </div>
             </div>
@@ -852,8 +855,7 @@ function OptionGroupsModal({
                       onClick={() => startCreatingOption(group.id)}
                       className="flex items-center px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded"
                     >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Option
+                      + Add Option
                     </button>
                   )}
 
