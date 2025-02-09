@@ -4,10 +4,10 @@ import { Plus, Edit2, Trash2, X, Save, Settings } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { categories } from '../../data/menu';
-import { uploadMenuItemImage } from '../../lib/api';
-
-// If Rails runs on a different host/port, update here:
-const API_BASE_URL = 'http://localhost:3000';
+import {
+  api,
+  uploadMenuItemImage
+} from '../../lib/api'; // <-- import from api
 
 // --------------------------------------
 // Types
@@ -103,6 +103,8 @@ export function MenuManager() {
     if (editingItem.id) {
       // Update existing
       await updateMenuItem(editingItem.id, editingItem);
+
+      // If user selected a new file, upload
       if (editingItem.imageFile) {
         const updated = await uploadMenuItemImage(
           editingItem.id.toString(),
@@ -337,7 +339,10 @@ export function MenuManager() {
       {/* The Items Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.map(item => (
-          <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+          <div
+            key={item.id}
+            className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
+          >
             <img
               src={item.image}
               alt={item.name}
@@ -418,7 +423,9 @@ function OptionGroupsModal({
   const [newGroupRequired, setNewGroupRequired] = useState(false);
 
   // For inline create option
-  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(null);
+  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(
+    null
+  );
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
 
@@ -428,19 +435,12 @@ function OptionGroupsModal({
   }, [item.id]);
 
   // -------------------------------------
-  // Fetch Option Groups (once)
+  // Fetch Option Groups
   // -------------------------------------
   const fetchGroups = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/menu_items/${item.id}/option_groups`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (!res.ok) throw new Error('Failed to fetch option groups');
-      const data = await res.json();
+      const data = await api.get(`/menu_items/${item.id}/option_groups`);
       setOptionGroups(data);
     } catch (err) {
       console.error(err);
@@ -507,22 +507,14 @@ function OptionGroupsModal({
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/menu_items/${item.id}/option_groups`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          name: newGroupName,
-          min_select: newGroupMin,
-          max_select: newGroupMax,
-          required: newGroupRequired
-        })
+      const created = await api.post(`/menu_items/${item.id}/option_groups`, {
+        name: newGroupName,
+        min_select: newGroupMin,
+        max_select: newGroupMax,
+        required: newGroupRequired
       });
-      if (!res.ok) throw new Error('Error creating group');
-      const created = await res.json();
-      addGroupToState(created); // partial update => no flicker
+      addGroupToState(created);
+
       // Reset fields
       setNewGroupName('');
       setNewGroupMin(0);
@@ -536,23 +528,18 @@ function OptionGroupsModal({
   // -------------------------------------
   // UPDATE OptionGroup (partial update)
   // -------------------------------------
-  const handleUpdateGroup = async (group: OptionGroup, changes: Partial<OptionGroup>) => {
+  const handleUpdateGroup = async (
+    group: OptionGroup,
+    changes: Partial<OptionGroup>
+  ) => {
     try {
       const updated = { ...group, ...changes };
-      // Immediately update local state => smooth UX
+      // Immediately update local state => smooth
       replaceGroupInState(updated);
 
       // Then call server
-      const res = await fetch(`${API_BASE_URL}/option_groups/${group.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(changes)
-      });
-      if (!res.ok) throw new Error('Error updating group');
-      const serverGroup = await res.json();
+      const serverGroup = await api.patch(`/option_groups/${group.id}`, changes);
+
       // Optionally re-sync in case server changed something
       replaceGroupInState(serverGroup);
     } catch (err) {
@@ -570,14 +557,7 @@ function OptionGroupsModal({
       removeGroupInState(groupId);
 
       // Then server call
-      const res = await fetch(`${API_BASE_URL}/option_groups/${groupId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (!res.ok) throw new Error('Error deleting group');
-      // No further action needed
+      await api.delete(`/option_groups/${groupId}`);
     } catch (err) {
       console.error(err);
     }
@@ -598,27 +578,16 @@ function OptionGroupsModal({
       return;
     }
     try {
-      // Create local "temp" Option? We can also just wait until server returns.
       const groupId = creatingOptionGroupId;
-
-      const res = await fetch(`${API_BASE_URL}/option_groups/${groupId}/options`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
+      const createdOption = await api.post(
+        `/option_groups/${groupId}/options`,
+        {
           name: newOptionName,
           additional_price: newOptionPrice
-        })
-      });
-      if (!res.ok) throw new Error('Error creating option');
-      const createdOption = await res.json();
+        }
+      );
 
-      // Partial update => add to local state
       addOptionToState(groupId, createdOption);
-
-      // Reset
       setCreatingOptionGroupId(null);
       setNewOptionName('');
       setNewOptionPrice(0);
@@ -636,25 +605,18 @@ function OptionGroupsModal({
   // -------------------------------------
   // UPDATE Option (partial update)
   // -------------------------------------
-  const handleUpdateOption = async (groupId: number, option: OptionRow, changes: Partial<OptionRow>) => {
+  const handleUpdateOption = async (
+    groupId: number,
+    option: OptionRow,
+    changes: Partial<OptionRow>
+  ) => {
     try {
       // local partial update => smooth
       const updatedOpt = { ...option, ...changes };
       replaceOptionInState(groupId, updatedOpt);
 
       // server call
-      const res = await fetch(`${API_BASE_URL}/options/${option.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(changes)
-      });
-      if (!res.ok) throw new Error('Error updating option');
-
-      const serverOpt = await res.json();
-      // Sync with server version
+      const serverOpt = await api.patch(`/options/${option.id}`, changes);
       replaceOptionInState(groupId, serverOpt);
     } catch (err) {
       console.error(err);
@@ -662,22 +624,13 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // DELETE Option (partial update)
+  // DELETE Option
   // -------------------------------------
   const handleDeleteOption = async (groupId: number, optId: number) => {
     if (!window.confirm('Delete this option?')) return;
     try {
-      // remove local
       removeOptionInState(groupId, optId);
-
-      // server
-      const res = await fetch(`${API_BASE_URL}/options/${optId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (!res.ok) throw new Error('Error deleting option');
+      await api.delete(`/options/${optId}`);
     } catch (err) {
       console.error(err);
     }
@@ -691,10 +644,7 @@ function OptionGroupsModal({
           <h2 className="text-xl font-semibold">
             Manage Option Groups for: {item.name}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -840,7 +790,9 @@ function OptionGroupsModal({
                         className="border p-1 rounded w-16 text-sm"
                         placeholder="Price"
                         value={newOptionPrice}
-                        onChange={e => setNewOptionPrice(parseFloat(e.target.value) || 0)}
+                        onChange={e =>
+                          setNewOptionPrice(parseFloat(e.target.value) || 0)
+                        }
                       />
                       <button
                         onClick={confirmCreateOption}
@@ -866,9 +818,7 @@ function OptionGroupsModal({
                   )}
 
                   {group.options.length === 0 && (
-                    <p className="text-sm text-gray-400 mt-2">
-                      No options yet.
-                    </p>
+                    <p className="text-sm text-gray-400 mt-2">No options yet.</p>
                   )}
                   {group.options.map(opt => (
                     <div
