@@ -10,13 +10,14 @@ export function OrderConfirmation() {
       orderId?: string;
       estimatedTime?: string;
       total?: number;
+      hasAny24hrItem?: boolean; // <-- NEW
     };
   };
 
-  // Fallback if any are missing
   const orderId = state?.orderId || 'N/A';
   const estimatedTime = state?.estimatedTime || '15-20 mins';
   const total = state?.total ?? 0;
+  const hasAny24hrItem = !!state?.hasAny24hrItem;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -24,11 +25,11 @@ export function OrderConfirmation() {
         <div className="flex justify-center mb-4">
           <CheckCircle className="h-16 w-16 text-green-500" />
         </div>
-        
+
         <h1 className="text-3xl font-bold text-gray-900 mb-4">
           Thank You for Your Order!
         </h1>
-        
+
         <p className="text-lg text-gray-600 mb-8">
           Your order #{orderId} has been received and is being prepared.
         </p>
@@ -38,11 +39,19 @@ export function OrderConfirmation() {
             <Clock className="h-6 w-6" />
             <span>Estimated Pickup Time: {estimatedTime}</span>
           </div>
-          
+
+          {/* NEW: big 24hr reminder if needed */}
+          {hasAny24hrItem && (
+            <p className="text-red-600 mb-4 font-semibold">
+              Heads up: One or more items in your order requires 24 hours notice!
+              Your pickup time may be scheduled accordingly.
+            </p>
+          )}
+
           <p className="text-gray-600 mb-4">
             Please show your order number when picking up.
           </p>
-          
+
           <div className="border-t pt-4">
             <p className="text-lg font-medium">
               Total Paid: ${total.toFixed(2)}

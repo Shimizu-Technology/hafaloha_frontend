@@ -4,10 +4,7 @@ import { Plus, Edit2, Trash2, X, Save, Settings } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { categories } from '../../data/menu';
-import {
-  api,
-  uploadMenuItemImage
-} from '../../lib/api'; // <-- import from api
+import { api, uploadMenuItemImage } from '../../lib/api';
 
 // --------------------------------------
 // Types
@@ -21,6 +18,9 @@ interface MenuItemFormData {
   menu_id?: number;
   image: string;
   imageFile?: File | null;
+
+  // We'll use 0 or 24
+  advance_notice_hours: number;
 }
 
 interface OptionGroup {
@@ -71,10 +71,13 @@ export function MenuManager() {
     category: categories[0].id,
     image: '',
     imageFile: null,
-    menu_id: 1
+    menu_id: 1,
+    advance_notice_hours: 0 // default: no extra notice
   };
 
-  // Edit existing
+  // --------------------------------------
+  // Edit existing item
+  // --------------------------------------
   const handleEdit = (item: MenuItem) => {
     setEditingItem({
       id: item.id,
@@ -84,18 +87,25 @@ export function MenuManager() {
       category: item.category,
       image: item.image,
       imageFile: null,
-      menu_id: item.menu_id
+      menu_id: item.menu_id,
+
+      // If the server's JSON includes advance_notice_hours, use it; else default to 0
+      advance_notice_hours: (item as any).advance_notice_hours ?? 0,
     });
     setIsEditing(true);
   };
 
-  // Add new
+  // --------------------------------------
+  // Add new item
+  // --------------------------------------
   const handleAdd = () => {
     setEditingItem(initialFormData);
     setIsEditing(true);
   };
 
+  // --------------------------------------
   // Submit create/update
+  // --------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
@@ -121,14 +131,18 @@ export function MenuManager() {
     setEditingItem(null);
   };
 
+  // --------------------------------------
   // Delete an item
+  // --------------------------------------
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       await deleteMenuItem(id);
     }
   };
 
+  // --------------------------------------
   // Manage Options modal
+  // --------------------------------------
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
     setOptionsModalOpen(true);
@@ -138,6 +152,9 @@ export function MenuManager() {
     setOptionsModalItem(null);
   };
 
+  // --------------------------------------
+  // Render
+  // --------------------------------------
   return (
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
@@ -183,6 +200,7 @@ export function MenuManager() {
       {isEditing && editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            {/* Modal Header */}
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold">
                 {editingItem.id ? 'Edit Item' : 'Add New Item'}
@@ -198,6 +216,7 @@ export function MenuManager() {
               </button>
             </div>
 
+            {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Name */}
               <div>
@@ -269,6 +288,26 @@ export function MenuManager() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Requires 24-hour notice? (checkbox) */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="requires24"
+                  checked={editingItem.advance_notice_hours >= 24}
+                  onChange={(e) => {
+                    // If checked, set 24 hours; if unchecked, set 0
+                    const newVal = e.target.checked ? 24 : 0;
+                    setEditingItem({
+                      ...editingItem,
+                      advance_notice_hours: newVal,
+                    });
+                  }}
+                />
+                <label htmlFor="requires24" className="block text-sm font-medium text-gray-700">
+                  Requires 24-hour notice?
+                </label>
               </div>
 
               {/* Image Upload */}
@@ -352,6 +391,12 @@ export function MenuManager() {
               <div>
                 <h3 className="text-lg font-semibold">{item.name}</h3>
                 <p className="text-sm text-gray-600">{item.description}</p>
+                {/* If > 0, show notice in red text */}
+                {(item as any).advance_notice_hours >= 24 && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Requires 24 hours notice
+                  </p>
+                )}
               </div>
               <div className="mt-auto flex justify-between items-center pt-4">
                 <span className="text-sm text-gray-500 capitalize">
@@ -394,10 +439,7 @@ export function MenuManager() {
 
       {/* OptionGroups Modal */}
       {optionsModalOpen && optionsModalItem && (
-        <OptionGroupsModal
-          item={optionsModalItem}
-          onClose={handleCloseOptionsModal}
-        />
+        <OptionGroupsModal item={optionsModalItem} onClose={handleCloseOptionsModal} />
       )}
     </div>
   );
@@ -423,9 +465,7 @@ function OptionGroupsModal({
   const [newGroupRequired, setNewGroupRequired] = useState(false);
 
   // For inline create option
-  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(
-    null
-  );
+  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(null);
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
 

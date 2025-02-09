@@ -14,20 +14,20 @@ export function MenuItem({ item }: MenuItemProps) {
   const [showCustomization, setShowCustomization] = useState(false);
 
   function handleQuickAdd() {
-    // No customizations, add directly
+    // Notice we're passing `advance_notice_hours` as well into the cart item
     addToCart(
       {
         id: item.id,
         name: item.name,
         price: item.price,
-        image: item.image, // or item.image_url if you prefer
+        image: item.image,
         description: item.description,
+        advance_notice_hours: item.advance_notice_hours ?? 0, // make sure we store it
       },
       1
     );
   }
 
-  // If item has options => open modal
   function handleOpenCustomization() {
     setShowCustomization(true);
   }
@@ -45,6 +45,12 @@ export function MenuItem({ item }: MenuItemProps) {
           <div>
             <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
             <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+
+            {item.advance_notice_hours && item.advance_notice_hours >= 24 && (
+              <p className="mt-1 text-sm text-red-600">
+                Requires 24 hours notice
+              </p>
+            )}
           </div>
 
           <div className="mt-auto pt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -53,7 +59,6 @@ export function MenuItem({ item }: MenuItemProps) {
             </span>
 
             {item.option_groups && item.option_groups.length > 0 ? (
-              // If we have option groups => show a "Customize" button
               <button
                 onClick={handleOpenCustomization}
                 className="w-full md:w-auto flex items-center justify-center px-4 py-2
@@ -64,7 +69,6 @@ export function MenuItem({ item }: MenuItemProps) {
                 Customize
               </button>
             ) : (
-              // Otherwise => a normal "Add to cart" button
               <button
                 onClick={handleQuickAdd}
                 className="w-full md:w-auto flex items-center justify-center px-4 py-2

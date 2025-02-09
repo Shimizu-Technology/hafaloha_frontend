@@ -54,8 +54,16 @@ export function CartPage() {
 
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg font-medium text-gray-900">{item.name}</h3>
+
                 {item.description && (
                   <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+                )}
+
+                {/* If the item requires 24 hours, show it */}
+                {item.advance_notice_hours && item.advance_notice_hours >= 24 && (
+                  <p className="mt-1 text-sm text-red-600">
+                    Requires 24 hours notice
+                  </p>
                 )}
 
                 {/* If customizations exist, show them */}
