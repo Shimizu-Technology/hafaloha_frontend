@@ -71,7 +71,7 @@ export function CheckoutPage() {
         phone: user.phone,
       }));
     } else {
-      // If user logs out (or we never had one), clear them
+      // If user logs out or never logged in
       setFormData((prev) => ({
         ...prev,
         name: '',
@@ -114,10 +114,14 @@ export function CheckoutPage() {
       );
 
       // 2) Create the new order on the backend
+      // We pass contactName, contactPhone, contactEmail so the store can include them in the payload
       const newOrder = await addOrder(
         cartItems,
         finalTotal,
-        formData.specialInstructions
+        formData.specialInstructions,
+        formData.name,
+        formData.phone,
+        formData.email
       );
 
       toast.success('Order placed successfully!');
@@ -127,7 +131,7 @@ export function CheckoutPage() {
         ? '24 hours'
         : '20–25 min';
 
-      // 4) Navigate to confirmation, passing the flag
+      // 4) Navigate to confirmation, passing the data
       navigate('/ordering/order-confirmation', {
         state: {
           orderId: newOrder.id || '12345',

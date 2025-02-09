@@ -19,20 +19,23 @@ interface OrderStore {
   addOrder: (
     items: CartItem[],
     total: number,
-    specialInstructions?: string
+    specialInstructions: string,
+    contactName?: string,
+    contactPhone?: string,
+    contactEmail?: string
   ) => Promise<Order>;
 
   updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
   getOrderHistory: (userId: string) => Order[];
 
-  // Cart
+  // CART
   cartItems: CartItem[];
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
   removeFromCart: (itemId: string) => void;
   setCartQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
 
-  // NEW: to update per-item notes
+  // For per-item notes
   setCartItemNotes: (itemId: string, notes: string) => void;
 }
 
@@ -56,10 +59,17 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
   },
 
   // POST /orders
-  addOrder: async (items, total, specialInstructions) => {
+  addOrder: async (
+    items,
+    total,
+    specialInstructions,
+    contactName,
+    contactPhone,
+    contactEmail
+  ) => {
     set({ loading: true, error: null });
     try {
-      // Build the request payload
+      // Build the request payload for the backend
       const payload = {
         order: {
           items: items.map((i) => ({
@@ -68,21 +78,25 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
             quantity: i.quantity,
             price: i.price,
             customizations: i.customizations,
-            // Include the notes if present
             notes: i.notes,
           })),
           total,
           special_instructions: specialInstructions,
+          // Pass contact info
+          contact_name: contactName,
+          contact_phone: contactPhone,
+          contact_email: contactEmail,
         },
       };
 
       const newOrder = await api.post('/orders', payload);
 
+      // Add newly created order to local store
       set({
         orders: [...get().orders, newOrder],
         loading: false,
       });
-      // Optionally clear cart after order
+      // Optionally clear the cart after placing order
       set({ cartItems: [] });
 
       return newOrder;
@@ -108,7 +122,7 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
     }
   },
 
-  // Local helper to filter by user ID
+  // Local helper: filter by user ID
   getOrderHistory: (userId: string) => {
     return get().orders.filter((o) => o.userId === userId);
   },
@@ -163,7 +177,7 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
     set({ cartItems: [] });
   },
 
-  // NEW: setCartItemNotes
+  // Update notes on a specific item
   setCartItemNotes: (itemId, notes) => {
     set((state) => ({
       cartItems: state.cartItems.map((ci) =>

@@ -1,7 +1,7 @@
 // src/components/admin/AdminDashboard.tsx
 import React, { useState } from 'react';
 import { MenuManager } from './MenuManager';
-import { InventoryManager } from './InventoryManager';
+// import { InventoryManager } from './InventoryManager';
 import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
 import { AnalyticsManager } from './AnalyticsManager';
@@ -33,7 +33,7 @@ export function AdminDashboard() {
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'orders',    label: 'Orders',    icon: ShoppingBag },
     { id: 'menu',      label: 'Menu',      icon: LayoutGrid },
-    { id: 'inventory', label: 'Inventory', icon: Package },
+    // { id: 'inventory', label: 'Inventory', icon: Package },
     { id: 'promos',    label: 'Promos',    icon: Tag },
   ] as const;
 
@@ -75,7 +75,7 @@ export function AdminDashboard() {
             {activeTab === 'analytics' && <AnalyticsManager />}
             {activeTab === 'orders'    && <OrderManager />}
             {activeTab === 'menu'      && <MenuManager />}
-            {activeTab === 'inventory' && <InventoryManager />}
+            {/* {activeTab === 'inventory' && <InventoryManager />} */}
             {activeTab === 'promos'    && <PromoManager />}
           </div>
         </div>

@@ -1,4 +1,4 @@
-// src/components/admin/OrderManager.tsx
+// src/ordering/components/admin/OrderManager.tsx
 import React, { useEffect, useState } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 
@@ -13,32 +13,40 @@ export function OrderManager() {
     fetchOrders();
   }, [fetchOrders]);
 
+  // Filter the orders by selected status
   const filteredOrders =
     selectedStatus === 'all'
       ? orders
       : orders.filter(order => order.status === selectedStatus);
 
+  // Decide the badge color for each status
   const getStatusBadgeColor = (status: OrderStatus) => {
     const colors = {
       pending: 'bg-yellow-100 text-yellow-800',
       preparing: 'bg-blue-100 text-blue-800',
       ready: 'bg-green-100 text-green-800',
       completed: 'bg-gray-100 text-gray-800',
-      cancelled: 'bg-red-100 text-red-800'
+      cancelled: 'bg-red-100 text-red-800',
     };
     return colors[status];
   };
 
+  // A helper to safely format the date or show fallback
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'No pickup time set'; // fallback if null
+    const d = new Date(dateString);
+    return isNaN(d.getTime()) ? 'No pickup time set' : d.toLocaleString();
+  };
+
   return (
     <div>
-      {/* If you want a heading or container, you can do so */}
       {loading && <p>Loading orders...</p>}
       {error && <p className="text-red-600">{error}</p>}
 
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-2xl font-bold">Order Management</h2>
         <div className="flex space-x-2">
-          {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(status => (
+          {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map((status) => (
             <button
               key={status}
               onClick={() => setSelectedStatus(status)}
@@ -55,54 +63,92 @@ export function OrderManager() {
       </div>
 
       <div className="space-y-6">
-        {filteredOrders.map(order => (
+        {filteredOrders.map((order) => (
           <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
+            {/* Header: Order # and status */}
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-lg font-medium text-gray-900">
                   Order #{order.id}
                 </h3>
-                {/* If your order model has `createdAt`, do this: */}
-                <p className="text-sm text-gray-500">
-                  {new Date(order.createdAt).toLocaleString()}
-                </p>
+                {/* If your order includes createdAt, show it */}
+                {order.createdAt && (
+                  <p className="text-sm text-gray-500">
+                    {new Date(order.createdAt).toLocaleString()}
+                  </p>
+                )}
               </div>
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(order.status)}`}>
+              <span
+                className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(
+                  order.status
+                )}`}
+              >
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </span>
             </div>
 
+            {/* Order Items */}
             <div className="border-t border-b py-4 mb-4">
               <h4 className="font-medium mb-2">Order Items:</h4>
               {order.items.map((item: any, index: number) => (
-                <div key={index} className="flex justify-between items-start mb-2">
+                <div
+                  key={index}
+                  className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2"
+                >
                   <div>
-                    <p className="font-medium">{item.name} × {item.quantity}</p>
+                    <p className="font-medium">
+                      {item.name} × {item.quantity}
+                    </p>
+                    {/* Show customizations if any */}
                     {item.customizations &&
-                      Object.entries(item.customizations).map(([key, values]) => (
-                        <p key={key} className="text-sm text-gray-600">
-                          {key}: {(values as string[]).join(', ')}
-                        </p>
-                      ))}
+                      Object.entries(item.customizations).map(
+                        ([groupName, values]) => (
+                          <p key={groupName} className="text-sm text-gray-600">
+                            {groupName}: {(values as string[]).join(', ')}
+                          </p>
+                        )
+                      )}
+                    {/* Show per-item notes if any */}
+                    {item.notes && (
+                      <p className="text-sm text-gray-600">
+                        Notes: {item.notes}
+                      </p>
+                    )}
                   </div>
+                  {/* If you want item-level pricing, add it here */}
                 </div>
               ))}
             </div>
 
+            {/* More Order Details */}
             <div className="grid grid-cols-2 gap-4 mb-4">
+              {/* Show contact info if your server returns them in the JSON
+                  (assuming 'contact_name', 'contact_phone', 'contact_email') */}
               <div>
                 <h4 className="text-sm font-medium text-gray-700">Customer</h4>
-                <p>{order.customerName}</p>
-                <p>{order.customerPhone}</p>
+                <p>{(order as any).contact_name || 'Guest'}</p>
+                <p>{(order as any).contact_phone || ''}</p>
+                <p>{(order as any).contact_email || ''}</p>
               </div>
               <div>
                 <h4 className="text-sm font-medium text-gray-700">Pickup Time</h4>
-                <p>{new Date(order.estimatedPickupTime).toLocaleString()}</p>
+                <p>{formatDate(order.estimatedPickupTime)}</p>
               </div>
             </div>
 
+            {/* Special instructions */}
+            <div className="mb-4">
+              <h4 className="text-sm font-medium text-gray-700">
+                Special Instructions
+              </h4>
+              <p>{order.special_instructions || 'None'}</p>
+            </div>
+
+            {/* Footer: total + status update buttons */}
             <div className="flex justify-between items-center">
-              <p className="font-medium">Total: ${order.total.toFixed(2)}</p>
+              <p className="font-medium">
+                Total: ${Number(order.total || 0).toFixed(2)}
+              </p>
               <div className="flex space-x-2">
                 {order.status === 'pending' && (
                   <button
@@ -138,7 +184,6 @@ export function OrderManager() {
                 )}
               </div>
             </div>
-
           </div>
         ))}
       </div>
