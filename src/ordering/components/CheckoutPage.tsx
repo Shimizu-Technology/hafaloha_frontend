@@ -108,6 +108,12 @@ export function CheckoutPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
+      // 1) Check if any cart item needs 24 hours
+      const hasAny24hrItem = cartItems.some(
+        (it) => (it.advance_notice_hours ?? 0) >= 24
+      );
+
+      // 2) Create the new order on the backend
       const newOrder = await addOrder(
         cartItems,
         finalTotal,
@@ -116,13 +122,18 @@ export function CheckoutPage() {
 
       toast.success('Order placed successfully!');
 
-      const estimatedTime = '20–25 min';
+      // 3) Figure out the estimated time for the front-end
+      const estimatedTime = hasAny24hrItem
+        ? '24 hours'
+        : '20–25 min';
 
+      // 4) Navigate to confirmation, passing the flag
       navigate('/ordering/order-confirmation', {
         state: {
           orderId: newOrder.id || '12345',
           total: finalTotal,
           estimatedTime,
+          hasAny24hrItem, // so we can show a red message if it's 24hr
         },
       });
     } catch (err: any) {

@@ -40,7 +40,6 @@ export function OrderConfirmation() {
             <span>Estimated Pickup Time: {estimatedTime}</span>
           </div>
 
-          {/* NEW: big 24hr reminder if needed */}
           {hasAny24hrItem && (
             <p className="text-red-600 mb-4 font-semibold">
               Heads up: One or more items in your order requires 24 hours notice!
