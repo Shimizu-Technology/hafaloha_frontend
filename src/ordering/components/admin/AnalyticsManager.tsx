@@ -1,3 +1,4 @@
+// src/ordering/componenets/admin/AnalyticsManager.tsx
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, ResponsiveContainer } from 'recharts';
 import { DollarSign, TrendingUp, Clock, ShoppingBag, Calendar } from 'lucide-react';
@@ -88,7 +89,7 @@ export function AnalyticsManager() {
   // Calculate top selling categories
   const categoryTotals = filteredOrders.reduce((acc, order) => {
     order.items.forEach(item => {
-      const category = item.id.split('-')[0];
+      const category = item.category || 'unknown';
       acc[category] = (acc[category] || 0) + (item.quantity * item.price);
     });
     return acc;

@@ -1,4 +1,4 @@
-// src/components/MenuPage.tsx
+// src/ordering/components/MenuPage.tsx
 import React, { useState, useEffect } from 'react';
 import { categories } from '../data/menu'; // Still using static categories for now
 import { MenuItem } from './MenuItem';

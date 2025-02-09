@@ -7,7 +7,14 @@ import type { CartItem } from '../types/menu';
 
 export function CartPage() {
   const navigate = useNavigate();
-  const { cartItems, setCartQuantity, removeFromCart } = useOrderStore();
+
+  // We pull the new action `setCartItemNotes` from our store, plus existing ones
+  const {
+    cartItems,
+    setCartQuantity,
+    removeFromCart,
+    setCartItemNotes
+  } = useOrderStore();
 
   // Sum up the total
   const total = cartItems.reduce(
@@ -19,7 +26,9 @@ export function CartPage() {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
         <h2 className="text-xl sm:text-2xl font-bold mb-4">Your cart is empty</h2>
-        <p className="text-gray-600 mb-8">Add some delicious items to get started!</p>
+        <p className="text-gray-600 mb-8">
+          Add some delicious items to get started!
+        </p>
         <Link
           to="/ordering/menu"
           className="inline-flex items-center px-6 py-3 border border-transparent
@@ -34,7 +43,9 @@ export function CartPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Your Cart</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">
+        Your Cart
+      </h1>
 
       <div className="lg:grid lg:grid-cols-12 lg:gap-8">
         {/* Cart items list */}
@@ -77,6 +88,15 @@ export function CartPage() {
                   </div>
                 )}
 
+                {/* NEW: Per-item notes text area */}
+                <textarea
+                  className="mt-2 w-full border border-gray-300 rounded-md p-2 text-sm
+                             focus:ring-[#c1902f] focus:border-[#c1902f]"
+                  placeholder="Any notes for this item? (e.g. 'No onions', 'Extra sauce')"
+                  value={item.notes || ''}
+                  onChange={(e) => setCartItemNotes(item.id, e.target.value)}
+                />
+
                 <div className="flex items-center justify-between mt-4">
                   {/* Quantity controls */}
                   <div className="flex items-center border rounded-md">
@@ -118,7 +138,9 @@ export function CartPage() {
         {/* Order summary */}
         <div className="lg:col-span-5 mt-8 lg:mt-0">
           <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Order Summary</h2>
+            <h2 className="text-lg font-medium text-gray-900 mb-4">
+              Order Summary
+            </h2>
             <div className="space-y-4">
               <div className="flex justify-between text-lg font-medium">
                 <span>Total</span>

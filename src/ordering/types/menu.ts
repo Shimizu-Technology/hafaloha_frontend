@@ -23,23 +23,21 @@ export interface MenuItem {
   price: number;
   category: string;
   image: string; // e.g. from 'image_url' in your backend
-  option_groups?: OptionGroup[]; // <-- The new nested array
-
-  // If you want to keep your old "customizations" array, you can remove or ignore it.
-  // For example, if the backend used to store them as static:
-  //   customizations?: {
-  //     name: string;
-  //     options: string[];
-  //     maxChoices?: number;
-  //   }[];
+  option_groups?: OptionGroup[];
+  // If your backend includes it:
+  advance_notice_hours?: number;
 }
 
-// A cart item is a MenuItem + quantity + a "customizations" object 
-// that stores the user's final picks from the OptionGroups
+/**
+ * A cart item is basically a MenuItem plus:
+ * - quantity
+ * - user-chosen customizations
+ * - now a per-item `notes` field
+ */
 export interface CartItem extends MenuItem {
   quantity: number;
-  // user-chosen selections, e.g. { "Size": ["Large"], "Flavors": ["Mango"] }
   customizations?: Record<string, string[]>;
+  notes?: string; // <-- per-item special instructions
 }
 
 export type Category = {
