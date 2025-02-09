@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/components/admin/AdminDashboard.tsx
+import React, { useState } from 'react';
 import { MenuManager } from './MenuManager';
 import { InventoryManager } from './InventoryManager';
 import { OrderManager } from './OrderManager';
@@ -9,20 +10,20 @@ import { BarChart2, ShoppingBag, LayoutGrid, Package, Tag } from 'lucide-react';
 type Tab = 'analytics' | 'orders' | 'menu' | 'inventory' | 'promos';
 
 export function AdminDashboard() {
-  // 1) On first render, check localStorage. If no value, default to 'analytics'.
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const stored = localStorage.getItem('adminTab');
-    if (stored === 'analytics' || 
-        stored === 'orders' || 
-        stored === 'menu' || 
-        stored === 'inventory' || 
-        stored === 'promos') {
+    if (
+      stored === 'analytics' ||
+      stored === 'orders' ||
+      stored === 'menu' ||
+      stored === 'inventory' ||
+      stored === 'promos'
+    ) {
       return stored as Tab;
     }
     return 'analytics';
   });
 
-  // 2) Whenever user changes tabs, also store in localStorage
   const handleTabClick = (id: Tab) => {
     setActiveTab(id);
     localStorage.setItem('adminTab', id);
