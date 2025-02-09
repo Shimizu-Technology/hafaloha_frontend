@@ -1,4 +1,4 @@
-// src/components/profile/OrderHistory.tsx
+// src/ordering/components/profile/OrderHistory.tsx
 import React, { useEffect } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 import { useAuthStore } from '../../store/authStore';

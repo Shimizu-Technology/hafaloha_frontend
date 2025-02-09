@@ -1,4 +1,5 @@
 // src/ordering/components/admin/OrderManager.tsx
+
 import React, { useEffect, useState } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 
@@ -13,13 +14,13 @@ export function OrderManager() {
     fetchOrders();
   }, [fetchOrders]);
 
-  // Filter the orders by selected status
+  // Filter by selected status
   const filteredOrders =
     selectedStatus === 'all'
       ? orders
       : orders.filter(order => order.status === selectedStatus);
 
-  // Decide the badge color for each status
+  // For status color badges
   const getStatusBadgeColor = (status: OrderStatus) => {
     const colors = {
       pending: 'bg-yellow-100 text-yellow-800',
@@ -31,9 +32,9 @@ export function OrderManager() {
     return colors[status];
   };
 
-  // A helper to safely format the date or show fallback
+  // Safely format date or fallback
   const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return 'No pickup time set'; // fallback if null
+    if (!dateString) return 'No pickup time set'; 
     const d = new Date(dateString);
     return isNaN(d.getTime()) ? 'No pickup time set' : d.toLocaleString();
   };
@@ -65,13 +66,10 @@ export function OrderManager() {
       <div className="space-y-6">
         {filteredOrders.map((order) => (
           <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
-            {/* Header: Order # and status */}
+            {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-lg font-medium text-gray-900">
-                  Order #{order.id}
-                </h3>
-                {/* If your order includes createdAt, show it */}
+                <h3 className="text-lg font-medium text-gray-900">Order #{order.id}</h3>
                 {order.createdAt && (
                   <p className="text-sm text-gray-500">
                     {new Date(order.createdAt).toLocaleString()}
@@ -79,9 +77,7 @@ export function OrderManager() {
                 )}
               </div>
               <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(
-                  order.status
-                )}`}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(order.status)}`}
               >
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </span>
@@ -99,31 +95,24 @@ export function OrderManager() {
                     <p className="font-medium">
                       {item.name} × {item.quantity}
                     </p>
-                    {/* Show customizations if any */}
                     {item.customizations &&
-                      Object.entries(item.customizations).map(
-                        ([groupName, values]) => (
-                          <p key={groupName} className="text-sm text-gray-600">
-                            {groupName}: {(values as string[]).join(', ')}
-                          </p>
-                        )
-                      )}
-                    {/* Show per-item notes if any */}
+                      Object.entries(item.customizations).map(([gName, values]) => (
+                        <p key={gName} className="text-sm text-gray-600">
+                          {gName}: {(values as string[]).join(', ')}
+                        </p>
+                      ))}
                     {item.notes && (
                       <p className="text-sm text-gray-600">
                         Notes: {item.notes}
                       </p>
                     )}
                   </div>
-                  {/* If you want item-level pricing, add it here */}
                 </div>
               ))}
             </div>
 
-            {/* More Order Details */}
+            {/* Contact & pickup */}
             <div className="grid grid-cols-2 gap-4 mb-4">
-              {/* Show contact info if your server returns them in the JSON
-                  (assuming 'contact_name', 'contact_phone', 'contact_email') */}
               <div>
                 <h4 className="text-sm font-medium text-gray-700">Customer</h4>
                 <p>{(order as any).contact_name || 'Guest'}</p>
@@ -138,13 +127,11 @@ export function OrderManager() {
 
             {/* Special instructions */}
             <div className="mb-4">
-              <h4 className="text-sm font-medium text-gray-700">
-                Special Instructions
-              </h4>
+              <h4 className="text-sm font-medium text-gray-700">Special Instructions</h4>
               <p>{order.special_instructions || 'None'}</p>
             </div>
 
-            {/* Footer: total + status update buttons */}
+            {/* Footer: total + status buttons */}
             <div className="flex justify-between items-center">
               <p className="font-medium">
                 Total: ${Number(order.total || 0).toFixed(2)}

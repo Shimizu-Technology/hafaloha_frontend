@@ -5,10 +5,6 @@ import { api } from '../lib/api';
 import type { Order } from '../types/order';
 import type { CartItem } from '../types/menu';
 
-/**
- * We define the store interface that includes methods to manage both
- * existing orders and the cart state.
- */
 interface OrderStore {
   orders: Order[];
   loading: boolean;
@@ -26,7 +22,7 @@ interface OrderStore {
   ) => Promise<Order>;
 
   updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
-  getOrderHistory: (userId: string) => Order[];
+  getOrderHistory: (userId: number) => Order[];  // or string, but be consistent
 
   // CART
   cartItems: CartItem[];
@@ -35,7 +31,7 @@ interface OrderStore {
   setCartQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
 
-  // For per-item notes
+  // Per‐item notes
   setCartItemNotes: (itemId: string, notes: string) => void;
 }
 
@@ -69,7 +65,7 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
   ) => {
     set({ loading: true, error: null });
     try {
-      // Build the request payload for the backend
+      // Build the request payload
       const payload = {
         order: {
           items: items.map((i) => ({
@@ -82,7 +78,6 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
           })),
           total,
           special_instructions: specialInstructions,
-          // Pass contact info
           contact_name: contactName,
           contact_phone: contactPhone,
           contact_email: contactEmail,
@@ -91,12 +86,12 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
 
       const newOrder = await api.post('/orders', payload);
 
-      // Add newly created order to local store
+      // Insert into local store
       set({
         orders: [...get().orders, newOrder],
         loading: false,
       });
-      // Optionally clear the cart after placing order
+      // Clear cart afterwards (optional)
       set({ cartItems: [] });
 
       return newOrder;
@@ -122,8 +117,10 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
     }
   },
 
-  // Local helper: filter by user ID
-  getOrderHistory: (userId: string) => {
+  // Filter by userId => must match the 'userId' in the JSON from Rails
+  getOrderHistory: (userId) => {
+    // If your user’s ID is a string, do: const idNum = Number(userId)
+    // But if user.id is numeric, just match directly:
     return get().orders.filter((o) => o.userId === userId);
   },
 
@@ -136,7 +133,7 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
     set((state) => {
       const existing = state.cartItems.find((ci) => ci.id === item.id);
       if (existing) {
-        // Increase existing item's quantity
+        // Increase existing quantity
         return {
           cartItems: state.cartItems.map((ci) =>
             ci.id === item.id
@@ -145,7 +142,7 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
           ),
         };
       } else {
-        // Add new cart item
+        // Add new item
         return {
           cartItems: [...state.cartItems, { ...item, quantity }],
         };
@@ -177,7 +174,6 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
     set({ cartItems: [] });
   },
 
-  // Update notes on a specific item
   setCartItemNotes: (itemId, notes) => {
     set((state) => ({
       cartItems: state.cartItems.map((ci) =>
