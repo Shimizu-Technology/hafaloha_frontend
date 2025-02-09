@@ -32,3 +32,5 @@ const relativePaths = extractPaths(tree, directoryPath);
 writeFileSync('directoryStructure.json', JSON.stringify(relativePaths, null, 2));
 
 console.log('Directory structure has been saved to directoryStructure.json');
+
+// run it - node generateTree.js
