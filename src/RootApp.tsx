@@ -1,6 +1,7 @@
 // src/RootApp.tsx
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';  // <-- so toasts can appear
 import { AuthProvider } from './reservations/context/AuthContext';
 
 import GlobalLayout from './GlobalLayout';
@@ -12,7 +13,11 @@ export default function RootApp() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        {/* So we scroll to top on route changes */}
         <ScrollToTop />
+
+        {/* So toast notifications can appear */}
+        <Toaster position="top-right" reverseOrder={false} />
 
         <Routes>
           {/* Wrap everything in GlobalLayout */}

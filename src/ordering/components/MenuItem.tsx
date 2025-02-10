@@ -1,6 +1,7 @@
 // src/ordering/components/MenuItem.tsx
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
+// import toast from 'react-hot-toast'; // <-- Removed
 import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
 import type { MenuItem as MenuItemType } from '../types/menu';
@@ -13,8 +14,11 @@ export function MenuItem({ item }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
   const [showCustomization, setShowCustomization] = useState(false);
 
+  // For button bounce animation
+  const [buttonClicked, setButtonClicked] = useState(false);
+
   function handleQuickAdd() {
-    // Notice we're passing `advance_notice_hours` as well into the cart item
+    // 1) Actually add to cart
     addToCart(
       {
         id: item.id,
@@ -22,10 +26,14 @@ export function MenuItem({ item }: MenuItemProps) {
         price: item.price,
         image: item.image,
         description: item.description,
-        advance_notice_hours: item.advance_notice_hours ?? 0, // make sure we store it
+        advance_notice_hours: item.advance_notice_hours ?? 0,
       },
       1
     );
+
+    // 2) Trigger a short bounce animation on the button
+    setButtonClicked(true);
+    setTimeout(() => setButtonClicked(false), 300);
   }
 
   function handleOpenCustomization() {
@@ -71,9 +79,15 @@ export function MenuItem({ item }: MenuItemProps) {
             ) : (
               <button
                 onClick={handleQuickAdd}
-                className="w-full md:w-auto flex items-center justify-center px-4 py-2
+                className={`w-full md:w-auto flex items-center justify-center px-4 py-2
                   border border-transparent rounded-md shadow-sm text-sm font-medium
-                  text-white bg-[#c1902f] hover:bg-[#d4a43f]"
+                  text-white bg-[#c1902f] hover:bg-[#d4a43f]
+                  transition-transform 
+                  ${
+                    buttonClicked
+                      ? 'animate-bounce' // Tailwind's bounce animation
+                      : ''
+                  }`}
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Add to Cart

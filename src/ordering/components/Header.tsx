@@ -21,13 +21,31 @@ export function Header() {
   // Sum up the total quantity
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
+  // Add bounce state for the cart icon
+  const [cartBounce, setCartBounce] = useState(false);
+  const prevCartCountRef = useRef(cartCount);
+
+  useEffect(() => {
+    if (cartCount > prevCartCountRef.current) {
+      // The cart count increased => bounce
+      setCartBounce(true);
+      const timer = setTimeout(() => setCartBounce(false), 300);
+      return () => clearTimeout(timer);
+    }
+    // update previous count
+    prevCartCountRef.current = cartCount;
+  }, [cartCount]);
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsDropdownOpen(false);
       }
     }
@@ -152,7 +170,11 @@ export function Header() {
               className="p-2 relative text-gray-700 hover:text-gray-900"
               aria-label="Shopping cart"
             >
-              <ShoppingCart className="h-6 w-6" />
+              <ShoppingCart
+                className={`h-6 w-6 transition-transform ${
+                  cartBounce ? 'animate-bounce' : ''
+                }`}
+              />
               {/* Show a badge if cartCount > 0 */}
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-[#c1902f] 
