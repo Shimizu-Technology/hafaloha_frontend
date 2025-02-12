@@ -66,10 +66,7 @@ export function AdminDashboard() {
     const intervalId = setInterval(async () => {
       try {
         const url = `/orders/new_since/${lastOrderId}`;
-        console.log('[AdminDashboard] Polling new orders =>', url);
         const newOrders: Order[] = await api.get(url);
-
-        console.log('[AdminDashboard] Polling result =>', newOrders);
 
         if (newOrders.length > 0) {
           newOrders.forEach((order) => {
