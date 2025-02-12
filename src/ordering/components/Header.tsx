@@ -21,18 +21,16 @@ export function Header() {
   // Sum up the total quantity
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
-  // Add bounce state for the cart icon
+  // Bounce animation for cart icon
   const [cartBounce, setCartBounce] = useState(false);
   const prevCartCountRef = useRef(cartCount);
 
   useEffect(() => {
     if (cartCount > prevCartCountRef.current) {
-      // The cart count increased => bounce
       setCartBounce(true);
       const timer = setTimeout(() => setCartBounce(false), 300);
       return () => clearTimeout(timer);
     }
-    // update previous count
     prevCartCountRef.current = cartCount;
   }, [cartCount]);
 
@@ -62,7 +60,13 @@ export function Header() {
         <div className="flex justify-between items-center h-16">
           {/* Mobile menu button */}
           <button
-            className="p-2 rounded-md text-gray-700 lg:hidden"
+            className="
+              p-2 rounded-md text-gray-700 
+              transition-transform duration-200
+              hover:bg-gray-200 
+              active:scale-95 
+              lg:hidden
+            "
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle menu"
           >
@@ -74,15 +78,30 @@ export function Header() {
           </button>
 
           {/* Logo link => go to /ordering */}
-          <Link to="/ordering" className="flex items-center">
-            <span className="text-2xl font-bold text-gray-900">håfaloha!</span>
+          <Link
+            to="/ordering"
+            className="
+              flex items-center text-2xl font-bold text-gray-900
+              transition-colors duration-200
+              hover:text-black
+            "
+          >
+            håfaloha!
           </Link>
 
           {/* Desktop Nav */}
           <nav className="hidden lg:flex items-center space-x-8">
-            <Link to="/ordering/menu" className="text-gray-700 hover:text-gray-900">
+            <Link
+              to="/ordering/menu"
+              className="
+                text-gray-700 hover:text-gray-900
+                transition-colors duration-200 px-2 py-1
+                rounded-md hover:bg-gray-100 active:scale-95
+              "
+            >
               Menu
             </Link>
+
             <div className="flex items-center text-gray-700">
               <Clock className="h-4 w-4 mr-2" />
               <span>11AM-9PM</span>
@@ -102,12 +121,17 @@ export function Header() {
             {user ? (
               <div className="relative" ref={dropdownRef}>
                 <button
-                  className="flex items-center text-gray-700 hover:text-gray-900"
+                  className="
+                    flex items-center text-gray-700 hover:text-gray-900
+                    transition-colors duration-200 px-2 py-1 rounded-md
+                    hover:bg-gray-100 active:scale-95
+                  "
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 >
                   <User className="h-6 w-6" />
                   <span className="ml-2 hidden lg:inline">{firstName}</span>
                 </button>
+
                 {isDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
                     {isAdmin && (
@@ -151,14 +175,22 @@ export function Header() {
               <div className="hidden lg:flex space-x-2">
                 <Link
                   to="/ordering/login"
-                  className="text-gray-700 hover:text-gray-900"
+                  className="
+                    text-gray-700 hover:text-gray-900
+                    transition-colors duration-200 px-2 py-1
+                    rounded-md hover:bg-gray-100 active:scale-95
+                  "
                 >
                   Sign In
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
                   to="/ordering/signup"
-                  className="text-gray-700 hover:text-gray-900"
+                  className="
+                    text-gray-700 hover:text-gray-900
+                    transition-colors duration-200 px-2 py-1
+                    rounded-md hover:bg-gray-100 active:scale-95
+                  "
                 >
                   Sign Up
                 </Link>
@@ -167,13 +199,16 @@ export function Header() {
 
             <Link
               to="/ordering/cart"
-              className="p-2 relative text-gray-700 hover:text-gray-900"
+              className="
+                p-2 relative text-gray-700 hover:text-gray-900
+                transition-transform duration-200
+                hover:bg-gray-200 active:scale-95
+                rounded-md
+              "
               aria-label="Shopping cart"
             >
               <ShoppingCart
-                className={`h-6 w-6 transition-transform ${
-                  cartBounce ? 'animate-bounce' : ''
-                }`}
+                className={`h-6 w-6 ${cartBounce ? 'animate-bounce' : ''}`}
               />
               {/* Show a badge if cartCount > 0 */}
               {cartCount > 0 && (
@@ -195,8 +230,11 @@ export function Header() {
           <div className="px-2 pt-2 pb-3 space-y-1">
             <Link
               to="/ordering/menu"
-              className="block px-3 py-2 rounded-md text-base font-medium text-gray-700
-                         hover:text-gray-900 hover:bg-gray-50"
+              className="
+                block px-3 py-2 rounded-md text-base font-medium text-gray-700
+                hover:text-gray-900 hover:bg-gray-50
+                transition-colors duration-200 active:scale-95
+              "
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Menu
@@ -220,16 +258,22 @@ export function Header() {
                   <>
                     <Link
                       to="/reservations/dashboard"
-                      className="block px-3 py-2 rounded-md text-base font-medium
-                                 text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                      className="
+                        block px-3 py-2 rounded-md text-base font-medium
+                        text-gray-700 hover:text-gray-900 hover:bg-gray-50
+                        transition-colors duration-200 active:scale-95
+                      "
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Reservations Admin
                     </Link>
                     <Link
                       to="/ordering/admin"
-                      className="block px-3 py-2 rounded-md text-base font-medium
-                                 text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                      className="
+                        block px-3 py-2 rounded-md text-base font-medium
+                        text-gray-700 hover:text-gray-900 hover:bg-gray-50
+                        transition-colors duration-200 active:scale-95
+                      "
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Ordering Admin
@@ -238,8 +282,11 @@ export function Header() {
                 )}
                 <Link
                   to="/ordering/orders"
-                  className="block px-3 py-2 rounded-md text-base font-medium
-                             text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                  className="
+                    block px-3 py-2 rounded-md text-base font-medium
+                    text-gray-700 hover:text-gray-900 hover:bg-gray-50
+                    transition-colors duration-200 active:scale-95
+                  "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Order History
@@ -249,8 +296,11 @@ export function Header() {
                     signOut();
                     setIsMobileMenuOpen(false);
                   }}
-                  className="block w-full text-left px-3 py-2 rounded-md text-base
-                             font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                  className="
+                    block w-full text-left px-3 py-2 rounded-md text-base font-medium
+                    text-gray-700 hover:text-gray-900 hover:bg-gray-50
+                    transition-colors duration-200 active:scale-95
+                  "
                 >
                   Sign Out
                 </button>
@@ -259,16 +309,22 @@ export function Header() {
               <>
                 <Link
                   to="/ordering/login"
-                  className="block px-3 py-2 rounded-md text-base font-medium
-                             text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                  className="
+                    block px-3 py-2 rounded-md text-base font-medium
+                    text-gray-700 hover:text-gray-900 hover:bg-gray-50
+                    transition-colors duration-200 active:scale-95
+                  "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Sign In
                 </Link>
                 <Link
                   to="/ordering/signup"
-                  className="block px-3 py-2 rounded-md text-base font-medium
-                             text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                  className="
+                    block px-3 py-2 rounded-md text-base font-medium
+                    text-gray-700 hover:text-gray-900 hover:bg-gray-50
+                    transition-colors duration-200 active:scale-95
+                  "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Sign Up
