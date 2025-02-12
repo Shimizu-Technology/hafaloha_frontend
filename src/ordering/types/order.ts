@@ -1,3 +1,4 @@
+// src/ordering/types/order.ts
 export interface Order {
   id: string;
   userId: string;
