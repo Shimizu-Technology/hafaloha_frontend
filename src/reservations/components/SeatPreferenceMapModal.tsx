@@ -6,7 +6,9 @@ import SeatLayoutCanvas, {
   DBSeat,
   SeatSectionData,
 } from './SeatLayoutCanvas';
-import { fetchSeatAllocations } from '../services/api';
+
+// NEW HOOK IMPORT (adjust path as needed):
+import { useSeatAllocations } from '../hooks/useSeatAllocations';
 
 interface SeatPreferenceMapModalProps {
   /** The date we’re booking, e.g. "2025-01-25". */
@@ -50,6 +52,9 @@ export default function SeatPreferenceMapModal({
   onSave,
   onClose,
 }: SeatPreferenceMapModalProps) {
+  // 1) Use your new seat allocations hook:
+  const { fetchSeatAllocations } = useSeatAllocations();
+
   // occupant data => seatId => occupantStatus + occupantName
   const [seatAllocations, setSeatAllocations] =
     useState<Record<number, { status: string; name?: string }>>({});
@@ -75,8 +80,9 @@ export default function SeatPreferenceMapModal({
     async function loadAllocations() {
       setLoading(true);
       try {
-        // For daily occupant checks:
+        // 2) Use the hook’s method instead of import { fetchSeatAllocations } from 'services/api'
         const seatAllocs = await fetchSeatAllocations({ date });
+        // Build occupant map
         const seatMap: Record<number, { status: string; name?: string }> = {};
 
         seatAllocs.forEach((alloc: any) => {
@@ -96,7 +102,7 @@ export default function SeatPreferenceMapModal({
       }
     }
     loadAllocations();
-  }, [date, time, duration]);
+  }, [date, time, duration, fetchSeatAllocations]);
 
   // Filter sections by activeFloor
   const sectionsForActiveFloor = sections.filter(

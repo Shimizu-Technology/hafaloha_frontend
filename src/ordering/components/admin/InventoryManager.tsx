@@ -1,16 +1,28 @@
-// src/components/admin/InventoryManager.tsx
+// src/ordering/components/admin/InventoryManager.tsx
 import React, { useEffect } from 'react';
-import { useInventoryStore } from '../../store/inventoryStore';
 import { AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 
+import { useInventory } from '../../hooks/useInventory';
+
 export function InventoryManager() {
-  const { inventory, updateInventoryStatus, fetchInventory, loading, error } = useInventoryStore();
+  // Destructure from the new hook
+  const {
+    inventory,
+    fetchInventory,
+    updateInventoryStatus,
+    loading,
+    error,
+  } = useInventory();
 
   useEffect(() => {
     fetchInventory();
   }, [fetchInventory]);
 
-  const handleStatusChange = (itemId: string, inStock: boolean, lowStock: boolean) => {
+  const handleStatusChange = (
+    itemId: string,
+    inStock: boolean,
+    lowStock: boolean
+  ) => {
     updateInventoryStatus(itemId, { inStock, lowStock });
   };
 
@@ -29,9 +41,9 @@ export function InventoryManager() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h2 className="text-2xl font-bold mb-6">Inventory Management</h2>
-      
+
       <div className="grid gap-6">
-        {Object.values(inventory).map(item => (
+        {Object.values(inventory).map((item) => (
           <div key={item.itemId} className="bg-white rounded-lg shadow-md p-6">
             <div className="flex justify-between items-center">
               <div>
@@ -57,7 +69,7 @@ export function InventoryManager() {
                   )}
                 </div>
               </div>
-              
+
               <div className="space-x-2">
                 <button
                   onClick={() => handleStatusChange(item.itemId, true, false)}

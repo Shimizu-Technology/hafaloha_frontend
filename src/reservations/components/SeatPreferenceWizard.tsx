@@ -1,7 +1,10 @@
-// src/components/SeatPreferenceWizard.tsx
+// src/reservations/components/SeatPreferenceWizard.tsx
+
 import React, { useEffect, useState } from 'react';
-import { fetchSeatAllocations } from '../services/api';
 import { X } from 'lucide-react';
+
+// NEW: import your domain hook
+import { useSeatAllocations } from '../hooks/useSeatAllocations';
 
 // Example seat interface
 interface DBSeat {
@@ -39,6 +42,9 @@ export default function SeatPreferenceWizard({
   // We'll store 3 sets of chosen seat labels here
   const [prefs, setPrefs] = useState<string[][]>(initialPreferences);
 
+  // NEW: Use the seat allocations hook
+  const { fetchSeatAllocations } = useSeatAllocations();
+
   // Example: we fetch seat allocations for the entire day, then we filter for the timeslot
   // or you have a custom endpoint that returns occupant seat data for just that timeslot.
   const [seatAllocs, setSeatAllocs] = useState<SeatAllocation[]>([]);
@@ -51,17 +57,18 @@ export default function SeatPreferenceWizard({
     // Example: fetch occupant data. We'll ignore actual seat objects for brevity.
     async function loadSeatData() {
       try {
+        // Replaces the old import from services/api
         const data = await fetchSeatAllocations({ date });
         setSeatAllocs(data); // might be a large array
 
-        // You might also fetch all seats if you haven't already
-        // setAllSeats( ...
+        // Also fetch all seats if you haven't already (or you might have another hook for seats)
+        // setAllSeats(...
       } catch (err) {
         console.error('Wizard seat fetch error:', err);
       }
     }
     loadSeatData();
-  }, [date]);
+  }, [date, fetchSeatAllocations]);
 
   // For simplicity, let's assume allSeats is known or you can put a placeholder array
   useEffect(() => {
@@ -79,8 +86,6 @@ export default function SeatPreferenceWizard({
   function getSeatStatus(seatId: number): "free" | "reserved" | "occupied" {
     // For the chosen time, check if seatAllocs has occupantStatus
     // This is a placeholder. You might need real overlap logic.
-    // We'll just see if occupant_status includes "seated" => occupied, or "reserved" => reserved
-    // In real code, you'd also check if start_time/end_time overlap.
     const alloc = seatAllocs.find(a => a.seat_id === seatId);
     if (!alloc) return "free";
     if (alloc.occupant_status === "seated" || alloc.occupant_status === "occupied") {
@@ -116,7 +121,13 @@ export default function SeatPreferenceWizard({
         // remove it
         clone[activePrefIndex] = arr.filter(s => s !== seatLabel);
       } else {
-        // add it
+        // add it if we haven't exceeded partySize
+        if (arr.length >= partySize) {
+          alert(
+            `Option ${activePrefIndex + 1} can only have up to ${partySize} seat(s).`
+          );
+          return prev; // no change
+        }
         clone[activePrefIndex] = [...arr, seatLabel];
       }
       return clone;
@@ -137,13 +148,6 @@ export default function SeatPreferenceWizard({
     return "bg-green-500"; // free
   }
 
-  // Save => pass the `prefs` array up
-  function handleSave() {
-    // Filter out empty arrays if you want
-    const final = prefs.filter(arr => arr && arr.length > 0);
-    onSave(final);
-  }
-
   // Provide a way to switch between preference #1, #2, #3
   function handlePrefSwitch(idx: number) {
     setActivePrefIndex(idx);
@@ -155,6 +159,13 @@ export default function SeatPreferenceWizard({
       }
       return clone;
     });
+  }
+
+  // Save => pass the `prefs` array up
+  function handleSave() {
+    // Filter out empty arrays if you want
+    const final = prefs.filter(arr => arr && arr.length > 0);
+    onSave(final);
   }
 
   return (

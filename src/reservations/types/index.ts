@@ -1,3 +1,4 @@
+// src/reservations/types/index.ts
 //
 // 1) StaffMember — used in StaffBanner
 //

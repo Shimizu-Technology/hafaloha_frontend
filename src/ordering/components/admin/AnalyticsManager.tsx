@@ -1,8 +1,26 @@
-// src/ordering/componenets/admin/AnalyticsManager.tsx
-import React, { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, ResponsiveContainer } from 'recharts';
-import { DollarSign, TrendingUp, Clock, ShoppingBag, Calendar } from 'lucide-react';
-import { useOrderStore } from '../../store/orderStore';
+// src/ordering/components/admin/AnalyticsManager.tsx
+import React, { useState, useEffect } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  ResponsiveContainer
+} from 'recharts';
+import {
+  DollarSign,
+  TrendingUp,
+  Clock,
+  ShoppingBag,
+  Calendar
+} from 'lucide-react';
+
+import { useOrders } from '../../hooks/useOrders';
 
 type TimeFrame = '7days' | '30days' | '90days' | '1year' | 'custom';
 
@@ -12,7 +30,9 @@ interface DateRange {
 }
 
 export function AnalyticsManager() {
-  const { orders } = useOrderStore();
+  // Pull orders from the new hook
+  const { orders, fetchOrders, loading, error } = useOrders();
+
   const [timeframe, setTimeframe] = useState<TimeFrame>('7days');
   const [customRange, setCustomRange] = useState<DateRange>({
     start: new Date(),
@@ -20,7 +40,12 @@ export function AnalyticsManager() {
   });
   const [showCustomRange, setShowCustomRange] = useState(false);
 
-  // Get date range based on timeframe
+  // Fetch all orders on mount
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  // 1) Determine date range based on timeframe
   const getDateRange = (tf: TimeFrame): DateRange => {
     const end = new Date();
     const start = new Date();
@@ -44,18 +69,19 @@ export function AnalyticsManager() {
 
     return { start, end };
   };
-
   const dateRange = getDateRange(timeframe);
 
-  // Filter orders within date range
+  // 2) Filter orders within that date range
   const filteredOrders = orders.filter(order => {
     const orderDate = new Date(order.createdAt);
     return orderDate >= dateRange.start && orderDate <= dateRange.end;
   });
 
-  // Calculate daily sales for the selected timeframe
+  // 3) Compute daily sales
   const getDailySales = () => {
-    const days = Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24));
+    const days = Math.ceil(
+      (dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)
+    );
     const datesArray = [...Array(days)].map((_, i) => {
       const date = new Date(dateRange.start);
       date.setDate(date.getDate() + i);
@@ -63,13 +89,16 @@ export function AnalyticsManager() {
     });
 
     return datesArray.map(date => {
-      const dayOrders = filteredOrders.filter(order => 
-        order.createdAt.split('T')[0] === date &&
-        order.status !== 'cancelled'
+      const dayOrders = filteredOrders.filter(
+        order =>
+          order.createdAt.split('T')[0] === date && order.status !== 'cancelled'
       );
       return {
-        date: new Date(date).toLocaleDateString('en-US', 
-          timeframe === '1year' ? { month: 'short', day: 'numeric' } : { weekday: 'short', day: 'numeric' }
+        date: new Date(date).toLocaleDateString(
+          'en-US',
+          timeframe === '1year'
+            ? { month: 'short', day: 'numeric' }
+            : { weekday: 'short', day: 'numeric' }
         ),
         sales: dayOrders.reduce((sum, order) => sum + order.total, 0),
         orders: dayOrders.length
@@ -77,24 +106,25 @@ export function AnalyticsManager() {
     });
   };
 
-  // Calculate hourly order distribution
-  const hourlyOrders = Array(24).fill(0).map((_, hour) => ({
-    hour: hour,
-    orders: filteredOrders.filter(order => 
-      new Date(order.createdAt).getHours() === hour &&
-      order.status !== 'cancelled'
-    ).length
-  }));
+  // 4) Hourly distribution
+  const hourlyOrders = Array(24)
+    .fill(0)
+    .map((_, hour) => ({
+      hour,
+      orders: filteredOrders.filter(
+        order =>
+          new Date(order.createdAt).getHours() === hour && order.status !== 'cancelled'
+      ).length
+    }));
 
-  // Calculate top selling categories
+  // 5) Top categories
   const categoryTotals = filteredOrders.reduce((acc, order) => {
     order.items.forEach(item => {
       const category = item.category || 'unknown';
-      acc[category] = (acc[category] || 0) + (item.quantity * item.price);
+      acc[category] = (acc[category] || 0) + item.quantity * item.price;
     });
     return acc;
   }, {} as Record<string, number>);
-
   const topCategories = Object.entries(categoryTotals)
     .map(([category, total]) => ({
       category: category.charAt(0).toUpperCase() + category.slice(1),
@@ -103,25 +133,26 @@ export function AnalyticsManager() {
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
 
-  // Calculate total stats
+  // 6) Total stats
   const totalStats = {
-    revenue: filteredOrders.reduce((sum, order) => 
-      order.status !== 'cancelled' ? sum + order.total : sum, 0
+    revenue: filteredOrders.reduce(
+      (sum, order) => (order.status !== 'cancelled' ? sum + order.total : sum),
+      0
     ),
     orders: filteredOrders.filter(order => order.status !== 'cancelled').length,
-    averageOrder: filteredOrders.length > 0 ? 
-      filteredOrders.reduce((sum, order) => 
-        order.status !== 'cancelled' ? sum + order.total : sum, 0
-      ) / filteredOrders.filter(order => order.status !== 'cancelled').length : 0
+    averageOrder:
+      filteredOrders.filter(o => o.status !== 'cancelled').length > 0
+        ? filteredOrders
+            .filter(o => o.status !== 'cancelled')
+            .reduce((sum, order) => sum + order.total, 0) /
+          filteredOrders.filter(o => o.status !== 'cancelled').length
+        : 0
   };
 
+  // 7) Handle timeframe changes
   const handleTimeframeChange = (tf: TimeFrame) => {
     setTimeframe(tf);
-    if (tf === 'custom') {
-      setShowCustomRange(true);
-    } else {
-      setShowCustomRange(false);
-    }
+    setShowCustomRange(tf === 'custom');
   };
 
   const handleCustomRangeChange = (type: 'start' | 'end', value: string) => {
@@ -133,6 +164,10 @@ export function AnalyticsManager() {
 
   return (
     <div className="space-y-8">
+      {/* Loading / Error States */}
+      {loading && <p>Loading orders for analytics...</p>}
+      {error && <p className="text-red-600">{error}</p>}
+
       {/* Timeframe Selection */}
       <div className="bg-white rounded-lg shadow-md p-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -170,7 +205,7 @@ export function AnalyticsManager() {
               <input
                 type="date"
                 value={customRange.start.toISOString().split('T')[0]}
-                onChange={(e) => handleCustomRangeChange('start', e.target.value)}
+                onChange={e => handleCustomRangeChange('start', e.target.value)}
                 max={new Date().toISOString().split('T')[0]}
                 className="px-3 py-2 border rounded-md"
               />
@@ -182,7 +217,7 @@ export function AnalyticsManager() {
               <input
                 type="date"
                 value={customRange.end.toISOString().split('T')[0]}
-                onChange={(e) => handleCustomRangeChange('end', e.target.value)}
+                onChange={e => handleCustomRangeChange('end', e.target.value)}
                 max={new Date().toISOString().split('T')[0]}
                 className="px-3 py-2 border rounded-md"
               />
@@ -197,7 +232,9 @@ export function AnalyticsManager() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold">${totalStats.revenue.toFixed(2)}</p>
+              <p className="text-2xl font-bold">
+                ${totalStats.revenue.toFixed(2)}
+              </p>
             </div>
             <DollarSign className="h-8 w-8 text-[#c1902f]" />
           </div>
@@ -215,7 +252,9 @@ export function AnalyticsManager() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Average Order Value</p>
-              <p className="text-2xl font-bold">${totalStats.averageOrder.toFixed(2)}</p>
+              <p className="text-2xl font-bold">
+                ${totalStats.averageOrder.toFixed(2)}
+              </p>
             </div>
             <TrendingUp className="h-8 w-8 text-[#c1902f]" />
           </div>
@@ -229,9 +268,15 @@ export function AnalyticsManager() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={getDailySales()}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
+              <XAxis
                 dataKey="date"
-                interval={timeframe === '1year' ? 30 : timeframe === '90days' ? 7 : 'preserveEnd'}
+                interval={
+                  timeframe === '1year'
+                    ? 30
+                    : timeframe === '90days'
+                    ? 7
+                    : 'preserveEnd'
+                }
                 angle={-45}
                 textAnchor="end"
                 height={60}

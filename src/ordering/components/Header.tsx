@@ -10,32 +10,31 @@ import {
   User,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
-import { useOrderStore } from '../store/orderStore';
+import { useAuth0 } from '@auth0/auth0-react';   // <-- Auth0
+import { useOrders } from '../hooks/useOrders'; // <-- Our new Orders hook
 
 export function Header() {
-  const { user, signOut } = useAuthStore();
+  // Auth0
+  const { user, isAuthenticated, logout } = useAuth0();
 
-  // Pull the cartItems array from the store
-  const cartItems = useOrderStore((state) => state.cartItems);
-  // Sum up the total quantity
+  // CART from useOrders
+  const { cartItems } = useOrders();
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
-  // Add bounce state for the cart icon
+  // Bounce animation
   const [cartBounce, setCartBounce] = useState(false);
   const prevCartCountRef = useRef(cartCount);
 
   useEffect(() => {
     if (cartCount > prevCartCountRef.current) {
-      // The cart count increased => bounce
       setCartBounce(true);
       const timer = setTimeout(() => setCartBounce(false), 300);
       return () => clearTimeout(timer);
     }
-    // update previous count
     prevCartCountRef.current = cartCount;
   }, [cartCount]);
 
+  // Mobile menu + user dropdown
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -53,14 +52,19 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const isAdmin = user?.role === 'admin';
-  const firstName = user?.first_name || user?.email || 'Guest';
+  // If you have a custom logic for admin checks:
+  // const isAdmin = user?.['https://hafaloha.com/roles']?.includes('admin');
+  const isAdmin = false;
+
+  // Pick a nice display name or fallback
+  const firstName = user?.name || user?.email || 'Guest';
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Mobile menu button */}
+
+          {/* Mobile menu toggle */}
           <button
             className="p-2 rounded-md text-gray-700 lg:hidden"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -73,7 +77,7 @@ export function Header() {
             )}
           </button>
 
-          {/* Logo link => go to /ordering */}
+          {/* Logo => /ordering */}
           <Link to="/ordering" className="flex items-center">
             <span className="text-2xl font-bold text-gray-900">håfaloha!</span>
           </Link>
@@ -99,7 +103,8 @@ export function Header() {
 
           {/* Right side: Profile / Cart */}
           <div className="flex items-center space-x-4">
-            {user ? (
+            {isAuthenticated ? (
+              // If Auth0 has a user
               <div className="relative" ref={dropdownRef}>
                 <button
                   className="flex items-center text-gray-700 hover:text-gray-900"
@@ -137,7 +142,7 @@ export function Header() {
                     </Link>
                     <button
                       onClick={() => {
-                        signOut();
+                        logout({ returnTo: window.location.origin });
                         setIsDropdownOpen(false);
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -148,6 +153,7 @@ export function Header() {
                 )}
               </div>
             ) : (
+              // Not authenticated => Show Sign In / Sign Up
               <div className="hidden lg:flex space-x-2">
                 <Link
                   to="/ordering/login"
@@ -165,6 +171,7 @@ export function Header() {
               </div>
             )}
 
+            {/* Cart Link */}
             <Link
               to="/ordering/cart"
               className="p-2 relative text-gray-700 hover:text-gray-900"
@@ -175,11 +182,10 @@ export function Header() {
                   cartBounce ? 'animate-bounce' : ''
                 }`}
               />
-              {/* Show a badge if cartCount > 0 */}
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#c1902f] 
-                                 text-white text-xs font-bold 
-                                 rounded-full h-5 w-5 
+                <span className="absolute -top-1 -right-1 bg-[#c1902f]
+                                 text-white text-xs font-bold
+                                 rounded-full h-5 w-5
                                  flex items-center justify-center">
                   {cartCount}
                 </span>
@@ -214,7 +220,7 @@ export function Header() {
               (671) 989-3444
             </div>
 
-            {user ? (
+            {isAuthenticated ? (
               <>
                 {isAdmin && (
                   <>
@@ -246,7 +252,7 @@ export function Header() {
                 </Link>
                 <button
                   onClick={() => {
-                    signOut();
+                    logout({ returnTo: window.location.origin });
                     setIsMobileMenuOpen(false);
                   }}
                   className="block w-full text-left px-3 py-2 rounded-md text-base

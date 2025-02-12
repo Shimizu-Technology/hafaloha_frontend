@@ -1,22 +1,25 @@
-// src/components/AdminSettings.tsx
+// src/reservations/components/admin/AdminSettings.tsx
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
 import {
-  fetchRestaurant,
-  updateRestaurant,
-  fetchOperatingHours,
-  fetchSpecialEvents,
-  createSpecialEvent,
-  updateSpecialEvent,
-  deleteSpecialEvent,
-  updateOperatingHour,
-} from '../services/api';
+  useRestaurant,
+  // Restaurant
+} from '../hooks/useRestaurant';
+import {
+  useOperatingHours,
+  // OperatingHour
+} from '../hooks/useOperatingHours';
+import {
+  useSpecialEvents,
+  // SpecialEvent as HookEvent
+} from '../hooks/useSpecialEvents';
 
-/** Basic Restaurant shape (including current_seat_count for the UI) */
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Basic shape for the local restaurant fields
 interface Restaurant {
   id: number;
   default_reservation_length?: number;
@@ -24,17 +27,17 @@ interface Restaurant {
   current_seat_count?: number;
 }
 
-/** OperatingHour shape */
+// OperatingHour shape
 interface OperatingHour {
   id: number;
-  restaurant_id: number;
+  restaurant_id?: number;
   day_of_week: number;
   open_time: string | null;
   close_time: string | null;
   closed: boolean;
 }
 
-/** SpecialEvent shape */
+// SpecialEvent shape (mirroring what you had but adding `_deleted`)
 interface SpecialEvent {
   id: number;
   event_date_obj: Date | null;
@@ -62,8 +65,8 @@ function parseDateString(dateStr: string | null): Date | null {
 function formatDateYYYYMMDD(d: Date | null): string | null {
   if (!d) return null;
   const yyyy = d.getFullYear();
-  const mm   = String(d.getMonth() + 1).padStart(2, '0');
-  const dd   = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -72,6 +75,7 @@ function shortTime(dbTime: string | null): string {
   if (!dbTime) return '';
   let parseStr = dbTime;
   if (!parseStr.includes('T')) {
+    // If the server doesn’t provide date, prefix a dummy date
     parseStr = `1970-01-01T${parseStr}`;
   }
   try {
@@ -92,29 +96,45 @@ function toDbTime(inputTime: string): string | null {
   return inputTime + ':00';
 }
 
-// Day-of-week labels
-const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-
 export default function AdminSettings() {
-  // Loading indicator
+  // 1) Hooks from your new domain hooks:
+  const {
+    restaurant,
+    fetchRestaurant,
+    updateRestaurant,
+  } = useRestaurant();
+
+  const {
+    operatingHours,
+    fetchOperatingHours,
+    updateOperatingHour,
+  } = useOperatingHours();
+
+  const {
+    events,
+    fetchSpecialEvents,
+    createSpecialEvent,
+    updateSpecialEvent,
+    deleteSpecialEvent,
+  } = useSpecialEvents();
+
+  // 2) Local states
   const [loading, setLoading] = useState(true);
 
-  // General
-  const [defaultLength, setDefaultLength] = useState(60);
+  // From the Restaurant object:
+  const [defaultLength, setDefaultLength] = useState<number>(60);
   const [adminSettings, setAdminSettings] = useState('');
-
-  // Operating Hours
-  const [draftHours, setDraftHours] = useState<OperatingHour[]>([]);
-
-  // Special Events
-  const [draftEvents, setDraftEvents] = useState<SpecialEvent[]>([]);
-
-  // Toggle for advanced event options
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // We'll store seatCount from the restaurant to pre-fill new events
   const [seatCount, setSeatCount] = useState(0);
 
+  // For Operating Hours (locally editable draft)
+  const [draftHours, setDraftHours] = useState<OperatingHour[]>([]);
+
+  // For Special Events (locally editable draft)
+  const [draftEvents, setDraftEvents] = useState<SpecialEvent[]>([]);
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // 3) On mount => load all data from the hooks
   useEffect(() => {
     loadAllData();
   }, []);
@@ -122,34 +142,47 @@ export default function AdminSettings() {
   async function loadAllData() {
     setLoading(true);
     try {
-      const rest: Restaurant = await fetchRestaurant(1);
+      // a) fetch the restaurant (id=1)
+      await fetchRestaurant(1);
 
-      if (rest.default_reservation_length) {
-        setDefaultLength(rest.default_reservation_length);
-      }
-      if (rest.admin_settings) {
-        setAdminSettings(JSON.stringify(rest.admin_settings, null, 2));
-      }
-      if (rest.current_seat_count) {
-        setSeatCount(rest.current_seat_count);
+      // b) fetch operating hours
+      await fetchOperatingHours();
+
+      // c) fetch special events
+      await fetchSpecialEvents();
+
+      // After all done, set local “draft” states from the hooks’ data
+      if (restaurant) {
+        if (restaurant.default_reservation_length) {
+          setDefaultLength(restaurant.default_reservation_length);
+        }
+        if (restaurant.admin_settings) {
+          // store as JSON string
+          setAdminSettings(JSON.stringify(restaurant.admin_settings, null, 2));
+        }
+        if (restaurant.current_seat_count) {
+          setSeatCount(restaurant.current_seat_count);
+        }
       }
 
-      const oh = await fetchOperatingHours();
-      setDraftHours(oh);
+      if (operatingHours && operatingHours.length) {
+        setDraftHours([...operatingHours]); // shallow copy
+      }
 
-      const se = await fetchSpecialEvents();
-      const mapped = se.map((item: any) => ({
-        id:                item.id,
-        event_date_obj:    parseDateString(item.event_date),
-        start_time:        item.start_time,
-        end_time:          item.end_time,
-        closed:            item.closed,
-        exclusive_booking: item.exclusive_booking,
-        max_capacity:      item.max_capacity,
-        description:       item.description,
-        _deleted:          false,
-      })) as SpecialEvent[];
-      setDraftEvents(mapped);
+      if (events && events.length) {
+        const mapped = events.map((item) => ({
+          id: item.id,
+          event_date_obj: parseDateString(item.date ?? null),
+          start_time: item.start_time,
+          end_time: item.end_time,
+          closed: item.closed || false,
+          exclusive_booking: item.exclusive_booking || false,
+          max_capacity: item.max_capacity || seatCount,
+          description: item.description || '',
+          _deleted: false,
+        })) as SpecialEvent[];
+        setDraftEvents(mapped);
+      }
 
     } catch (err) {
       console.error('Error loading settings:', err);
@@ -159,24 +192,26 @@ export default function AdminSettings() {
     }
   }
 
-  // Operating Hours changes
+  // 4) Operating Hours changes
   function handleOHChange(hourId: number, field: keyof OperatingHour, value: any) {
     setDraftHours((prev) =>
       prev.map((oh) => (oh.id === hourId ? { ...oh, [field]: value } : oh))
     );
   }
 
-  // Special Events changes
+  // 5) Special Events changes
   function handleEventChange(eventId: number, field: keyof SpecialEvent, value: any) {
     setDraftEvents((prev) =>
       prev.map((ev) => (ev.id === eventId ? { ...ev, [field]: value } : ev))
     );
   }
+
   function handleDeleteEvent(eventId: number) {
     setDraftEvents((prev) =>
       prev.map((ev) => (ev.id === eventId ? { ...ev, _deleted: true } : ev))
     );
   }
+
   function handleAddEvent() {
     const newEvent: SpecialEvent = {
       id: 0,
@@ -191,10 +226,10 @@ export default function AdminSettings() {
     setDraftEvents((prev) => [...prev, newEvent]);
   }
 
-  // Save all
+  // 6) Save all
   async function handleSaveAll() {
     try {
-      // Parse adminSettings from JSON
+      // a) parse adminSettings from JSON
       let parsedAdmin: any = {};
       if (adminSettings.trim()) {
         try {
@@ -205,62 +240,62 @@ export default function AdminSettings() {
         }
       }
 
-      // 1) Update restaurant
+      // b) Update restaurant (id=1)
       const restaurantPayload = {
         default_reservation_length: Number(defaultLength),
         admin_settings: parsedAdmin,
       };
       await updateRestaurant(1, restaurantPayload);
 
-      // 2) Update operating hours
+      // c) Update operating hours
       for (const oh of draftHours) {
         await updateOperatingHour(oh.id, {
-          open_time:  oh.open_time,
+          open_time: oh.open_time,
           close_time: oh.close_time,
-          closed:     oh.closed,
+          closed: oh.closed,
         });
       }
 
-      // 3) Special events
-      const toCreate = draftEvents.filter(ev => ev.id === 0 && !ev._deleted);
-      const toUpdate = draftEvents.filter(ev => ev.id !== 0 && !ev._deleted);
-      const toDelete = draftEvents.filter(ev => ev.id !== 0 && ev._deleted);
+      // d) Special events
+      const toCreate = draftEvents.filter((ev) => ev.id === 0 && !ev._deleted);
+      const toUpdate = draftEvents.filter((ev) => ev.id !== 0 && !ev._deleted);
+      const toDelete = draftEvents.filter((ev) => ev.id !== 0 && ev._deleted);
 
-      // 3.1) Create
+      // d.1) Create
       for (const ev of toCreate) {
         const payload = {
-          event_date:       formatDateYYYYMMDD(ev.event_date_obj),
-          closed:           ev.closed,
+          date: formatDateYYYYMMDD(ev.event_date_obj),
+          closed: ev.closed,
           exclusive_booking: ev.exclusive_booking,
-          max_capacity:     ev.max_capacity,
-          description:      ev.description,
-          start_time:       ev.start_time,
-          end_time:         ev.end_time,
+          max_capacity: ev.max_capacity,
+          description: ev.description,
+          start_time: ev.start_time,
+          end_time: ev.end_time,
         };
         await createSpecialEvent(payload);
       }
 
-      // 3.2) Update
+      // d.2) Update
       for (const ev of toUpdate) {
         const payload = {
-          event_date:       formatDateYYYYMMDD(ev.event_date_obj),
-          closed:           ev.closed,
+          date: formatDateYYYYMMDD(ev.event_date_obj),
+          closed: ev.closed,
           exclusive_booking: ev.exclusive_booking,
-          max_capacity:     ev.max_capacity,
-          description:      ev.description,
-          start_time:       ev.start_time,
-          end_time:         ev.end_time,
+          max_capacity: ev.max_capacity,
+          description: ev.description,
+          start_time: ev.start_time,
+          end_time: ev.end_time,
         };
         await updateSpecialEvent(ev.id, payload);
       }
 
-      // 3.3) Delete
+      // d.3) Delete
       for (const ev of toDelete) {
         await deleteSpecialEvent(ev.id);
       }
 
       toast.success('All settings saved successfully!');
-      loadAllData();
+      loadAllData(); // re-fetch to reflect new data
     } catch (err) {
       console.error('Error saving settings:', err);
       toast.error('Failed to save settings. See console for details.');
@@ -298,7 +333,7 @@ export default function AdminSettings() {
                   </thead>
                   <tbody>
                     {draftHours.map((oh) => {
-                      const openVal  = shortTime(oh.open_time);
+                      const openVal = shortTime(oh.open_time);
                       const closeVal = shortTime(oh.close_time);
                       return (
                         <tr key={oh.id} className="border-b last:border-b-0">
@@ -381,25 +416,16 @@ export default function AdminSettings() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-2 py-2 text-left text-sm">Event Date</th>
-                      <th
-                        className="px-2 py-2 text-left text-sm"
-                        title="Fully close the restaurant?"
-                      >
+                      <th className="px-2 py-2 text-left text-sm" title="Fully close the restaurant?">
                         Fully Closed?
                       </th>
                       {showAdvanced && (
-                        <th
-                          className="px-2 py-2 text-left text-sm"
-                          title="No other bookings if checked."
-                        >
+                        <th className="px-2 py-2 text-left text-sm" title="No other bookings if checked.">
                           Private Only
                         </th>
                       )}
                       {showAdvanced && (
-                        <th
-                          className="px-2 py-2 text-left text-sm"
-                          title="Max capacity for the day."
-                        >
+                        <th className="px-2 py-2 text-left text-sm" title="Max capacity for the day.">
                           Max Guests
                         </th>
                       )}

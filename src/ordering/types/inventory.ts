@@ -1,3 +1,4 @@
+// src/ordering/types/inventory.ts
 export interface InventoryStatus {
   itemId: string;
   inStock: boolean;

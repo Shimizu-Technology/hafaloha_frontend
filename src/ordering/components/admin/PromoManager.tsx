@@ -1,8 +1,9 @@
-// src/components/admin/PromoManager.tsx
+// src/ordering/components/admin/PromoManager.tsx
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, X, Save, Tag } from 'lucide-react';
-import { usePromoStore } from '../../store/promoStore';
-import type { PromoCode } from '../../types/promo';
+
+// Import the new hook instead of the old zustand store
+import { usePromos } from '../../hooks/usePromos';
 
 interface PromoFormData {
   code: string;
@@ -13,6 +14,7 @@ interface PromoFormData {
 }
 
 export function PromoManager() {
+  // Destructure from the new hook
   const {
     promoCodes,
     fetchPromoCodes,
@@ -20,15 +22,18 @@ export function PromoManager() {
     updatePromoCode,
     deletePromoCode,
     loading,
-    error
-  } = usePromoStore();
+    error,
+  } = usePromos();
+
   const [isEditing, setIsEditing] = useState(false);
   const [editingPromo, setEditingPromo] = useState<PromoFormData | null>(null);
 
   useEffect(() => {
+    // Load promo codes on mount
     fetchPromoCodes();
   }, [fetchPromoCodes]);
 
+  // Default form for a new promo
   const initialFormData: PromoFormData = {
     code: '',
     discountPercent: 10,
@@ -36,33 +41,41 @@ export function PromoManager() {
       .toISOString()
       .split('T')[0],
     maxUses: undefined,
-    description: ''
+    description: '',
   };
 
-  const handleEdit = (promo: PromoCode) => {
+  // Edit existing
+  const handleEdit = (promo: any) => {
+    // Convert the existing promo into the form data shape
     setEditingPromo({
       ...promo,
-      validUntil: new Date(promo.validUntil).toISOString().split('T')[0]
+      // Convert to YYYY-MM-DD
+      validUntil: new Date(promo.validUntil).toISOString().split('T')[0],
     });
     setIsEditing(true);
   };
 
+  // Add new
   const handleAdd = () => {
     setEditingPromo(initialFormData);
     setIsEditing(true);
   };
 
+  // Submit create/update
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPromo) return;
 
-    const promoData: PromoCode = {
+    // Rebuild final data
+    const promoData = {
       ...editingPromo,
-      validUntil: new Date(editingPromo.validUntil).toISOString(),
-      currentUses: 0
+      validUntil: new Date(editingPromo.validUntil).toISOString(), // store full date/time if you wish
+      currentUses: 0,
     };
 
-    if (promoCodes.find(p => p.code === promoData.code)) {
+    // Check if this code already exists => update, else add
+    const existing = promoCodes.find((p) => p.code === promoData.code);
+    if (existing) {
       updatePromoCode(promoData);
     } else {
       addPromoCode(promoData);
@@ -78,6 +91,7 @@ export function PromoManager() {
     }
   };
 
+  // Helpers to check expiry
   const isExpired = (validUntil: string) => new Date(validUntil) < new Date();
   const isAlmostExpired = (validUntil: string) => {
     const daysUntilExpiry = Math.ceil(
@@ -89,6 +103,7 @@ export function PromoManager() {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
+      {/* Top bar */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Promo Code Management</h2>
         <button
@@ -99,8 +114,12 @@ export function PromoManager() {
           Add Promo Code
         </button>
       </div>
+
+      {/* Loading / Error */}
       {loading && <div>Loading promo codes…</div>}
       {error && <div className="text-red-600">Error: {error}</div>}
+
+      {/* Edit/Add Modal */}
       {isEditing && editingPromo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md p-6">
@@ -119,6 +138,7 @@ export function PromoManager() {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Code */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Code
@@ -126,10 +146,10 @@ export function PromoManager() {
                 <input
                   type="text"
                   value={editingPromo.code}
-                  onChange={e =>
+                  onChange={(e) =>
                     setEditingPromo({
                       ...editingPromo,
-                      code: e.target.value.toUpperCase()
+                      code: e.target.value.toUpperCase(),
                     })
                   }
                   className="w-full px-4 py-2 border rounded-md"
@@ -138,6 +158,7 @@ export function PromoManager() {
                   title="Only uppercase letters and numbers allowed"
                 />
               </div>
+              {/* Discount */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Discount Percentage
@@ -147,16 +168,17 @@ export function PromoManager() {
                   min="1"
                   max="100"
                   value={editingPromo.discountPercent}
-                  onChange={e =>
+                  onChange={(e) =>
                     setEditingPromo({
                       ...editingPromo,
-                      discountPercent: parseInt(e.target.value)
+                      discountPercent: parseInt(e.target.value),
                     })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   required
                 />
               </div>
+              {/* Valid Until */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Valid Until
@@ -164,14 +186,18 @@ export function PromoManager() {
                 <input
                   type="date"
                   value={editingPromo.validUntil}
-                  onChange={e =>
-                    setEditingPromo({ ...editingPromo, validUntil: e.target.value })
+                  onChange={(e) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      validUntil: e.target.value,
+                    })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   required
                   min={new Date().toISOString().split('T')[0]}
                 />
               </div>
+              {/* Max Uses */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Maximum Uses (Optional)
@@ -180,30 +206,37 @@ export function PromoManager() {
                   type="number"
                   min="1"
                   value={editingPromo.maxUses || ''}
-                  onChange={e =>
+                  onChange={(e) =>
                     setEditingPromo({
                       ...editingPromo,
-                      maxUses: e.target.value ? parseInt(e.target.value) : undefined
+                      maxUses: e.target.value
+                        ? parseInt(e.target.value)
+                        : undefined,
                     })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   placeholder="Unlimited if empty"
                 />
               </div>
+              {/* Description */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Description (Optional)
                 </label>
                 <textarea
                   value={editingPromo.description || ''}
-                  onChange={e =>
-                    setEditingPromo({ ...editingPromo, description: e.target.value })
+                  onChange={(e) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      description: e.target.value,
+                    })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   rows={3}
                   placeholder="Enter description or terms of use"
                 />
               </div>
+              {/* Buttons */}
               <div className="flex justify-end space-x-2 pt-4">
                 <button
                   type="button"
@@ -227,11 +260,15 @@ export function PromoManager() {
           </div>
         </div>
       )}
+
+      {/* Promo Codes List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {promoCodes.map(promo => (
+        {promoCodes.map((promo) => (
           <div
             key={promo.code}
-            className={`bg-white rounded-lg shadow-md p-6 ${isExpired(promo.validUntil) ? 'opacity-50' : ''}`}
+            className={`bg-white rounded-lg shadow-md p-6 ${
+              isExpired(promo.validUntil) ? 'opacity-50' : ''
+            }`}
           >
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -240,7 +277,9 @@ export function PromoManager() {
                   <h3 className="text-lg font-semibold">{promo.code}</h3>
                 </div>
                 {promo.description && (
-                  <p className="text-sm text-gray-600 mt-1">{promo.description}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {promo.description}
+                  </p>
                 )}
               </div>
               <span className="text-lg font-semibold text-[#c1902f]">
@@ -266,6 +305,7 @@ export function PromoManager() {
                 </p>
               )}
             </div>
+            {/* Edit/Delete Buttons */}
             <div className="flex justify-end space-x-2 mt-4">
               <button
                 onClick={() => handleEdit(promo)}
@@ -287,4 +327,14 @@ export function PromoManager() {
   );
 }
 
-export default { PromoManager };
+// Helper functions to check expiry
+function isExpired(validUntil: string) {
+  return new Date(validUntil) < new Date();
+}
+function isAlmostExpired(validUntil: string) {
+  const daysUntilExpiry = Math.ceil(
+    (new Date(validUntil).getTime() - new Date().getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
+  return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+}

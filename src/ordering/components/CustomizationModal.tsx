@@ -1,8 +1,11 @@
 // src/ordering/components/CustomizationModal.tsx
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { useOrderStore } from '../store/orderStore';
-import type { MenuItem, OptionGroup, MenuOption } from '../types/menu';
+
+// Replace this import with your new hooks path:
+import { useOrders } from '../hooks/useOrders'; 
+import type { MenuItem, OptionGroup, MenuOption } from '../hooks/useMenu'; 
+// ^ Adjust the import paths or types if needed
 
 interface CustomizationModalProps {
   item: MenuItem;
@@ -10,9 +13,10 @@ interface CustomizationModalProps {
 }
 
 export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
-  const addToCart = useOrderStore((state) => state.addToCart);
+  // Use the new useOrders hook to add items to cart
+  const { addToCart } = useOrders();
 
-  // 1) Track user selections: selections[groupId] = array of optionIds
+  // Track user selections: selections[groupId] = array of optionIds
   const [selections, setSelections] = useState<Record<number, number[]>>({});
   const [quantity, setQuantity] = useState(1);
 
@@ -30,7 +34,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
           [group.id]: current.filter((id) => id !== opt.id),
         };
       }
-      // If we are at max => remove the first selected
+      // If we're at max => remove the first selected
       if (current.length >= group.max_select) {
         return {
           ...prev,
@@ -54,7 +58,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
         // find the Option
         const opt = group.options.find((o) => o.id === optId);
         if (opt) {
-          // Use "additional_price_float" from the server, default to 0 if missing
+          // Use "additional_price_float" or fallback to 0
           const extra = opt.additional_price_float ?? 0;
           sum += extra;
         }
@@ -63,7 +67,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
     return sum;
   }
 
-  const basePrice = item.price; // item.price is presumably numeric already
+  const basePrice = item.price; // item.price is presumably numeric
   const addlPrice = getAdditionalPrice();
   const totalItemPrice = (basePrice + addlPrice) * quantity;
 
@@ -115,9 +119,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
           <X className="h-6 w-6" />
         </button>
 
-        <h3 className="text-xl font-semibold mb-4">
-          Customize: {item.name}
-        </h3>
+        <h3 className="text-xl font-semibold mb-4">Customize: {item.name}</h3>
 
         {/* If no optionGroups, just show "no customizations" */}
         {optionGroups.length === 0 ? (
@@ -136,14 +138,13 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                 <div className="mt-2 space-y-2">
                   {group.options.map((opt) => {
                     const selected = selections[groupId]?.includes(opt.id);
-                    // Coerce to number
                     const extraPrice = Number(opt.additional_price_float ?? 0);
                     return (
                       <button
                         key={opt.id}
                         type="button"
                         onClick={() => handleOptionToggle(group, opt)}
-                        className={`block w-full text-left px-4 py-2 border rounded-md 
+                        className={`block w-full text-left px-4 py-2 border rounded-md
                           ${
                             selected
                               ? 'border-[#c1902f] bg-[#c1902f]/10'

@@ -1,13 +1,16 @@
 // src/ordering/components/CheckoutPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react'; // for user info
 import { CreditCard, Mail, Phone, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-import { useAuthStore } from '../store/authStore';  // We import our auth store
-import { usePromoStore } from '../store/promoStore';
-import { useOrderStore } from '../store/orderStore';
+import { useOrders } from '../hooks/useOrders';   // new Orders hook
+import { usePromos } from '../hooks/usePromos';   // new Promos hook
 import { PickupInfo } from './location/PickupInfo';
+
+// For typed cart items, if needed:
+// import type { CartItem } from '../hooks/useOrders';
 
 interface CheckoutFormData {
   name: string;
@@ -23,36 +26,33 @@ interface CheckoutFormData {
 export function CheckoutPage() {
   const navigate = useNavigate();
 
-  // 1) Access the user from authStore (could be null if no one is logged in)
-  const { user } = useAuthStore();
+  // 1) Access the user from Auth0 (could be null if not logged in)
+  const { user } = useAuth0();
 
-  // 2) Grab cart items & addOrder method
-  const cartItems = useOrderStore((state) => state.cartItems);
-  const addOrder = useOrderStore((state) => state.addOrder);
+  // 2) Grab cart items & addOrder method from useOrders
+  const { cartItems, addOrder } = useOrders();
 
-  // 3) Promo code logic
-  const { validatePromoCode, applyDiscount } = usePromoStore();
+  // 3) Promo code logic from usePromos
+  const { validatePromoCode, applyDiscount } = usePromos();
 
   // 4) Calculate the raw total
-  const rawTotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  const rawTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // 5) Build an initial form state that uses user if available
+  // 5) Build an initial form state, using user details if available
   const initialFormData: CheckoutFormData = {
-    // Use user.first_name & user.last_name from your backend
-    name: user ? `${user.first_name} ${user.last_name}` : '',
+    // For name/phone, you may store them in Auth0 user_metadata or elsewhere.
+    // Adjust accordingly if your user object is shaped differently.
+    name: user?.name || '',
     email: user?.email || '',
-    phone: user?.phone || '',
+    phone: '', // If your user object has phone, fill it here. e.g. user?.phone
     cardNumber: '',
     expiryDate: '',
     cvv: '',
     specialInstructions: '',
-    promoCode: ''
+    promoCode: '',
   };
 
-  // 6) Our local state
+  // 6) Local component state
   const [formData, setFormData] = useState<CheckoutFormData>(initialFormData);
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
@@ -66,12 +66,12 @@ export function CheckoutPage() {
       // Populate from user
       setFormData((prev) => ({
         ...prev,
-        name: `${user.first_name} ${user.last_name}`,
-        email: user.email,
-        phone: user.phone,
+        name: user.name || '',
+        email: user.email || '',
+        // phone: user.phone || '', // if your Auth0 user object has phone
       }));
     } else {
-      // If user logs out or never logged in
+      // If user logs out or was never logged in
       setFormData((prev) => ({
         ...prev,
         name: '',
@@ -92,15 +92,22 @@ export function CheckoutPage() {
   }
 
   // Apply promo code
-  function handleApplyPromo() {
+  async function handleApplyPromo() {
+    // Validate code locally first
     const isValid = validatePromoCode(formData.promoCode);
-    if (isValid) {
-      const discounted = applyDiscount(rawTotal, formData.promoCode);
+    if (!isValid) {
+      toast.error('Invalid or expired promo code');
+      return;
+    }
+
+    // If valid, we apply the discount on the server
+    try {
+      const discounted = await applyDiscount(rawTotal, formData.promoCode);
       setFinalTotal(discounted);
       setAppliedPromo(formData.promoCode);
       toast.success(`Promo code ${formData.promoCode} applied!`);
-    } else {
-      toast.error('Invalid or expired promo code');
+    } catch (err) {
+      toast.error('Failed to apply promo code');
     }
   }
 
@@ -114,30 +121,26 @@ export function CheckoutPage() {
       );
 
       // 2) Create the new order on the backend
-      // We pass contactName, contactPhone, contactEmail so the store can include them in the payload
-      const newOrder = await addOrder(
-        cartItems,
-        finalTotal,
-        formData.specialInstructions,
-        formData.name,
-        formData.phone,
-        formData.email
-      );
+      // addOrder expects: items, total, specialInstructions, contactName, phone, email
+      const newOrder = await addOrder({
+        specialInstructions: formData.specialInstructions,
+        contactName: formData.name,
+        contactPhone: formData.phone,
+        contactEmail: formData.email,
+      });
 
       toast.success('Order placed successfully!');
 
       // 3) Figure out the estimated time for the front-end
-      const estimatedTime = hasAny24hrItem
-        ? '24 hours'
-        : '20–25 min';
+      const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
 
-      // 4) Navigate to confirmation, passing the data
+      // 4) Navigate to confirmation
       navigate('/ordering/order-confirmation', {
         state: {
           orderId: newOrder.id || '12345',
           total: finalTotal,
           estimatedTime,
-          hasAny24hrItem, // so we can show a red message if it's 24hr
+          hasAny24hrItem, // so we can show a note if it's 24hr
         },
       });
     } catch (err: any) {
@@ -175,8 +178,7 @@ export function CheckoutPage() {
                     required
                     value={formData.name}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md
-                      focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
 
@@ -196,8 +198,7 @@ export function CheckoutPage() {
                     required
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md
-                      focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
 
@@ -217,8 +218,7 @@ export function CheckoutPage() {
                     required
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md
-                      focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
               </div>
@@ -245,8 +245,7 @@ export function CheckoutPage() {
                     placeholder="1234 5678 9012 3456"
                     value={formData.cardNumber}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md
-                      focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
 
@@ -267,8 +266,7 @@ export function CheckoutPage() {
                       placeholder="MM/YY"
                       value={formData.expiryDate}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md
-                        focus:ring-[#c1902f] focus:border-[#c1902f]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                     />
                   </div>
                   <div>
@@ -286,8 +284,7 @@ export function CheckoutPage() {
                       placeholder="123"
                       value={formData.cvv}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md
-                        focus:ring-[#c1902f] focus:border-[#c1902f]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                     />
                   </div>
                 </div>
@@ -302,8 +299,7 @@ export function CheckoutPage() {
                 value={formData.specialInstructions}
                 onChange={handleInputChange}
                 placeholder="Any special requests or notes for your order?"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md
-                  focus:ring-[#c1902f] focus:border-[#c1902f]"
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                 rows={3}
               />
             </div>
@@ -326,14 +322,12 @@ export function CheckoutPage() {
                     value={formData.promoCode}
                     onChange={handleInputChange}
                     placeholder="Enter promo code"
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md
-                      focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                   <button
                     type="button"
                     onClick={handleApplyPromo}
-                    className="px-4 py-2 bg-gray-100 text-gray-700
-                      rounded-md hover:bg-gray-200"
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
                   >
                     Apply
                   </button>
@@ -349,9 +343,7 @@ export function CheckoutPage() {
                       ${rawTotal.toFixed(2)}
                     </span>
                   )}
-                  <span className="text-2xl font-bold">
-                    ${finalTotal.toFixed(2)}
-                  </span>
+                  <span className="text-2xl font-bold">${finalTotal.toFixed(2)}</span>
                 </div>
               </div>
 

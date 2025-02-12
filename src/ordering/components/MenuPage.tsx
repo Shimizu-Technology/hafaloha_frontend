@@ -1,27 +1,30 @@
 // src/ordering/components/MenuPage.tsx
 import React, { useState, useEffect } from 'react';
-import { categories } from '../data/menu'; // Still using static categories for now
-import { MenuItem } from './MenuItem';
 import { Filter, X } from 'lucide-react';
-import type { Category, MenuItem as MenuItemType } from '../types/menu';
-import { useMenuStore } from '../store/menuStore';
 
-interface MenuPageProps {
-  onAddToCart: (item: MenuItemType) => void;
-}
+import { MenuItem } from './MenuItem';                // Updated MenuItem
+import { categories } from '../data/menu';            // Still uses static categories
+// Adjust this import path if your domain types changed:
+import type { MenuItem as MenuItemType } from '../../hooks/useMenu'; 
 
-export function MenuPage({ onAddToCart }: MenuPageProps) {
-  const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
+// Import the new useMenu hook
+import { useMenu } from '../hooks/useMenu';
+
+export function MenuPage() {
+  // Destructure from the new hook
+  const { menuItems, fetchMenuItems, loading, error } = useMenu();
+  
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
+  // Fetch menu items on mount
   useEffect(() => {
-    // Load menu items from the backend
     fetchMenuItems();
   }, [fetchMenuItems]);
 
+  // Filter items by selected category
   const filteredItems = selectedCategory
-    ? menuItems.filter(item => item.category === selectedCategory)
+    ? menuItems.filter((item) => item.category === selectedCategory)
     : menuItems;
 
   return (
@@ -77,7 +80,7 @@ export function MenuPage({ onAddToCart }: MenuPageProps) {
                 >
                   All Items
                 </button>
-                {categories.map(category => (
+                {categories.map((category) => (
                   <button
                     key={category.id}
                     className={`w-full text-left px-4 py-3 rounded-md ${
@@ -113,7 +116,7 @@ export function MenuPage({ onAddToCart }: MenuPageProps) {
               >
                 All Items
               </button>
-              {categories.map(category => (
+              {categories.map((category) => (
                 <button
                   key={category.id}
                   className={`w-full text-left px-4 py-2 rounded-md ${
@@ -133,8 +136,8 @@ export function MenuPage({ onAddToCart }: MenuPageProps) {
         {/* Menu Items Grid */}
         <div className="flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {filteredItems.map(item => (
-              <MenuItem key={item.id} item={item} onAddToCart={onAddToCart} />
+            {filteredItems.map((item) => (
+              <MenuItem key={item.id} item={item} />
             ))}
           </div>
         </div>
@@ -142,5 +145,3 @@ export function MenuPage({ onAddToCart }: MenuPageProps) {
     </div>
   );
 }
-
-export default MenuPage;

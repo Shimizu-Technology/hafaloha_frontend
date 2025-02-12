@@ -10,8 +10,11 @@ import {
   Share2,
 } from 'lucide-react';
 
-// Example: if you have these from your actual API calls
-import { fetchAvailability, createReservation } from '../../../reservations/services/api';
+// Replace the old import from api.ts
+// import { fetchAvailability, createReservation } from '../../../reservations/services/api';
+
+// Instead, import your domain hook from the new reservations side:
+import { useReservations } from '../../../reservations/hooks/useReservations';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -34,9 +37,9 @@ interface ConfirmationData extends ReservationData {
 }
 
 export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
-  //
-  // 1) HOOKS (unconditional!)
-  //
+  // 1) HOOKS
+  const { fetchAvailability, createReservation } = useReservations();
+
   const [formData, setFormData] = useState<ReservationData>({
     date: '',
     time: '',
@@ -59,25 +62,22 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
       return;
     }
 
-    fetchAvailability(formData.date, formData.partySize)
-      .then((res) => {
-        // Suppose res.slots = ["17:00", "17:30", ...]
-        setTimeSlots(res.slots || []);
-      })
-      .catch((err) => {
+    (async () => {
+      try {
+        const data = await fetchAvailability(formData.date, formData.partySize);
+        // Suppose data.slots = ["17:00", "17:30", ...]
+        setTimeSlots(data.slots || []);
+      } catch (err) {
         console.error('Error fetching availability:', err);
         setTimeSlots([]);
-      });
-  }, [formData.date, formData.partySize]);
+      }
+    })();
+  }, [formData.date, formData.partySize, fetchAvailability]);
 
-  //
-  // 2) If not open, bail out *after* the Hooks above
-  //
+  // 2) If not open, bail out after hooks
   if (!isOpen) return null;
 
-  //
   // 3) "Share" button logic & other handlers
-  //
   function handleShare() {
     if (!confirmation) return;
     const text = `I just made a reservation at Håfaloha!\n\nDate: ${confirmation.date}
@@ -98,6 +98,7 @@ Party Size: ${confirmation.partySize} people`;
 
     try {
       const start_time = `${formData.date}T${formData.time}:00`;
+
       await createReservation({
         reservation: {
           restaurant_id: 1,
@@ -111,7 +112,7 @@ Party Size: ${confirmation.partySize} people`;
         },
       });
 
-      // if successful => show confirmation
+      // If successful => show confirmation
       setConfirmation({ ...formData, confirmed: true });
     } catch (err) {
       console.error('Failed to create reservation:', err);
@@ -126,7 +127,7 @@ Party Size: ${confirmation.partySize} people`;
     return Math.round(num * 60);
   }
 
-  // 4) If user has a `confirmation` => render the "Confirmed" screen
+  // 4) If user has a `confirmation`, render the "Confirmed" screen
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
@@ -255,7 +256,10 @@ Party Size: ${confirmation.partySize} people`;
                 <select
                   value={formData.partySize}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, partySize: parseInt(e.target.value, 10) }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      partySize: parseInt(e.target.value, 10),
+                    }))
                   }
                   className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2
                              focus:border-[#c1902f] focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
@@ -392,6 +396,6 @@ function formatTime(t: string) {
   return date.toLocaleString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true
+    hour12: true,
   });
 }

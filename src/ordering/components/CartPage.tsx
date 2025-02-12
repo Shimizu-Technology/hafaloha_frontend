@@ -2,25 +2,23 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, Minus, Plus } from 'lucide-react';
-import { useOrderStore } from '../store/orderStore';
-import type { CartItem } from '../types/menu';
+
+import { useOrders, CartItem } from '../hooks/useOrders'; 
+// ^ If your types or hook path differ, adjust accordingly
 
 export function CartPage() {
   const navigate = useNavigate();
 
-  // We pull the new action `setCartItemNotes` from our store, plus existing ones
+  // Destructure from useOrders:
   const {
     cartItems,
     setCartQuantity,
     removeFromCart,
-    setCartItemNotes
-  } = useOrderStore();
+    setCartItemNotes,
+  } = useOrders();
 
   // Sum up the total
-  const total = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   if (cartItems.length === 0) {
     return (
@@ -70,7 +68,7 @@ export function CartPage() {
                   <p className="mt-1 text-sm text-gray-500">{item.description}</p>
                 )}
 
-                {/* If the item requires 24 hours, show it */}
+                {/* If item requires 24 hours */}
                 {item.advance_notice_hours && item.advance_notice_hours >= 24 && (
                   <p className="mt-1 text-sm text-red-600">
                     Requires 24 hours notice
@@ -88,7 +86,7 @@ export function CartPage() {
                   </div>
                 )}
 
-                {/* NEW: Per-item notes text area */}
+                {/* Per-item notes text area */}
                 <textarea
                   className="mt-2 w-full border border-gray-300 rounded-md p-2 text-sm
                              focus:ring-[#c1902f] focus:border-[#c1902f]"

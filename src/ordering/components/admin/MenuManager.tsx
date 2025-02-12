@@ -1,16 +1,19 @@
-// src/components/admin/MenuManager.tsx
+// src/ordering/components/admin/MenuManager.tsx
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
-import { useMenuStore } from '../../store/menuStore';
-import type { MenuItem } from '../../types/menu';
+
+import type { MenuItem } from '../../hooks/useMenu'; // or your domain type
+import { useMenu } from '../../hooks/useMenu';        // NEW HOOK
+import { useOrderingApi } from '../../hooks/useOrderingApi'; // for OptionGroupsModal
 import { categories } from '../../data/menu';
-import { api, uploadMenuItemImage } from '../../lib/api';
 
 // --------------------------------------
-// Types
+// Local Types
 // --------------------------------------
 interface MenuItemFormData {
-  id?: number;
+  // If your backend uses numeric IDs, you can keep number here, 
+  // but then convert to string when calling your CRUD methods if needed.
+  id?: string | number;
   name: string;
   description: string;
   price: number;
@@ -18,7 +21,6 @@ interface MenuItemFormData {
   menu_id?: number;
   image: string;
   imageFile?: File | null;
-  // We'll use 0 or 24 (or any integer) for advanced notice
   advance_notice_hours: number;
 }
 
@@ -38,31 +40,39 @@ interface OptionRow {
 }
 
 // --------------------------------------
-// Main MenuManager
+// Main: MenuManager
 // --------------------------------------
 export function MenuManager() {
+  // 1) Use the new "useMenu" hook
   const {
     menuItems,
+    loading: menuLoading,
+    error: menuError,
+    fetchMenuItems,
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
-    refreshItemInState
-  } = useMenuStore();
+  } = useMenu();
 
+  // 2) Local component states
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Modal for Option Groups
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
-  // Filter items by category
+  // 3) Filter items by category
   const filteredItems = selectedCategory
     ? menuItems.filter(item => item.category === selectedCategory)
     : menuItems;
 
-  // Default form for new item
+  // 4) On mount, fetch menu items
+  useEffect(() => {
+    fetchMenuItems();
+  }, [fetchMenuItems]);
+
+  // 5) Provide a default blank form for adding a new item
   const initialFormData: MenuItemFormData = {
     name: '',
     description: '',
@@ -71,31 +81,29 @@ export function MenuManager() {
     image: '',
     imageFile: null,
     menu_id: 1,
-    advance_notice_hours: 0, // default to 0 hours
+    advance_notice_hours: 0,
   };
 
   // --------------------------------------
-  // Edit existing item
+  // Editing / Adding items
   // --------------------------------------
   const handleEdit = (item: MenuItem) => {
+    // Convert item ID from string to number if you track it that way
+    // or keep it as string if your hooks do so
     setEditingItem({
       id: item.id,
       name: item.name,
       description: item.description,
       price: item.price,
-      category: item.category,
-      image: item.image,
+      category: item.category || categories[0].id,
+      image: item.image || '',
       imageFile: null,
-      menu_id: item.menu_id,
-      // If server’s JSON includes advance_notice_hours, use it
+      menu_id: item.menu_id || 1,
       advance_notice_hours: (item as any).advance_notice_hours ?? 0,
     });
     setIsEditing(true);
   };
 
-  // --------------------------------------
-  // Add new item
-  // --------------------------------------
   const handleAdd = () => {
     setEditingItem(initialFormData);
     setIsEditing(true);
@@ -109,19 +117,10 @@ export function MenuManager() {
     if (!editingItem) return;
 
     if (editingItem.id) {
-      // Update existing
-      await updateMenuItem(editingItem.id, editingItem);
-
-      // If user selected a new file, upload it
-      if (editingItem.imageFile) {
-        const updated = await uploadMenuItemImage(
-          editingItem.id.toString(),
-          editingItem.imageFile
-        );
-        refreshItemInState(updated);
-      }
+      // If updating an existing item
+      await updateMenuItem(String(editingItem.id), editingItem);
     } else {
-      // Create new
+      // Creating new
       await addMenuItem({ ...editingItem });
     }
 
@@ -132,14 +131,14 @@ export function MenuManager() {
   // --------------------------------------
   // Delete an item
   // --------------------------------------
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string | number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
-      await deleteMenuItem(id);
+      await deleteMenuItem(String(id));
     }
   };
 
   // --------------------------------------
-  // Manage Options (now triggered from the modal)
+  // Manage Options (open modal)
   // --------------------------------------
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
@@ -156,6 +155,7 @@ export function MenuManager() {
   // --------------------------------------
   return (
     <div className="max-w-7xl mx-auto p-6">
+
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Menu Management</h2>
@@ -167,6 +167,14 @@ export function MenuManager() {
           Add Item
         </button>
       </div>
+
+      {/* Loading/Error States */}
+      {menuLoading && <div className="mb-4">Loading menu items...</div>}
+      {menuError && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          Error: {menuError}
+        </div>
+      )}
 
       {/* Category Filters */}
       <div className="flex space-x-4 mb-6">
@@ -260,7 +268,7 @@ export function MenuManager() {
                   onChange={e =>
                     setEditingItem({
                       ...editingItem,
-                      price: parseFloat(e.target.value) || 0
+                      price: parseFloat(e.target.value) || 0,
                     })
                   }
                   className="w-full px-4 py-2 border rounded-md"
@@ -289,7 +297,7 @@ export function MenuManager() {
                 </select>
               </div>
 
-              {/* Requires 24-hour notice? (checkbox) */}
+              {/* Requires 24-hour notice? */}
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -303,7 +311,10 @@ export function MenuManager() {
                     });
                   }}
                 />
-                <label htmlFor="requires24" className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="requires24"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Requires 24-hour notice?
                 </label>
               </div>
@@ -320,7 +331,7 @@ export function MenuManager() {
                     if (e.target.files && e.target.files[0]) {
                       setEditingItem({
                         ...editingItem,
-                        imageFile: e.target.files[0]
+                        imageFile: e.target.files[0],
                       });
                     }
                   }}
@@ -348,7 +359,7 @@ export function MenuManager() {
                 )}
               </div>
 
-              {/* Manage Options Button (only if item already has an ID) */}
+              {/* Manage Options Button (only if editing existing item) */}
               {editingItem.id && (
                 <div className="pt-4">
                   <button
@@ -419,19 +430,16 @@ export function MenuManager() {
                     ${Number(item.price).toFixed(2)}
                   </span>
 
-                  {/* Remove the old "Settings" button entirely */}
-                  {/* Edit Item */}
+                  {/* Edit */}
                   <button
                     onClick={() => handleEdit(item)}
                     className="p-2 text-gray-600 hover:text-[#c1902f]"
                   >
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  {/* Delete Item */}
+                  {/* Delete */}
                   <button
-                    onClick={() => {
-                      if (typeof item.id === 'number') handleDelete(item.id);
-                    }}
+                    onClick={() => handleDelete(item.id)}
                     className="p-2 text-gray-600 hover:text-red-600"
                   >
                     <Trash2 className="h-5 w-5" />
@@ -443,7 +451,7 @@ export function MenuManager() {
         ))}
       </div>
 
-      {/* OptionGroups Modal (pops up if admin clicks "Manage Options" inside the item form) */}
+      {/* OptionGroups Modal */}
       {optionsModalOpen && optionsModalItem && (
         <OptionGroupsModal
           item={optionsModalItem}
@@ -455,15 +463,17 @@ export function MenuManager() {
 }
 
 // --------------------------------------
-// OptionGroupsModal Component
+// OptionGroupsModal
 // --------------------------------------
 function OptionGroupsModal({
   item,
-  onClose
+  onClose,
 }: {
   item: MenuItem;
   onClose: () => void;
 }) {
+  const { get, post, patch, delete: remove } = useOrderingApi();
+
   const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -480,72 +490,68 @@ function OptionGroupsModal({
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
 
+  // -------------------------------------
+  // Fetch Option Groups once
+  // -------------------------------------
   useEffect(() => {
-    // Fetch once on mount
-    fetchGroups();
-    // eslint-disable-next-line
-  }, [item.id]);
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await get(`/menu_items/${item.id}/option_groups`);
+        setOptionGroups(data);
+      } catch (err) {
+        console.error(err);
+        setOptionGroups([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [item.id, get]);
 
   // -------------------------------------
-  // Fetch Option Groups
-  // -------------------------------------
-  const fetchGroups = async () => {
-    setLoading(true);
-    try {
-      const data = await api.get(`/menu_items/${item.id}/option_groups`);
-      setOptionGroups(data);
-    } catch (err) {
-      console.error(err);
-      setOptionGroups([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // -------------------------------------
-  // Local state helpers (no re-fetch => no flash)
+  // Helpers to update local state
   // -------------------------------------
   const replaceGroupInState = (updated: OptionGroup) => {
-    setOptionGroups(current =>
-      current.map(g => (g.id === updated.id ? updated : g))
+    setOptionGroups((current) =>
+      current.map((g) => (g.id === updated.id ? updated : g))
     );
   };
 
   const removeGroupInState = (groupId: number) => {
-    setOptionGroups(current => current.filter(g => g.id !== groupId));
+    setOptionGroups((current) => current.filter((g) => g.id !== groupId));
   };
 
   const addGroupToState = (created: OptionGroup) => {
-    setOptionGroups(current => [...current, created]);
+    setOptionGroups((current) => [...current, created]);
   };
 
   const replaceOptionInState = (groupId: number, updatedOpt: OptionRow) => {
-    setOptionGroups(current =>
-      current.map(g => {
+    setOptionGroups((current) =>
+      current.map((g) => {
         if (g.id !== groupId) return g;
         return {
           ...g,
-          options: g.options.map(o => (o.id === updatedOpt.id ? updatedOpt : o))
+          options: g.options.map((o) => (o.id === updatedOpt.id ? updatedOpt : o)),
         };
       })
     );
   };
 
   const removeOptionInState = (groupId: number, optId: number) => {
-    setOptionGroups(current =>
-      current.map(g => {
+    setOptionGroups((current) =>
+      current.map((g) => {
         if (g.id !== groupId) return g;
         return {
           ...g,
-          options: g.options.filter(o => o.id !== optId)
+          options: g.options.filter((o) => o.id !== optId),
         };
       })
     );
   };
 
   const addOptionToState = (groupId: number, newOpt: OptionRow) => {
-    setOptionGroups(current =>
-      current.map(g => {
+    setOptionGroups((current) =>
+      current.map((g) => {
         if (g.id !== groupId) return g;
         return { ...g, options: [...g.options, newOpt] };
       })
@@ -558,14 +564,13 @@ function OptionGroupsModal({
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
-      const created = await api.post(`/menu_items/${item.id}/option_groups`, {
+      const created = await post(`/menu_items/${item.id}/option_groups`, {
         name: newGroupName,
         min_select: newGroupMin,
         max_select: newGroupMax,
-        required: newGroupRequired
+        required: newGroupRequired,
       });
       addGroupToState(created);
-
       // Reset fields
       setNewGroupName('');
       setNewGroupMin(0);
@@ -584,10 +589,11 @@ function OptionGroupsModal({
     changes: Partial<OptionGroup>
   ) => {
     try {
+      // Immediately update local state
       const updated = { ...group, ...changes };
       replaceGroupInState(updated);
-
-      const serverGroup = await api.patch(`/option_groups/${group.id}`, changes);
+      // Send patch to server
+      const serverGroup = await patch(`/option_groups/${group.id}`, changes);
       replaceGroupInState(serverGroup);
     } catch (err) {
       console.error(err);
@@ -601,7 +607,7 @@ function OptionGroupsModal({
     if (!window.confirm('Delete this option group?')) return;
     try {
       removeGroupInState(groupId);
-      await api.delete(`/option_groups/${groupId}`);
+      await remove(`/option_groups/${groupId}`);
     } catch (err) {
       console.error(err);
     }
@@ -623,13 +629,10 @@ function OptionGroupsModal({
     }
     try {
       const groupId = creatingOptionGroupId;
-      const createdOption = await api.post(
-        `/option_groups/${groupId}/options`,
-        {
-          name: newOptionName,
-          additional_price: newOptionPrice
-        }
-      );
+      const createdOption = await post(`/option_groups/${groupId}/options`, {
+        name: newOptionName,
+        additional_price: newOptionPrice,
+      });
       addOptionToState(groupId, createdOption);
       setCreatingOptionGroupId(null);
       setNewOptionName('');
@@ -654,10 +657,12 @@ function OptionGroupsModal({
     changes: Partial<OptionRow>
   ) => {
     try {
+      // local update
       const updatedOpt = { ...option, ...changes };
       replaceOptionInState(groupId, updatedOpt);
 
-      const serverOpt = await api.patch(`/options/${option.id}`, changes);
+      // server patch
+      const serverOpt = await patch(`/options/${option.id}`, changes);
       replaceOptionInState(groupId, serverOpt);
     } catch (err) {
       console.error(err);
@@ -671,14 +676,14 @@ function OptionGroupsModal({
     if (!window.confirm('Delete this option?')) return;
     try {
       removeOptionInState(groupId, optId);
-      await api.delete(`/options/${optId}`);
+      await remove(`/options/${optId}`);
     } catch (err) {
       console.error(err);
     }
   };
 
   // -------------------------------------
-  // Render the OptionGroups modal
+  // Render modal
   // -------------------------------------
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -697,7 +702,7 @@ function OptionGroupsModal({
           <p>Loading...</p>
         ) : (
           <>
-            {/* Inline "Add Option Group" form */}
+            {/* Inline Add Group */}
             <div className="border-b pb-4 mb-4">
               <h3 className="font-semibold mb-2">Add Option Group</h3>
               <div className="flex flex-wrap items-center space-x-2 space-y-2">
@@ -747,17 +752,17 @@ function OptionGroupsModal({
               <p className="text-sm text-gray-500">No Option Groups yet.</p>
             )}
 
-            {/* List of Groups */}
-            {optionGroups.map(group => (
+            {/* Existing Groups */}
+            {optionGroups.map((group) => (
               <div key={group.id} className="border rounded-md p-4 mb-4">
-                {/* Group Header: name, min, max, required */}
                 <div className="flex justify-between items-center">
                   <div>
+                    {/* Editable group name */}
                     <input
                       type="text"
                       className="text-lg font-semibold border-b focus:outline-none"
                       value={group.name}
-                      onChange={e =>
+                      onChange={(e) =>
                         handleUpdateGroup(group, { name: e.target.value })
                       }
                     />
@@ -769,9 +774,9 @@ function OptionGroupsModal({
                           type="number"
                           className="w-14 ml-1 border p-1 rounded text-xs"
                           value={group.min_select}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateGroup(group, {
-                              min_select: parseInt(e.target.value) || 0
+                              min_select: parseInt(e.target.value) || 0,
                             })
                           }
                         />
@@ -783,9 +788,9 @@ function OptionGroupsModal({
                           type="number"
                           className="w-14 ml-1 border p-1 rounded text-xs"
                           value={group.max_select}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateGroup(group, {
-                              max_select: parseInt(e.target.value) || 0
+                              max_select: parseInt(e.target.value) || 0,
                             })
                           }
                         />
@@ -795,9 +800,9 @@ function OptionGroupsModal({
                         <input
                           type="checkbox"
                           checked={group.required}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateGroup(group, {
-                              required: e.target.checked
+                              required: e.target.checked,
                             })
                           }
                         />
@@ -806,6 +811,7 @@ function OptionGroupsModal({
                     </div>
                   </div>
 
+                  {/* Delete group */}
                   <button
                     onClick={() => handleDeleteGroup(group.id)}
                     className="p-2 text-gray-600 hover:text-red-600"
@@ -825,7 +831,7 @@ function OptionGroupsModal({
                         className="border p-1 rounded text-sm"
                         placeholder="Option Name"
                         value={newOptionName}
-                        onChange={e => setNewOptionName(e.target.value)}
+                        onChange={(e) => setNewOptionName(e.target.value)}
                       />
                       <input
                         type="number"
@@ -833,7 +839,7 @@ function OptionGroupsModal({
                         className="border p-1 rounded w-16 text-sm"
                         placeholder="Price"
                         value={newOptionPrice}
-                        onChange={e =>
+                        onChange={(e) =>
                           setNewOptionPrice(parseFloat(e.target.value) || 0)
                         }
                       />
@@ -860,9 +866,12 @@ function OptionGroupsModal({
                   )}
 
                   {group.options.length === 0 && (
-                    <p className="text-sm text-gray-400 mt-2">No options yet.</p>
+                    <p className="text-sm text-gray-400 mt-2">
+                      No options yet.
+                    </p>
                   )}
-                  {group.options.map(opt => (
+
+                  {group.options.map((opt) => (
                     <div
                       key={opt.id}
                       className="flex items-center justify-between mt-2"
@@ -871,9 +880,9 @@ function OptionGroupsModal({
                       <input
                         type="text"
                         value={opt.name}
-                        onChange={e =>
+                        onChange={(e) =>
                           handleUpdateOption(group.id, opt, {
-                            name: e.target.value
+                            name: e.target.value,
                           })
                         }
                         className="border-b text-sm flex-1 mr-2 focus:outline-none"
@@ -886,9 +895,9 @@ function OptionGroupsModal({
                           type="number"
                           step="0.01"
                           value={opt.additional_price}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateOption(group.id, opt, {
-                              additional_price: parseFloat(e.target.value) || 0
+                              additional_price: parseFloat(e.target.value) || 0,
                             })
                           }
                           className="w-16 ml-1 border-b focus:outline-none text-sm"

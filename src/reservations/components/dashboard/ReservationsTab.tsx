@@ -1,6 +1,14 @@
 // src/reservations/components/dashboard/ReservationsTab.tsx
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, Users, Phone, Mail } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  Phone,
+  Mail,
+} from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -8,13 +16,9 @@ import { useDateFilter } from '../../context/DateFilterContext';
 import ReservationModal from '../ReservationModal';
 import ReservationFormModal from '../ReservationFormModal';
 
-import {
-  fetchReservations as apiFetchReservations,
-  deleteReservation as apiDeleteReservation,
-  updateReservation as apiUpdateReservation,
-} from '../../services/api';
+// Import your new hook:
+import { useReservations } from '../../hooks/useReservations';
 
-/** Shape of a Reservation. */
 interface Reservation {
   id: number;
   contact_name?: string;
@@ -27,7 +31,7 @@ interface Reservation {
   start_time?: string; // e.g. "2025-01-22T18:00:00Z"
 }
 
-// Utility for parse/format:
+// Utility date parsing
 function parseDateFilter(dateStr: string): Date {
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? new Date() : d;
@@ -40,43 +44,40 @@ export default function ReservationsTab() {
   // “global” date filter from context
   const { date, setDate } = useDateFilter();
 
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  // Hook for reservations
+  const {
+    reservations,
+    fetchReservations,
+    deleteReservation,
+    updateReservation,
+    loading,
+    error,
+  } = useReservations();
 
+  // Local states
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Fetch reservations whenever “date” changes
+  // On mount or whenever `date` changes, fetch reservations
   useEffect(() => {
-    fetchReservations();
-  }, [date]);
-
-  async function fetchReservations() {
-    try {
-      const data = await apiFetchReservations({ date });
-      // Sort earliest -> latest
-      const sorted = data.slice().sort((a, b) => {
-        const dateA = new Date(a.start_time || '').getTime();
-        const dateB = new Date(b.start_time || '').getTime();
-        return dateA - dateB;
-      });
-      setReservations(sorted);
-    } catch (err) {
-      console.error('Error fetching reservations:', err);
-    }
-  }
+    fetchReservations({ date });
+  }, [date, fetchReservations]);
 
   // Searching
   const searchedReservations = reservations.filter((r) => {
-    const name  = r.contact_name?.toLowerCase() ?? '';
+    const name = r.contact_name?.toLowerCase() ?? '';
     const phone = r.contact_phone ?? '';
     const email = r.contact_email?.toLowerCase() ?? '';
     const sTerm = searchTerm.toLowerCase();
-    return (
-      name.includes(sTerm) ||
-      phone.includes(searchTerm) ||
-      email.includes(sTerm)
-    );
+    return name.includes(sTerm) || phone.includes(sTerm) || email.includes(sTerm);
+  });
+
+  // Sort earliest -> latest (by start_time)
+  const sortedReservations = [...searchedReservations].sort((a, b) => {
+    const dateA = new Date(a.start_time || '').getTime();
+    const dateB = new Date(b.start_time || '').getTime();
+    return dateA - dateB;
   });
 
   // Row click => open detail
@@ -103,23 +104,26 @@ export default function ReservationsTab() {
   function handleCloseCreateModal() {
     setShowCreateModal(false);
   }
-  async function handleCreateReservationSuccess() {
+  // Once the form modal successfully creates a reservation => refetch
+  const handleCreateReservationSuccess = useCallback(async () => {
     setShowCreateModal(false);
-    await fetchReservations();
-  }
+    await fetchReservations({ date });
+  }, [date, fetchReservations]);
 
   // Delete or Edit an existing reservation
   async function handleDeleteReservation(id: number) {
     try {
-      await apiDeleteReservation(id);
-      setReservations((prev) => prev.filter((r) => r.id !== id));
+      await deleteReservation(id);
       setSelectedReservation(null);
+      // Optionally refetch to ensure we're in sync
+      await fetchReservations({ date });
     } catch (err) {
       console.error('Failed to delete reservation:', err);
     }
   }
   async function handleEditReservation(updated: Reservation) {
     try {
+      // Build the patch data from the updated object
       const patchData: any = {
         party_size: updated.party_size,
         contact_name: updated.contact_name,
@@ -130,9 +134,11 @@ export default function ReservationsTab() {
       if (updated.seat_preferences) {
         patchData.seat_preferences = updated.seat_preferences;
       }
-      await apiUpdateReservation(updated.id, patchData);
-      await fetchReservations();
+
+      await updateReservation(updated.id, patchData);
       setSelectedReservation(null);
+      // Optionally refetch to ensure we're in sync
+      await fetchReservations({ date });
     } catch (err) {
       console.error('Failed to update reservation:', err);
     }
@@ -241,6 +247,10 @@ export default function ReservationsTab() {
         </div>
       </div>
 
+      {/* Loading / Error */}
+      {loading && <p className="p-4 text-sm text-gray-500">Loading reservations...</p>}
+      {error && <p className="p-4 text-sm text-red-600">Error: {error}</p>}
+
       {/* Reservations table */}
       <div className="overflow-x-auto mt-4">
         <table className="w-full table-auto divide-y divide-gray-200 text-sm">
@@ -264,7 +274,7 @@ export default function ReservationsTab() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {searchedReservations.map((res) => {
+            {sortedReservations.map((res) => {
               const dt = new Date(res.start_time || '');
               const dateStr = dt.toLocaleDateString(undefined, {
                 year: 'numeric',
@@ -290,7 +300,7 @@ export default function ReservationsTab() {
                     {`${dateStr}, ${timeStr}`}
                   </td>
                   <td className="px-6 py-4 text-gray-900 whitespace-nowrap">
-                    {res.contact_name ?? 'N/A'}
+                    {res.contact_name ?? 'N/A'}{' '}
                     {seatLabelText && (
                       <span className="text-xs text-green-600 ml-1">
                         {seatLabelText}
@@ -325,7 +335,7 @@ export default function ReservationsTab() {
                 </tr>
               );
             })}
-            {searchedReservations.length === 0 && (
+            {sortedReservations.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
                   No reservations found for this date or search term.
@@ -362,31 +372,26 @@ export default function ReservationsTab() {
 function renderStatusBadge(status?: string) {
   switch (status) {
     case 'booked':
-      // brand: gold or pink, up to you:
       return (
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-hafaloha-gold/20 text-hafaloha-gold">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
           booked
         </span>
       );
     case 'reserved':
       return (
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-hafaloha-coral/20 text-hafaloha-coral">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
           reserved
         </span>
       );
     case 'seated':
       return (
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-hafaloha-teal/20 text-hafaloha-teal">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
           seated
         </span>
       );
     case 'finished':
       return (
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-gray-200 text-gray-800">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-800">
           finished
         </span>
       );
@@ -394,15 +399,13 @@ function renderStatusBadge(status?: string) {
     case 'no_show':
       // red highlight for both
       return (
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-red-100 text-red-800">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
           {status}
         </span>
       );
     default:
       return (
-        <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-gray-100 text-gray-800">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
           {status ?? 'N/A'}
         </span>
       );

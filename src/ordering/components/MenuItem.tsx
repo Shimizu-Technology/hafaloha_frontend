@@ -1,17 +1,23 @@
 // src/ordering/components/MenuItem.tsx
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
-// import toast from 'react-hot-toast'; // <-- Removed
-import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
-import type { MenuItem as MenuItemType } from '../types/menu';
+
+// Adjust import path for your domain types:
+import type { MenuItem as MenuItemType } from '../hooks/useMenu'; 
+// If you have a separate types file, import from there or adjust as needed.
+
+import { useOrders } from '../hooks/useOrders'; // new Orders hook
 
 interface MenuItemProps {
   item: MenuItemType;
 }
 
 export function MenuItem({ item }: MenuItemProps) {
-  const addToCart = useOrderStore((state) => state.addToCart);
+  // Grab addToCart from useOrders
+  const { addToCart } = useOrders();
+
+  // Track whether we show the customization modal
   const [showCustomization, setShowCustomization] = useState(false);
 
   // For button bounce animation
@@ -82,12 +88,8 @@ export function MenuItem({ item }: MenuItemProps) {
                 className={`w-full md:w-auto flex items-center justify-center px-4 py-2
                   border border-transparent rounded-md shadow-sm text-sm font-medium
                   text-white bg-[#c1902f] hover:bg-[#d4a43f]
-                  transition-transform 
-                  ${
-                    buttonClicked
-                      ? 'animate-bounce' // Tailwind's bounce animation
-                      : ''
-                  }`}
+                  transition-transform
+                  ${buttonClicked ? 'animate-bounce' : ''}`}
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Add to Cart

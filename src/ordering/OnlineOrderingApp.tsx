@@ -1,7 +1,8 @@
 // src/ordering/OnlineOrderingApp.tsx
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { useAuth0 } from '@auth0/auth0-react';
 
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -9,21 +10,27 @@ import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
 import { CartPage } from './components/CartPage';
 import { CheckoutPage } from './components/CheckoutPage';
-import { OrderConfirmation } from './components/OrderConfirmation'; // <-- We'll make this unprotected
+import { OrderConfirmation } from './components/OrderConfirmation';
 import AdminDashboard from './components/admin/AdminDashboard';
 import { LoadingSpinner } from './components/LoadingSpinner';
-import { UpsellModal } from './components/upsell/UpsellModal';
+import { UpsellModal } from './components/upsell/UpsellModal'; // if you still use this
 import { LoyaltyTeaser } from './components/loyalty/LoyaltyTeaser';
 import { LoginForm } from './components/auth/LoginForm';
 import { SignUpForm } from './components/auth/SignUpForm';
 import { OrderHistory } from './components/profile/OrderHistory';
 
-import { useAuthStore } from './store/authStore';
-import { useMenuStore } from './store/menuStore';
-import type { CartItem, MenuItem as MenuItemType } from './types/menu';
-import { MenuItem } from './components/MenuItem';
+// Hook-based approach
+import { useMenu } from './hooks/useMenu';       // no more useMenuStore
+import { useOrders } from './hooks/useOrders';   // for the cart logic
+import { MenuItem } from './components/MenuItem'; // updated
 import { CustomizationModal } from './components/CustomizationModal';
 
+/**
+ * ProtectedRoute:
+ *  - Checks if user is authenticated via Auth0
+ *  - Optionally checks if adminOnly is required
+ *  - If not satisfied, redirect to /ordering/login
+ */
 function ProtectedRoute({
   children,
   adminOnly = false,
@@ -31,17 +38,29 @@ function ProtectedRoute({
   children: React.ReactNode;
   adminOnly?: boolean;
 }) {
-  const { user } = useAuthStore();
-  if (!user) {
+  const { isAuthenticated, user } = useAuth0();
+
+  // If not logged in, redirect to /ordering/login
+  if (!isAuthenticated) {
     return <Navigate to="login" />;
   }
-  if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="" />;
+
+  // If adminOnly is required, check your user claims or app_metadata
+  if (adminOnly) {
+    // e.g. const isAdmin = user?.['https://hafaloha.com/roles']?.includes('admin');
+    const isAdmin = false; // or your real logic
+    if (!isAdmin) {
+      return <Navigate to="" />; // or some 403 page
+    }
   }
+
   return <>{children}</>;
 }
 
-/** Layout wrapper with shared header/footer for the Ordering domain */
+/** 
+ * Layout wrapper with shared header/footer for the Ordering domain.
+ * Renders an <Outlet> for nested routes. 
+ */
 function OrderingLayout() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -57,34 +76,17 @@ function OrderingLayout() {
 }
 
 export default function OnlineOrderingApp() {
-  // 1) Bring in the menu store to fetch items
-  const { menuItems, fetchMenuItems } = useMenuStore();
+  // 1) Bring in the new useMenu hook to fetch items
+  const { menuItems, fetchMenuItems } = useMenu();
 
-  // 2) Local cart state
-  const [cart, setCart] = useState<CartItem[]>([]);
+  // 2) We can also access the Orders hook to get or manage cart if needed
+  // const { cartItems } = useOrders(); // if you just want cart items or similar
 
   // On mount, fetch menu items
   useEffect(() => {
     fetchMenuItems();
   }, [fetchMenuItems]);
 
-  /** Helper: Add an item to the cart */
-  function handleAddToCart(item: MenuItemType) {
-    setCart((prevCart) => {
-      const existing = prevCart.find((x) => x.id === item.id);
-      if (existing) {
-        // increment quantity
-        return prevCart.map((x) =>
-          x.id === item.id ? { ...x, quantity: x.quantity + 1 } : x
-        );
-      } else {
-        // add new item
-        return [...prevCart, { ...item, quantity: 1 }];
-      }
-    });
-  }
-
-  // For convenience: pass the “handleAddToCart” to <MenuPage> or any child:
   return (
     <Routes>
       <Route element={<OrderingLayout />}>
@@ -94,7 +96,6 @@ export default function OnlineOrderingApp() {
           element={
             <>
               <Hero />
-              {/* example popular items / loyalty teaser */}
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
@@ -103,11 +104,7 @@ export default function OnlineOrderingApp() {
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {menuItems.slice(0, 4).map((item) => (
-                        <MenuItem
-                          key={item.id}
-                          item={item}
-                          onAddToCart={handleAddToCart}
-                        />
+                        <MenuItem key={item.id} item={item} />
                       ))}
                     </div>
                   </div>
@@ -121,19 +118,13 @@ export default function OnlineOrderingApp() {
         />
 
         {/* Menu */}
-        <Route
-          path="menu"
-          element={<MenuPage onAddToCart={handleAddToCart} />}
-        />
+        <Route path="menu" element={<MenuPage />} />
 
-        {/* Cart & Checkout, etc. */}
-        <Route path="cart" element={<CartPage items={cart} />} />
+        {/* Cart & Checkout */}
+        <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
 
-        {/* 
-          Make order-confirmation UNPROTECTED so everyone can see it.
-          path="order-confirmation" means final URL is "/order-confirmation"
-        */}
+        {/* Make order-confirmation UNPROTECTED so anyone can see it after placing an order */}
         <Route path="order-confirmation" element={<OrderConfirmation />} />
 
         {/* Admin */}

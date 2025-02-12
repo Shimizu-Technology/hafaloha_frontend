@@ -1,120 +1,256 @@
-// src/reservations/components/ReservationFormModal.tsx
+// src/reservations/components/ReservationFormModal.tsx 
+// (or ReservationForm.tsx if you prefer that name)
 
 import React, { useState, useEffect } from 'react';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import { useAuth0 } from '@auth0/auth0-react';  // <-- Replaces useAuth
 import { toast } from 'react-hot-toast';
+
+import DatePicker from 'react-datepicker';
 import Select, { SingleValue } from 'react-select';
+import 'react-datepicker/dist/react-datepicker.css';
 
 import {
-  fetchAvailability,
-  createReservation,
-  fetchLayout,
-  fetchRestaurant
-} from '../services/api';
+  Clock,
+  Users,
+  Phone,
+  Mail,
+  Check,
+  MapPin,
+  CalendarClock,
+  Share2,
+} from 'lucide-react';
 
-import SeatPreferenceMapModal from './SeatPreferenceMapModal';
-import type { SeatSectionData } from './SeatLayoutCanvas';
+import { useAvailability } from '../hooks/useAvailability';
+import { useReservations } from '../hooks/useReservations';
 
-// Types for React Select
+/** Helpers */
+function formatYYYYMMDD(dateObj: Date): string {
+  const yyyy = dateObj.getFullYear();
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseYYYYMMDD(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function format12hSlot(slot: string) {
+  const [hhStr, mmStr] = slot.split(':');
+  const hh = parseInt(hhStr, 10);
+  const mm = parseInt(mmStr, 10);
+  const d = new Date(2020, 0, 1, hh, mm);
+  return d.toLocaleString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function formatDuration(minutes: number) {
+  if (minutes === 30) return '30 minutes';
+  if (minutes === 60) return '1 hour';
+  if (minutes === 90) return '1.5 hours';
+  return `${minutes / 60} hours`;
+}
+
+/** React-Select types */
 interface TimeOption {
-  value: string; // e.g. "17:30"
-  label: string; // e.g. "5:30 PM"
+  value: string;
+  label: string;
 }
 interface DurationOption {
-  value: number; // e.g. 60
-  label: string; // e.g. "60" or "1 hour"
+  value: number;
+  label: string;
 }
 
-interface Props {
+/** Form fields */
+interface ReservationFormData {
+  date: string;
+  time: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+}
+
+/** Data for the confirmation UI */
+interface ConfirmationData {
+  date: string;
+  time: string;
+  partySize: number;
+  duration: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+}
+
+/** “Reservation Confirmed!” screen */
+function ReservationConfirmation({
+  reservation,
+  onClose,
+}: {
+  reservation: ConfirmationData;
   onClose: () => void;
-  onSuccess: () => void;
-  defaultDate?: string; // e.g. "2025-01-26"
+}) {
+  const dateObj = parseYYYYMMDD(reservation.date);
+  const dateStr = dateObj
+    ? dateObj.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : reservation.date;
+
+  return (
+    <div className="relative p-6 max-w-md sm:max-w-xl mx-auto bg-white rounded-lg shadow-lg">
+      {/* Pink check bubble */}
+      <div className="absolute left-1/2 -top-8 -translate-x-1/2">
+        <div className="bg-hafaloha-pink text-white p-3 rounded-full shadow-lg">
+          <Check className="h-7 w-7" />
+        </div>
+      </div>
+
+      <div className="text-center mt-8 mb-6">
+        <h2 className="text-2xl sm:text-3xl font-bold">Reservation Confirmed!</h2>
+        <p className="text-gray-600 mt-1">
+          {reservation.firstName ? `Thank you, ${reservation.firstName}! ` : 'Thank you! '}
+          We’re excited to serve you at Hafaloha.
+        </p>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-4">
+        <h3 className="font-semibold text-base sm:text-lg mb-4 text-gray-900">
+          Reservation Details
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Date & Time */}
+          <div className="flex items-start space-x-2">
+            <CalendarClock className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+            <div>
+              <p className="font-medium text-gray-900">Date &amp; Time</p>
+              <p className="text-gray-600">{dateStr}</p>
+              <p className="text-gray-600">{reservation.time}</p>
+            </div>
+          </div>
+
+          {/* Party & Duration */}
+          <div className="flex items-start space-x-2">
+            <Users className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+            <div>
+              <p className="font-medium text-gray-900">Party Size</p>
+              <p className="text-gray-600">
+                {reservation.partySize}{' '}
+                {reservation.partySize === 1 ? 'person' : 'people'}
+              </p>
+              <p className="text-gray-600">{reservation.duration}</p>
+            </div>
+          </div>
+
+          {/* Contact */}
+          {(reservation.phone || reservation.email) && (
+            <div className="flex items-start space-x-2 md:col-span-2">
+              <Mail className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+              <div>
+                <p className="font-medium text-gray-900">Contact Information</p>
+                {reservation.phone && (
+                  <p className="text-gray-600">{reservation.phone}</p>
+                )}
+                {reservation.email && (
+                  <p className="text-gray-600">{reservation.email}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Location */}
+          <div className="flex items-start space-x-2">
+            <MapPin className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+            <div>
+              <p className="font-medium text-gray-900">Location</p>
+              <p className="text-gray-600">955 Pale San Vitores Rd</p>
+              <p className="text-gray-600">Tamuning, Guam 96913</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Done / Share buttons */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={onClose}
+          className="w-full sm:w-auto flex-1 bg-hafaloha-coral hover:bg-hafaloha-pink text-white font-medium py-2 sm:py-3 px-4 rounded-lg transition-colors"
+        >
+          Done
+        </button>
+        <button
+          onClick={() => alert('Share feature not yet implemented!')}
+          className="w-full sm:w-auto flex-1 bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 sm:py-3 px-4 rounded-lg border border-gray-300 transition-colors inline-flex items-center justify-center"
+        >
+          <Share2 className="h-5 w-5 mr-2" />
+          Share Details
+        </button>
+      </div>
+    </div>
+  );
 }
 
-export default function ReservationFormModal({ onClose, onSuccess, defaultDate }: Props) {
-  // -- Helpers --
-  function parseYYYYMMDD(dateStr: string): Date | null {
-    if (!dateStr) return null;
-    const [year, month, day] = dateStr.split('-').map(Number);
-    if (!year || !month || !day) return null;
-    return new Date(year, month - 1, day);
-  }
-  function formatYYYYMMDD(d: Date): string {
-    const yyyy = d.getFullYear();
-    const mm   = String(d.getMonth() + 1).padStart(2, '0');
-    const dd   = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  function format12hSlot(slot: string) {
-    const [hhStr, mmStr] = slot.split(':');
-    const hh = parseInt(hhStr, 10);
-    const mins = parseInt(mmStr, 10);
-    const d = new Date(2020, 0, 1, hh, mins);
-    return d.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  }
+/** Main ReservationForm (Modal) */
+export default function ReservationFormModal({
+  onClose,                // Parent can close the modal
+  onToggleConfirmation,   // Tells parent if we’re confirming
+}: {
+  onClose?: () => void;
+  onToggleConfirmation?: (confirming: boolean) => void;
+}) {
+  // 1) Use Auth0 for user data
+  const { user } = useAuth0();
 
-  // -- State --
-  const [date, setDate] = useState(defaultDate || ''); // "YYYY-MM-DD"
-  const [time, setTime] = useState('');
-  const [partySizeText, setPartySizeText] = useState('2');
+  // 2) Hooks for fetching timeslots & creating reservations
+  const { fetchAvailability } = useAvailability();
+  const { createReservation } = useReservations();
 
-  // Contact info
-  const [contactName, setContactName]   = useState('');
-  const [contactPhone, setContactPhone] = useState('+1671');
-  const [contactEmail, setContactEmail] = useState('');
+  // Basic form data
+  const [formData, setFormData] = useState<ReservationFormData>({
+    date: '',
+    time: '',
+    firstName: '',
+    lastName: '',
+    phone: user?.phone?.trim() || '+1671',
+    email: '',
+  });
 
-  // Duration (minutes)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [partySizeText, setPartySizeText] = useState('1');
   const [duration, setDuration] = useState(60);
-
-  // Timeslots from server
   const [timeslots, setTimeslots] = useState<string[]>([]);
-  // If there's exactly 1 timeslot => forcibly set a large duration
-  const hideDuration = timeslots.length === 1;
 
-  // Seat preferences
-  const [allSets, setAllSets] = useState<string[][]>([[], [], []]);
-  const [showSeatMapModal, setShowSeatMapModal] = useState(false);
+  // For confirmation screen
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [reservationDetails, setReservationDetails] = useState<ConfirmationData | null>(null);
 
-  // Layout
-  const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
-  const [layoutLoading, setLayoutLoading]   = useState(false);
-
+  /** Convert typed partySize => number */
   function getPartySize(): number {
     return parseInt(partySizeText, 10) || 1;
   }
 
-  // -- Effects --
-
-  // 1) Load default reservation length from the restaurant
+  /** Fetch timeslots on date or partySize changes */
   useEffect(() => {
-    async function loadRestaurant() {
-      try {
-        const rest = await fetchRestaurant(1);
-        if (rest.default_reservation_length) {
-          setDuration(rest.default_reservation_length);
-        }
-      } catch (err) {
-        console.error('Error fetching restaurant:', err);
-      }
-    }
-    loadRestaurant();
-  }, []);
-
-  // 2) Load timeslots on date/partySize changes
-  useEffect(() => {
-    const sizeNum = getPartySize();
-    if (!date || !sizeNum) {
-      setTimeslots([]);
-      return;
-    }
     async function loadTimes() {
+      if (!formData.date || !getPartySize()) {
+        setTimeslots([]);
+        return;
+      }
       try {
-        const data = await fetchAvailability(date, sizeNum);
+        const data = await fetchAvailability(formData.date, getPartySize());
+        // If your hook returns a shape like { slots: ['17:00', '17:30', ...] },
+        // setTimeslots(data.slots || []);
+        // If it returns a direct array, adapt as needed
         setTimeslots(data.slots || []);
       } catch (err) {
         console.error('Error fetching availability:', err);
@@ -122,364 +258,374 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
       }
     }
     loadTimes();
-  }, [date, partySizeText]);
+  }, [formData.date, partySizeText, fetchAvailability]);
 
-  // 3) If only 1 timeslot => forcibly set duration
-  useEffect(() => {
-    if (hideDuration) {
-      setDuration(720); // e.g. 12 hours to block entire day
-    }
-  }, [hideDuration]);
-
-  // 4) Load layout for seat map
-  useEffect(() => {
-    async function loadLayout() {
-      setLayoutLoading(true);
-      try {
-        const layout = await fetchLayout(1);
-        const sections: SeatSectionData[] = layout.seat_sections.map((sec: any) => ({
-          id: sec.id,
-          name: sec.name,
-          section_type: sec.section_type === 'table' ? 'table' : 'counter',
-          offset_x: sec.offset_x,
-          offset_y: sec.offset_y,
-          floor_number: sec.floor_number ?? 1,
-          seats: sec.seats.map((s: any) => ({
-            id: s.id,
-            label: s.label,
-            position_x: s.position_x,
-            position_y: s.position_y,
-            capacity: s.capacity ?? 1,
-          })),
-        }));
-        setLayoutSections(sections);
-      } catch (err) {
-        console.error('Error fetching layout:', err);
-      } finally {
-        setLayoutLoading(false);
-      }
-    }
-    loadLayout();
-  }, []);
-
-  // -- Handlers --
-
-  // numeric input for partySize
-  function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const digitsOnly = e.target.value.replace(/\D/g, '');
-    setPartySizeText(digitsOnly);
-  }
-
-  // Build React-Select options for timeslots
+  /** Build time options for react-select */
   const timeOptions: TimeOption[] = timeslots.map((slot) => ({
     value: slot,
     label: format12hSlot(slot),
   }));
 
-  // Build React-Select options for possible durations
-  const durationValues = [30, 60, 90, 120, 180, 240, 360, 480, 720];
-  const durationOptions: DurationOption[] = durationValues.map((val) => ({
-    value: val,
-    label: val.toString(),
-  }));
+  /** Duration (minutes) options */
+  const durations = [30, 60, 90, 120, 180, 240];
+  const durationOptions: DurationOption[] = durations.map((val) => {
+    if (val === 30) return { value: val, label: '30 minutes' };
+    if (val === 60) return { value: val, label: '1 hour' };
+    if (val === 90) return { value: val, label: '1.5 hours' };
+    return { value: val, label: `${val / 60} hours` };
+  });
 
-  // Attempt create reservation
-  async function handleCreate() {
-    if (!contactName) {
-      toast.error('Guest name is required.');
+  /** Sync the selectedDate with formData.date */
+  function handleDateChange(date: Date | null) {
+    setSelectedDate(date);
+    setFormData({ ...formData, date: date ? formatYYYYMMDD(date) : '' });
+  }
+
+  useEffect(() => {
+    if (formData.date) {
+      setSelectedDate(parseYYYYMMDD(formData.date));
+    } else {
+      setSelectedDate(null);
+    }
+  }, [formData.date]);
+
+  /** On form submit => create reservation => show confirmation */
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formData.date || !formData.time) {
+      toast.error('Please pick a date and time.');
       return;
     }
-    if (!date || !time) {
-      toast.error('Please pick a valid date/time.');
+
+    const start_time = `${formData.date}T${formData.time}:00`;
+
+    // fallback contact info
+    const contactFirstName =
+      formData.firstName.trim() || user?.name?.split(' ')[0] || '';
+    const contactLastName =
+      formData.lastName.trim() || user?.name?.split(' ')[1] || '';
+    let contactPhone = formData.phone.trim();
+    const contactEmail = formData.email.trim() || user?.email || '';
+
+    if (!contactFirstName) {
+      toast.error('First name is required.');
       return;
     }
 
     const finalPartySize = getPartySize();
-    let phoneVal         = contactPhone.trim();
-    // cleanup phone
-    const cleanedPhone = phoneVal.replace(/[-()\s]+/g, '');
+    // phone cleanup
+    const cleanedPhone = contactPhone.replace(/[-()\s]+/g, '');
     if (cleanedPhone === '+1671') {
-      phoneVal = '';
+      contactPhone = '';
     }
-
-    const start_time = `${date}T${time}:00`;
-
-    // Only store seat preferences if they are non-empty
-    const seat_prefs_for_db = allSets.filter((arr) => arr.length > 0);
 
     try {
       await createReservation({
-        reservation: {
-          restaurant_id: 1,
-          start_time,
-          party_size: finalPartySize,
-          contact_name: contactName,
-          contact_phone: phoneVal,
-          contact_email: contactEmail,
-          status: 'booked',
-          seat_preferences: seat_prefs_for_db,
-          duration_minutes: duration,
-        },
+        start_time,
+        party_size: finalPartySize,
+        contact_name: [contactFirstName, contactLastName].filter(Boolean).join(' '),
+        contact_phone: contactPhone,
+        contact_email: contactEmail,
+        restaurant_id: 1,
+        duration_minutes: duration,
       });
-
       toast.success('Reservation created successfully!');
-      onSuccess(); // parent can reload
+
+      // Build data for the Confirmation UI
+      const confirmData: ConfirmationData = {
+        date: formData.date,
+        time: format12hSlot(formData.time),
+        partySize: finalPartySize,
+        duration: formatDuration(duration),
+        firstName: contactFirstName || undefined,
+        lastName: contactLastName || undefined,
+        phone: contactPhone || undefined,
+        email: contactEmail || undefined,
+      };
+      setReservationDetails(confirmData);
+      setShowConfirmation(true);
+      onToggleConfirmation?.(true);
     } catch (err) {
       console.error('Error creating reservation:', err);
       toast.error('Failed to create reservation. Please try again.');
     }
   }
 
-  // Seat map
-  function handleOpenSeatMap() {
-    if (!layoutSections.length) {
-      alert('Layout not loaded or no seats available.');
-      return;
-    }
-    setShowSeatMapModal(true);
-  }
-  function handleCloseSeatMap() {
-    setShowSeatMapModal(false);
-  }
-  function handleSeatMapSave(threeSets: string[][]) {
-    setAllSets(threeSets);
-    setShowSeatMapModal(false);
+  /** Filter out non-numeric for partySize */
+  function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    setPartySizeText(digitsOnly);
   }
 
-  // Convert date => Date object for <DatePicker>
-  const parsedDate = date ? parseYYYYMMDD(date) : null;
-
-  // React-Select styling to match brand colors
+  /** Custom React-Select styles */
   const reactSelectStyles = {
     control: (base: any) => ({
       ...base,
       minHeight: '2.25rem',
-      borderColor: '#D1D5DB', // tailwind gray-300
+      borderColor: '#D1D5DB',
       fontSize: '0.875rem',
       boxShadow: 'none',
-      '&:hover': {
-        borderColor: '#EB578C', // pink
-      },
+      paddingLeft: '2rem',
+      '&:hover': { borderColor: '#EB578C' },
     }),
     option: (base: any, state: any) => ({
       ...base,
       fontSize: '0.875rem',
-      color: state.isSelected ? 'white' : '#374151', // gray-700
+      color: state.isSelected ? 'white' : '#374151',
       backgroundColor: state.isSelected ? '#EB578C' : 'white',
-      '&:hover': {
-        backgroundColor: '#FF7F6A', // coral
-      },
+      '&:hover': { backgroundColor: '#FF7F6A' },
     }),
-    menu: (base: any) => ({
-      ...base,
-      zIndex: 9999,
-    }),
+    menu: (base: any) => ({ ...base, zIndex: 9999 }),
   };
 
+  /** If we are showing the Confirmation screen */
+  if (showConfirmation && reservationDetails) {
+    return (
+      <div className="w-full max-w-md mx-auto">
+        <ReservationConfirmation
+          reservation={reservationDetails}
+          onClose={() => {
+            onClose?.();
+            setShowConfirmation(false);
+            setReservationDetails(null);
+            onToggleConfirmation?.(false);
+          }}
+        />
+      </div>
+    );
+  }
+
+  /** Otherwise, render the narrower form with two columns */
   return (
-    <>
-      {/* Modal background */}
-      <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-        <div className="relative bg-white max-w-lg w-full mx-4 rounded-lg shadow-lg">
-          <div className="p-6 max-h-[85vh] overflow-y-auto relative">
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
+    <div className="w-full max-w-md mx-auto">
+      <form onSubmit={handleSubmit} className="w-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          {/* Date */}
+          <div className="space-y-1">
+            <label className="block text-sm sm:text-base font-medium text-gray-700">
+              Date
+            </label>
+            <DatePicker
+              selected={selectedDate}
+              onChange={handleDateChange}
+              dateFormat="MM/dd/yyyy"
+              minDate={new Date()}
+              className="
+                w-full
+                px-3 py-2
+                border border-gray-300
+                rounded-md
+                focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                text-sm sm:text-base
+              "
+              placeholderText="Select date"
+              required
+              shouldCloseOnSelect
+            />
+          </div>
 
-            <h2 className="text-2xl font-bold mb-4 text-gray-900">
-              New Reservation
-            </h2>
-
-            {/* 2-col grid: Date + PartySize */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date
-                </label>
-                <DatePicker
-                  selected={parsedDate ?? undefined}
-                  onChange={(selected: Date | null) => {
-                    if (selected) {
-                      setDate(formatYYYYMMDD(selected));
-                    } else {
-                      setDate('');
-                    }
-                  }}
-                  dateFormat="MM/dd/yyyy"
-                  className="w-full p-2 border border-gray-300 rounded text-sm"
-                  placeholderText="Select date"
-                />
-              </div>
-
-              {/* Party Size */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Party Size
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={partySizeText}
-                  onChange={handlePartySizeChange}
-                  placeholder="2"
-                  className="w-full p-2 border border-gray-300 rounded text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Time => React Select */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Time
-              </label>
+          {/* Time => React Select */}
+          <div className="space-y-1">
+            <label className="block text-sm sm:text-base font-medium text-gray-700">
+              Time
+            </label>
+            <div className="relative">
+              <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Select<TimeOption>
                 options={timeOptions}
-                placeholder="-- Select a time --"
-                value={time ? timeOptions.find((opt) => opt.value === time) : null}
-                onChange={(opt: SingleValue<TimeOption>) => {
-                  setTime(opt?.value || '');
-                }}
+                placeholder="Select a time"
+                value={
+                  formData.time
+                    ? timeOptions.find((opt) => opt.value === formData.time)
+                    : null
+                }
+                onChange={(opt: SingleValue<TimeOption>) =>
+                  setFormData({ ...formData, time: opt?.value || '' })
+                }
                 styles={reactSelectStyles}
               />
             </div>
+          </div>
 
-            {/* Duration => also React Select, unless only 1 timeslot found */}
-            {!hideDuration && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration (minutes)
-                </label>
-                <Select<DurationOption>
-                  options={durationOptions}
-                  placeholder="Select duration"
-                  value={durationOptions.find((o) => o.value === duration) || null}
-                  onChange={(opt) => setDuration(opt?.value || 60)}
-                  styles={reactSelectStyles}
-                />
-              </div>
-            )}
-
-            {/* Contact Name */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Guest Name
-              </label>
+          {/* Party Size */}
+          <div className="space-y-1">
+            <label
+              htmlFor="partySize"
+              className="block text-sm sm:text-base font-medium text-gray-700"
+            >
+              Party Size
+            </label>
+            <div className="relative">
+              <Users className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               <input
                 type="text"
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
+                id="partySize"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={partySizeText}
+                onChange={handlePartySizeChange}
+                placeholder="1"
                 required
-                className="w-full p-2 border border-gray-300 rounded text-sm"
+                className="
+                  w-full
+                  pl-10 pr-3
+                  py-2
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  text-sm sm:text-base
+                "
               />
             </div>
+          </div>
 
-            {/* Phone */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phone
-              </label>
+          {/* Duration => React Select */}
+          <div className="space-y-1">
+            <label className="block text-sm sm:text-base font-medium text-gray-700">
+              Duration (minutes)
+            </label>
+            <Select<DurationOption>
+              options={durationOptions}
+              placeholder="Select duration"
+              value={durationOptions.find((opt) => opt.value === duration) || null}
+              onChange={(opt) => setDuration(opt?.value || 60)}
+              styles={reactSelectStyles}
+            />
+          </div>
+
+          {/* First Name */}
+          <div className="space-y-1">
+            <label
+              htmlFor="firstName"
+              className="block text-sm sm:text-base font-medium text-gray-700"
+            >
+              {user ? 'First Name (Optional)' : 'First Name (Required)'}
+            </label>
+            <input
+              type="text"
+              id="firstName"
+              placeholder={
+                user ? user.name?.split(' ')[0] || '' : 'Enter your first name'
+              }
+              value={formData.firstName}
+              onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              className="
+                w-full
+                px-3 py-2
+                border border-gray-300
+                rounded-md
+                focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                text-sm sm:text-base
+              "
+            />
+          </div>
+
+          {/* Last Name */}
+          <div className="space-y-1">
+            <label
+              htmlFor="lastName"
+              className="block text-sm sm:text-base font-medium text-gray-700"
+            >
+              Last Name (Optional)
+            </label>
+            <input
+              type="text"
+              id="lastName"
+              placeholder={user ? user.name?.split(' ')[1] || '' : 'Last name (optional)'}
+              value={formData.lastName}
+              onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+              className="
+                w-full
+                px-3 py-2
+                border border-gray-300
+                rounded-md
+                focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                text-sm sm:text-base
+              "
+            />
+          </div>
+
+          {/* Phone */}
+          <div className="space-y-1">
+            <label
+              htmlFor="phone"
+              className="block text-sm sm:text-base font-medium text-gray-700"
+            >
+              Phone {user ? '(Optional)' : '(Required)'}
+            </label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               <input
                 type="tel"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded text-sm"
-                placeholder="+1671"
+                id="phone"
+                placeholder={user ? user.phone ?? '' : '+1671'}
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="
+                  w-full
+                  pl-10 pr-3
+                  py-2
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  text-sm sm:text-base
+                "
               />
             </div>
+          </div>
 
-            {/* Email */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
+          {/* Email */}
+          <div className="space-y-1">
+            <label
+              htmlFor="email"
+              className="block text-sm sm:text-base font-medium text-gray-700"
+            >
+              Email {user ? '(Optional)' : '(Required)'}
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               <input
                 type="email"
-                value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded text-sm"
+                id="email"
+                placeholder={user ? user.email ?? '' : 'Enter your email'}
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="
+                  w-full
+                  pl-10 pr-3
+                  py-2
+                  border border-gray-300
+                  rounded-md
+                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  text-sm sm:text-base
+                "
               />
-            </div>
-
-            {/* Seat Preferences */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Seat Preferences (Optional)
-              </label>
-              <div className="p-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
-                <p className="text-xs italic">
-                  Option 1: {allSets[0].length ? allSets[0].join(', ') : '(none)'}
-                </p>
-                <p className="text-xs italic">
-                  Option 2: {allSets[1].length ? allSets[1].join(', ') : '(none)'}
-                </p>
-                <p className="text-xs italic">
-                  Option 3: {allSets[2].length ? allSets[2].join(', ') : '(none)'}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleOpenSeatMap}
-                  className="mt-2 px-3 py-1 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-                  disabled={layoutLoading}
-                >
-                  {allSets.some((a) => a.length)
-                    ? 'Edit Seat Preferences'
-                    : 'Select Seat Preferences'}
-                </button>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="mt-6 flex justify-end space-x-2">
-              <button
-                onClick={handleCreate}
-                className="
-                  px-4 py-2
-                  bg-hafaloha-pink
-                  hover:bg-hafaloha-coral
-                  text-white
-                  rounded
-                  transition-colors
-                "
-              >
-                Create
-              </button>
-              <button
-                onClick={onClose}
-                className="
-                  px-4 py-2
-                  bg-gray-200
-                  text-gray-800
-                  rounded
-                  hover:bg-gray-300
-                  transition-colors
-                "
-              >
-                Cancel
-              </button>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Seat Map Modal */}
-      {showSeatMapModal && (
-        <SeatPreferenceMapModal
-          date={date}
-          time={time}
-          duration={duration}
-          partySize={getPartySize()}
-          sections={layoutSections}
-          initialPreferences={allSets}
-          onSave={handleSeatMapSave}
-          onClose={handleCloseSeatMap}
-        />
-      )}
-    </>
+        {/* Submit button */}
+        <div className="mt-4 sm:mt-6">
+          <button
+            type="submit"
+            className="
+              w-full
+              bg-hafaloha-pink
+              hover:bg-hafaloha-coral
+              text-white
+              py-2 sm:py-3
+              px-4 sm:px-6
+              rounded-md
+              font-semibold
+              transition-colors
+              duration-200
+              text-sm sm:text-base
+            "
+          >
+            Reserve Now
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

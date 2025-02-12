@@ -1,8 +1,8 @@
-// src/components/RenameSeatsModal.tsx
+// src/reservations/components/RenameSeatsModal.tsx
 
 import React, { useState } from 'react';
-import { updateSeat } from '../services/api'; // We'll add this in api.ts
 import { X } from 'lucide-react';
+import { useLayouts } from '../hooks/useLayouts';
 
 interface DBSeat {
   id?: number;
@@ -31,15 +31,18 @@ export default function RenameSeatsModal({
 }: RenameSeatsModalProps) {
   // We'll copy seat labels into local state so we can edit them.
   const [localSeats, setLocalSeats] = useState<DBSeat[]>(
-    seats.map(seat => ({
+    seats.map((seat) => ({
       ...seat,
       label: seat.label || '', // default to empty string if none
     }))
   );
   const [isSaving, setIsSaving] = useState(false);
 
+  // Bring in the new hook that can update seats
+  const { updateSeat } = useLayouts();
+
   function handleLabelChange(index: number, newLabel: string) {
-    setLocalSeats(prev => {
+    setLocalSeats((prev) => {
       const updated = [...prev];
       updated[index] = {
         ...updated[index],
@@ -64,9 +67,15 @@ export default function RenameSeatsModal({
         continue;
       }
       try {
+        // Instead of the old "updateSeat(seat.id, ...)" from services/api,
+        // call our hook's updateSeat method:
         const resp = await updateSeat(seat.id, { label: seat.label || '' });
-        // Merge any returned changes
-        updatedArray[i] = resp;
+        // If your Rails response returns the updated seat, merge changes
+        // back into updatedArray[i]:
+        updatedArray[i] = {
+          ...updatedArray[i],
+          ...resp, 
+        };
       } catch (err) {
         console.error(`Failed to update seat ID=${seat.id}`, err);
       }
@@ -101,7 +110,7 @@ export default function RenameSeatsModal({
                 type="text"
                 className="border border-gray-300 rounded px-2 py-1 w-full"
                 value={seat.label}
-                onChange={e => handleLabelChange(idx, e.target.value)}
+                onChange={(e) => handleLabelChange(idx, e.target.value)}
               />
             </div>
           ))}

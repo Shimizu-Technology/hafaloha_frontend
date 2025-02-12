@@ -1,21 +1,8 @@
-// src/components/dashboard/WaitlistTab.tsx
+// src/reservations/components/dashboard/WaitlistTab.tsx
 import React, { useEffect, useState } from 'react';
 import { Search, Clock, Users, Phone } from 'lucide-react';
-import DatePicker from 'react-datepicker';  // optional if you want a date picker
-import 'react-datepicker/dist/react-datepicker.css';
-
 import { useDateFilter } from '../../context/DateFilterContext';
-import { fetchWaitlistEntries as apiFetchWaitlist } from '../../services/api';
-
-interface WaitlistEntry {
-  id: number;
-  contact_name?: string;
-  contact_phone?: string;
-  party_size?: number;
-  check_in_time?: string;
-  status?: string; // "waiting", "seated", "removed", "no_show", etc.
-  seat_labels?: string[];
-}
+import { useWaitlist } from '../../hooks/useWaitlist';  // <-- New hook
 
 // Utility for parse/format
 function parseDateFilter(dateStr: string): Date {
@@ -27,29 +14,28 @@ function formatYYYYMMDD(dateObj: Date): string {
 }
 
 export default function WaitlistTab() {
-  // Using the global date from context (like ReservationsTab)
-  const { date /*, setDate */ } = useDateFilter();
+  // Use the global date from context
+  const { date } = useDateFilter();
 
-  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  // Hook for waitlist
+  const {
+    waitlistEntries,
+    fetchWaitlistEntries,
+    loading,
+    error,
+  } = useWaitlist();
+
+  // Local search state
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Fetch waitlist whenever the “global” date changes
+  // On mount + whenever date changes => fetch waitlist
   useEffect(() => {
-    fetchWaitlistData();
-  }, [date]);
-
-  async function fetchWaitlistData() {
-    try {
-      const data = await apiFetchWaitlist({ date });
-      setWaitlist(data);
-    } catch (err) {
-      console.error('Error fetching waitlist:', err);
-    }
-  }
+    fetchWaitlistEntries({ date });
+  }, [date, fetchWaitlistEntries]);
 
   // Searching logic
-  const searchedWaitlist = waitlist.filter((w) => {
-    const wName = w.contact_name?.toLowerCase() ?? '';
+  const searchedWaitlist = waitlistEntries.filter((w) => {
+    const wName = w.name?.toLowerCase() ?? w.contact_name?.toLowerCase() ?? '';
     const wPhone = w.contact_phone ?? '';
     const sTerm = searchTerm.toLowerCase();
     return wName.includes(sTerm) || wPhone.includes(searchTerm);
@@ -60,8 +46,7 @@ export default function WaitlistTab() {
       {/* Top toolbar for search; optionally also a date nav if desired */}
       <div className="border-b border-gray-200 bg-hafaloha-gold/5 rounded-md p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          {/* If you want a date nav, replicate the approach from ReservationsTab. 
-              For simplicity, we'll just show the search bar. */}
+          {/* Search input */}
           <div className="relative w-full sm:w-auto flex-1">
             <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
             <input
@@ -78,13 +63,16 @@ export default function WaitlistTab() {
               "
             />
           </div>
-          {/* Optionally add DatePicker or arrow nav here if you want date-based waitlist. */}
+          {/* If you want a date picker or navigation, replicate from ReservationsTab. */}
         </div>
       </div>
 
+      {/* Loading / error states if desired */}
+      {loading && <p className="mt-4 text-sm text-gray-500">Loading waitlist...</p>}
+      {error && <p className="mt-4 text-sm text-red-600">Error: {error}</p>}
+
       {/* Waitlist table */}
       <div className="overflow-x-auto mt-4">
-        {/* Full-width table for desktop */}
         <table className="w-full table-auto divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -131,7 +119,7 @@ export default function WaitlistTab() {
 
                   {/* Guest */}
                   <td className="px-6 py-4 text-gray-900 whitespace-nowrap">
-                    {w.contact_name ?? 'N/A'}
+                    {w.name || w.contact_name || 'N/A'}
                     {seatLabelText && (
                       <span className="text-xs text-green-600 ml-1">
                         {seatLabelText}
@@ -143,7 +131,7 @@ export default function WaitlistTab() {
                   <td className="px-6 py-4 text-gray-900 whitespace-nowrap">
                     <div className="flex items-center">
                       <Users className="h-4 w-4 text-gray-400 mr-2" />
-                      {w.party_size ?? 1}
+                      {w.partySize ?? w.party_size ?? 1}
                     </div>
                   </td>
 
@@ -167,7 +155,6 @@ export default function WaitlistTab() {
               );
             })}
 
-            {/* If no waitlist entries match the search */}
             {searchedWaitlist.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
@@ -182,30 +169,23 @@ export default function WaitlistTab() {
   );
 }
 
-/**
- * Renders a color-coded badge for each waitlist status using
- * brand-friendly or distinct colors.
- */
 function renderWaitlistStatusBadge(status?: string) {
   switch (status) {
     case 'waiting':
-      // gold for "waiting"
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-hafaloha-gold/20 text-hafaloha-gold">
+          rounded-full bg-yellow-100 text-yellow-800">
           waiting
         </span>
       );
     case 'seated':
-      // Teal for "seated"
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
-          rounded-full bg-hafaloha-teal/20 text-hafaloha-teal">
+          rounded-full bg-green-100 text-green-800">
           seated
         </span>
       );
     case 'removed':
-      // Gray
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
           rounded-full bg-gray-200 text-gray-800">
@@ -213,7 +193,6 @@ function renderWaitlistStatusBadge(status?: string) {
         </span>
       );
     case 'no_show':
-      // Red
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
           rounded-full bg-red-100 text-red-800">
@@ -221,7 +200,6 @@ function renderWaitlistStatusBadge(status?: string) {
         </span>
       );
     default:
-      // Fallback
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold
           rounded-full bg-gray-100 text-gray-800">

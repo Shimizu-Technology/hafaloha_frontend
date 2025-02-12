@@ -1,9 +1,8 @@
-// src/components/WaitlistForm.tsx
+// src/reservations/components/WaitlistForm.tsx
+
 import React, { useState } from 'react';
 import { Users, User, Phone } from 'lucide-react';
-
-// 1) Import your new API helper
-import { createWaitlistEntry } from '../services/api';
+import { useWaitlist } from '../hooks/useWaitlist';
 
 interface WaitlistFormData {
   name: string;
@@ -12,6 +11,10 @@ interface WaitlistFormData {
 }
 
 export default function WaitlistForm() {
+  // 1) Use your domain hook
+  const { createWaitlistEntry } = useWaitlist();
+
+  // 2) Local form state
   const [formData, setFormData] = useState<WaitlistFormData>({
     name: '',
     partySize: 1,
@@ -21,15 +24,14 @@ export default function WaitlistForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // 3) Handle Submit => call createWaitlistEntry from your hook
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
     try {
-      // 2) Use createWaitlistEntry
-      //    The Rails WaitlistEntriesController might expect:
-      //    contact_name, party_size, contact_phone, check_in_time, status, etc.
+      // The new domain method might expect the same fields as your old approach:
       await createWaitlistEntry({
         contact_name: formData.name,
         party_size: formData.partySize,

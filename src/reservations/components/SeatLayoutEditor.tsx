@@ -1,22 +1,15 @@
-// src/components/SeatLayoutEditor.tsx
-
+// src/reservations/components/SeatLayoutEditor.tsx
 import React, { useEffect, useState } from 'react';
 import {
-  Save, Trash2, Plus as LucidePlus, Settings, Edit2,
-  Minus, Maximize, Power
+  Save, Trash2, Plus as LucidePlus, Settings,
+  Edit2, Minus, Maximize, Power
 } from 'lucide-react';
 
 import { toast } from 'react-hot-toast';
-
-import {
-  fetchAllLayouts,
-  fetchLayout,
-  createLayout,
-  updateLayout,
-  activateLayout,
-} from '../services/api';
-
 import RenameSeatsModal from './RenameSeatsModal';
+
+// NEW: Import your domain hook from wherever it lives
+import { useLayouts } from '../hooks/useLayouts';
 
 /** ---------- Data Interfaces ---------- **/
 interface LayoutData {
@@ -64,6 +57,15 @@ const LAYOUT_PRESETS = {
 };
 
 export default function SeatLayoutEditor() {
+  // 1) Bring in the needed layout methods from your domain hook
+  const {
+    fetchAllLayouts,
+    fetchLayout,
+    createLayout,
+    updateLayout,
+    activateLayout,
+  } = useLayouts();
+
   // Layout states
   const [allLayouts, setAllLayouts]         = useState<LayoutData[]>([]);
   const [activeLayoutId, setActiveLayoutId] = useState<number | null>(null);
@@ -122,7 +124,7 @@ export default function SeatLayoutEditor() {
   useEffect(() => {
     (async () => {
       try {
-        const layouts = await fetchAllLayouts();
+        const layouts = await fetchAllLayouts();  // <-- from the useLayouts hook
         setAllLayouts(layouts);
         if (layouts.length > 0) {
           const firstId = layouts[0].id;
@@ -134,12 +136,12 @@ export default function SeatLayoutEditor() {
         toast.error('Failed to load layouts.');
       }
     })();
-  }, []);
+  }, [fetchAllLayouts]);
 
   /** Load seat sections from the chosen layout. */
   async function loadOneLayout(id: number) {
     try {
-      const layout = await fetchLayout(id);
+      const layout = await fetchLayout(id);  // <-- from the hook
       const secWithFloors = (layout.sections_data.sections || []).map((sec: any) => ({
         ...sec,
         floorNumber: sec.floorNumber ?? 1,
@@ -238,7 +240,6 @@ export default function SeatLayoutEditor() {
   }
   function handleDragMove(e: React.PointerEvent) {
     if (!isEditMode || !isDragging || !dragStart || !selectedSection) return;
-
     const dx = e.clientX - dragStart.x;
     const dy = e.clientY - dragStart.y;
 

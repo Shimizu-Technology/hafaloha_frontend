@@ -1,9 +1,12 @@
-// src/components/ReservationForm.tsx
+// src/reservations/components/ReservationForm.tsx
 
 import React, { useState, useEffect } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';          // <-- Replaces useAuth
+import { toast } from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
 import Select, { SingleValue } from 'react-select';
+import 'react-datepicker/dist/react-datepicker.css';
+
 import {
   Clock,
   Users,
@@ -15,11 +18,11 @@ import {
   Share2,
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-hot-toast';
-import { fetchAvailability, createReservation } from '../services/api';
+// Hooks
+import { useAvailability } from '../hooks/useAvailability';   // <-- For fetching timeslots
+import { useReservations } from '../hooks/useReservations';   // <-- For creating reservations
 
-/** Helpers */
+/** --- Helper Functions --- */
 function formatYYYYMMDD(dateObj: Date): string {
   const yyyy = dateObj.getFullYear();
   const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -50,7 +53,7 @@ function formatDuration(minutes: number) {
   return `${minutes / 60} hours`;
 }
 
-/** React Select types */
+/** --- React Select Types --- */
 interface TimeOption {
   value: string;
   label: string;
@@ -60,7 +63,7 @@ interface DurationOption {
   label: string;
 }
 
-/** Form fields */
+/** --- Basic Form Data Shape --- */
 interface ReservationFormData {
   date: string;
   time: string;
@@ -70,7 +73,7 @@ interface ReservationFormData {
   email: string;
 }
 
-/** Data for the confirmation UI */
+/** --- Confirmation Data --- */
 interface ConfirmationData {
   date: string;
   time: string;
@@ -82,7 +85,7 @@ interface ConfirmationData {
   email?: string;
 }
 
-/** “Reservation Confirmed!” screen */
+/** --- Confirmation Screen --- */
 function ReservationConfirmation({
   reservation,
   onClose,
@@ -193,7 +196,7 @@ function ReservationConfirmation({
   );
 }
 
-/** Main ReservationForm */
+/** --- Main ReservationForm --- */
 export default function ReservationForm({
   onClose,                // Parent can close the modal
   onToggleConfirmation,   // Tells parent if we’re confirming
@@ -201,32 +204,45 @@ export default function ReservationForm({
   onClose?: () => void;
   onToggleConfirmation?: (confirming: boolean) => void;
 }) {
-  const { user } = useAuth();
+  // 1) Use Auth0 for user data
+  const { user } = useAuth0();
+
+  // 2) Hooks for fetching timeslots & creating reservations
+  const { availability, fetchAvailability, loading: loadingTimes } = useAvailability();
+  const { createReservation } = useReservations();
+
   // Basic form data
   const [formData, setFormData] = useState<ReservationFormData>({
     date: '',
     time: '',
     firstName: '',
     lastName: '',
-    phone: user?.phone?.trim() || '+1671',
+    phone: user?.phone?.trim() || '+1671', // or a custom claim if you have phone in Auth0
     email: '',
   });
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [partySizeText, setPartySizeText] = useState('1');
   const [duration, setDuration] = useState(60);
+
+  // We'll rely on the "availability" array from our hook
+  // that presumably returns an object like { slots: [...], ... } from your API
   const [timeslots, setTimeslots] = useState<string[]>([]);
 
   // For confirmation screen
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [reservationDetails, setReservationDetails] = useState<ConfirmationData | null>(null);
 
-  /** Convert typed partySize => number */
+  // Convert typed partySize => number
   function getPartySize(): number {
     return parseInt(partySizeText, 10) || 1;
   }
 
-  /** Fetch timeslots on date or partySize changes */
+  /** 
+   * Fetch timeslots whenever date or partySize changes.
+   * Instead of the old fetchAvailability() from `services/api`,
+   * we call our new `fetchAvailability()` from `useAvailability()`
+   */
   useEffect(() => {
     async function loadTimes() {
       if (!formData.date || !getPartySize()) {
@@ -234,17 +250,31 @@ export default function ReservationForm({
         return;
       }
       try {
-        const data = await fetchAvailability(formData.date, getPartySize());
-        setTimeslots(data.slots || []);
+        // For example, your Rails endpoint returns { slots: [...], ... }
+        await fetchAvailability(formData.date, getPartySize());
+        // The data is in the "availability" state from useAvailability() 
+        // which might look like: [ { time: '10:00', available: true }, ... ]
+        // If your "availability" hook returns an array of strings,
+        // or an array of objects with .time, adapt as needed:
+        // e.g. setTimeslots(availability.map(a => a.time));
+        if (Array.isArray(availability)) {
+          // Suppose your availability is simply an array of time strings
+          setTimeslots(availability.map((slot) => slot.time ?? slot));
+        } else {
+          // or if your backend returns { slots: [...] } 
+          // you'd adapt to availability.slots or similar
+        }
       } catch (err) {
         console.error('Error fetching availability:', err);
         setTimeslots([]);
       }
     }
     loadTimes();
-  }, [formData.date, partySizeText]);
+    // Important: include fetchAvailability and availability in the deps if you want 
+    // to re-run when they change, or if your hooking logic is different.
+  }, [formData.date, partySizeText, fetchAvailability, availability]);
 
-  /** Build time options for react-select */
+  /** Build time options for react-select from timeslots */
   const timeOptions: TimeOption[] = timeslots.map((slot) => ({
     value: slot,
     label: format12hSlot(slot),
@@ -273,6 +303,12 @@ export default function ReservationForm({
     }
   }, [formData.date]);
 
+  /** Filter out non-numeric for partySize */
+  function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    setPartySizeText(digitsOnly);
+  }
+
   /** On form submit => create reservation => show confirmation */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -289,7 +325,7 @@ export default function ReservationForm({
     const contactLastName =
       formData.lastName.trim() || user?.name?.split(' ')[1] || '';
     let contactPhone = formData.phone.trim();
-    const contactEmail = formData.email.trim() || user?.email || '';
+    const contactEmail = formData.email.trim() || (user?.email ?? '');
 
     if (!contactFirstName) {
       toast.error('First name is required.');
@@ -304,6 +340,8 @@ export default function ReservationForm({
     }
 
     try {
+      // Instead of the old createReservation from `services/api`,
+      // call your hook's createReservation method:
       await createReservation({
         start_time,
         party_size: finalPartySize,
@@ -313,6 +351,7 @@ export default function ReservationForm({
         restaurant_id: 1,
         duration_minutes: duration,
       });
+
       toast.success('Reservation created successfully!');
 
       // Build data for the Confirmation UI
@@ -333,12 +372,6 @@ export default function ReservationForm({
       console.error('Error creating reservation:', err);
       toast.error('Failed to create reservation. Please try again.');
     }
-  }
-
-  /** Filter out non-numeric for partySize */
-  function handlePartySizeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const digitsOnly = e.target.value.replace(/\D/g, '');
-    setPartySizeText(digitsOnly);
   }
 
   /** Custom React-Select styles */
@@ -379,7 +412,7 @@ export default function ReservationForm({
     );
   }
 
-  /** Otherwise, render the narrower form with two columns */
+  /** Otherwise, render the narrower form */
   return (
     <div className="w-full max-w-md mx-auto">
       <form onSubmit={handleSubmit} className="w-full">
@@ -515,7 +548,9 @@ export default function ReservationForm({
             <input
               type="text"
               id="lastName"
-              placeholder={user ? user.name?.split(' ')[1] || '' : 'Last name (optional)'}
+              placeholder={
+                user ? user.name?.split(' ')[1] || '' : 'Last name (optional)'
+              }
               value={formData.lastName}
               onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
               className="

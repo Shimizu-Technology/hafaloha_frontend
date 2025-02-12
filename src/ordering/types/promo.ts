@@ -1,3 +1,4 @@
+// src/ordering/types/promo.ts
 export interface PromoCode {
   code: string;
   discountPercent: number;
