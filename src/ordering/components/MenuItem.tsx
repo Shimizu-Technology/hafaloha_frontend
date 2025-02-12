@@ -1,7 +1,6 @@
 // src/ordering/components/MenuItem.tsx
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
-// import toast from 'react-hot-toast'; // <-- Removed
 import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
 import type { MenuItem as MenuItemType } from '../types/menu';
@@ -18,7 +17,8 @@ export function MenuItem({ item }: MenuItemProps) {
   const [buttonClicked, setButtonClicked] = useState(false);
 
   function handleQuickAdd() {
-    // 1) Actually add to cart
+    // 1) Add to cart without forcing advance_notice_hours to 0.
+    //    If item.advance_notice_hours is null or undefined, just leave it out.
     addToCart(
       {
         id: item.id,
@@ -26,7 +26,7 @@ export function MenuItem({ item }: MenuItemProps) {
         price: item.price,
         image: item.image,
         description: item.description,
-        advance_notice_hours: item.advance_notice_hours ?? 0,
+        advance_notice_hours: item.advance_notice_hours,
       },
       1
     );
@@ -54,7 +54,9 @@ export function MenuItem({ item }: MenuItemProps) {
             <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
             <p className="mt-1 text-sm text-gray-500">{item.description}</p>
 
-            {item.advance_notice_hours && item.advance_notice_hours >= 24 && (
+            {/* Only show text if advance_notice_hours is 24 or more */}
+            {item.advance_notice_hours != null &&
+             item.advance_notice_hours >= 24 && (
               <p className="mt-1 text-sm text-red-600">
                 Requires 24 hours notice
               </p>
@@ -82,12 +84,8 @@ export function MenuItem({ item }: MenuItemProps) {
                 className={`w-full md:w-auto flex items-center justify-center px-4 py-2
                   border border-transparent rounded-md shadow-sm text-sm font-medium
                   text-white bg-[#c1902f] hover:bg-[#d4a43f]
-                  transition-transform 
-                  ${
-                    buttonClicked
-                      ? 'animate-bounce' // Tailwind's bounce animation
-                      : ''
-                  }`}
+                  transition-transform
+                  ${buttonClicked ? 'animate-bounce' : ''}`}
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Add to Cart
