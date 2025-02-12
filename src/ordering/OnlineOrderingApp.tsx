@@ -60,7 +60,7 @@ function OrderingLayout() {
         const id = setTimeout(() => {
           setShowSpinner(true);
           setTimerId(null);
-        }, 300); // 300ms delay
+        }, 500); // 500ms delay
         setTimerId(id);
       }
     } else {
