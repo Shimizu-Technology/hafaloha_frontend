@@ -9,10 +9,9 @@ import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
 import { CartPage } from './components/CartPage';
 import { CheckoutPage } from './components/CheckoutPage';
-import { OrderConfirmation } from './components/OrderConfirmation'; // <-- We'll make this unprotected
+import { OrderConfirmation } from './components/OrderConfirmation'; 
 import AdminDashboard from './components/admin/AdminDashboard';
 import { LoadingSpinner } from './components/LoadingSpinner';
-import { UpsellModal } from './components/upsell/UpsellModal';
 import { LoyaltyTeaser } from './components/loyalty/LoyaltyTeaser';
 import { LoginForm } from './components/auth/LoginForm';
 import { SignUpForm } from './components/auth/SignUpForm';
@@ -22,7 +21,6 @@ import { useAuthStore } from './store/authStore';
 import { useMenuStore } from './store/menuStore';
 import type { CartItem, MenuItem as MenuItemType } from './types/menu';
 import { MenuItem } from './components/MenuItem';
-import { CustomizationModal } from './components/CustomizationModal';
 
 function ProtectedRoute({
   children,
@@ -57,10 +55,8 @@ function OrderingLayout() {
 }
 
 export default function OnlineOrderingApp() {
-  // 1) Bring in the menu store to fetch items
   const { menuItems, fetchMenuItems } = useMenuStore();
 
-  // 2) Local cart state
   const [cart, setCart] = useState<CartItem[]>([]);
 
   // On mount, fetch menu items
@@ -68,7 +64,6 @@ export default function OnlineOrderingApp() {
     fetchMenuItems();
   }, [fetchMenuItems]);
 
-  /** Helper: Add an item to the cart */
   function handleAddToCart(item: MenuItemType) {
     setCart((prevCart) => {
       const existing = prevCart.find((x) => x.id === item.id);
@@ -84,33 +79,34 @@ export default function OnlineOrderingApp() {
     });
   }
 
-  // For convenience: pass the “handleAddToCart” to <MenuPage> or any child:
   return (
     <Routes>
       <Route element={<OrderingLayout />}>
-        {/* HOME = index route at /ordering/ */}
+        {/* Home = index route at /ordering/ */}
         <Route
           index
           element={
             <>
               <Hero />
-              {/* example popular items / loyalty teaser */}
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Popular Items */}
                   <div className="lg:col-span-2">
-                    <h2 className="text-3xl font-display text-gray-900 mb-8">
+                    <h2 className="text-2xl sm:text-3xl font-display text-gray-900 mb-8">
                       Popular Items
                     </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                       {menuItems.slice(0, 4).map((item) => (
                         <MenuItem
                           key={item.id}
                           item={item}
+                          // Add to the local cart for this example
                           onAddToCart={handleAddToCart}
                         />
                       ))}
                     </div>
                   </div>
+                  {/* Loyalty Teaser */}
                   <div>
                     <LoyaltyTeaser />
                   </div>
@@ -126,17 +122,12 @@ export default function OnlineOrderingApp() {
           element={<MenuPage onAddToCart={handleAddToCart} />}
         />
 
-        {/* Cart & Checkout, etc. */}
+        {/* Cart & Checkout */}
         <Route path="cart" element={<CartPage items={cart} />} />
         <Route path="checkout" element={<CheckoutPage />} />
-
-        {/* 
-          Make order-confirmation UNPROTECTED so everyone can see it.
-          path="order-confirmation" means final URL is "/order-confirmation"
-        */}
         <Route path="order-confirmation" element={<OrderConfirmation />} />
 
-        {/* Admin */}
+        {/* Admin (protected) */}
         <Route
           path="admin"
           element={
@@ -150,7 +141,7 @@ export default function OnlineOrderingApp() {
         <Route path="login" element={<LoginForm />} />
         <Route path="signup" element={<SignUpForm />} />
 
-        {/* e.g. order history, must be logged in */}
+        {/* Order History (protected) */}
         <Route
           path="orders"
           element={

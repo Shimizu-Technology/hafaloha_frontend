@@ -102,18 +102,21 @@ export function Header() {
               Menu
             </Link>
 
-            <div className="flex items-center text-gray-700">
+            <div className="flex items-center text-gray-700 whitespace-nowrap">
               <Clock className="h-4 w-4 mr-2" />
               <span>11AM-9PM</span>
             </div>
-            <div className="flex items-center text-gray-700">
+            <div className="flex items-center text-gray-700 whitespace-nowrap">
               <MapPin className="h-4 w-4 mr-2" />
               <span>Tamuning</span>
             </div>
-            <div className="flex items-center text-gray-700">
+            <a
+              href="tel:+16719893444"
+              className="flex items-center text-gray-700 whitespace-nowrap hover:text-gray-900"
+            >
               <Phone className="h-4 w-4 mr-2" />
-              <span>(671) 989-3444</span>
-            </div>
+              (671) 989-3444
+            </a>
           </nav>
 
           {/* Right side: Profile / Cart */}
@@ -239,18 +242,22 @@ export function Header() {
             >
               Menu
             </Link>
-            <div className="px-3 py-2 text-base font-medium text-gray-700">
+            <div className="px-3 py-2 text-base font-medium text-gray-700 flex items-center">
               <Clock className="inline-block h-4 w-4 mr-2" />
               11AM-9PM
             </div>
-            <div className="px-3 py-2 text-base font-medium text-gray-700">
+            <div className="px-3 py-2 text-base font-medium text-gray-700 flex items-center">
               <MapPin className="inline-block h-4 w-4 mr-2" />
               Tamuning
             </div>
-            <div className="px-3 py-2 text-base font-medium text-gray-700">
+            <a
+              href="tel:+16719893444"
+              className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200 active:scale-95 flex items-center"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
               <Phone className="inline-block h-4 w-4 mr-2" />
               (671) 989-3444
-            </div>
+            </a>
 
             {user ? (
               <>

@@ -1,3 +1,4 @@
+// src/ordering/components/loyalty/LoyaltyTeaser.tsx
 import React from 'react';
 import { Gift, Star } from 'lucide-react';
 

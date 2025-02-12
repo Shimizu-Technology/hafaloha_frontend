@@ -1,5 +1,4 @@
 // src/ordering/components/admin/OrderManager.tsx
-
 import React, { useEffect, useState } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 
@@ -10,7 +9,7 @@ export function OrderManager() {
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
 
   useEffect(() => {
-    // Load orders from the backend on mount
+    // Load orders on mount
     fetchOrders();
   }, [fetchOrders]);
 
@@ -40,22 +39,29 @@ export function OrderManager() {
   };
 
   return (
-    <div>
+    <div className="max-w-7xl mx-auto p-6">
+      {/* Loading / Error */}
       {loading && <p>Loading orders...</p>}
       {error && <p className="text-red-600">{error}</p>}
 
-      <div className="flex justify-between items-center mb-8">
+      {/* Header: Title & Filters */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h2 className="text-2xl font-bold">Order Management</h2>
-        <div className="flex space-x-2">
-          {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map((status) => (
+        
+        {/* Status Filter Buttons: horizontal scroll on mobile */}
+        <div className="flex flex-nowrap space-x-3 overflow-x-auto scrollbar-hide py-1">
+          {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(status => (
             <button
               key={status}
               onClick={() => setSelectedStatus(status)}
-              className={`px-4 py-2 rounded-md ${
-                selectedStatus === status
-                  ? 'bg-[#c1902f] text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`
+                flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md 
+                ${
+                  selectedStatus === status
+                    ? 'bg-[#c1902f] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }
+              `}
             >
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </button>
@@ -63,8 +69,9 @@ export function OrderManager() {
         </div>
       </div>
 
+      {/* Orders List */}
       <div className="space-y-6">
-        {filteredOrders.map((order) => (
+        {filteredOrders.map(order => (
           <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
@@ -77,7 +84,10 @@ export function OrderManager() {
                 )}
               </div>
               <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(order.status)}`}
+                className={`
+                  px-3 py-1 rounded-full text-sm font-medium
+                  ${getStatusBadgeColor(order.status)}
+                `}
               >
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </span>
@@ -111,8 +121,8 @@ export function OrderManager() {
               ))}
             </div>
 
-            {/* Contact & pickup */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            {/* Contact & Pickup Info: grid -> 1 col on mobile, 2 col on sm+ */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <h4 className="text-sm font-medium text-gray-700">Customer</h4>
                 <p>{(order as any).contact_name || 'Guest'}</p>
@@ -136,7 +146,7 @@ export function OrderManager() {
               <p className="font-medium">
                 Total: ${Number(order.total || 0).toFixed(2)}
               </p>
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2">
                 {order.status === 'pending' && (
                   <button
                     className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"

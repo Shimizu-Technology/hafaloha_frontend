@@ -7,31 +7,32 @@ import type { MenuItem as MenuItemType } from '../types/menu';
 
 interface MenuItemProps {
   item: MenuItemType;
+  onAddToCart?: (item: MenuItemType) => void; // optional if you want to pass in a custom handler
 }
 
-export function MenuItem({ item }: MenuItemProps) {
-  const addToCart = useOrderStore((state) => state.addToCart);
+export function MenuItem({ item, onAddToCart }: MenuItemProps) {
+  const addToCartStore = useOrderStore((state) => state.addToCart);
   const [showCustomization, setShowCustomization] = useState(false);
-
-  // For button bounce animation
   const [buttonClicked, setButtonClicked] = useState(false);
 
-  function handleQuickAdd() {
-    // 1) Add to cart without forcing advance_notice_hours to 0.
-    //    If item.advance_notice_hours is null or undefined, just leave it out.
-    addToCart(
+  // Decide which "addToCart" function to call
+  const addToCartFn = onAddToCart ?? ((menuItem: MenuItemType) =>
+    addToCartStore(
       {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        image: item.image,
-        description: item.description,
-        advance_notice_hours: item.advance_notice_hours,
+        id: menuItem.id,
+        name: menuItem.name,
+        price: menuItem.price,
+        image: menuItem.image,
+        description: menuItem.description,
+        advance_notice_hours: menuItem.advance_notice_hours,
       },
       1
-    );
+    )
+  );
 
-    // 2) Trigger a short bounce animation on the button
+  function handleQuickAdd() {
+    addToCartFn(item);
+    // bounce animation
     setButtonClicked(true);
     setTimeout(() => setButtonClicked(false), 300);
   }
@@ -42,7 +43,7 @@ export function MenuItem({ item }: MenuItemProps) {
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[380px]">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[300px] sm:min-h-[360px]">
         <img
           src={item.image}
           alt={item.name}
@@ -54,9 +55,8 @@ export function MenuItem({ item }: MenuItemProps) {
             <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
             <p className="mt-1 text-sm text-gray-500">{item.description}</p>
 
-            {/* Only show text if advance_notice_hours is 24 or more */}
-            {item.advance_notice_hours != null &&
-             item.advance_notice_hours >= 24 && (
+            {/* Show text only if advance_notice_hours >= 24 */}
+            {item.advance_notice_hours != null && item.advance_notice_hours >= 24 && (
               <p className="mt-1 text-sm text-red-600">
                 Requires 24 hours notice
               </p>
@@ -72,8 +72,8 @@ export function MenuItem({ item }: MenuItemProps) {
               <button
                 onClick={handleOpenCustomization}
                 className="w-full md:w-auto flex items-center justify-center px-4 py-2
-                  border border-transparent rounded-md shadow-sm text-sm font-medium
-                  text-white bg-[#c1902f] hover:bg-[#d4a43f]"
+                           border border-transparent rounded-md shadow-sm text-sm font-medium
+                           text-white bg-[#c1902f] hover:bg-[#d4a43f]"
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Customize
@@ -81,11 +81,13 @@ export function MenuItem({ item }: MenuItemProps) {
             ) : (
               <button
                 onClick={handleQuickAdd}
-                className={`w-full md:w-auto flex items-center justify-center px-4 py-2
+                className={`
+                  w-full md:w-auto flex items-center justify-center px-4 py-2
                   border border-transparent rounded-md shadow-sm text-sm font-medium
                   text-white bg-[#c1902f] hover:bg-[#d4a43f]
                   transition-transform
-                  ${buttonClicked ? 'animate-bounce' : ''}`}
+                  ${buttonClicked ? 'animate-bounce' : ''}
+                `}
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Add to Cart
@@ -95,7 +97,7 @@ export function MenuItem({ item }: MenuItemProps) {
         </div>
       </div>
 
-      {/* Modal for selecting options */}
+      {/* Modal for customizing item */}
       {showCustomization && (
         <CustomizationModal
           item={item}

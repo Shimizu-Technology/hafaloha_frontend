@@ -18,8 +18,7 @@ interface MenuItemFormData {
   menu_id?: number;
   image: string;
   imageFile?: File | null;
-  // We'll use 0 or 24 (or any integer) for advanced notice
-  advance_notice_hours: number;
+  advance_notice_hours: number; // 0 or 24, etc.
 }
 
 interface OptionGroup {
@@ -46,7 +45,7 @@ export function MenuManager() {
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
-    refreshItemInState
+    refreshItemInState,
   } = useMenuStore();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -59,10 +58,10 @@ export function MenuManager() {
 
   // Filter items by category
   const filteredItems = selectedCategory
-    ? menuItems.filter(item => item.category === selectedCategory)
+    ? menuItems.filter((item) => item.category === selectedCategory)
     : menuItems;
 
-  // Default form for new item
+  // Default form data for new items
   const initialFormData: MenuItemFormData = {
     name: '',
     description: '',
@@ -71,7 +70,7 @@ export function MenuManager() {
     image: '',
     imageFile: null,
     menu_id: 1,
-    advance_notice_hours: 0, // default to 0 hours
+    advance_notice_hours: 0,
   };
 
   // --------------------------------------
@@ -87,7 +86,6 @@ export function MenuManager() {
       image: item.image,
       imageFile: null,
       menu_id: item.menu_id,
-      // If server’s JSON includes advance_notice_hours, use it
       advance_notice_hours: (item as any).advance_notice_hours ?? 0,
     });
     setIsEditing(true);
@@ -102,16 +100,15 @@ export function MenuManager() {
   };
 
   // --------------------------------------
-  // Submit create/update
+  // Create/Update item
   // --------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
 
     if (editingItem.id) {
-      // Update existing
+      // Update existing item
       await updateMenuItem(editingItem.id, editingItem);
-
       // If user selected a new file, upload it
       if (editingItem.imageFile) {
         const updated = await uploadMenuItemImage(
@@ -121,7 +118,7 @@ export function MenuManager() {
         refreshItemInState(updated);
       }
     } else {
-      // Create new
+      // Create new item
       await addMenuItem({ ...editingItem });
     }
 
@@ -130,7 +127,7 @@ export function MenuManager() {
   };
 
   // --------------------------------------
-  // Delete an item
+  // Delete item
   // --------------------------------------
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
@@ -139,7 +136,7 @@ export function MenuManager() {
   };
 
   // --------------------------------------
-  // Manage Options (now triggered from the modal)
+  // Manage Options
   // --------------------------------------
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
@@ -156,43 +153,57 @@ export function MenuManager() {
   // --------------------------------------
   return (
     <div className="max-w-7xl mx-auto p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      {/* Header row: Title + 'Add Item' */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h2 className="text-2xl font-bold">Menu Management</h2>
         <button
           onClick={handleAdd}
-          className="flex items-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+          className="
+            inline-flex items-center justify-center 
+            w-fit min-w-[120px] 
+            px-4 py-2 
+            bg-[#c1902f] text-white rounded-md 
+            hover:bg-[#d4a43f]
+            whitespace-nowrap
+          "
         >
           <Plus className="h-5 w-5 mr-2" />
           Add Item
         </button>
       </div>
 
-      {/* Category Filters */}
-      <div className="flex space-x-4 mb-6">
-        <button
-          className={`px-4 py-2 rounded-md ${
-            !selectedCategory
-              ? 'bg-[#c1902f] text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-          onClick={() => setSelectedCategory(null)}
-        >
-          All Categories
-        </button>
-        {categories.map(cat => (
+      {/* Category Filters as a horizontal scroll */}
+      <div className="mb-6">
+        <div className="flex flex-nowrap space-x-3 overflow-x-auto scrollbar-hide py-2">
+          {/* 'All Categories' */}
           <button
-            key={cat.id}
-            className={`px-4 py-2 rounded-md ${
-              selectedCategory === cat.id
+            className={`whitespace-nowrap px-4 py-2 rounded-md ${
+              !selectedCategory
                 ? 'bg-[#c1902f] text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
-            onClick={() => setSelectedCategory(cat.id)}
+            onClick={() => setSelectedCategory(null)}
           >
-            {cat.name}
+            All Categories
           </button>
-        ))}
+          {/* Each category */}
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              className={`
+                whitespace-nowrap px-4 py-2 rounded-md
+                ${
+                  selectedCategory === cat.id
+                    ? 'bg-[#c1902f] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }
+              `}
+              onClick={() => setSelectedCategory(cat.id)}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Add/Edit Item Modal */}
@@ -225,7 +236,7 @@ export function MenuManager() {
                 <input
                   type="text"
                   value={editingItem.name}
-                  onChange={e =>
+                  onChange={(e) =>
                     setEditingItem({ ...editingItem, name: e.target.value })
                   }
                   className="w-full px-4 py-2 border rounded-md"
@@ -240,7 +251,7 @@ export function MenuManager() {
                 </label>
                 <textarea
                   value={editingItem.description}
-                  onChange={e =>
+                  onChange={(e) =>
                     setEditingItem({ ...editingItem, description: e.target.value })
                   }
                   className="w-full px-4 py-2 border rounded-md"
@@ -257,10 +268,10 @@ export function MenuManager() {
                   type="number"
                   step="0.01"
                   value={editingItem.price}
-                  onChange={e =>
+                  onChange={(e) =>
                     setEditingItem({
                       ...editingItem,
-                      price: parseFloat(e.target.value) || 0
+                      price: parseFloat(e.target.value) || 0,
                     })
                   }
                   className="w-full px-4 py-2 border rounded-md"
@@ -275,13 +286,16 @@ export function MenuManager() {
                 </label>
                 <select
                   value={editingItem.category}
-                  onChange={e =>
-                    setEditingItem({ ...editingItem, category: e.target.value })
+                  onChange={(e) =>
+                    setEditingItem({
+                      ...editingItem,
+                      category: e.target.value,
+                    })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   required
                 >
-                  {categories.map(cat => (
+                  {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.name}
                     </option>
@@ -303,7 +317,10 @@ export function MenuManager() {
                     });
                   }}
                 />
-                <label htmlFor="requires24" className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="requires24"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Requires 24-hour notice?
                 </label>
               </div>
@@ -316,11 +333,11 @@ export function MenuManager() {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={e => {
+                  onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
                       setEditingItem({
                         ...editingItem,
-                        imageFile: e.target.files[0]
+                        imageFile: e.target.files[0],
                       });
                     }
                   }}
@@ -348,7 +365,7 @@ export function MenuManager() {
                 )}
               </div>
 
-              {/* Manage Options Button (only if item already has an ID) */}
+              {/* Manage Options (only if editing existing) */}
               {editingItem.id && (
                 <div className="pt-4">
                   <button
@@ -377,9 +394,14 @@ export function MenuManager() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+                  className="
+                    inline-flex items-center
+                    px-4 py-2 
+                    bg-[#c1902f] text-white rounded-md 
+                    hover:bg-[#d4a43f]
+                  "
                 >
-                  <Save className="h-5 w-5 mr-2 inline-block" />
+                  <Save className="h-5 w-5 mr-2" />
                   Save
                 </button>
               </div>
@@ -388,9 +410,9 @@ export function MenuManager() {
         </div>
       )}
 
-      {/* The Items Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredItems.map(item => (
+      {/* Items Grid: 1 col on mobile, 2 on sm, 3 on lg */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredItems.map((item) => (
           <div
             key={item.id}
             className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
@@ -418,8 +440,6 @@ export function MenuManager() {
                   <span className="text-lg font-semibold">
                     ${Number(item.price).toFixed(2)}
                   </span>
-
-                  {/* Remove the old "Settings" button entirely */}
                   {/* Edit Item */}
                   <button
                     onClick={() => handleEdit(item)}
@@ -443,7 +463,7 @@ export function MenuManager() {
         ))}
       </div>
 
-      {/* OptionGroups Modal (pops up if admin clicks "Manage Options" inside the item form) */}
+      {/* OptionGroups Modal */}
       {optionsModalOpen && optionsModalItem && (
         <OptionGroupsModal
           item={optionsModalItem}
@@ -459,7 +479,7 @@ export function MenuManager() {
 // --------------------------------------
 function OptionGroupsModal({
   item,
-  onClose
+  onClose,
 }: {
   item: MenuItem;
   onClose: () => void;
@@ -467,28 +487,22 @@ function OptionGroupsModal({
   const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Inline create group
+  // For creating new group
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMin, setNewGroupMin] = useState(0);
   const [newGroupMax, setNewGroupMax] = useState(1);
   const [newGroupRequired, setNewGroupRequired] = useState(false);
 
-  // For inline create option
-  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(
-    null
-  );
+  // For creating new option
+  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(null);
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
 
   useEffect(() => {
-    // Fetch once on mount
     fetchGroups();
     // eslint-disable-next-line
   }, [item.id]);
 
-  // -------------------------------------
-  // Fetch Option Groups
-  // -------------------------------------
   const fetchGroups = async () => {
     setLoading(true);
     try {
@@ -503,52 +517,47 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // Local state helpers (no re-fetch => no flash)
+  // State helpers
   // -------------------------------------
   const replaceGroupInState = (updated: OptionGroup) => {
-    setOptionGroups(current =>
-      current.map(g => (g.id === updated.id ? updated : g))
+    setOptionGroups((prev) =>
+      prev.map((g) => (g.id === updated.id ? updated : g))
     );
   };
-
   const removeGroupInState = (groupId: number) => {
-    setOptionGroups(current => current.filter(g => g.id !== groupId));
+    setOptionGroups((prev) => prev.filter((g) => g.id !== groupId));
   };
-
   const addGroupToState = (created: OptionGroup) => {
-    setOptionGroups(current => [...current, created]);
+    setOptionGroups((prev) => [...prev, created]);
   };
-
   const replaceOptionInState = (groupId: number, updatedOpt: OptionRow) => {
-    setOptionGroups(current =>
-      current.map(g => {
-        if (g.id !== groupId) return g;
-        return {
-          ...g,
-          options: g.options.map(o => (o.id === updatedOpt.id ? updatedOpt : o))
-        };
-      })
+    setOptionGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId
+          ? {
+              ...g,
+              options: g.options.map((o) =>
+                o.id === updatedOpt.id ? updatedOpt : o
+              ),
+            }
+          : g
+      )
     );
   };
-
   const removeOptionInState = (groupId: number, optId: number) => {
-    setOptionGroups(current =>
-      current.map(g => {
-        if (g.id !== groupId) return g;
-        return {
-          ...g,
-          options: g.options.filter(o => o.id !== optId)
-        };
-      })
+    setOptionGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId
+          ? { ...g, options: g.options.filter((o) => o.id !== optId) }
+          : g
+      )
     );
   };
-
   const addOptionToState = (groupId: number, newOpt: OptionRow) => {
-    setOptionGroups(current =>
-      current.map(g => {
-        if (g.id !== groupId) return g;
-        return { ...g, options: [...g.options, newOpt] };
-      })
+    setOptionGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId ? { ...g, options: [...g.options, newOpt] } : g
+      )
     );
   };
 
@@ -562,11 +571,10 @@ function OptionGroupsModal({
         name: newGroupName,
         min_select: newGroupMin,
         max_select: newGroupMax,
-        required: newGroupRequired
+        required: newGroupRequired,
       });
       addGroupToState(created);
-
-      // Reset fields
+      // Reset
       setNewGroupName('');
       setNewGroupMin(0);
       setNewGroupMax(1);
@@ -615,22 +623,22 @@ function OptionGroupsModal({
     setNewOptionName('');
     setNewOptionPrice(0);
   };
-
   const confirmCreateOption = async () => {
     if (!creatingOptionGroupId || !newOptionName.trim()) {
       setCreatingOptionGroupId(null);
       return;
     }
     try {
-      const groupId = creatingOptionGroupId;
       const createdOption = await api.post(
-        `/option_groups/${groupId}/options`,
+        `/option_groups/${creatingOptionGroupId}/options`,
         {
           name: newOptionName,
-          additional_price: newOptionPrice
+          additional_price: newOptionPrice,
         }
       );
-      addOptionToState(groupId, createdOption);
+      addOptionToState(creatingOptionGroupId, createdOption);
+
+      // Reset
       setCreatingOptionGroupId(null);
       setNewOptionName('');
       setNewOptionPrice(0);
@@ -638,7 +646,6 @@ function OptionGroupsModal({
       console.error(err);
     }
   };
-
   const cancelCreateOption = () => {
     setCreatingOptionGroupId(null);
     setNewOptionName('');
@@ -678,12 +685,12 @@ function OptionGroupsModal({
   };
 
   // -------------------------------------
-  // Render the OptionGroups modal
+  // Render OptionGroups Modal
   // -------------------------------------
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
-        {/* Title Bar */}
+        {/* Title */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">
             Manage Option Groups for: {item.name}
@@ -697,7 +704,7 @@ function OptionGroupsModal({
           <p>Loading...</p>
         ) : (
           <>
-            {/* Inline "Add Option Group" form */}
+            {/* Create Group */}
             <div className="border-b pb-4 mb-4">
               <h3 className="font-semibold mb-2">Add Option Group</h3>
               <div className="flex flex-wrap items-center space-x-2 space-y-2">
@@ -706,7 +713,7 @@ function OptionGroupsModal({
                   className="border p-1 rounded text-sm"
                   placeholder="Group Name"
                   value={newGroupName}
-                  onChange={e => setNewGroupName(e.target.value)}
+                  onChange={(e) => setNewGroupName(e.target.value)}
                 />
                 <div className="flex items-center space-x-1 text-xs">
                   <span>Min:</span>
@@ -714,7 +721,7 @@ function OptionGroupsModal({
                     type="number"
                     className="border p-1 w-14 rounded"
                     value={newGroupMin}
-                    onChange={e => setNewGroupMin(parseInt(e.target.value) || 0)}
+                    onChange={(e) => setNewGroupMin(parseInt(e.target.value) || 0)}
                   />
                 </div>
                 <div className="flex items-center space-x-1 text-xs">
@@ -723,14 +730,14 @@ function OptionGroupsModal({
                     type="number"
                     className="border p-1 w-14 rounded"
                     value={newGroupMax}
-                    onChange={e => setNewGroupMax(parseInt(e.target.value) || 0)}
+                    onChange={(e) => setNewGroupMax(parseInt(e.target.value) || 0)}
                   />
                 </div>
                 <label className="flex items-center space-x-1 text-xs">
                   <input
                     type="checkbox"
                     checked={newGroupRequired}
-                    onChange={e => setNewGroupRequired(e.target.checked)}
+                    onChange={(e) => setNewGroupRequired(e.target.checked)}
                   />
                   <span>Required?</span>
                 </label>
@@ -747,17 +754,17 @@ function OptionGroupsModal({
               <p className="text-sm text-gray-500">No Option Groups yet.</p>
             )}
 
-            {/* List of Groups */}
-            {optionGroups.map(group => (
+            {/* Existing Groups */}
+            {optionGroups.map((group) => (
               <div key={group.id} className="border rounded-md p-4 mb-4">
-                {/* Group Header: name, min, max, required */}
+                {/* Group header */}
                 <div className="flex justify-between items-center">
                   <div>
                     <input
                       type="text"
                       className="text-lg font-semibold border-b focus:outline-none"
                       value={group.name}
-                      onChange={e =>
+                      onChange={(e) =>
                         handleUpdateGroup(group, { name: e.target.value })
                       }
                     />
@@ -769,9 +776,9 @@ function OptionGroupsModal({
                           type="number"
                           className="w-14 ml-1 border p-1 rounded text-xs"
                           value={group.min_select}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateGroup(group, {
-                              min_select: parseInt(e.target.value) || 0
+                              min_select: parseInt(e.target.value) || 0,
                             })
                           }
                         />
@@ -783,9 +790,9 @@ function OptionGroupsModal({
                           type="number"
                           className="w-14 ml-1 border p-1 rounded text-xs"
                           value={group.max_select}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateGroup(group, {
-                              max_select: parseInt(e.target.value) || 0
+                              max_select: parseInt(e.target.value) || 0,
                             })
                           }
                         />
@@ -795,9 +802,9 @@ function OptionGroupsModal({
                         <input
                           type="checkbox"
                           checked={group.required}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateGroup(group, {
-                              required: e.target.checked
+                              required: e.target.checked,
                             })
                           }
                         />
@@ -815,17 +822,17 @@ function OptionGroupsModal({
                   </button>
                 </div>
 
-                {/* Options List */}
+                {/* Options */}
                 <div className="mt-4 ml-2">
                   {creatingOptionGroupId === group.id ? (
-                    // Inline form for new option
+                    // Inline form for new Option
                     <div className="flex items-center space-x-2 mb-2">
                       <input
                         type="text"
                         className="border p-1 rounded text-sm"
                         placeholder="Option Name"
                         value={newOptionName}
-                        onChange={e => setNewOptionName(e.target.value)}
+                        onChange={(e) => setNewOptionName(e.target.value)}
                       />
                       <input
                         type="number"
@@ -833,7 +840,7 @@ function OptionGroupsModal({
                         className="border p-1 rounded w-16 text-sm"
                         placeholder="Price"
                         value={newOptionPrice}
-                        onChange={e =>
+                        onChange={(e) =>
                           setNewOptionPrice(parseFloat(e.target.value) || 0)
                         }
                       />
@@ -862,39 +869,38 @@ function OptionGroupsModal({
                   {group.options.length === 0 && (
                     <p className="text-sm text-gray-400 mt-2">No options yet.</p>
                   )}
-                  {group.options.map(opt => (
+
+                  {group.options.map((opt) => (
                     <div
                       key={opt.id}
                       className="flex items-center justify-between mt-2"
                     >
-                      {/* Editable option name */}
+                      {/* Option name */}
                       <input
                         type="text"
                         value={opt.name}
-                        onChange={e =>
+                        onChange={(e) =>
                           handleUpdateOption(group.id, opt, {
-                            name: e.target.value
+                            name: e.target.value,
                           })
                         }
                         className="border-b text-sm flex-1 mr-2 focus:outline-none"
                       />
-
-                      {/* Editable additional_price */}
+                      {/* Additional price */}
                       <span className="mr-2 text-sm text-gray-600">
                         $
                         <input
                           type="number"
                           step="0.01"
                           value={opt.additional_price}
-                          onChange={e =>
+                          onChange={(e) =>
                             handleUpdateOption(group.id, opt, {
-                              additional_price: parseFloat(e.target.value) || 0
+                              additional_price: parseFloat(e.target.value) || 0,
                             })
                           }
                           className="w-16 ml-1 border-b focus:outline-none text-sm"
                         />
                       </span>
-
                       {/* Delete option */}
                       <button
                         onClick={() => handleDeleteOption(group.id, opt.id)}
