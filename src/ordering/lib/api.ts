@@ -1,14 +1,39 @@
 // src/ordering/lib/api.ts
+import { useLoadingStore } from '../store/loadingStore';
 
 // 1) Dynamically choose base URL from environment or fallback
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 /**
- * Re-usable fetch wrapper for GET/POST/PATCH/DELETE using the chosen base URL
- * and automatically attaching the Authorization header from localStorage.
+ * Reusable fetch methods that either do or do NOT increment our global spinner.
  */
 export const api = {
+  /**
+   * Standard GET that shows the global spinner.
+   */
   async get(endpoint: string) {
+    useLoadingStore.getState().startLoading();
+    try {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    } finally {
+      useLoadingStore.getState().stopLoading();
+    }
+  },
+
+  /**
+   * Special GET that does NOT show the global spinner overlay.
+   * Use this for silent polling, etc.
+   */
+  async getBackground(endpoint: string) {
+    // No startLoading() or stopLoading() calls
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -21,46 +46,61 @@ export const api = {
   },
 
   async post(endpoint: string, data: any) {
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      throw new Error(await res.text());
+    useLoadingStore.getState().startLoading();
+    try {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    } finally {
+      useLoadingStore.getState().stopLoading();
     }
-    return res.json();
   },
 
   async patch(endpoint: string, data: any) {
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      throw new Error(await res.text());
+    useLoadingStore.getState().startLoading();
+    try {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    } finally {
+      useLoadingStore.getState().stopLoading();
     }
-    return res.json();
   },
 
   async delete(endpoint: string) {
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-    });
-    if (!res.ok) {
-      throw new Error(await res.text());
+    useLoadingStore.getState().startLoading();
+    try {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return true;
+    } finally {
+      useLoadingStore.getState().stopLoading();
     }
-    return true;
   },
 
   /**
@@ -68,8 +108,37 @@ export const api = {
    * We do NOT set 'Content-Type'; the browser auto-adds the boundary.
    */
   async upload(endpoint: string, method: 'POST' | 'PATCH', formData: FormData) {
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method,
+    useLoadingStore.getState().startLoading();
+    try {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: formData,
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    } finally {
+      useLoadingStore.getState().stopLoading();
+    }
+  },
+};
+
+/**
+ * Convenience method for the special `menu_items/:id/upload_image` endpoint
+ */
+export async function uploadMenuItemImage(itemId: string, file: File) {
+  const formData = new FormData();
+  // If your Rails code expects `params[:image]`, do this:
+  formData.append('image', file);
+
+  useLoadingStore.getState().startLoading();
+  try {
+    const res = await fetch(`${API_BASE_URL}/menu_items/${itemId}/upload_image`, {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`,
       },
@@ -78,27 +147,8 @@ export const api = {
     if (!res.ok) {
       throw new Error(await res.text());
     }
-    return res.json();
-  },
-};
-
-/**
- * A convenience method for the special `menu_items/:id/upload_image` endpoint
- */
-export async function uploadMenuItemImage(itemId: string, file: File) {
-  const formData = new FormData();
-  // If your Rails code expects `params[:image]`, just do this:
-  formData.append('image', file);
-
-  const res = await fetch(`${API_BASE_URL}/menu_items/${itemId}/upload_image`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`,
-    },
-    body: formData,
-  });
-  if (!res.ok) {
-    throw new Error(await res.text());
+    return res.json(); // returns updated MenuItem object (with new image_url)
+  } finally {
+    useLoadingStore.getState().stopLoading();
   }
-  return res.json(); // returns updated MenuItem object (with new image_url)
 }

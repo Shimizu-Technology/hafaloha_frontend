@@ -4,13 +4,16 @@ import { MenuManager } from './MenuManager';
 import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
 import { AnalyticsManager } from './AnalyticsManager';
-import { BarChart2, ShoppingBag, LayoutGrid, Tag, X as XIcon } from 'lucide-react';
+import {
+  BarChart2,
+  ShoppingBag,
+  LayoutGrid,
+  Tag,
+  X as XIcon
+} from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { api, Order } from '../../lib/api';
+import { api, Order } from '../../lib/api';  // <== we have api.getBackground now
 import { useAuthStore } from '../../store/authStore';
-
-// You can also import a ShoppingBag or some icon for the notification
-// import { ShoppingBag } from 'lucide-react';
 
 type Tab = 'analytics' | 'orders' | 'menu' | 'promos';
 
@@ -44,7 +47,7 @@ export function AdminDashboard() {
   ] as const;
 
   // --------------------------------
-  // Polling for new orders with localStorage
+  // Polling for new orders, stored in localStorage
   // --------------------------------
   const [lastOrderId, setLastOrderId] = useState<number>(() => {
     const stored = localStorage.getItem('adminLastOrderId');
@@ -59,13 +62,12 @@ export function AdminDashboard() {
 
     const intervalId = setInterval(async () => {
       try {
-        // GET /orders/new_since/:id
+        // Call the NO-SPINNER method:
         const url = `/orders/new_since/${lastOrderId}`;
-        const newOrders: Order[] = await api.get(url);
+        const newOrders: Order[] = await api.getBackground(url);
 
         if (newOrders.length > 0) {
           newOrders.forEach((order) => {
-            // Build a human-friendly date
             const createdAtStr = new Date(order.createdAt).toLocaleString();
             const itemCount = order.items?.length || 0;
             const totalPrice = (order.total ?? 0).toFixed(2);
@@ -77,9 +79,9 @@ export function AdminDashboard() {
             toast.custom((t) => (
               <div
                 className="relative bg-white rounded-lg shadow-lg p-4 max-w-sm border border-gray-200"
-                style={{ minWidth: '260px' }} // optional
+                style={{ minWidth: '260px' }}
               >
-                {/* Close button in top-right */}
+                {/* Close button */}
                 <button
                   onClick={() => toast.dismiss(t.id)}
                   className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
@@ -87,16 +89,13 @@ export function AdminDashboard() {
                   <XIcon className="h-4 w-4" />
                 </button>
 
-                {/* Header row */}
                 <div className="flex items-center space-x-2">
-                  {/* An icon if you like */}
                   <ShoppingBag className="h-6 w-6 text-[#c1902f]" />
                   <h4 className="text-sm font-semibold text-gray-900">
                     New Order #{order.id}
                   </h4>
                 </div>
 
-                {/* Body content */}
                 <div className="mt-3 text-sm text-gray-700">
                   <p className="text-xs text-gray-500">
                     Created: {createdAtStr}
@@ -117,7 +116,7 @@ export function AdminDashboard() {
                   )}
                 </div>
 
-                {/* Footer row with button(s) */}
+                {/* Footer row */}
                 <div className="mt-4 text-right">
                   <button
                     onClick={() => toast.dismiss(t.id)}
@@ -133,7 +132,7 @@ export function AdminDashboard() {
             });
           });
 
-          // Update lastOrderId & write to localStorage
+          // Update lastOrderId in localStorage
           const maxId = Math.max(...newOrders.map((o) => Number(o.id)));
           setLastOrderId(maxId);
           localStorage.setItem('adminLastOrderId', String(maxId));
@@ -141,7 +140,7 @@ export function AdminDashboard() {
       } catch (err) {
         console.error('Failed to poll new orders:', err);
       }
-    }, 5000); // poll every 5 seconds
+    }, 5000);
 
     return () => clearInterval(intervalId);
   }, [user, lastOrderId]);
