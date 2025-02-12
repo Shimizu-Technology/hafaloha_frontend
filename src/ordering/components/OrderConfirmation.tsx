@@ -1,21 +1,19 @@
 // src/ordering/components/OrderConfirmation.tsx
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { CheckCircle, Clock } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 
 export function OrderConfirmation() {
   // Grab data from location state
   const { state } = useLocation() as {
     state?: {
       orderId?: string;
-      estimatedTime?: string;
       total?: number;
-      hasAny24hrItem?: boolean; // <-- NEW
+      hasAny24hrItem?: boolean;
     };
   };
 
   const orderId = state?.orderId || 'N/A';
-  const estimatedTime = state?.estimatedTime || '15-20 mins';
   const total = state?.total ?? 0;
   const hasAny24hrItem = !!state?.hasAny24hrItem;
 
@@ -31,22 +29,19 @@ export function OrderConfirmation() {
         </h1>
 
         <p className="text-lg text-gray-600 mb-8">
-          Your order #{orderId} has been received and is being prepared.
+          Your order #{orderId} has been received and is currently pending.
         </p>
 
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex items-center justify-center space-x-2 text-lg font-medium text-gray-900 mb-4">
-            <Clock className="h-6 w-6" />
-            <span>Estimated Pickup Time: {estimatedTime}</span>
-          </div>
-
           {hasAny24hrItem && (
             <p className="text-red-600 mb-4 font-semibold">
-              Heads up: One or more items in your order requires 24 hours notice!
-              Your pickup time may be scheduled accordingly.
+              Heads up: one or more items in your order requires 24 hours notice!
             </p>
           )}
 
+          <p className="text-gray-600 mb-4">
+            We’ll send you an ETA as soon as the staff begins preparing your order.
+          </p>
           <p className="text-gray-600 mb-4">
             Please show your order number when picking up.
           </p>

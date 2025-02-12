@@ -10,6 +10,7 @@ interface OrderStore {
   orders: Order[];
   loading: boolean;
   error: string | null;
+
   fetchOrders: () => Promise<void>;
 
   /** Creates a new order in the backend and returns it. */
@@ -22,7 +23,16 @@ interface OrderStore {
     contactEmail?: string
   ) => Promise<Order>;
 
-  updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
+  /**
+   * Update an order's status, optionally including an `estimated_pickup_time`.
+   * E.g. updateOrderStatus(orderId, 'preparing', '2025-02-13T12:05:00Z').
+   */
+  updateOrderStatus: (
+    orderId: string,
+    status: Order['status'],
+    pickupTime?: string
+  ) => Promise<void>;
+
   getOrderHistory: (userId: number) => Order[];
 
   // CART
@@ -68,7 +78,6 @@ export const useOrderStore = create<OrderStore>()(
       ) => {
         set({ loading: true, error: null });
         try {
-          // Build the request payload
           const payload = {
             order: {
               items: items.map((i) => ({
@@ -89,28 +98,39 @@ export const useOrderStore = create<OrderStore>()(
 
           const newOrder = await api.post('/orders', payload);
 
-          // Insert new order
+          // Insert new order into state
           set({
             orders: [...get().orders, newOrder],
             loading: false,
           });
+
           // Optionally clear cart
           set({ cartItems: [] });
 
           return newOrder;
         } catch (err: any) {
           set({ error: err.message, loading: false });
-          throw err;
+          throw err; // re-throw so the caller can show a toast, etc.
         }
       },
 
-      // PATCH /orders/:id
-      updateOrderStatus: async (orderId, status) => {
+      /**
+       * PATCH /orders/:id
+       * Optionally pass in `pickupTime` if we want to set `estimated_pickup_time` too.
+       */
+      updateOrderStatus: async (orderId, status, pickupTime) => {
         set({ loading: true, error: null });
         try {
+          // Build the payload
+          const payload: any = { status };
+          if (pickupTime) {
+            payload.estimated_pickup_time = pickupTime;
+          }
+
           const updatedOrder = await api.patch(`/orders/${orderId}`, {
-            order: { status },
+            order: payload,
           });
+
           const updatedOrders = get().orders.map((o) =>
             o.id === updatedOrder.id ? updatedOrder : o
           );
@@ -120,7 +140,7 @@ export const useOrderStore = create<OrderStore>()(
         }
       },
 
-      // Filter by userId => must match the 'userId' from the JSON
+      // Filter by userId => must match 'o.userId'
       getOrderHistory: (userId) => {
         return get().orders.filter((o) => o.userId === userId);
       },
@@ -134,7 +154,6 @@ export const useOrderStore = create<OrderStore>()(
         set((state) => {
           const existing = state.cartItems.find((ci) => ci.id === item.id);
           if (existing) {
-            // Increase existing quantity
             return {
               cartItems: state.cartItems.map((ci) =>
                 ci.id === item.id
@@ -143,7 +162,6 @@ export const useOrderStore = create<OrderStore>()(
               ),
             };
           } else {
-            // Add new item
             return {
               cartItems: [...state.cartItems, { ...item, quantity }],
             };
@@ -184,8 +202,8 @@ export const useOrderStore = create<OrderStore>()(
       },
     }),
     {
-      name: 'cart-storage', // Key in localStorage
-      // Only persist cartItems to keep everything else ephemeral:
+      name: 'cart-storage', // localStorage key
+      // Only persist cartItems for offline usage
       partialize: (state) => ({ cartItems: state.cartItems }),
     }
   )
