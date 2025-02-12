@@ -12,7 +12,7 @@ import { PickupInfo } from './location/PickupInfo';
 interface CheckoutFormData {
   name: string;
   email: string;
-  phone: string;
+  phone: string; // We'll pre-fill +1671 if empty
   cardNumber: string;
   expiryDate: string;
   cvv: string;
@@ -22,29 +22,19 @@ interface CheckoutFormData {
 
 export function CheckoutPage() {
   const navigate = useNavigate();
-
-  // 1) Access the user from authStore (could be null if no one is logged in)
   const { user } = useAuthStore();
 
-  // 2) Grab cart items & addOrder method
   const cartItems = useOrderStore((state) => state.cartItems);
   const addOrder = useOrderStore((state) => state.addOrder);
 
-  // 3) Promo code logic
   const { validatePromoCode, applyDiscount } = usePromoStore();
 
-  // 4) Calculate the raw total
-  const rawTotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  const rawTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // 5) Build an initial form state that uses user if available
   const initialFormData: CheckoutFormData = {
-    // Use user.first_name & user.last_name from your backend
     name: user ? `${user.first_name} ${user.last_name}` : '',
     email: user?.email || '',
-    phone: user?.phone || '',
+    phone: user?.phone || '',  // if user has a phone, use it, else blank => we'll fill +1671 below
     cardNumber: '',
     expiryDate: '',
     cvv: '',
@@ -52,46 +42,40 @@ export function CheckoutPage() {
     promoCode: ''
   };
 
-  // 6) Our local state
   const [formData, setFormData] = useState<CheckoutFormData>(initialFormData);
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
 
-  /**
-   * If the user logs in or out while on the checkout page,
-   * we can update the contact fields accordingly.
-   */
+  // On mount or if phone changes from user => if blank => set +1671
+  useEffect(() => {
+    if (formData.phone.trim() === '') {
+      setFormData((prev) => ({ ...prev, phone: '+1671' }));
+    }
+  }, []);
+
   useEffect(() => {
     if (user) {
-      // Populate from user
       setFormData((prev) => ({
         ...prev,
         name: `${user.first_name} ${user.last_name}`,
         email: user.email,
-        phone: user.phone,
+        phone: user.phone || '+1671',
       }));
     } else {
-      // If user logs out or never logged in
       setFormData((prev) => ({
         ...prev,
         name: '',
         email: '',
-        phone: '',
+        phone: '+1671',
       }));
     }
   }, [user]);
 
-  // =============== HANDLERS =================
-
-  // Update local formData whenever any field changes
-  function handleInputChange(
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) {
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   }
 
-  // Apply promo code
   function handleApplyPromo() {
     const isValid = validatePromoCode(formData.promoCode);
     if (isValid) {
@@ -104,40 +88,45 @@ export function CheckoutPage() {
     }
   }
 
-  // Submit the order
+  // If user leaves phone as +1671 => treat as blank
+  function normalizePhone(phoneStr: string) {
+    const trimmed = phoneStr.trim();
+    if (trimmed === '+1671' || trimmed === '+1671-') {
+      return '';
+    }
+    return trimmed;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      // 1) Check if any cart item needs 24 hours
+      // Check for 24 hr item
       const hasAny24hrItem = cartItems.some(
         (it) => (it.advance_notice_hours ?? 0) >= 24
       );
 
-      // 2) Create the new order on the backend
-      // We pass contactName, contactPhone, contactEmail so the store can include them in the payload
+      // Normalize phone
+      const finalPhone = normalizePhone(formData.phone);
+
       const newOrder = await addOrder(
         cartItems,
         finalTotal,
         formData.specialInstructions,
         formData.name,
-        formData.phone,
+        finalPhone,
         formData.email
       );
 
       toast.success('Order placed successfully!');
 
-      // 3) Figure out the estimated time for the front-end
-      const estimatedTime = hasAny24hrItem
-        ? '24 hours'
-        : '20–25 min';
+      const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
 
-      // 4) Navigate to confirmation, passing the data
       navigate('/ordering/order-confirmation', {
         state: {
           orderId: newOrder.id || '12345',
           total: finalTotal,
           estimatedTime,
-          hasAny24hrItem, // so we can show a red message if it's 24hr
+          hasAny24hrItem,
         },
       });
     } catch (err: any) {
@@ -146,20 +135,17 @@ export function CheckoutPage() {
     }
   }
 
-  // =============== RENDER ===================
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
-
       <div className="lg:grid lg:grid-cols-12 lg:gap-8">
         {/* LEFT: The form */}
         <div className="lg:col-span-7">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Contact Information */}
+            {/* Contact Info */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Contact Information</h2>
               <div className="space-y-4">
-                {/* Full Name */}
                 <div>
                   <label
                     htmlFor="name"
@@ -179,8 +165,6 @@ export function CheckoutPage() {
                       focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
-
-                {/* Email */}
                 <div>
                   <label
                     htmlFor="email"
@@ -200,8 +184,6 @@ export function CheckoutPage() {
                       focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
-
-                {/* Phone */}
                 <div>
                   <label
                     htmlFor="phone"
@@ -217,6 +199,7 @@ export function CheckoutPage() {
                     required
                     value={formData.phone}
                     onChange={handleInputChange}
+                    placeholder="+1671"
                     className="w-full px-4 py-2 border border-gray-300 rounded-md
                       focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
@@ -224,11 +207,10 @@ export function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment Information */}
+            {/* Payment Info */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
               <div className="space-y-4">
-                {/* Card Number */}
                 <div>
                   <label
                     htmlFor="cardNumber"
@@ -250,7 +232,6 @@ export function CheckoutPage() {
                   />
                 </div>
 
-                {/* Expiry / CVV */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label
@@ -310,7 +291,6 @@ export function CheckoutPage() {
 
             {/* Promo + Total + Submit */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              {/* Promo Code */}
               <div className="mb-4">
                 <label
                   htmlFor="promoCode"
@@ -340,7 +320,6 @@ export function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Show total */}
               <div className="flex justify-between items-center mb-4">
                 <span className="text-lg font-medium">Total</span>
                 <div className="text-right">
@@ -355,9 +334,9 @@ export function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Submit => Place Order */}
               <button
                 type="submit"
+                onClick={handleSubmit}
                 className="w-full bg-[#c1902f] text-white py-3 px-4
                   rounded-md hover:bg-[#d4a43f] transition-colors duration-200"
               >
@@ -367,7 +346,7 @@ export function CheckoutPage() {
           </form>
         </div>
 
-        {/* RIGHT COLUMN */}
+        {/* RIGHT COLUMN => Pickup Info */}
         <div className="lg:col-span-5 mt-8 lg:mt-0">
           <PickupInfo />
         </div>

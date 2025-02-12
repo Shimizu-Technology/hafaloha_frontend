@@ -9,8 +9,6 @@ import {
   MapPin,
   Share2,
 } from 'lucide-react';
-
-// Example: if you have these from your actual API calls
 import { fetchAvailability, createReservation } from '../../../reservations/services/api';
 
 interface ReservationModalProps {
@@ -25,7 +23,7 @@ interface ReservationData {
   duration: string;
   firstName: string;
   lastName: string;
-  phone: string;
+  phone: string;  // We'll pre-fill +1671
   email: string;
 }
 
@@ -34,9 +32,6 @@ interface ConfirmationData extends ReservationData {
 }
 
 export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
-  //
-  // 1) HOOKS (unconditional!)
-  //
   const [formData, setFormData] = useState<ReservationData>({
     date: '',
     time: '',
@@ -44,24 +39,26 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
     duration: '1 hour',
     firstName: '',
     lastName: '',
-    phone: '',
+    phone: '',       // We'll handle pre-fill in useEffect
     email: '',
   });
   const [confirmation, setConfirmation] = useState<ConfirmationData | null>(null);
-
-  // For storing fetched time slots from the backend
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
 
-  // Fetch availability whenever date/partySize changes
+  // On mount or open, if phone is blank => set it to +1671
+  useEffect(() => {
+    if (isOpen && formData.phone.trim() === '') {
+      setFormData((prev) => ({ ...prev, phone: '+1671' }));
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (!formData.date || !formData.partySize) {
       setTimeSlots([]);
       return;
     }
-
     fetchAvailability(formData.date, formData.partySize)
       .then((res) => {
-        // Suppose res.slots = ["17:00", "17:30", ...]
         setTimeSlots(res.slots || []);
       })
       .catch((err) => {
@@ -70,14 +67,8 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
       });
   }, [formData.date, formData.partySize]);
 
-  //
-  // 2) If not open, bail out *after* the Hooks above
-  //
   if (!isOpen) return null;
 
-  //
-  // 3) "Share" button logic & other handlers
-  //
   function handleShare() {
     if (!confirmation) return;
     const text = `I just made a reservation at Håfaloha!\n\nDate: ${confirmation.date}
@@ -88,9 +79,18 @@ Party Size: ${confirmation.partySize} people`;
     }
   }
 
+  // On final submit, if phone is still exactly "+1671", treat it as blank
+  function normalizePhone(input: string) {
+    const trimmed = input.trim();
+    // Also handle variants like "+1671-"
+    if (trimmed === '+1671' || trimmed === '+1671-') {
+      return '';
+    }
+    return trimmed;
+  }
+
   async function handleSubmitReal(e: React.FormEvent) {
     e.preventDefault();
-    // basic validation
     if (!formData.date || !formData.time) {
       alert('Please fill out date and time');
       return;
@@ -98,21 +98,24 @@ Party Size: ${confirmation.partySize} people`;
 
     try {
       const start_time = `${formData.date}T${formData.time}:00`;
+
+      // Use our normalizer
+      const finalPhone = normalizePhone(formData.phone);
+
       await createReservation({
         reservation: {
           restaurant_id: 1,
           start_time,
           party_size: formData.partySize,
           contact_name: `${formData.firstName} ${formData.lastName}`.trim(),
-          contact_phone: formData.phone,
+          contact_phone: finalPhone,
           contact_email: formData.email,
           status: 'booked',
           duration_minutes: parseDuration(formData.duration),
         },
       });
 
-      // if successful => show confirmation
-      setConfirmation({ ...formData, confirmed: true });
+      setConfirmation({ ...formData, phone: finalPhone, confirmed: true });
     } catch (err) {
       console.error('Failed to create reservation:', err);
       alert('Reservation failed. Check console for details.');
@@ -120,14 +123,13 @@ Party Size: ${confirmation.partySize} people`;
   }
 
   function parseDuration(durStr: string): number {
-    // e.g. "1 hour" => 60, "1.5 hours" => 90
     const num = parseFloat(durStr);
     if (isNaN(num)) return 60;
     return Math.round(num * 60);
   }
 
-  // 4) If user has a `confirmation` => render the "Confirmed" screen
   if (confirmation) {
+    // Confirmation screen
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
         <div className="relative bg-white rounded-lg w-full max-w-2xl">
@@ -145,7 +147,6 @@ Party Size: ${confirmation.partySize} people`;
             <h2 className="text-2xl md:text-3xl font-bold mt-4">Reservation Confirmed!</h2>
             <p className="mt-2 text-sm text-gray-600">Thank you! We look forward to serving you.</p>
 
-            {/* Confirmation Details */}
             <div className="mt-6 space-y-6 text-left max-w-md mx-auto">
               <div>
                 <h4 className="font-medium flex items-center gap-2">
@@ -214,7 +215,7 @@ Party Size: ${confirmation.partySize} people`;
     );
   }
 
-  // 5) Otherwise => the main "Make a Reservation" form
+  // The main form
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
       <div className="relative bg-white rounded-lg w-full max-w-2xl">
@@ -232,9 +233,8 @@ Party Size: ${confirmation.partySize} people`;
 
         <div className="px-6 pb-8">
           <form onSubmit={handleSubmitReal} className="space-y-4">
-            {/* Row: date / partySize */}
+            {/* Date / Party Size */}
             <div className="grid grid-cols-2 gap-4">
-              {/* Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
                 <input
@@ -249,7 +249,6 @@ Party Size: ${confirmation.partySize} people`;
                              focus:border-[#c1902f] focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
                 />
               </div>
-              {/* Party Size */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Party Size</label>
                 <select
@@ -269,9 +268,8 @@ Party Size: ${confirmation.partySize} people`;
               </div>
             </div>
 
-            {/* Row: time (loaded from timeSlots) / duration */}
+            {/* Time / Duration */}
             <div className="grid grid-cols-2 gap-4">
-              {/* Time */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Time</label>
                 <select
@@ -291,7 +289,6 @@ Party Size: ${confirmation.partySize} people`;
                   ))}
                 </select>
               </div>
-              {/* Duration */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Duration</label>
                 <select
@@ -309,7 +306,7 @@ Party Size: ${confirmation.partySize} people`;
               </div>
             </div>
 
-            {/* Row: firstName / lastName */}
+            {/* FirstName / LastName */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">First Name</label>
@@ -337,7 +334,7 @@ Party Size: ${confirmation.partySize} people`;
               </div>
             </div>
 
-            {/* Row: phone / email */}
+            {/* Phone / Email */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Phone</label>
@@ -347,7 +344,7 @@ Party Size: ${confirmation.partySize} people`;
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, phone: e.target.value }))
                   }
-                  placeholder="671-123-4567"
+                  placeholder="+1671"
                   className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2
                              focus:border-[#c1902f] focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
                 />
@@ -366,7 +363,6 @@ Party Size: ${confirmation.partySize} people`;
               </div>
             </div>
 
-            {/* Submit */}
             <div className="pt-4">
               <button
                 type="submit"
@@ -384,7 +380,6 @@ Party Size: ${confirmation.partySize} people`;
   );
 }
 
-// Helper to format "17:30" => "5:30 PM"
 function formatTime(t: string) {
   const [hh, mm] = t.split(':').map(Number);
   if (isNaN(hh)) return t;
