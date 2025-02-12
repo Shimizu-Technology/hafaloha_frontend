@@ -1,22 +1,29 @@
 // src/components/admin/AdminDashboard.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MenuManager } from './MenuManager';
-// import { InventoryManager } from './InventoryManager';
 import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
 import { AnalyticsManager } from './AnalyticsManager';
-import { BarChart2, ShoppingBag, LayoutGrid, Package, Tag } from 'lucide-react';
+import { BarChart2, ShoppingBag, LayoutGrid, Tag, X as XIcon } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { api, Order } from '../../lib/api';
+import { useAuthStore } from '../../store/authStore';
 
-type Tab = 'analytics' | 'orders' | 'menu' | 'inventory' | 'promos';
+// You can also import a ShoppingBag or some icon for the notification
+// import { ShoppingBag } from 'lucide-react';
+
+type Tab = 'analytics' | 'orders' | 'menu' | 'promos';
 
 export function AdminDashboard() {
+  const { user } = useAuthStore();
+
+  // Track the active tab
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const stored = localStorage.getItem('adminTab');
     if (
       stored === 'analytics' ||
       stored === 'orders' ||
       stored === 'menu' ||
-      stored === 'inventory' ||
       stored === 'promos'
     ) {
       return stored as Tab;
@@ -33,19 +40,121 @@ export function AdminDashboard() {
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'orders',    label: 'Orders',    icon: ShoppingBag },
     { id: 'menu',      label: 'Menu',      icon: LayoutGrid },
-    // { id: 'inventory', label: 'Inventory', icon: Package },
     { id: 'promos',    label: 'Promos',    icon: Tag },
   ] as const;
+
+  // --------------------------------
+  // Polling for new orders with localStorage
+  // --------------------------------
+  const [lastOrderId, setLastOrderId] = useState<number>(() => {
+    const stored = localStorage.getItem('adminLastOrderId');
+    return stored ? parseInt(stored, 10) || 0 : 0;
+  });
+
+  useEffect(() => {
+    // Only poll if user is admin or super_admin
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return;
+    }
+
+    const intervalId = setInterval(async () => {
+      try {
+        // GET /orders/new_since/:id
+        const url = `/orders/new_since/${lastOrderId}`;
+        const newOrders: Order[] = await api.get(url);
+
+        if (newOrders.length > 0) {
+          newOrders.forEach((order) => {
+            // Build a human-friendly date
+            const createdAtStr = new Date(order.createdAt).toLocaleString();
+            const itemCount = order.items?.length || 0;
+            const totalPrice = (order.total ?? 0).toFixed(2);
+
+            // Optional contact info
+            const contactName = (order as any).contact_name || '';
+            const contactPhone = (order as any).contact_phone || '';
+
+            toast.custom((t) => (
+              <div
+                className="relative bg-white rounded-lg shadow-lg p-4 max-w-sm border border-gray-200"
+                style={{ minWidth: '260px' }} // optional
+              >
+                {/* Close button in top-right */}
+                <button
+                  onClick={() => toast.dismiss(t.id)}
+                  className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
+
+                {/* Header row */}
+                <div className="flex items-center space-x-2">
+                  {/* An icon if you like */}
+                  <ShoppingBag className="h-6 w-6 text-[#c1902f]" />
+                  <h4 className="text-sm font-semibold text-gray-900">
+                    New Order #{order.id}
+                  </h4>
+                </div>
+
+                {/* Body content */}
+                <div className="mt-3 text-sm text-gray-700">
+                  <p className="text-xs text-gray-500">
+                    Created: {createdAtStr}
+                  </p>
+                  <p className="mt-1">
+                    {itemCount} item{itemCount !== 1 ? 's' : ''} • ${totalPrice}
+                  </p>
+
+                  {contactName && (
+                    <p className="mt-1">
+                      <span className="font-medium">Name:</span> {contactName}
+                    </p>
+                  )}
+                  {contactPhone && (
+                    <p className="mt-1">
+                      <span className="font-medium">Phone:</span> {contactPhone}
+                    </p>
+                  )}
+                </div>
+
+                {/* Footer row with button(s) */}
+                <div className="mt-4 text-right">
+                  <button
+                    onClick={() => toast.dismiss(t.id)}
+                    className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ), {
+              duration: Infinity,
+              id: `new_order_${order.id}`,
+            });
+          });
+
+          // Update lastOrderId & write to localStorage
+          const maxId = Math.max(...newOrders.map((o) => Number(o.id)));
+          setLastOrderId(maxId);
+          localStorage.setItem('adminLastOrderId', String(maxId));
+        }
+      } catch (err) {
+        console.error('Failed to poll new orders:', err);
+      }
+    }, 5000); // poll every 5 seconds
+
+    return () => clearInterval(intervalId);
+  }, [user, lastOrderId]);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+
         {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Manage orders, menu items, inventory, and promotions
+            Manage orders, menu items, and promotions
           </p>
         </div>
 
@@ -75,7 +184,6 @@ export function AdminDashboard() {
             {activeTab === 'analytics' && <AnalyticsManager />}
             {activeTab === 'orders'    && <OrderManager />}
             {activeTab === 'menu'      && <MenuManager />}
-            {/* {activeTab === 'inventory' && <InventoryManager />} */}
             {activeTab === 'promos'    && <PromoManager />}
           </div>
         </div>
