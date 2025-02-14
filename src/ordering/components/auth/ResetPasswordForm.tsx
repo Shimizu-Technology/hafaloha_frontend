@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../../ordering/lib/api';
 import { useAuthStore } from '../../../ordering/store/authStore';
+import { toast } from 'react-hot-toast';
 
 export function ResetPasswordForm() {
   const [searchParams] = useSearchParams();
@@ -10,7 +11,6 @@ export function ResetPasswordForm() {
   const email = searchParams.get('email') || '';
 
   const navigate = useNavigate();
-  // Access the store method
   const { setUserFromResponse } = useAuthStore.getState();
 
   const [newPassword, setNewPassword] = useState('');
@@ -49,8 +49,9 @@ export function ResetPasswordForm() {
       }
 
       setSuccessMsg('Password reset successfully. Redirecting...');
+      toast.success('Password reset successfully!');
       setTimeout(() => {
-        navigate('/ordering'); // or navigate('/')
+        navigate('/ordering');
       }, 1500);
     } catch (err: any) {
       setError(err.message || 'Failed to reset password');

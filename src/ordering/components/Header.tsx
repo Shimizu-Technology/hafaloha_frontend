@@ -12,13 +12,13 @@ import {
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useOrderStore } from '../store/orderStore';
+import { toast } from 'react-hot-toast';
 
 export function Header() {
   const { user, signOut } = useAuthStore();
 
   // Pull the cartItems array from the store
   const cartItems = useOrderStore((state) => state.cartItems);
-  // Sum up the total quantity
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   // Bounce animation for cart icon
@@ -165,6 +165,7 @@ export function Header() {
                     <button
                       onClick={() => {
                         signOut();
+                        toast.success('Signed out successfully!');
                         setIsDropdownOpen(false);
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -213,7 +214,6 @@ export function Header() {
               <ShoppingCart
                 className={`h-6 w-6 ${cartBounce ? 'animate-bounce' : ''}`}
               />
-              {/* Show a badge if cartCount > 0 */}
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-[#c1902f] 
                                  text-white text-xs font-bold 
@@ -301,6 +301,7 @@ export function Header() {
                 <button
                   onClick={() => {
                     signOut();
+                    toast.success('Signed out successfully!');
                     setIsMobileMenuOpen(false);
                   }}
                   className="

@@ -1,7 +1,6 @@
 // src/ordering/OnlineOrderingApp.tsx
 import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
 
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
@@ -70,8 +69,7 @@ function OrderingLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col relative">
-      <Toaster position="top-right" />
-
+      {/* Removed <Toaster/> — only needed once at root */}
       <main className="flex-grow tropical-pattern">
         <Suspense fallback={<LoadingSpinner />}>
           <Outlet />

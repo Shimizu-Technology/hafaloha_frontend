@@ -14,6 +14,7 @@ export default function RootApp() {
     <AuthProvider>
       <BrowserRouter>
         <ScrollToTop />
+        {/* Provide the Toast container at root level */}
         <Toaster position="top-right" reverseOrder={false} />
 
         <Routes>

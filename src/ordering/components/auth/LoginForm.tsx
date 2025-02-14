@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { Mail, Lock } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 
 export function LoginForm() {
   const { signIn, loading, error } = useAuthStore();
@@ -14,8 +15,10 @@ export function LoginForm() {
     e.preventDefault();
     await signIn(email, password);
 
-    if (!error) {
-      // If successful => go to / => /ordering => index route
+    // If no error => success => show toast + navigate
+    if (!useAuthStore.getState().error) {
+      toast.success('Welcome back!');
+      // If successful => go to / (or /ordering)
       navigate('/');
     }
   };
@@ -81,10 +84,6 @@ export function LoginForm() {
       </form>
 
       <div className="mt-4 text-sm text-center">
-        {/* 
-           Absolute => always go to /ordering/forgot-password 
-           regardless of current route. 
-        */}
         <Link to="/ordering/forgot-password" className="text-blue-600 hover:underline">
           Forgot Password?
         </Link>

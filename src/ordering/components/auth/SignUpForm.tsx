@@ -3,11 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { Mail, Lock, User, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 
 export function SignUpForm() {
   const { signUp, loading, error } = useAuthStore();
 
-  // We store user input in local state
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -19,10 +19,8 @@ export function SignUpForm() {
 
   const navigate = useNavigate();
 
-  // If we had an “onMount” check for something, or a side effect
-  // to handle store error changes, we could do it here:
   useEffect(() => {
-    // If “error” is present, we can highlight or show it, but we already do so in the UI below.
+    // If “error” is present, we already show it in the UI below
   }, [error]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -46,10 +44,10 @@ export function SignUpForm() {
       formData.phone
     );
 
-    // The store sets “error” if something goes wrong.
-    // Only navigate if error is still null (meaning success).
+    // If store.error is still null => success
     if (!useAuthStore.getState().error) {
-      navigate('/ordering'); 
+      toast.success('Account created successfully!');
+      navigate('/ordering');
     }
   }
 
@@ -57,7 +55,6 @@ export function SignUpForm() {
     <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-center">Create an Account</h2>
 
-      {/* If the store has an error, show it */}
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
           {error}
@@ -67,7 +64,10 @@ export function SignUpForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* First Name */}
         <div>
-          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="firstName"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <User className="inline-block w-4 h-4 mr-2" />
             First Name
           </label>
@@ -85,7 +85,10 @@ export function SignUpForm() {
 
         {/* Last Name */}
         <div>
-          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="lastName"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <User className="inline-block w-4 h-4 mr-2" />
             Last Name
           </label>
@@ -103,7 +106,10 @@ export function SignUpForm() {
 
         {/* Email */}
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <Mail className="inline-block w-4 h-4 mr-2" />
             Email
           </label>
@@ -121,7 +127,10 @@ export function SignUpForm() {
 
         {/* Phone */}
         <div>
-          <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="phone"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <Phone className="inline-block w-4 h-4 mr-2" />
             Phone
           </label>
@@ -139,7 +148,10 @@ export function SignUpForm() {
 
         {/* Password */}
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <Lock className="inline-block w-4 h-4 mr-2" />
             Password
           </label>
@@ -157,7 +169,10 @@ export function SignUpForm() {
 
         {/* Confirm Password */}
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="confirmPassword"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <Lock className="inline-block w-4 h-4 mr-2" />
             Confirm Password
           </label>

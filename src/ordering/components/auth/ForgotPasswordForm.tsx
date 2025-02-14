@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../ordering/lib/api';
+import { toast } from 'react-hot-toast';
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
@@ -19,7 +20,9 @@ export function ForgotPasswordForm() {
 
     try {
       const res = await api.post('/password/forgot', { email });
-      setMessage(res.message || 'Check your email for a reset link.');
+      const successMsg = res.message || 'Check your email for a reset link.';
+      setMessage(successMsg);
+      toast.success(successMsg);
     } catch (err: any) {
       setError(err.message || 'Something went wrong.');
     } finally {
