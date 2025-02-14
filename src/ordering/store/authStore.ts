@@ -53,7 +53,7 @@ export const useAuthStore = create<AuthStore>((set) => {
             password,
             password_confirmation: password,
             first_name: firstName,
-            last_name,
+            last_name: lastName,
             phone
           }
         };

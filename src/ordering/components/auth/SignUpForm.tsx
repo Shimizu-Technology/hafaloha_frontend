@@ -1,14 +1,13 @@
 // src/ordering/components/auth/SignUpForm.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { Mail, Lock, User, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function SignUpForm() {
   const { signUp, loading, error } = useAuthStore();
-  const navigate = useNavigate();
 
-  // We'll store separate fields, including phone pre-populated
+  // We store user input in local state
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -18,21 +17,27 @@ export function SignUpForm() {
     confirmPassword: '',
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const navigate = useNavigate();
+
+  // If we had an “onMount” check for something, or a side effect
+  // to handle store error changes, we could do it here:
+  useEffect(() => {
+    // If “error” is present, we can highlight or show it, but we already do so in the UI below.
+  }, [error]);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    // Check password match
     if (formData.password !== formData.confirmPassword) {
       alert('Passwords do not match');
       return;
     }
 
-    // signUp(...) with all five fields
+    // Call signUp from the store
     await signUp(
       formData.email,
       formData.password,
@@ -41,18 +46,18 @@ export function SignUpForm() {
       formData.phone
     );
 
-    // If there's no error, we assume success => navigate
-    if (!error) {
-      navigate('/ordering');
+    // The store sets “error” if something goes wrong.
+    // Only navigate if error is still null (meaning success).
+    if (!useAuthStore.getState().error) {
+      navigate('/ordering'); 
     }
-  };
+  }
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">
-        Create an Account
-      </h2>
-      
+      <h2 className="text-2xl font-bold mb-6 text-center">Create an Account</h2>
+
+      {/* If the store has an error, show it */}
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
           {error}
