@@ -3,7 +3,6 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
-import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
@@ -15,15 +14,16 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { LoyaltyTeaser } from './components/loyalty/LoyaltyTeaser';
 import { LoginForm } from './components/auth/LoginForm';
 import { SignUpForm } from './components/auth/SignUpForm';
+import { ForgotPasswordForm } from './components/auth/ForgotPasswordForm';
+import { ResetPasswordForm } from './components/auth/ResetPasswordForm';
 import { OrderHistory } from './components/profile/OrderHistory';
 
 import { useAuthStore } from './store/authStore';
 import { useMenuStore } from './store/menuStore';
+import { useLoadingStore } from './store/loadingStore';
+
 import type { CartItem, MenuItem as MenuItemType } from './types/menu';
 import { MenuItem } from './components/MenuItem';
-
-// We import our global loading store
-import { useLoadingStore } from './store/loadingStore';
 
 function ProtectedRoute({
   children,
@@ -33,38 +33,33 @@ function ProtectedRoute({
   adminOnly?: boolean;
 }) {
   const { user } = useAuthStore();
+
+  // If no user => go to /ordering/login
   if (!user) {
-    return <Navigate to="login" />;
+    return <Navigate to="login" replace />;
   }
+  // If adminOnly & user.role != admin => go /ordering
   if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="" />;
+    return <Navigate to="" replace />;
   }
   return <>{children}</>;
 }
 
-/** Layout with a “debounced” spinner overlay. */
 function OrderingLayout() {
   const loadingCount = useLoadingStore((state) => state.loadingCount);
-
-  // Debounce logic:
-  // If loadingCount > 0, wait 300ms before actually showing the spinner.
-  // If the request finishes <300ms, we skip showing it => no flicker.
   const [showSpinner, setShowSpinner] = useState(false);
   const [timerId, setTimerId] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (loadingCount > 0) {
-      // We have an ongoing request => start a timer
-      // (if we haven't already)
       if (!timerId) {
         const id = setTimeout(() => {
           setShowSpinner(true);
           setTimerId(null);
-        }, 500); // 500ms delay
+        }, 700);
         setTimerId(id);
       }
     } else {
-      // No requests => clear any timer & hide the spinner
       if (timerId) {
         clearTimeout(timerId);
         setTimerId(null);
@@ -85,19 +80,18 @@ function OrderingLayout() {
 
       <Footer />
 
-      {/* Only show the overlay if showSpinner is true */}
       {showSpinner && (
-        <div className="
+        <div
+          className="
           fixed top-0 left-0 w-screen h-screen
           bg-black bg-opacity-40 
           flex items-center justify-center
           z-[9999999]
-        ">
+        "
+        >
           <div className="bg-gray-800 p-6 rounded shadow-lg flex flex-col items-center">
             <LoadingSpinner />
-            <p className="mt-3 text-white font-semibold">
-              Loading...
-            </p>
+            <p className="mt-3 text-white font-semibold">Loading...</p>
           </div>
         </div>
       )}
@@ -129,6 +123,7 @@ export default function OnlineOrderingApp() {
   return (
     <Routes>
       <Route element={<OrderingLayout />}>
+        {/* index => /ordering => Hero & sample items */}
         <Route
           index
           element={
@@ -159,11 +154,13 @@ export default function OnlineOrderingApp() {
           }
         />
 
+        {/* Ordering routes */}
         <Route path="menu" element={<MenuPage onAddToCart={handleAddToCart} />} />
         <Route path="cart" element={<CartPage items={cart} />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="order-confirmation" element={<OrderConfirmation />} />
 
+        {/* Admin => /ordering/admin */}
         <Route
           path="admin"
           element={
@@ -173,9 +170,13 @@ export default function OnlineOrderingApp() {
           }
         />
 
+        {/* Auth => /ordering/login, /ordering/signup, /ordering/forgot-password, etc. */}
         <Route path="login" element={<LoginForm />} />
         <Route path="signup" element={<SignUpForm />} />
+        <Route path="forgot-password" element={<ForgotPasswordForm />} />
+        <Route path="reset-password" element={<ResetPasswordForm />} />
 
+        {/* Protected => /ordering/orders => must be signed in */}
         <Route
           path="orders"
           element={
@@ -185,7 +186,8 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        <Route path="*" element={<Navigate to="" />} />
+        {/* Catch-all => /ordering => index route */}
+        <Route path="*" element={<Navigate to="" replace />} />
       </Route>
     </Routes>
   );

@@ -1,7 +1,8 @@
+// src/ordering/components/auth/LoginForm.tsx
 import React, { useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { Mail, Lock } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export function LoginForm() {
   const { signIn, loading, error } = useAuthStore();
@@ -13,9 +14,8 @@ export function LoginForm() {
     e.preventDefault();
     await signIn(email, password);
 
-    // If signIn didn't fail, error stays null => user is set => go home
-    // (This check is simplistic; for production you might want more robust checks)
     if (!error) {
+      // If successful => go to / => /ordering => index route
       navigate('/');
     }
   };
@@ -23,7 +23,7 @@ export function LoginForm() {
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-center">Welcome Back!</h2>
-      
+
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
           {error}
@@ -32,7 +32,10 @@ export function LoginForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <Mail className="inline-block w-4 h-4 mr-2" />
             Email
           </label>
@@ -41,13 +44,17 @@ export function LoginForm() {
             id="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
             required
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             <Lock className="inline-block w-4 h-4 mr-2" />
             Password
           </label>
@@ -56,7 +63,8 @@ export function LoginForm() {
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
             required
           />
         </div>
@@ -64,11 +72,23 @@ export function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-[#c1902f] text-white py-2 px-4 rounded-md hover:bg-[#d4a43f] transition-colors duration-200 disabled:opacity-50"
+          className="w-full bg-[#c1902f] text-white py-2 px-4 rounded-md
+                     hover:bg-[#d4a43f] transition-colors duration-200
+                     disabled:opacity-50"
         >
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
       </form>
+
+      <div className="mt-4 text-sm text-center">
+        {/* 
+           Absolute => always go to /ordering/forgot-password 
+           regardless of current route. 
+        */}
+        <Link to="/ordering/forgot-password" className="text-blue-600 hover:underline">
+          Forgot Password?
+        </Link>
+      </div>
     </div>
   );
 }

@@ -7,13 +7,16 @@ interface AuthStore {
   user: User | null;
   loading: boolean;
   error: string | null;
+
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signUp: (email: string, password: string, firstName: string, lastName: string, phone: string) => Promise<void>;
   signOut: () => void;
+
+  // Reusable method that sets store + localStorage from an object { jwt, user }
+  setUserFromResponse: (payload: { jwt: string; user: User }) => void;
 }
 
 export const useAuthStore = create<AuthStore>((set) => {
-  // On store creation, rehydrate from localStorage if we have a stored user
   const storedUser = localStorage.getItem('user');
   const parsedUser: User | null = storedUser ? JSON.parse(storedUser) : null;
 
@@ -22,46 +25,42 @@ export const useAuthStore = create<AuthStore>((set) => {
     loading: false,
     error: null,
 
+    // The new helper
+    setUserFromResponse: ({ jwt, user }) => {
+      localStorage.setItem('token', jwt);
+      localStorage.setItem('user', JSON.stringify(user));
+      set({ user, loading: false, error: null });
+    },
+
     // SIGN IN
     signIn: async (email, password) => {
       set({ loading: true, error: null });
       try {
-        // For example, Rails might return { jwt, user } with e.g. user.role
         const { jwt, user } = await api.post('/login', { email, password });
-
-        // Save JWT and user to localStorage
-        localStorage.setItem('token', jwt);
-        localStorage.setItem('user', JSON.stringify(user));
-
-        // Update state
-        set({ user, loading: false, error: null });
+        useAuthStore.getState().setUserFromResponse({ jwt, user });
       } catch (err: any) {
-        set({ error: err.message, loading: false });
+        set({ loading: false, error: err.message });
       }
     },
 
     // SIGN UP
-    signUp: async (email, password, name) => {
+    signUp: async (email, password, firstName, lastName, phone) => {
       set({ loading: true, error: null });
       try {
-        // Suppose we split "Full Name" into first/last
-        const nameParts = name.trim().split(' ');
-        const first_name = nameParts[0] || '';
-        const last_name = nameParts.slice(1).join(' ') || '';
-
-        const { jwt, user } = await api.post('/signup', {
-          email,
-          password,
-          first_name,
-          last_name
-        });
-
-        localStorage.setItem('token', jwt);
-        localStorage.setItem('user', JSON.stringify(user));
-
-        set({ user, loading: false, error: null });
+        const payload = {
+          user: {
+            email,
+            password,
+            password_confirmation: password,
+            first_name: firstName,
+            last_name,
+            phone
+          }
+        };
+        const { jwt, user } = await api.post('/signup', payload);
+        useAuthStore.getState().setUserFromResponse({ jwt, user });
       } catch (err: any) {
-        set({ error: err.message, loading: false });
+        set({ loading: false, error: err.message });
       }
     },
 
@@ -69,7 +68,7 @@ export const useAuthStore = create<AuthStore>((set) => {
     signOut: () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      set({ user: null, error: null, loading: false });
-    }
+      set({ user: null, loading: false, error: null });
+    },
   };
 });

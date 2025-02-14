@@ -1,15 +1,21 @@
+// src/ordering/components/auth/SignUpForm.tsx
 import React, { useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { Mail, Lock, User, Phone } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export function SignUpForm() {
   const { signUp, loading, error } = useAuthStore();
+  const navigate = useNavigate();
+
+  // We'll store separate fields, including phone pre-populated
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
+    phone: '+1671',
     email: '',
-    phone: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,18 +23,35 @@ export function SignUpForm() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check password match
     if (formData.password !== formData.confirmPassword) {
       alert('Passwords do not match');
       return;
     }
-    signUp(formData.email, formData.password, formData.name);
+
+    // signUp(...) with all five fields
+    await signUp(
+      formData.email,
+      formData.password,
+      formData.firstName,
+      formData.lastName,
+      formData.phone
+    );
+
+    // If there's no error, we assume success => navigate
+    if (!error) {
+      navigate('/ordering');
+    }
   };
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">Create an Account</h2>
+      <h2 className="text-2xl font-bold mb-6 text-center">
+        Create an Account
+      </h2>
       
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
@@ -37,22 +60,43 @@ export function SignUpForm() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* First Name */}
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
             <User className="inline-block w-4 h-4 mr-2" />
-            Full Name
+            First Name
           </label>
           <input
             type="text"
-            id="name"
-            name="name"
-            value={formData.name}
+            id="firstName"
+            name="firstName"
+            value={formData.firstName}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
             required
           />
         </div>
 
+        {/* Last Name */}
+        <div>
+          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+            <User className="inline-block w-4 h-4 mr-2" />
+            Last Name
+          </label>
+          <input
+            type="text"
+            id="lastName"
+            name="lastName"
+            value={formData.lastName}
+            onChange={handleChange}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
+            required
+          />
+        </div>
+
+        {/* Email */}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
             <Mail className="inline-block w-4 h-4 mr-2" />
@@ -64,11 +108,13 @@ export function SignUpForm() {
             name="email"
             value={formData.email}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
             required
           />
         </div>
 
+        {/* Phone */}
         <div>
           <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
             <Phone className="inline-block w-4 h-4 mr-2" />
@@ -80,10 +126,13 @@ export function SignUpForm() {
             name="phone"
             value={formData.phone}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
+            required
           />
         </div>
 
+        {/* Password */}
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
             <Lock className="inline-block w-4 h-4 mr-2" />
@@ -95,11 +144,13 @@ export function SignUpForm() {
             name="password"
             value={formData.password}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
             required
           />
         </div>
 
+        {/* Confirm Password */}
         <div>
           <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
             <Lock className="inline-block w-4 h-4 mr-2" />
@@ -111,7 +162,8 @@ export function SignUpForm() {
             name="confirmPassword"
             value={formData.confirmPassword}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md
+                       focus:ring-[#c1902f] focus:border-[#c1902f]"
             required
           />
         </div>
@@ -119,7 +171,9 @@ export function SignUpForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-[#c1902f] text-white py-2 px-4 rounded-md hover:bg-[#d4a43f] transition-colors duration-200 disabled:opacity-50"
+          className="w-full bg-[#c1902f] text-white py-2 px-4 rounded-md
+                     hover:bg-[#d4a43f] transition-colors duration-200
+                     disabled:opacity-50"
         >
           {loading ? 'Creating account...' : 'Sign Up'}
         </button>
