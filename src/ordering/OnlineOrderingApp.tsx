@@ -1,5 +1,5 @@
 // src/ordering/OnlineOrderingApp.tsx
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 
 import { Footer } from './components/Footer';
@@ -21,7 +21,7 @@ import { useAuthStore } from './store/authStore';
 import { useMenuStore } from './store/menuStore';
 import { useLoadingStore } from './store/loadingStore';
 
-import type { CartItem, MenuItem as MenuItemType } from './types/menu';
+// We also import { MenuItem } if we want to show popular items:
 import { MenuItem } from './components/MenuItem';
 
 function ProtectedRoute({
@@ -32,24 +32,17 @@ function ProtectedRoute({
   adminOnly?: boolean;
 }) {
   const { user } = useAuthStore();
-
-  // If no user => go to /ordering/login
-  if (!user) {
-    return <Navigate to="login" replace />;
-  }
-  // If adminOnly & user.role != admin => go /ordering
-  if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="" replace />;
-  }
+  if (!user) return <Navigate to="login" replace />;
+  if (adminOnly && user.role !== 'admin') return <Navigate to="" replace />;
   return <>{children}</>;
 }
 
 function OrderingLayout() {
   const loadingCount = useLoadingStore((state) => state.loadingCount);
-  const [showSpinner, setShowSpinner] = useState(false);
-  const [timerId, setTimerId] = useState<NodeJS.Timeout | null>(null);
+  const [showSpinner, setShowSpinner] = React.useState(false);
+  const [timerId, setTimerId] = React.useState<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (loadingCount > 0) {
       if (!timerId) {
         const id = setTimeout(() => {
@@ -69,23 +62,21 @@ function OrderingLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col relative">
-      {/* Removed <Toaster/> — only needed once at root */}
       <main className="flex-grow tropical-pattern">
         <Suspense fallback={<LoadingSpinner />}>
           <Outlet />
         </Suspense>
       </main>
-
       <Footer />
 
       {showSpinner && (
         <div
           className="
-          fixed top-0 left-0 w-screen h-screen
-          bg-black bg-opacity-40 
-          flex items-center justify-center
-          z-[9999999]
-        "
+            fixed top-0 left-0 w-screen h-screen
+            bg-black bg-opacity-40 
+            flex items-center justify-center
+            z-[9999999]
+          "
         >
           <div className="bg-gray-800 p-6 rounded shadow-lg flex flex-col items-center">
             <LoadingSpinner />
@@ -99,24 +90,11 @@ function OrderingLayout() {
 
 export default function OnlineOrderingApp() {
   const { menuItems, fetchMenuItems } = useMenuStore();
-  const [cart, setCart] = useState<CartItem[]>([]);
 
+  // On mount, load menu items from your backend
   useEffect(() => {
     fetchMenuItems();
   }, [fetchMenuItems]);
-
-  function handleAddToCart(item: MenuItemType) {
-    setCart((prevCart) => {
-      const existing = prevCart.find((x) => x.id === item.id);
-      if (existing) {
-        return prevCart.map((x) =>
-          x.id === item.id ? { ...x, quantity: x.quantity + 1 } : x
-        );
-      } else {
-        return [...prevCart, { ...item, quantity: 1 }];
-      }
-    });
-  }
 
   return (
     <Routes>
@@ -134,12 +112,9 @@ export default function OnlineOrderingApp() {
                       Popular Items
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                      {/* Show first 4 items, each calls store in <MenuItem>. */}
                       {menuItems.slice(0, 4).map((item) => (
-                        <MenuItem
-                          key={item.id}
-                          item={item}
-                          onAddToCart={handleAddToCart}
-                        />
+                        <MenuItem key={item.id} item={item} />
                       ))}
                     </div>
                   </div>
@@ -152,13 +127,15 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        {/* Ordering routes */}
-        <Route path="menu" element={<MenuPage onAddToCart={handleAddToCart} />} />
-        <Route path="cart" element={<CartPage items={cart} />} />
+        {/* The main menu page => each <MenuItem> calls store.addToCart */}
+        <Route path="menu" element={<MenuPage />} />
+
+        {/* The cart / checkout => reads cart from store */}
+        <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="order-confirmation" element={<OrderConfirmation />} />
 
-        {/* Admin => /ordering/admin */}
+        {/* Admin => must be admin */}
         <Route
           path="admin"
           element={
@@ -168,13 +145,13 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        {/* Auth => /ordering/login, /ordering/signup, /ordering/forgot-password, etc. */}
+        {/* Auth routes */}
         <Route path="login" element={<LoginForm />} />
         <Route path="signup" element={<SignUpForm />} />
         <Route path="forgot-password" element={<ForgotPasswordForm />} />
         <Route path="reset-password" element={<ResetPasswordForm />} />
 
-        {/* Protected => /ordering/orders => must be signed in */}
+        {/* Protected => /orders => must be signed in */}
         <Route
           path="orders"
           element={

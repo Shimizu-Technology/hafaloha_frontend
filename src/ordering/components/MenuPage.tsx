@@ -2,14 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { categories } from '../data/menu';
 import { MenuItem } from './MenuItem';
-import type { MenuItem as MenuItemType } from '../types/menu';
 import { useMenuStore } from '../store/menuStore';
 
-interface MenuPageProps {
-  onAddToCart: (item: MenuItemType) => void;
-}
-
-export function MenuPage({ onAddToCart }: MenuPageProps) {
+export function MenuPage() {
   const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -18,7 +13,6 @@ export function MenuPage({ onAddToCart }: MenuPageProps) {
     fetchMenuItems();
   }, [fetchMenuItems]);
 
-  // Filter items by category
   const filteredItems = selectedCategory
     ? menuItems.filter((item) => item.category === selectedCategory)
     : menuItems;
@@ -73,7 +67,7 @@ export function MenuPage({ onAddToCart }: MenuPageProps) {
       {/* Menu Items Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {filteredItems.map((item) => (
-          <MenuItem key={item.id} item={item} onAddToCart={onAddToCart} />
+          <MenuItem key={item.id} item={item} />
         ))}
       </div>
     </div>

@@ -30,10 +30,8 @@ export const api = {
 
   /**
    * Special GET that does NOT show the global spinner overlay.
-   * Use this for silent polling, etc.
    */
   async getBackground(endpoint: string) {
-    // No startLoading() or stopLoading() calls
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`,

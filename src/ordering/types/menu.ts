@@ -24,8 +24,12 @@ export interface MenuItem {
   category: string;
   image: string; // e.g. from 'image_url' in your backend
   option_groups?: OptionGroup[];
-  // If your backend includes it:
   advance_notice_hours?: number;
+
+  // NEW: Seasonal fields
+  seasonal?: boolean;
+  available_from?: string | null;   // or Date, but typically comes as a string
+  available_until?: string | null;  // or Date
 }
 
 /**

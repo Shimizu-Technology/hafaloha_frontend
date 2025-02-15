@@ -9,35 +9,59 @@ interface MenuItemProps {
   item: MenuItemType;
 }
 
+/**
+ * A single MenuItem card. 
+ * - Quick "Add to Cart" calls the store directly. 
+ * - If the item has `option_groups`, opens CustomizationModal.
+ */
 export function MenuItem({ item }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
-  const [showCustomization, setShowCustomization] = useState(false);
 
-  // For button bounce animation
+  const [showCustomization, setShowCustomization] = useState(false);
   const [buttonClicked, setButtonClicked] = useState(false);
 
   function handleQuickAdd() {
-    // 1) Add to cart without forcing advance_notice_hours to 0.
-    //    If item.advance_notice_hours is null or undefined, just leave it out.
+    // For quick add, quantity=1 and no customizations
     addToCart(
       {
         id: item.id,
         name: item.name,
+        description: item.description,
         price: item.price,
         image: item.image,
-        description: item.description,
-        advance_notice_hours: item.advance_notice_hours,
+        customizations: {},
       },
       1
     );
 
-    // 2) Trigger a short bounce animation on the button
     setButtonClicked(true);
     setTimeout(() => setButtonClicked(false), 300);
   }
 
   function handleOpenCustomization() {
     setShowCustomization(true);
+  }
+
+  // If item is seasonal => show promo_label or fallback "Limited Time"
+  const specialLabel = item.seasonal
+    ? (item as any).promo_label?.trim() || 'Limited Time'
+    : null;
+
+  // Format available_until as “February 17, 2025,” etc.
+  let formattedUntil = '';
+  if (item.seasonal && item.available_until) {
+    try {
+      const parsed = new Date(item.available_until);
+      if (!isNaN(parsed.getTime())) {
+        formattedUntil = parsed.toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        });
+      }
+    } catch {
+      formattedUntil = item.available_until;
+    }
   }
 
   return (
@@ -54,11 +78,20 @@ export function MenuItem({ item }: MenuItemProps) {
             <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
             <p className="mt-1 text-sm text-gray-500">{item.description}</p>
 
-            {/* Only show text if advance_notice_hours is 24 or more */}
-            {item.advance_notice_hours != null &&
-             item.advance_notice_hours >= 24 && (
+            {item.advance_notice_hours != null && item.advance_notice_hours >= 24 && (
               <p className="mt-1 text-sm text-red-600">
                 Requires 24 hours notice
+              </p>
+            )}
+
+            {specialLabel && (
+              <div className="mt-2 inline-block bg-red-500 text-white text-xs font-bold rounded-full px-2 py-1">
+                {specialLabel}
+              </div>
+            )}
+            {formattedUntil && (
+              <p className="text-xs text-gray-600 mt-1">
+                Available until {formattedUntil}
               </p>
             )}
           </div>
@@ -95,7 +128,7 @@ export function MenuItem({ item }: MenuItemProps) {
         </div>
       </div>
 
-      {/* Modal for selecting options */}
+      {/* If user chooses to “Customize,” show the modal */}
       {showCustomization && (
         <CustomizationModal
           item={item}
