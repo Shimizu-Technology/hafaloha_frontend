@@ -1,16 +1,11 @@
 // src/ordering/lib/api.ts
 import { useLoadingStore } from '../store/loadingStore';
 
-// 1) Dynamically choose base URL from environment or fallback
+// Dynamically choose base URL from environment or fallback:
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-/**
- * Reusable fetch methods that either do or do NOT increment our global spinner.
- */
 export const api = {
-  /**
-   * Standard GET that shows the global spinner.
-   */
+  // GET with global spinner
   async get(endpoint: string) {
     useLoadingStore.getState().startLoading();
     try {
@@ -63,6 +58,7 @@ export const api = {
     }
   },
 
+  // PATCH JSON
   async patch(endpoint: string, data: any) {
     useLoadingStore.getState().startLoading();
     try {
@@ -83,6 +79,7 @@ export const api = {
     }
   },
 
+  // DELETE
   async delete(endpoint: string) {
     useLoadingStore.getState().startLoading();
     try {

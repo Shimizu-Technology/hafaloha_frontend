@@ -1,12 +1,10 @@
 // src/components/admin/MenuManager.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
-import { useMenuStore } from '../../store/menuStore';
+import { useMenuStore } from '../../store/menuStore'; // your zustand store
 import type { MenuItem } from '../../types/menu';
 import { categories } from '../../data/menu';
-import { api, uploadMenuItemImage } from '../../lib/api';
 
-// -------------- Types --------------
 interface MenuItemFormData {
   id?: number;
   name: string;
@@ -14,10 +12,9 @@ interface MenuItemFormData {
   price: number;
   category: string;
   menu_id?: number;
-  image: string;
-  imageFile?: File | null;
+  image: string;            // existing image URL (if any)
+  imageFile?: File | null;  // new file if user chooses one
   advance_notice_hours: number;
-
   seasonal: boolean;
   available_from?: string | null;
   available_until?: string | null;
@@ -46,7 +43,6 @@ export function MenuManager() {
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
-    refreshItemInState,
   } = useMenuStore();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -56,17 +52,21 @@ export function MenuManager() {
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
-  // Filter items by category
+  // --------------------------------------------
+  // Category filtering
+  // --------------------------------------------
   const filteredItems = selectedCategory
     ? menuItems.filter((item) => item.category === selectedCategory)
     : menuItems;
 
-  // Default data for new items
+  // --------------------------------------------
+  // Default form data (for new items)
+  // --------------------------------------------
   const initialFormData: MenuItemFormData = {
     name: '',
     description: '',
     price: 0,
-    category: categories[0].id,
+    category: categories[0]?.id || 'appetizers',
     image: '',
     imageFile: null,
     menu_id: 1,
@@ -74,12 +74,12 @@ export function MenuManager() {
     seasonal: false,
     available_from: null,
     available_until: null,
-
-    // We can set a default label if we want from the start:
     promo_label: 'Limited Time',
   };
 
-  // -------------- Edit an existing item --------------
+  // --------------------------------------------
+  // Edit existing item
+  // --------------------------------------------
   const handleEdit = (item: MenuItem) => {
     setEditingItem({
       id: Number(item.id),
@@ -87,86 +87,38 @@ export function MenuManager() {
       description: item.description,
       price: item.price,
       category: item.category,
-      image: item.image,
+      image: item.image, // existing URL
       imageFile: null,
       menu_id: (item as any).menu_id || 1,
       advance_notice_hours: item.advance_notice_hours ?? 0,
-      seasonal: item.seasonal === true,
+      seasonal: !!item.seasonal,
       available_from: item.available_from || null,
       available_until: item.available_until || null,
-      // If there's no promo_label, fallback to "Limited Time"
       promo_label: (item as any).promo_label?.trim() || 'Limited Time',
     });
     setIsEditing(true);
   };
 
-  // -------------- Add new item --------------
+  // --------------------------------------------
+  // Add new item
+  // --------------------------------------------
   const handleAdd = () => {
     setEditingItem(initialFormData);
     setIsEditing(true);
   };
 
-  // -------------- Create/Update item --------------
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingItem) return;
-
-    // If seasonal is checked, ensure there's some label. If it's blank, use "Limited Time."
-    let finalLabel = editingItem.promo_label?.trim() || '';
-    if (editingItem.seasonal && !finalLabel) {
-      finalLabel = 'Limited Time';
-    }
-
-    const itemPayload = {
-      name: editingItem.name,
-      description: editingItem.description,
-      price: editingItem.price,
-      category: editingItem.category,
-      menu_id: editingItem.menu_id,
-      advance_notice_hours: editingItem.advance_notice_hours,
-      seasonal: editingItem.seasonal,
-      available_from: editingItem.available_from,
-      available_until: editingItem.available_until,
-      promo_label: finalLabel,
-    };
-
-    if (editingItem.id) {
-      // Update existing item
-      await updateMenuItem(editingItem.id, itemPayload);
-
-      // If user selected a file, upload it
-      if (editingItem.imageFile) {
-        const updated = await uploadMenuItemImage(
-          editingItem.id.toString(),
-          editingItem.imageFile
-        );
-        refreshItemInState(updated);
-      }
-    } else {
-      // Create new item
-      const newItem = await addMenuItem(itemPayload);
-      // If user immediately had a file
-      if (newItem && editingItem.imageFile) {
-        const updated = await uploadMenuItemImage(
-          newItem.id.toString(),
-          editingItem.imageFile
-        );
-        refreshItemInState(updated);
-      }
-    }
-
-    setIsEditing(false);
-    setEditingItem(null);
-  };
-
-  // -------------- Delete item --------------
+  // --------------------------------------------
+  // Delete item
+  // --------------------------------------------
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       await deleteMenuItem(id);
     }
   };
 
-  // -------------- Manage Options --------------
+  // --------------------------------------------
+  // Manage Options
+  // --------------------------------------------
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
     setOptionsModalOpen(true);
@@ -176,7 +128,43 @@ export function MenuManager() {
     setOptionsModalItem(null);
   };
 
-  // -------------- Render --------------
+  // --------------------------------------------
+  // Submit (Create / Update)
+  // --------------------------------------------
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    // If seasonal is checked but label is blank, use "Limited Time"
+    let finalLabel = editingItem.promo_label?.trim() || '';
+    if (editingItem.seasonal && !finalLabel) {
+      finalLabel = 'Limited Time';
+    }
+
+    const payload = {
+      ...editingItem,
+      promo_label: finalLabel,
+    };
+
+    try {
+      if (editingItem.id) {
+        // update existing
+        await updateMenuItem(String(editingItem.id), payload);
+      } else {
+        // create new
+        await addMenuItem(payload);
+      }
+    } catch (err) {
+      console.error('Failed to save menu item:', err);
+    }
+
+    setIsEditing(false);
+    setEditingItem(null);
+  };
+
+  // --------------------------------------------
+  // Render
+  // --------------------------------------------
   return (
     <div className="max-w-7xl mx-auto p-6">
       {/* Header row */}
@@ -193,15 +181,15 @@ export function MenuManager() {
         </button>
       </div>
 
-      {/* Category Filters */}
+      {/* Category filters */}
       <div className="mb-6">
-        <div className="flex flex-nowrap space-x-3 overflow-x-auto scrollbar-hide py-2">
+        <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
           <button
-            className={`whitespace-nowrap px-4 py-2 rounded-md ${
+            className={
               !selectedCategory
-                ? 'bg-[#c1902f] text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+                ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
+                : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }
             onClick={() => setSelectedCategory(null)}
           >
             All Categories
@@ -209,14 +197,11 @@ export function MenuManager() {
           {categories.map((cat) => (
             <button
               key={cat.id}
-              className={`
-                whitespace-nowrap px-4 py-2 rounded-md
-                ${
-                  selectedCategory === cat.id
-                    ? 'bg-[#c1902f] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }
-              `}
+              className={
+                selectedCategory === cat.id
+                  ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
+                  : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }
               onClick={() => setSelectedCategory(cat.id)}
             >
               {cat.name}
@@ -225,7 +210,70 @@ export function MenuManager() {
         </div>
       </div>
 
-      {/* Add/Edit Item Modal */}
+      {/* Items Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredItems.map((item) => (
+          <div
+            key={item.id}
+            className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
+          >
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-full h-48 object-cover"
+            />
+            <div className="p-4 flex flex-col flex-1">
+              <div>
+                <h3 className="text-lg font-semibold">{item.name}</h3>
+                <p className="text-sm text-gray-600">{item.description}</p>
+                {item.advance_notice_hours >= 24 && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Requires 24 hours notice
+                  </p>
+                )}
+                {item.seasonal && (
+                  <span className="inline-block bg-red-500 text-white text-xs rounded-full px-2 py-1 mt-1">
+                    {item.promo_label?.trim() || 'Limited Time'}
+                  </span>
+                )}
+              </div>
+              <div className="mt-auto flex justify-between items-center pt-4">
+                <span className="text-sm text-gray-500 capitalize">
+                  {item.category}
+                </span>
+                <div className="flex items-center space-x-4">
+                  <span className="text-lg font-semibold">
+                    ${Number(item.price).toFixed(2)}
+                  </span>
+                  {/* Edit Item */}
+                  <button
+                    onClick={() => handleEdit(item)}
+                    className="p-2 text-gray-600 hover:text-[#c1902f]"
+                  >
+                    <Edit2 className="h-5 w-5" />
+                  </button>
+                  {/* Delete Item */}
+                  <button
+                    onClick={() => {
+                      if (typeof item.id === 'string') {
+                        const numId = parseInt(item.id, 10);
+                        if (!Number.isNaN(numId)) handleDelete(numId);
+                      } else {
+                        handleDelete(item.id as number);
+                      }
+                    }}
+                    className="p-2 text-gray-600 hover:text-red-600"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Add/Edit Modal */}
       {isEditing && editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
@@ -327,15 +375,12 @@ export function MenuManager() {
                   checked={editingItem.advance_notice_hours >= 24}
                   onChange={(e) => {
                     const newVal = e.target.checked ? 24 : 0;
-                    setEditingItem({
-                      ...editingItem,
-                      advance_notice_hours: newVal,
-                    });
+                    setEditingItem({ ...editingItem, advance_notice_hours: newVal });
                   }}
                 />
                 <label
                   htmlFor="requires24"
-                  className="block text-sm font-medium text-gray-700"
+                  className="text-sm font-medium text-gray-700"
                 >
                   Requires 24-hour notice?
                 </label>
@@ -350,8 +395,6 @@ export function MenuManager() {
                   onChange={(e) => {
                     const turnedOn = e.target.checked;
                     setEditingItem((prev) => {
-                      // If user is toggling from false->true,
-                      // and there's no label set, default to "Limited Time"
                       let newLabel = prev.promo_label;
                       if (turnedOn && (!newLabel || !newLabel.trim())) {
                         newLabel = 'Limited Time';
@@ -368,7 +411,7 @@ export function MenuManager() {
                 />
                 <label
                   htmlFor="seasonal"
-                  className="block text-sm font-medium text-gray-700"
+                  className="text-sm font-medium text-gray-700"
                 >
                   Seasonal / Limited Time?
                 </label>
@@ -376,7 +419,7 @@ export function MenuManager() {
 
               {/* available_from / available_until */}
               {editingItem.seasonal && (
-                <div className="flex flex-col sm:flex-row sm:gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Available From
@@ -421,10 +464,7 @@ export function MenuManager() {
                   type="text"
                   value={editingItem.promo_label ?? ''}
                   onChange={(e) =>
-                    setEditingItem({
-                      ...editingItem,
-                      promo_label: e.target.value,
-                    })
+                    setEditingItem({ ...editingItem, promo_label: e.target.value })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   placeholder='E.g. "Valentine’s Special" or "4th of July"'
@@ -440,7 +480,7 @@ export function MenuManager() {
                   type="file"
                   accept="image/*"
                   onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
+                    if (e.target.files?.[0]) {
                       setEditingItem({
                         ...editingItem,
                         imageFile: e.target.files[0],
@@ -449,6 +489,7 @@ export function MenuManager() {
                   }}
                   className="w-full px-2 py-2 border rounded-md"
                 />
+                {/* If there's an existing image but no new file chosen yet */}
                 {editingItem.image && !editingItem.imageFile && (
                   <div className="mt-2">
                     <img
@@ -458,6 +499,7 @@ export function MenuManager() {
                     />
                   </div>
                 )}
+                {/* If a new file is chosen, show a local preview */}
                 {editingItem.imageFile && (
                   <div className="mt-2">
                     <img
@@ -484,7 +526,7 @@ export function MenuManager() {
                 </div>
               )}
 
-              {/* Submit/Cancel */}
+              {/* Submit / Cancel */}
               <div className="flex justify-end space-x-2 pt-4">
                 <button
                   type="button"
@@ -498,9 +540,7 @@ export function MenuManager() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center px-4 py-2 
-                             bg-[#c1902f] text-white rounded-md 
-                             hover:bg-[#d4a43f]"
+                  className="inline-flex items-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
                 >
                   <Save className="h-5 w-5 mr-2" />
                   Save
@@ -511,71 +551,7 @@ export function MenuManager() {
         </div>
       )}
 
-      {/* Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredItems.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
-          >
-            <img
-              src={item.image}
-              alt={item.name}
-              className="w-full h-48 object-cover"
-            />
-            <div className="p-4 flex flex-col flex-1">
-              <div>
-                <h3 className="text-lg font-semibold">{item.name}</h3>
-                <p className="text-sm text-gray-600">{item.description}</p>
-                {(item as any).advance_notice_hours >= 24 && (
-                  <p className="text-xs text-red-600 mt-1">
-                    Requires 24 hours notice
-                  </p>
-                )}
-
-                {/* If item.seasonal => show label or fallback "Limited Time" */}
-                {item.seasonal && (
-                  <span className="inline-block bg-red-500 text-white text-xs rounded-full px-2 py-1 mt-1">
-                    {(item as any).promo_label?.trim() || 'Limited Time'}
-                  </span>
-                )}
-              </div>
-              <div className="mt-auto flex justify-between items-center pt-4">
-                <span className="text-sm text-gray-500 capitalize">
-                  {item.category}
-                </span>
-                <div className="flex items-center space-x-4">
-                  <span className="text-lg font-semibold">
-                    ${Number(item.price).toFixed(2)}
-                  </span>
-                  {/* Edit Item */}
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="p-2 text-gray-600 hover:text-[#c1902f]"
-                  >
-                    <Edit2 className="h-5 w-5" />
-                  </button>
-                  {/* Delete Item */}
-                  <button
-                    onClick={() => {
-                      if (typeof item.id === 'string') {
-                        const numId = parseInt(item.id, 10);
-                        if (!Number.isNaN(numId)) handleDelete(numId);
-                      } else {
-                        handleDelete(item.id as number);
-                      }
-                    }}
-                    className="p-2 text-gray-600 hover:text-red-600"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
+      {/* Options Modal */}
       {optionsModalOpen && optionsModalItem && (
         <OptionGroupsModal item={optionsModalItem} onClose={handleCloseOptionsModal} />
       )}
@@ -584,8 +560,8 @@ export function MenuManager() {
 }
 
 // --------------------------------------
-// OptionGroupsModal Component
-// (unchanged aside from existing code)
+// OptionGroupsModal
+// (unchanged except for your existing code)
 // --------------------------------------
 function OptionGroupsModal({
   item,
@@ -783,8 +759,8 @@ function OptionGroupsModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      {/* ... your modal content, unchanged ... */}
       <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
-        {/* Title */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">
             Manage Option Groups for: {item.name}
