@@ -1,4 +1,5 @@
 // src/ordering/components/MenuItem.tsx
+
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
@@ -10,9 +11,9 @@ interface MenuItemProps {
 }
 
 /**
- * A single MenuItem card. 
- * - Quick "Add to Cart" calls the store directly. 
- * - If the item has `option_groups`, opens CustomizationModal.
+ * A single MenuItem card.
+ * - Quick "Add to Cart" calls the store directly.
+ * - If the item has option_groups, opens CustomizationModal.
  */
 export function MenuItem({ item }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
@@ -20,7 +21,15 @@ export function MenuItem({ item }: MenuItemProps) {
   const [showCustomization, setShowCustomization] = useState(false);
   const [buttonClicked, setButtonClicked] = useState(false);
 
+  const isOutOfStock = item.stock_status === 'out_of_stock';
+  const isLimited = item.stock_status === 'limited';
+
   function handleQuickAdd() {
+    if (isOutOfStock) {
+      alert('Sorry, this item is out of stock.');
+      return;
+    }
+
     // For quick add, quantity=1 and no customizations
     addToCart(
       {
@@ -39,6 +48,10 @@ export function MenuItem({ item }: MenuItemProps) {
   }
 
   function handleOpenCustomization() {
+    if (isOutOfStock) {
+      alert('Sorry, this item is out of stock.');
+      return;
+    }
     setShowCustomization(true);
   }
 
@@ -66,7 +79,11 @@ export function MenuItem({ item }: MenuItemProps) {
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[380px]">
+      <div
+        className={`bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[380px]
+          ${isOutOfStock ? 'opacity-70' : ''}
+        `}
+      >
         <img
           src={item.image}
           alt={item.name}
@@ -78,6 +95,19 @@ export function MenuItem({ item }: MenuItemProps) {
             <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
             <p className="mt-1 text-sm text-gray-500">{item.description}</p>
 
+            {/* Stock Status Badges */}
+            {isOutOfStock && (
+              <div className="mt-2 inline-block bg-gray-500 text-white text-xs font-bold rounded-full px-2 py-1">
+                Out of Stock
+              </div>
+            )}
+            {isLimited && (
+              <div className="mt-2 inline-block bg-orange-400 text-white text-xs font-bold rounded-full px-2 py-1">
+                Limited
+              </div>
+            )}
+
+            {/* Seasonal Notice */}
             {item.advance_notice_hours != null && item.advance_notice_hours >= 24 && (
               <p className="mt-1 text-sm text-red-600">
                 Requires 24 hours notice
@@ -94,6 +124,13 @@ export function MenuItem({ item }: MenuItemProps) {
                 Available until {formattedUntil}
               </p>
             )}
+
+            {/* If there's a status_note from the back end */}
+            {item.status_note?.trim() && (
+              <p className="mt-1 text-xs italic text-gray-700">
+                {item.status_note}
+              </p>
+            )}
           </div>
 
           <div className="mt-auto pt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -104,24 +141,36 @@ export function MenuItem({ item }: MenuItemProps) {
             {item.option_groups && item.option_groups.length > 0 ? (
               <button
                 onClick={handleOpenCustomization}
-                className="w-full md:w-auto flex items-center justify-center px-4 py-2
+                disabled={isOutOfStock}
+                className={`w-full md:w-auto flex items-center justify-center px-4 py-2
                   border border-transparent rounded-md shadow-sm text-sm font-medium
-                  text-white bg-[#c1902f] hover:bg-[#d4a43f]"
+                  text-white ${
+                    isOutOfStock
+                      ? 'bg-gray-300 cursor-not-allowed'
+                      : 'bg-[#c1902f] hover:bg-[#d4a43f]'
+                  }
+                `}
               >
                 <Plus className="h-5 w-5 mr-2" />
-                Customize
+                {isOutOfStock ? 'Unavailable' : 'Customize'}
               </button>
             ) : (
               <button
                 onClick={handleQuickAdd}
+                disabled={isOutOfStock}
                 className={`w-full md:w-auto flex items-center justify-center px-4 py-2
-                  border border-transparent rounded-md shadow-sm text-sm font-medium
-                  text-white bg-[#c1902f] hover:bg-[#d4a43f]
+                  rounded-md shadow-sm text-sm font-medium text-white
                   transition-transform
-                  ${buttonClicked ? 'animate-bounce' : ''}`}
+                  ${
+                    isOutOfStock
+                      ? 'bg-gray-300 cursor-not-allowed'
+                      : 'bg-[#c1902f] hover:bg-[#d4a43f]'
+                  }
+                  ${buttonClicked ? 'animate-bounce' : ''}
+                `}
               >
                 <Plus className="h-5 w-5 mr-2" />
-                Add to Cart
+                {isOutOfStock ? 'Unavailable' : 'Add to Cart'}
               </button>
             )}
           </div>

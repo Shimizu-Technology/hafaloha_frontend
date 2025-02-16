@@ -1,4 +1,5 @@
 // src/ordering/components/MenuPage.tsx
+
 import React, { useState, useEffect } from 'react';
 import { categories } from '../data/menu';
 import { MenuItem } from './MenuItem';
@@ -27,11 +28,11 @@ export function MenuPage() {
     if (selectedCategory) {
       list = list.filter((item) => item.category === selectedCategory);
     }
-    // If “showFeaturedOnly” is checked, filter by `featured`
+    // If “showFeaturedOnly” is checked, filter by featured
     if (showFeaturedOnly) {
       list = list.filter((item) => item.featured);
     }
-    // If “showSeasonalOnly” is checked, filter by `seasonal`
+    // If “showSeasonalOnly” is checked, filter by seasonal
     if (showSeasonalOnly) {
       list = list.filter((item) => item.seasonal);
     }
@@ -70,14 +71,11 @@ export function MenuPage() {
         <div className="flex flex-nowrap space-x-3 overflow-x-auto scrollbar-hide py-2">
           {/* “All Items” button */}
           <button
-            className={`
-              flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md
-              ${
-                !selectedCategory
-                  ? 'bg-[#c1902f] text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }
-            `}
+            className={
+              !selectedCategory
+                ? 'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
+                : 'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }
             onClick={() => setSelectedCategory(null)}
           >
             All Items
@@ -87,14 +85,11 @@ export function MenuPage() {
           {categories.map((cat) => (
             <button
               key={cat.id}
-              className={`
-                flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md
-                ${
-                  selectedCategory === cat.id
-                    ? 'bg-[#c1902f] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }
-              `}
+              className={
+                selectedCategory === cat.id
+                  ? 'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
+                  : 'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }
               onClick={() => setSelectedCategory(cat.id)}
             >
               {cat.name}

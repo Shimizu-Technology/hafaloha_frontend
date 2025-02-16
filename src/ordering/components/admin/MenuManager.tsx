@@ -21,6 +21,10 @@ interface MenuItemFormData {
   available_until?: string | null;
   promo_label?: string | null;
   featured: boolean;
+
+  // --- NEW for out-of-stock/limited ---
+  stock_status: 'in_stock' | 'out_of_stock' | 'limited';
+  status_note?: string | null;
 }
 
 interface OptionGroup {
@@ -86,6 +90,10 @@ export function MenuManager() {
     available_until: null,
     promo_label: 'Limited Time',
     featured: false,
+
+    // NEW: default them
+    stock_status: 'in_stock',
+    status_note: '',
   };
 
   // Ensure not more than 4 featured
@@ -124,6 +132,10 @@ export function MenuManager() {
       available_until: item.available_until || null,
       promo_label: (item as any).promo_label?.trim() || 'Limited Time',
       featured: !!item.featured,
+
+      // NEW: read from the item
+      stock_status: item.stock_status || 'in_stock',
+      status_note: item.status_note || '',
     });
     setIsEditing(true);
   };
@@ -283,8 +295,30 @@ export function MenuManager() {
             />
             <div className="p-4 flex flex-col flex-1">
               <div>
-                <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
+                <h3 className="text-base sm:text-lg font-semibold">
+                  {item.name}
+                </h3>
                 <p className="text-sm text-gray-600">{item.description}</p>
+
+                {/* STOCK STATUS BADGES */}
+                {item.stock_status === 'out_of_stock' && (
+                  <span className="inline-block bg-gray-500 text-white text-xs rounded-full px-2 py-1 mt-1">
+                    Out of Stock
+                  </span>
+                )}
+                {item.stock_status === 'limited' && (
+                  <span className="inline-block bg-orange-500 text-white text-xs rounded-full px-2 py-1 mt-1">
+                    Limited
+                  </span>
+                )}
+
+                {/* Optional status note */}
+                {item.status_note?.trim() && (
+                  <p className="text-xs text-gray-500 mt-1 italic">
+                    {item.status_note}
+                  </p>
+                )}
+
                 {item.advance_notice_hours >= 24 && (
                   <p className="text-xs text-red-600 mt-1">
                     Requires 24 hours notice
@@ -544,6 +578,46 @@ export function MenuManager() {
                 </label>
               </div>
 
+              {/* =========== NEW STOCK STATUS =========== */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stock Status
+                </label>
+                <select
+                  value={editingItem.stock_status}
+                  onChange={(e) =>
+                    setEditingItem({
+                      ...editingItem,
+                      stock_status: e.target.value as 'in_stock' | 'out_of_stock' | 'limited',
+                    })
+                  }
+                  className="w-full px-4 py-2 border rounded-md"
+                >
+                  <option value="in_stock">In Stock</option>
+                  <option value="out_of_stock">Out of Stock</option>
+                  <option value="limited">Limited</option>
+                </select>
+              </div>
+
+              {/* =========== NEW STATUS NOTE =========== */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status Note (Optional)
+                </label>
+                <textarea
+                  value={editingItem.status_note ?? ''}
+                  onChange={(e) =>
+                    setEditingItem({
+                      ...editingItem,
+                      status_note: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border rounded-md"
+                  rows={2}
+                  placeholder='E.g. "Supplier delayed; using turkey instead of chicken."'
+                />
+              </div>
+
               {/* Image Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -631,7 +705,7 @@ export function MenuManager() {
 }
 
 // --------------------------------------
-// OptionGroupsModal (unchanged except your existing code)
+// OptionGroupsModal (your existing code, unchanged, except any local changes)
 // --------------------------------------
 function OptionGroupsModal({
   item,

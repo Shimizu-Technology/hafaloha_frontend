@@ -26,20 +26,24 @@ export interface MenuItem {
   option_groups?: OptionGroup[];
   advance_notice_hours?: number;
 
-  // NEW: Seasonal fields
+  // --- Seasonal fields ---
   seasonal?: boolean;
   available_from?: string | null;   // or Date, but typically comes as a string
   available_until?: string | null;  // or Date
 
-  // NEW: Featured
-  featured?: boolean; // <--- add this so the front end can track featured
+  // --- Featured ---
+  featured?: boolean;
+
+  // --- NEW: Out-of-stock / limited ---
+  stock_status?: 'in_stock' | 'out_of_stock' | 'limited';
+  status_note?: string | null;
 }
 
 /**
  * A cart item is basically a MenuItem plus:
  * - quantity
  * - user-chosen customizations
- * - a per-item `notes` field
+ * - a per-item notes field
  */
 export interface CartItem extends MenuItem {
   quantity: number;
