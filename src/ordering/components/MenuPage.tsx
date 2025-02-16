@@ -6,16 +6,38 @@ import { useMenuStore } from '../store/menuStore';
 
 export function MenuPage() {
   const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
+  
+  // Category filter
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  // NEW: flags for filtering by Featured/Seasonal
+  const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
+  const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
+
+  // On mount, load menu items from the backend
   useEffect(() => {
-    // Load menu items from the backend
     fetchMenuItems();
   }, [fetchMenuItems]);
 
-  const filteredItems = selectedCategory
-    ? menuItems.filter((item) => item.category === selectedCategory)
-    : menuItems;
+  // Combine all filters: category, featured, seasonal
+  const filteredItems = React.useMemo(() => {
+    let list = menuItems;
+
+    // 1) If a category is chosen, filter by category
+    if (selectedCategory) {
+      list = list.filter((item) => item.category === selectedCategory);
+    }
+    // 2) If “show featured only” is checked, filter by `item.featured`
+    if (showFeaturedOnly) {
+      list = list.filter((item) => item.featured);
+    }
+    // 3) If “show seasonal only” is checked, filter by `item.seasonal`
+    if (showSeasonalOnly) {
+      list = list.filter((item) => item.seasonal);
+    }
+
+    return list;
+  }, [menuItems, selectedCategory, showFeaturedOnly, showSeasonalOnly]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -27,7 +49,7 @@ export function MenuPage() {
       {error && <p className="text-red-600">{error}</p>}
 
       {/* Horizontally scrollable categories */}
-      <div className="mb-6">
+      <div className="mb-3">
         <div className="flex flex-nowrap space-x-3 overflow-x-auto scrollbar-hide py-2">
           {/* “All Items” button */}
           <button
@@ -62,6 +84,27 @@ export function MenuPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Extra filters for Featured / Seasonal */}
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <label className="inline-flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={showFeaturedOnly}
+            onChange={(e) => setShowFeaturedOnly(e.target.checked)}
+          />
+          <span>Featured Items</span>
+        </label>
+
+        <label className="inline-flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={showSeasonalOnly}
+            onChange={(e) => setShowSeasonalOnly(e.target.checked)}
+          />
+          <span>Seasonal Items</span>
+        </label>
       </div>
 
       {/* Menu Items Grid */}
