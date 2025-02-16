@@ -55,19 +55,16 @@ export function MenuManager() {
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
-  // Memo: filter items for display
+  // Filter logic
   const filteredItems = React.useMemo(() => {
     let list = menuItems;
 
-    // Filter by category if selected
     if (selectedCategory) {
       list = list.filter((item) => item.category === selectedCategory);
     }
-    // Filter by featured if toggled
     if (showFeaturedOnly) {
       list = list.filter((item) => item.featured);
     }
-    // Filter by seasonal if toggled
     if (showSeasonalOnly) {
       list = list.filter((item) => item.seasonal);
     }
@@ -91,18 +88,17 @@ export function MenuManager() {
     featured: false,
   };
 
-  // Check that we don't exceed 4 featured items
+  // Ensure not more than 4 featured
   function canFeatureThisItem(formData: MenuItemFormData): boolean {
     if (!formData.featured) return true;
 
+    // Check if it's already featured
     const isCurrentlyFeatured = menuItems.find(
       (m) => Number(m.id) === formData.id
     )?.featured;
 
-    // If it was already featured, no new limit check
     if (isCurrentlyFeatured) return true;
 
-    // Count how many are featured
     const currentlyFeaturedCount = menuItems.filter((m) => m.featured).length;
     if (currentlyFeaturedCount >= 4) {
       alert('You can only have 4 featured items at a time.');
@@ -111,7 +107,7 @@ export function MenuManager() {
     return true;
   }
 
-  // Edit existing
+  // Edit item
   const handleEdit = (item: MenuItem) => {
     setEditingItem({
       id: Number(item.id),
@@ -132,7 +128,7 @@ export function MenuManager() {
     setIsEditing(true);
   };
 
-  // Add new
+  // Add new item
   const handleAdd = () => {
     setEditingItem(initialFormData);
     setIsEditing(true);
@@ -155,17 +151,17 @@ export function MenuManager() {
     setOptionsModalItem(null);
   };
 
-  // Submit changes
+  // Handle the form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
 
-    // If toggling featured, check limit
+    // If toggling featured => check the 4-limit
     if (!canFeatureThisItem(editingItem)) {
       return;
     }
 
-    // If seasonal w/o label => "Limited Time"
+    // If seasonal but no label => "Limited Time"
     let finalLabel = editingItem.promo_label?.trim() || '';
     if (editingItem.seasonal && !finalLabel) {
       finalLabel = 'Limited Time';
@@ -189,6 +185,22 @@ export function MenuManager() {
     setIsEditing(false);
     setEditingItem(null);
   };
+
+  // If admin checks "Featured Items," uncheck "Seasonal"
+  function handleToggleFeatured(checked: boolean) {
+    if (checked) {
+      setShowSeasonalOnly(false);
+    }
+    setShowFeaturedOnly(checked);
+  }
+
+  // If admin checks "Seasonal Items," uncheck "Featured"
+  function handleToggleSeasonal(checked: boolean) {
+    if (checked) {
+      setShowFeaturedOnly(false);
+    }
+    setShowSeasonalOnly(checked);
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
@@ -242,7 +254,7 @@ export function MenuManager() {
           <input
             type="checkbox"
             checked={showFeaturedOnly}
-            onChange={(e) => setShowFeaturedOnly(e.target.checked)}
+            onChange={(e) => handleToggleFeatured(e.target.checked)}
           />
           <span>Featured Items</span>
         </label>
@@ -251,7 +263,7 @@ export function MenuManager() {
           <input
             type="checkbox"
             checked={showSeasonalOnly}
-            onChange={(e) => setShowSeasonalOnly(e.target.checked)}
+            onChange={(e) => handleToggleSeasonal(e.target.checked)}
           />
           <span>Seasonal Items</span>
         </label>
@@ -572,14 +584,12 @@ export function MenuManager() {
                 )}
               </div>
 
-              {/* Manage Options (if editing existing) */}
+              {/* Manage Options (only if editing existing) */}
               {editingItem.id && (
                 <div className="pt-4">
                   <button
                     type="button"
-                    onClick={() =>
-                      handleManageOptions(editingItem as unknown as MenuItem)
-                    }
+                    onClick={() => handleManageOptions(editingItem as unknown as MenuItem)}
                     className="px-4 py-2 border rounded-md hover:bg-gray-50"
                   >
                     Manage Options
