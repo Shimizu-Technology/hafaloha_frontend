@@ -2,9 +2,12 @@
 
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
-import { useMenuStore } from '../../store/menuStore'; // your zustand store
+import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { categories } from '../../data/menu';
+
+// Important: We'll import { api } here so we can use it in OptionGroupsModal.
+import { api } from '../../lib/api';  // adjust path if needed
 
 interface MenuItemFormData {
   id?: number;
@@ -21,8 +24,6 @@ interface MenuItemFormData {
   available_until?: string | null;
   promo_label?: string | null;
   featured: boolean;
-
-  // Stock status renamed from "limited" => "low_stock"
   stock_status: 'in_stock' | 'out_of_stock' | 'low_stock';
   status_note?: string | null;
 }
@@ -74,7 +75,7 @@ export function MenuManager() {
     return list;
   }, [menuItems, selectedCategory, showFeaturedOnly, showSeasonalOnly]);
 
-  // Default data for creating a new item
+  // Default form data
   const initialFormData: MenuItemFormData = {
     name: '',
     description: '',
@@ -89,13 +90,11 @@ export function MenuManager() {
     available_until: null,
     promo_label: 'Limited Time',
     featured: false,
-
-    // Default stock_status
     stock_status: 'in_stock',
     status_note: '',
   };
 
-  // Enforce not more than 4 featured items
+  // Ensure not more than 4 featured
   function canFeatureThisItem(formData: MenuItemFormData): boolean {
     if (!formData.featured) return true;
     const isCurrentlyFeatured = menuItems.find(
@@ -118,7 +117,7 @@ export function MenuManager() {
       name: item.name,
       description: item.description,
       price: item.price,
-      category: item.category,
+      category: item.category || '',  // never pass null to select
       image: item.image || '',
       imageFile: null,
       menu_id: (item as any).menu_id || 1,
@@ -126,10 +125,9 @@ export function MenuManager() {
       seasonal: !!item.seasonal,
       available_from: item.available_from || null,
       available_until: item.available_until || null,
-      promo_label: (item as any).promo_label?.trim() || 'Limited Time',
+      promo_label: item.promo_label?.trim() || 'Limited Time',
       featured: !!item.featured,
-
-      // stock_status: rename "limited" => "low_stock"
+      // rename 'limited' => 'low_stock'
       stock_status: item.stock_status === 'limited'
         ? 'low_stock'
         : (item.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
@@ -144,7 +142,7 @@ export function MenuManager() {
     setIsEditing(true);
   };
 
-  // Delete
+  // Delete item
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       await deleteMenuItem(id);
@@ -161,7 +159,7 @@ export function MenuManager() {
     setOptionsModalItem(null);
   };
 
-  // Handle the form submission
+  // Submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
@@ -177,10 +175,7 @@ export function MenuManager() {
       finalLabel = 'Limited Time';
     }
 
-    const payload = {
-      ...editingItem,
-      promo_label: finalLabel,
-    };
+    const payload = { ...editingItem, promo_label: finalLabel };
 
     try {
       if (editingItem.id) {
@@ -196,18 +191,14 @@ export function MenuManager() {
     setEditingItem(null);
   };
 
-  // Filter toggles
+  // Toggling filters
   function handleToggleFeatured(checked: boolean) {
-    if (checked) {
-      setShowSeasonalOnly(false);
-    }
+    if (checked) setShowSeasonalOnly(false);
     setShowFeaturedOnly(checked);
   }
 
   function handleToggleSeasonal(checked: boolean) {
-    if (checked) {
-      setShowFeaturedOnly(false);
-    }
+    if (checked) setShowFeaturedOnly(false);
     setShowSeasonalOnly(checked);
   }
 
@@ -218,9 +209,11 @@ export function MenuManager() {
         <h2 className="text-2xl font-bold">Menu Management</h2>
         <button
           onClick={handleAdd}
-          className="inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2
-                     bg-[#c1902f] text-white rounded-md
-                     hover:bg-[#d4a43f] whitespace-nowrap"
+          className="
+            inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2
+            bg-[#c1902f] text-white rounded-md
+            hover:bg-[#d4a43f] whitespace-nowrap
+          "
         >
           <Plus className="h-5 w-5 mr-2" />
           Add Item
@@ -257,7 +250,7 @@ export function MenuManager() {
         </div>
       </div>
 
-      {/* Additional Filters (Featured, Seasonal) */}
+      {/* Additional Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <label className="inline-flex items-center space-x-2">
           <input
@@ -292,12 +285,10 @@ export function MenuManager() {
             />
             <div className="p-4 flex flex-col flex-1">
               <div>
-                <h3 className="text-base sm:text-lg font-semibold">
-                  {item.name}
-                </h3>
+                <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
                 <p className="text-sm text-gray-600">{item.description}</p>
 
-                {/* STOCK STATUS BADGES */}
+                {/* Stock Status Badges */}
                 {item.stock_status === 'out_of_stock' && (
                   <span className="inline-block bg-gray-500 text-white text-xs rounded-full px-2 py-1 mt-1">
                     Out of Stock
@@ -309,7 +300,7 @@ export function MenuManager() {
                   </span>
                 )}
 
-                {/* Optional status note */}
+                {/* Optional note */}
                 {item.status_note?.trim() && (
                   <p className="text-xs text-gray-500 mt-1 italic">
                     {item.status_note}
@@ -389,283 +380,303 @@ export function MenuManager() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Name */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* BASIC INFO */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  value={editingItem.name}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, name: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border rounded-md"
-                  required
-                />
-              </div>
+                <h4 className="text-md font-semibold mb-2 border-b pb-2">Basic Info</h4>
 
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={editingItem.description}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, description: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border rounded-md"
-                  rows={3}
-                />
-              </div>
-
-              {/* Price */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingItem.price}
-                  onChange={(e) =>
-                    setEditingItem({
-                      ...editingItem,
-                      price: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full px-4 py-2 border rounded-md"
-                  required
-                />
-              </div>
-
-              {/* Category */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <select
-                  value={editingItem.category}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, category: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border rounded-md"
-                  required
-                >
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Requires 24-hour notice? */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="requires24"
-                  checked={editingItem.advance_notice_hours >= 24}
-                  onChange={(e) => {
-                    const newVal = e.target.checked ? 24 : 0;
-                    setEditingItem({ ...editingItem, advance_notice_hours: newVal });
-                  }}
-                />
-                <label htmlFor="requires24" className="text-sm font-medium text-gray-700">
-                  Requires 24-hour notice?
-                </label>
-              </div>
-
-              {/* Time-based availability? (Seasonal) */}
-              <div>
-                <div className="flex items-center gap-2">
+                {/* Name & Description */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Name <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    id="seasonal"
-                    checked={editingItem.seasonal}
-                    onChange={(e) => {
-                      const turnedOn = e.target.checked;
-                      setEditingItem((prev) => {
-                        let newLabel = prev.promo_label;
-                        if (turnedOn && (!newLabel || !newLabel.trim())) {
-                          newLabel = 'Limited Time';
-                        }
-                        return {
-                          ...prev,
-                          seasonal: turnedOn,
-                          available_from: turnedOn ? prev.available_from : null,
-                          available_until: turnedOn ? prev.available_until : null,
-                          promo_label: newLabel,
-                        };
-                      });
-                    }}
+                    type="text"
+                    value={editingItem.name}
+                    onChange={(e) =>
+                      setEditingItem({ ...editingItem, name: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border rounded-md"
+                    required
                   />
-                  <label htmlFor="seasonal" className="text-sm font-medium text-gray-700">
-                    Time-based availability? (Seasonal)
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={editingItem.description}
+                    onChange={(e) =>
+                      setEditingItem({ ...editingItem, description: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border rounded-md"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Price & Category in a row */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {/* Price */}
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Price
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingItem.price}
+                      onChange={(e) =>
+                        setEditingItem({
+                          ...editingItem,
+                          price: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-md"
+                      required
+                    />
+                  </div>
+
+                  {/* Category */}
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Category
+                    </label>
+                    <select
+                      // if category is null, fallback to ''
+                      value={editingItem.category ?? ''}
+                      onChange={(e) =>
+                        setEditingItem({ ...editingItem, category: e.target.value })
+                      }
+                      className="w-full px-4 py-2 border rounded-md"
+                      required
+                    >
+                      <option value="" disabled>
+                        -- Select a Category --
+                      </option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* AVAILABILITY */}
+              <div>
+                <h4 className="text-md font-semibold mb-2 border-b pb-2">Availability</h4>
+
+                {/* 24-hour notice + Seasonal toggles */}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  {/* 24-hour Notice */}
+                  <label className="inline-flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={editingItem.advance_notice_hours >= 24}
+                      onChange={(e) => {
+                        const newVal = e.target.checked ? 24 : 0;
+                        setEditingItem({ ...editingItem, advance_notice_hours: newVal });
+                      }}
+                    />
+                    <span>Requires 24-hour notice?</span>
+                  </label>
+
+                  {/* Featured */}
+                  <label className="inline-flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={editingItem.featured}
+                      onChange={(e) =>
+                        setEditingItem({ ...editingItem, featured: e.target.checked })
+                      }
+                    />
+                    <span>Featured?</span>
                   </label>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  If checked, this item is only available between the specified start & end dates.
-                </p>
+
+                {/* Seasonal */}
+                <div className="mt-4">
+                  <label className="inline-flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={editingItem.seasonal}
+                      onChange={(e) => {
+                        const turnedOn = e.target.checked;
+                        setEditingItem((prev) => {
+                          let newLabel = prev.promo_label;
+                          if (turnedOn && (!newLabel || !newLabel.trim())) {
+                            newLabel = 'Limited Time';
+                          }
+                          return {
+                            ...prev,
+                            seasonal: turnedOn,
+                            available_from: turnedOn ? prev.available_from : null,
+                            available_until: turnedOn ? prev.available_until : null,
+                            promo_label: newLabel,
+                          };
+                        });
+                      }}
+                    />
+                    <span>Time-based availability? (Seasonal)</span>
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    If checked, this item is only available between the specified start & end
+                    dates.
+                  </p>
+                </div>
+
+                {/* Date range if seasonal */}
+                {editingItem.seasonal && (
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Available From
+                      </label>
+                      <input
+                        type="date"
+                        value={editingItem.available_from ?? ''}
+                        onChange={(e) =>
+                          setEditingItem({
+                            ...editingItem,
+                            available_from: e.target.value || null,
+                          })
+                        }
+                        className="w-full px-4 py-2 border rounded-md"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Available Until
+                      </label>
+                      <input
+                        type="date"
+                        value={editingItem.available_until ?? ''}
+                        onChange={(e) =>
+                          setEditingItem({
+                            ...editingItem,
+                            available_until: e.target.value || null,
+                          })
+                        }
+                        className="w-full px-4 py-2 border rounded-md"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Promo Label */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Special Label (e.g. "Valentine's Special")
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.promo_label ?? ''}
+                    onChange={(e) =>
+                      setEditingItem({ ...editingItem, promo_label: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border rounded-md"
+                    placeholder='e.g. "Valentine’s Special"'
+                  />
+                </div>
               </div>
 
-              {/* available_from / available_until */}
-              {editingItem.seasonal && (
+              {/* INVENTORY STATUS */}
+              <div>
+                <h4 className="text-md font-semibold mb-2 border-b pb-2">Inventory Status</h4>
                 <div className="flex flex-col sm:flex-row gap-4">
+                  {/* Stock Status */}
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Available From
+                      Inventory Status
                     </label>
-                    <input
-                      type="date"
-                      value={editingItem.available_from ?? ''}
+                    <select
+                      value={editingItem.stock_status ?? 'in_stock'}
                       onChange={(e) =>
                         setEditingItem({
                           ...editingItem,
-                          available_from: e.target.value || null,
+                          stock_status: e.target.value as
+                            | 'in_stock'
+                            | 'out_of_stock'
+                            | 'low_stock',
                         })
                       }
                       className="w-full px-4 py-2 border rounded-md"
-                    />
+                    >
+                      <option value="in_stock">In Stock</option>
+                      <option value="out_of_stock">Out of Stock</option>
+                      <option value="low_stock">Low Stock</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      “Low Stock” shows a warning but still allows ordering.
+                      “Out of Stock” disables ordering.
+                    </p>
                   </div>
+
+                  {/* Status Note */}
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Available Until
+                      Status Note (Optional)
                     </label>
-                    <input
-                      type="date"
-                      value={editingItem.available_until ?? ''}
+                    <textarea
+                      value={editingItem.status_note ?? ''}
                       onChange={(e) =>
-                        setEditingItem({
-                          ...editingItem,
-                          available_until: e.target.value || null,
-                        })
+                        setEditingItem({ ...editingItem, status_note: e.target.value })
                       }
                       className="w-full px-4 py-2 border rounded-md"
+                      rows={2}
+                      placeholder='e.g. "Supplier delayed; we’re using a temporary sauce."'
                     />
                   </div>
                 </div>
-              )}
+              </div>
 
-              {/* Promo Label */}
+              {/* IMAGES */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Special Label (e.g. "Valentine's Special")
-                </label>
-                <input
-                  type="text"
-                  value={editingItem.promo_label ?? ''}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, promo_label: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border rounded-md"
-                  placeholder='e.g. "Valentine’s Special"'
-                />
+                <h4 className="text-md font-semibold mb-2 border-b pb-2">Images</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Image Upload
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setEditingItem({ ...editingItem, imageFile: e.target.files[0] });
+                      }
+                    }}
+                    className="w-full px-2 py-2 border rounded-md"
+                  />
+                  {/* Existing image preview */}
+                  {editingItem.image && !editingItem.imageFile && (
+                    <div className="mt-2">
+                      <img
+                        src={editingItem.image}
+                        alt="Existing"
+                        className="h-10 w-10 object-cover rounded"
+                      />
+                    </div>
+                  )}
+                  {/* New file preview */}
+                  {editingItem.imageFile && (
+                    <div className="mt-2">
+                      <img
+                        src={URL.createObjectURL(editingItem.imageFile)}
+                        alt="Preview"
+                        className="h-10 w-10 object-cover rounded"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Featured checkbox */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="featured"
-                  checked={editingItem.featured}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, featured: e.target.checked })
-                  }
-                />
-                <label htmlFor="featured" className="text-sm font-medium text-gray-700">
-                  Featured?
-                </label>
-              </div>
-
-              {/* Stock Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Inventory Status
-                </label>
-                <select
-                  value={editingItem.stock_status}
-                  onChange={(e) =>
-                    setEditingItem({
-                      ...editingItem,
-                      stock_status: e.target.value as 'in_stock' | 'out_of_stock' | 'low_stock',
-                    })
-                  }
-                  className="w-full px-4 py-2 border rounded-md"
-                >
-                  <option value="in_stock">In Stock</option>
-                  <option value="out_of_stock">Out of Stock</option>
-                  <option value="low_stock">Low Stock</option> {/* renamed */}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  “Low Stock” shows a warning but still allows ordering. “Out of Stock” disables ordering.
-                </p>
-              </div>
-
-              {/* Status Note */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status Note (Optional)
-                </label>
-                <textarea
-                  value={editingItem.status_note ?? ''}
-                  onChange={(e) =>
-                    setEditingItem({
-                      ...editingItem,
-                      status_note: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 border rounded-md"
-                  rows={2}
-                  placeholder='e.g. "Supplier delayed; we’re using a temporary sauce."'
-                />
-              </div>
-
-              {/* Image Upload */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Image Upload
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) {
-                      setEditingItem({ ...editingItem, imageFile: e.target.files[0] });
-                    }
-                  }}
-                  className="w-full px-2 py-2 border rounded-md"
-                />
-                {/* Existing image preview */}
-                {editingItem.image && !editingItem.imageFile && (
-                  <div className="mt-2">
-                    <img
-                      src={editingItem.image}
-                      alt="Existing"
-                      className="h-10 w-10 object-cover rounded"
-                    />
-                  </div>
-                )}
-                {/* New file preview */}
-                {editingItem.imageFile && (
-                  <div className="mt-2">
-                    <img
-                      src={URL.createObjectURL(editingItem.imageFile)}
-                      alt="Preview"
-                      className="h-10 w-10 object-cover rounded"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Manage Options (only if editing existing) */}
+              {/* MANAGE OPTIONS (only if editing existing) */}
               {editingItem.id && (
-                <div className="pt-4">
+                <div className="mt-6">
                   <button
                     type="button"
-                    onClick={() => handleManageOptions(editingItem as unknown as MenuItem)}
+                    onClick={() => handleManageOptions(editingItem as MenuItem)}
                     className="px-4 py-2 border rounded-md hover:bg-gray-50"
                   >
                     Manage Options
@@ -674,7 +685,7 @@ export function MenuManager() {
               )}
 
               {/* Submit / Cancel */}
-              <div className="flex justify-end space-x-2 pt-4">
+              <div className="flex justify-end space-x-2 pt-6">
                 <button
                   type="button"
                   onClick={() => {
@@ -687,7 +698,10 @@ export function MenuManager() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+                  className="
+                    inline-flex items-center px-4 py-2 
+                    bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]
+                  "
                 >
                   <Save className="h-5 w-5 mr-2" />
                   Save
@@ -707,7 +721,7 @@ export function MenuManager() {
 }
 
 // --------------------------------------
-// OptionGroupsModal (your existing code, unchanged, except any local changes)
+// OptionGroupsModal
 // --------------------------------------
 function OptionGroupsModal({
   item,
