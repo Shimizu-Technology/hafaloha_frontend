@@ -13,8 +13,8 @@ interface MenuItemFormData {
   price: number;
   category: string;
   menu_id?: number;
-  image: string;            // existing image URL
-  imageFile?: File | null;  // new file if user chooses one
+  image: string;
+  imageFile?: File | null;
   advance_notice_hours: number;
   seasonal: boolean;
   available_from?: string | null;
@@ -22,8 +22,8 @@ interface MenuItemFormData {
   promo_label?: string | null;
   featured: boolean;
 
-  // --- NEW for out-of-stock/limited ---
-  stock_status: 'in_stock' | 'out_of_stock' | 'limited';
+  // Stock status renamed from "limited" => "low_stock"
+  stock_status: 'in_stock' | 'out_of_stock' | 'low_stock';
   status_note?: string | null;
 }
 
@@ -62,7 +62,6 @@ export function MenuManager() {
   // Filter logic
   const filteredItems = React.useMemo(() => {
     let list = menuItems;
-
     if (selectedCategory) {
       list = list.filter((item) => item.category === selectedCategory);
     }
@@ -91,20 +90,17 @@ export function MenuManager() {
     promo_label: 'Limited Time',
     featured: false,
 
-    // NEW: default them
+    // Default stock_status
     stock_status: 'in_stock',
     status_note: '',
   };
 
-  // Ensure not more than 4 featured
+  // Enforce not more than 4 featured items
   function canFeatureThisItem(formData: MenuItemFormData): boolean {
     if (!formData.featured) return true;
-
-    // Check if it's already featured
     const isCurrentlyFeatured = menuItems.find(
       (m) => Number(m.id) === formData.id
     )?.featured;
-
     if (isCurrentlyFeatured) return true;
 
     const currentlyFeaturedCount = menuItems.filter((m) => m.featured).length;
@@ -133,8 +129,10 @@ export function MenuManager() {
       promo_label: (item as any).promo_label?.trim() || 'Limited Time',
       featured: !!item.featured,
 
-      // NEW: read from the item
-      stock_status: item.stock_status || 'in_stock',
+      // stock_status: rename "limited" => "low_stock"
+      stock_status: item.stock_status === 'limited'
+        ? 'low_stock'
+        : (item.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
       status_note: item.status_note || '',
     });
     setIsEditing(true);
@@ -168,7 +166,7 @@ export function MenuManager() {
     e.preventDefault();
     if (!editingItem) return;
 
-    // If toggling featured => check the 4-limit
+    // If toggling featured => check limit
     if (!canFeatureThisItem(editingItem)) {
       return;
     }
@@ -198,7 +196,7 @@ export function MenuManager() {
     setEditingItem(null);
   };
 
-  // If admin checks "Featured Items," uncheck "Seasonal"
+  // Filter toggles
   function handleToggleFeatured(checked: boolean) {
     if (checked) {
       setShowSeasonalOnly(false);
@@ -206,7 +204,6 @@ export function MenuManager() {
     setShowFeaturedOnly(checked);
   }
 
-  // If admin checks "Seasonal Items," uncheck "Featured"
   function handleToggleSeasonal(checked: boolean) {
     if (checked) {
       setShowFeaturedOnly(false);
@@ -306,9 +303,9 @@ export function MenuManager() {
                     Out of Stock
                   </span>
                 )}
-                {item.stock_status === 'limited' && (
+                {item.stock_status === 'low_stock' && (
                   <span className="inline-block bg-orange-500 text-white text-xs rounded-full px-2 py-1 mt-1">
-                    Limited
+                    Low Stock
                   </span>
                 )}
 
@@ -481,32 +478,37 @@ export function MenuManager() {
                 </label>
               </div>
 
-              {/* Seasonal checkbox */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="seasonal"
-                  checked={editingItem.seasonal}
-                  onChange={(e) => {
-                    const turnedOn = e.target.checked;
-                    setEditingItem((prev) => {
-                      let newLabel = prev.promo_label;
-                      if (turnedOn && (!newLabel || !newLabel.trim())) {
-                        newLabel = 'Limited Time';
-                      }
-                      return {
-                        ...prev,
-                        seasonal: turnedOn,
-                        available_from: turnedOn ? prev.available_from : null,
-                        available_until: turnedOn ? prev.available_until : null,
-                        promo_label: newLabel,
-                      };
-                    });
-                  }}
-                />
-                <label htmlFor="seasonal" className="text-sm font-medium text-gray-700">
-                  Seasonal / Limited Time?
-                </label>
+              {/* Time-based availability? (Seasonal) */}
+              <div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="seasonal"
+                    checked={editingItem.seasonal}
+                    onChange={(e) => {
+                      const turnedOn = e.target.checked;
+                      setEditingItem((prev) => {
+                        let newLabel = prev.promo_label;
+                        if (turnedOn && (!newLabel || !newLabel.trim())) {
+                          newLabel = 'Limited Time';
+                        }
+                        return {
+                          ...prev,
+                          seasonal: turnedOn,
+                          available_from: turnedOn ? prev.available_from : null,
+                          available_until: turnedOn ? prev.available_until : null,
+                          promo_label: newLabel,
+                        };
+                      });
+                    }}
+                  />
+                  <label htmlFor="seasonal" className="text-sm font-medium text-gray-700">
+                    Time-based availability? (Seasonal)
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  If checked, this item is only available between the specified start & end dates.
+                </p>
               </div>
 
               {/* available_from / available_until */}
@@ -559,7 +561,7 @@ export function MenuManager() {
                     setEditingItem({ ...editingItem, promo_label: e.target.value })
                   }
                   className="w-full px-4 py-2 border rounded-md"
-                  placeholder='E.g. "Valentine’s Special" or "4th of July"'
+                  placeholder='e.g. "Valentine’s Special"'
                 />
               </div>
 
@@ -578,28 +580,31 @@ export function MenuManager() {
                 </label>
               </div>
 
-              {/* =========== NEW STOCK STATUS =========== */}
+              {/* Stock Status */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Stock Status
+                  Inventory Status
                 </label>
                 <select
                   value={editingItem.stock_status}
                   onChange={(e) =>
                     setEditingItem({
                       ...editingItem,
-                      stock_status: e.target.value as 'in_stock' | 'out_of_stock' | 'limited',
+                      stock_status: e.target.value as 'in_stock' | 'out_of_stock' | 'low_stock',
                     })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                 >
                   <option value="in_stock">In Stock</option>
                   <option value="out_of_stock">Out of Stock</option>
-                  <option value="limited">Limited</option>
+                  <option value="low_stock">Low Stock</option> {/* renamed */}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  “Low Stock” shows a warning but still allows ordering. “Out of Stock” disables ordering.
+                </p>
               </div>
 
-              {/* =========== NEW STATUS NOTE =========== */}
+              {/* Status Note */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Status Note (Optional)
@@ -614,7 +619,7 @@ export function MenuManager() {
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   rows={2}
-                  placeholder='E.g. "Supplier delayed; using turkey instead of chicken."'
+                  placeholder='e.g. "Supplier delayed; we’re using a temporary sauce."'
                 />
               </div>
 
@@ -628,10 +633,7 @@ export function MenuManager() {
                   accept="image/*"
                   onChange={(e) => {
                     if (e.target.files?.[0]) {
-                      setEditingItem({
-                        ...editingItem,
-                        imageFile: e.target.files[0],
-                      });
+                      setEditingItem({ ...editingItem, imageFile: e.target.files[0] });
                     }
                   }}
                   className="w-full px-2 py-2 border rounded-md"

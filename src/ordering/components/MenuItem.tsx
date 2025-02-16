@@ -10,26 +10,21 @@ interface MenuItemProps {
   item: MenuItemType;
 }
 
-/**
- * A single MenuItem card.
- * - Quick "Add to Cart" calls the store directly.
- * - If the item has option_groups, opens CustomizationModal.
- */
 export function MenuItem({ item }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
 
   const [showCustomization, setShowCustomization] = useState(false);
   const [buttonClicked, setButtonClicked] = useState(false);
 
+  // Check status
   const isOutOfStock = item.stock_status === 'out_of_stock';
-  const isLimited = item.stock_status === 'limited';
+  const isLowStock = item.stock_status === 'low_stock';
 
   function handleQuickAdd() {
     if (isOutOfStock) {
       alert('Sorry, this item is out of stock.');
       return;
     }
-
     // For quick add, quantity=1 and no customizations
     addToCart(
       {
@@ -42,7 +37,6 @@ export function MenuItem({ item }: MenuItemProps) {
       },
       1
     );
-
     setButtonClicked(true);
     setTimeout(() => setButtonClicked(false), 300);
   }
@@ -101,19 +95,18 @@ export function MenuItem({ item }: MenuItemProps) {
                 Out of Stock
               </div>
             )}
-            {isLimited && (
+            {isLowStock && (
               <div className="mt-2 inline-block bg-orange-400 text-white text-xs font-bold rounded-full px-2 py-1">
-                Limited
+                Low Stock
               </div>
             )}
 
-            {/* Seasonal Notice */}
+            {/* Seasonal & availability notices */}
             {item.advance_notice_hours != null && item.advance_notice_hours >= 24 && (
               <p className="mt-1 text-sm text-red-600">
                 Requires 24 hours notice
               </p>
             )}
-
             {specialLabel && (
               <div className="mt-2 inline-block bg-red-500 text-white text-xs font-bold rounded-full px-2 py-1">
                 {specialLabel}
@@ -177,7 +170,7 @@ export function MenuItem({ item }: MenuItemProps) {
         </div>
       </div>
 
-      {/* If user chooses to “Customize,” show the modal */}
+      {/* If user chooses “Customize,” show the modal */}
       {showCustomization && (
         <CustomizationModal
           item={item}

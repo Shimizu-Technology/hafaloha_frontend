@@ -22,20 +22,20 @@ export interface MenuItem {
   description: string;
   price: number;
   category: string;
-  image: string; // e.g. from 'image_url' in your backend
+  image: string; // e.g. from 'image_url'
   option_groups?: OptionGroup[];
   advance_notice_hours?: number;
 
   // --- Seasonal fields ---
   seasonal?: boolean;
-  available_from?: string | null;   // or Date, but typically comes as a string
-  available_until?: string | null;  // or Date
+  available_from?: string | null;
+  available_until?: string | null;
 
   // --- Featured ---
   featured?: boolean;
 
-  // --- NEW: Out-of-stock / limited ---
-  stock_status?: 'in_stock' | 'out_of_stock' | 'limited';
+  // --- Stock Status (renamed) ---
+  stock_status?: 'in_stock' | 'out_of_stock' | 'low_stock';
   status_note?: string | null;
 }
 
@@ -48,7 +48,7 @@ export interface MenuItem {
 export interface CartItem extends MenuItem {
   quantity: number;
   customizations?: Record<string, string[]>;
-  notes?: string; // <-- per-item special instructions
+  notes?: string;
 }
 
 export type Category = {
