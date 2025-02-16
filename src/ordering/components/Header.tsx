@@ -1,4 +1,5 @@
 // src/ordering/components/Header.tsx
+
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ShoppingCart,
@@ -17,7 +18,7 @@ import { toast } from 'react-hot-toast';
 export function Header() {
   const { user, signOut } = useAuthStore();
 
-  // Pull the cartItems array from the store
+  // Pull cart items from store and count them
   const cartItems = useOrderStore((state) => state.cartItems);
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
@@ -34,7 +35,10 @@ export function Header() {
     prevCartCountRef.current = cartCount;
   }, [cartCount]);
 
+  // Mobile menu toggle
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Dropdown (desktop) for profile/admin links
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -51,22 +55,20 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Check if user is admin
   const isAdmin = user?.role === 'admin';
+
+  // This is the first name we display in the nav bar.
+  // If user has no first_name, we fall back to email or 'Guest'.
   const firstName = user?.first_name || user?.email || 'Guest';
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Mobile menu button */}
+          {/* Mobile menu button (hamburger) */}
           <button
-            className="
-              p-2 rounded-md text-gray-700 
-              transition-transform duration-200
-              hover:bg-gray-200 
-              active:scale-95 
-              lg:hidden
-            "
+            className="p-2 rounded-md text-gray-700 hover:bg-gray-200 active:scale-95 lg:hidden"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle menu"
           >
@@ -77,27 +79,22 @@ export function Header() {
             )}
           </button>
 
-          {/* Logo link => go to /ordering */}
+          {/* Logo => link to /ordering */}
           <Link
             to="/ordering"
             className="
               flex items-center text-2xl font-bold text-gray-900
-              transition-colors duration-200
-              hover:text-black
+              hover:text-black transition-colors
             "
           >
             håfaloha!
           </Link>
 
-          {/* Desktop Nav */}
+          {/* Desktop Nav (hidden on mobile) */}
           <nav className="hidden lg:flex items-center space-x-8">
             <Link
               to="/ordering/menu"
-              className="
-                text-gray-700 hover:text-gray-900
-                transition-colors duration-200 px-2 py-1
-                rounded-md hover:bg-gray-100 active:scale-95
-              "
+              className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
             >
               Menu
             </Link>
@@ -119,16 +116,13 @@ export function Header() {
             </a>
           </nav>
 
-          {/* Right side: Profile / Cart */}
+          {/* Right side: Profile & Cart */}
           <div className="flex items-center space-x-4">
+            {/* If user is logged in => show dropdown button */}
             {user ? (
               <div className="relative" ref={dropdownRef}>
                 <button
-                  className="
-                    flex items-center text-gray-700 hover:text-gray-900
-                    transition-colors duration-200 px-2 py-1 rounded-md
-                    hover:bg-gray-100 active:scale-95
-                  "
+                  className="flex items-center text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 >
                   <User className="h-6 w-6" />
@@ -136,25 +130,32 @@ export function Header() {
                 </button>
 
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50">
+                    {/* Admin Tools if isAdmin */}
                     {isAdmin && (
                       <>
+                        <div className="px-4 py-2 text-xs font-semibold text-gray-400">
+                          Admin Tools
+                        </div>
                         <Link
                           to="/reservations/dashboard"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => setIsDropdownOpen(false)}
                         >
-                          Reservations Admin
+                          Manage Reservations
                         </Link>
                         <Link
                           to="/ordering/admin"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => setIsDropdownOpen(false)}
                         >
-                          Ordering Admin
+                          Manage Orders
                         </Link>
+                        <hr className="my-1" />
                       </>
                     )}
+
+                    {/* Normal user links */}
                     <Link
                       to="/ordering/orders"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -162,7 +163,6 @@ export function Header() {
                     >
                       Order History
                     </Link>
-                    {/* NEW: My Profile link */}
                     <Link
                       to="/ordering/profile"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -170,6 +170,8 @@ export function Header() {
                     >
                       My Profile
                     </Link>
+                    <hr className="my-1" />
+
                     <button
                       onClick={() => {
                         signOut();
@@ -184,49 +186,41 @@ export function Header() {
                 )}
               </div>
             ) : (
+              // If not logged in => show Sign In/Up (desktop only)
               <div className="hidden lg:flex space-x-2">
                 <Link
                   to="/ordering/login"
-                  className="
-                    text-gray-700 hover:text-gray-900
-                    transition-colors duration-200 px-2 py-1
-                    rounded-md hover:bg-gray-100 active:scale-95
-                  "
+                  className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
                   Sign In
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
                   to="/ordering/signup"
-                  className="
-                    text-gray-700 hover:text-gray-900
-                    transition-colors duration-200 px-2 py-1
-                    rounded-md hover:bg-gray-100 active:scale-95
-                  "
+                  className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
                   Sign Up
                 </Link>
               </div>
             )}
 
+            {/* Cart icon */}
             <Link
               to="/ordering/cart"
-              className="
-                p-2 relative text-gray-700 hover:text-gray-900
-                transition-transform duration-200
-                hover:bg-gray-200 active:scale-95
-                rounded-md
-              "
+              className="p-2 relative text-gray-700 hover:text-gray-900 hover:bg-gray-200 active:scale-95 rounded-md"
               aria-label="Shopping cart"
             >
               <ShoppingCart
                 className={`h-6 w-6 ${cartBounce ? 'animate-bounce' : ''}`}
               />
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#c1902f] 
-                                 text-white text-xs font-bold 
-                                 rounded-full h-5 w-5 
-                                 flex items-center justify-center">
+                <span
+                  className="
+                    absolute -top-1 -right-1 
+                    bg-[#c1902f] text-white text-xs font-bold
+                    rounded-full h-5 w-5 flex items-center justify-center
+                  "
+                >
                   {cartCount}
                 </span>
               )}
@@ -235,7 +229,7 @@ export function Header() {
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu => shows if isMobileMenuOpen */}
       {isMobileMenuOpen && (
         <div className="lg:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1">
@@ -244,7 +238,6 @@ export function Header() {
               className="
                 block px-3 py-2 rounded-md text-base font-medium text-gray-700
                 hover:text-gray-900 hover:bg-gray-50
-                transition-colors duration-200 active:scale-95
               "
               onClick={() => setIsMobileMenuOpen(false)}
             >
@@ -260,7 +253,11 @@ export function Header() {
             </div>
             <a
               href="tel:+16719893444"
-              className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200 active:scale-95 flex items-center"
+              className="
+                block px-3 py-2 text-base font-medium text-gray-700
+                hover:text-gray-900 hover:bg-gray-50
+                flex items-center
+              "
               onClick={() => setIsMobileMenuOpen(false)}
             >
               <Phone className="inline-block h-4 w-4 mr-2" />
@@ -269,55 +266,58 @@ export function Header() {
 
             {user ? (
               <>
+                {/* Admin Tools (mobile) */}
                 {isAdmin && (
                   <>
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-400">
+                      Admin Tools
+                    </div>
                     <Link
                       to="/reservations/dashboard"
                       className="
                         block px-3 py-2 rounded-md text-base font-medium
                         text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                        transition-colors duration-200 active:scale-95
                       "
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Reservations Admin
+                      Manage Reservations
                     </Link>
                     <Link
                       to="/ordering/admin"
                       className="
                         block px-3 py-2 rounded-md text-base font-medium
                         text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                        transition-colors duration-200 active:scale-95
                       "
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Ordering Admin
+                      Manage Orders
                     </Link>
+                    <hr className="my-1" />
                   </>
                 )}
+
                 <Link
                   to="/ordering/orders"
                   className="
                     block px-3 py-2 rounded-md text-base font-medium
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                    transition-colors duration-200 active:scale-95
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Order History
                 </Link>
-                {/* My Profile in mobile menu */}
                 <Link
                   to="/ordering/profile"
                   className="
                     block px-3 py-2 rounded-md text-base font-medium
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                    transition-colors duration-200 active:scale-95
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   My Profile
                 </Link>
+                <hr className="my-1" />
+
                 <button
                   onClick={() => {
                     signOut();
@@ -327,7 +327,6 @@ export function Header() {
                   className="
                     block w-full text-left px-3 py-2 rounded-md text-base font-medium
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                    transition-colors duration-200 active:scale-95
                   "
                 >
                   Sign Out
@@ -340,7 +339,6 @@ export function Header() {
                   className="
                     block px-3 py-2 rounded-md text-base font-medium
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                    transition-colors duration-200 active:scale-95
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
@@ -351,7 +349,6 @@ export function Header() {
                   className="
                     block px-3 py-2 rounded-md text-base font-medium
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                    transition-colors duration-200 active:scale-95
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
