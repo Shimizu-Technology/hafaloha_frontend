@@ -162,6 +162,14 @@ export function Header() {
                     >
                       Order History
                     </Link>
+                    {/* NEW: My Profile link */}
+                    <Link
+                      to="/ordering/profile"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsDropdownOpen(false)}
+                    >
+                      My Profile
+                    </Link>
                     <button
                       onClick={() => {
                         signOut();
@@ -297,6 +305,18 @@ export function Header() {
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Order History
+                </Link>
+                {/* My Profile in mobile menu */}
+                <Link
+                  to="/ordering/profile"
+                  className="
+                    block px-3 py-2 rounded-md text-base font-medium
+                    text-gray-700 hover:text-gray-900 hover:bg-gray-50
+                    transition-colors duration-200 active:scale-95
+                  "
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  My Profile
                 </Link>
                 <button
                   onClick={() => {

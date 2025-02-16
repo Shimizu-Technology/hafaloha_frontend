@@ -16,6 +16,7 @@ import { SignUpForm } from './components/auth/SignUpForm';
 import { ForgotPasswordForm } from './components/auth/ForgotPasswordForm';
 import { ResetPasswordForm } from './components/auth/ResetPasswordForm';
 import { OrderHistory } from './components/profile/OrderHistory';
+import { ProfilePage } from './components/profile/ProfilePage'; // <-- import the new ProfilePage
 
 import { useAuthStore } from './store/authStore';
 import { useMenuStore } from './store/menuStore';
@@ -157,6 +158,16 @@ export default function OnlineOrderingApp() {
           element={
             <ProtectedRoute>
               <OrderHistory />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* NEW: My Profile => must be logged in */}
+        <Route
+          path="profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           }
         />
