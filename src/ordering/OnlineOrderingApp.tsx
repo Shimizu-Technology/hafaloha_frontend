@@ -16,14 +16,14 @@ import { SignUpForm } from './components/auth/SignUpForm';
 import { ForgotPasswordForm } from './components/auth/ForgotPasswordForm';
 import { ResetPasswordForm } from './components/auth/ResetPasswordForm';
 import { OrderHistory } from './components/profile/OrderHistory';
-import { ProfilePage } from './components/profile/ProfilePage'; // <-- import the new ProfilePage
+import { ProfilePage } from './components/profile/ProfilePage';
 
 import { useAuthStore } from './store/authStore';
 import { useMenuStore } from './store/menuStore';
 import { useLoadingStore } from './store/loadingStore';
 
-// We also import { MenuItem } if we want to show popular items:
-import { MenuItem } from './components/MenuItem';
+// Import MenuItem for the homepage display
+import { MenuItem as MenuItemCard } from './components/MenuItem';
 
 function ProtectedRoute({
   children,
@@ -92,10 +92,15 @@ function OrderingLayout() {
 export default function OnlineOrderingApp() {
   const { menuItems, fetchMenuItems } = useMenuStore();
 
-  // On mount, load menu items from your backend
+  // On mount, load menu items
   useEffect(() => {
     fetchMenuItems();
   }, [fetchMenuItems]);
+
+  // Filter for featured items
+  const featuredItems = menuItems.filter((item) => item.featured);
+  // Limit to 4 (though our server also enforces it)
+  const featuredSlice = featuredItems.slice(0, 4);
 
   return (
     <Routes>
@@ -113,9 +118,9 @@ export default function OnlineOrderingApp() {
                       Popular Items
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                      {/* Show first 4 items, each calls store in <MenuItem>. */}
-                      {menuItems.slice(0, 4).map((item) => (
-                        <MenuItem key={item.id} item={item} />
+                      {/* Show up to 4 featured items */}
+                      {featuredSlice.map((item) => (
+                        <MenuItemCard key={item.id} item={item} />
                       ))}
                     </div>
                   </div>
@@ -128,7 +133,7 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        {/* The main menu page => each <MenuItem> calls store.addToCart */}
+        {/* The main menu page => each <MenuItemCard> calls store.addToCart */}
         <Route path="menu" element={<MenuPage />} />
 
         {/* The cart / checkout => reads cart from store */}

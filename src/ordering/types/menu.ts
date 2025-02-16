@@ -30,13 +30,16 @@ export interface MenuItem {
   seasonal?: boolean;
   available_from?: string | null;   // or Date, but typically comes as a string
   available_until?: string | null;  // or Date
+
+  // NEW: Featured
+  featured?: boolean; // <--- add this so the front end can track featured
 }
 
 /**
  * A cart item is basically a MenuItem plus:
  * - quantity
  * - user-chosen customizations
- * - now a per-item `notes` field
+ * - a per-item `notes` field
  */
 export interface CartItem extends MenuItem {
   quantity: number;

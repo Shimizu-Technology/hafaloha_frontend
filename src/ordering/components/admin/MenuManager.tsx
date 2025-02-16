@@ -1,4 +1,5 @@
 // src/components/admin/MenuManager.tsx
+
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore'; // your zustand store
@@ -12,13 +13,14 @@ interface MenuItemFormData {
   price: number;
   category: string;
   menu_id?: number;
-  image: string;            // existing image URL (if any)
+  image: string;            // existing image URL
   imageFile?: File | null;  // new file if user chooses one
   advance_notice_hours: number;
   seasonal: boolean;
   available_from?: string | null;
   available_until?: string | null;
   promo_label?: string | null;
+  featured: boolean;
 }
 
 interface OptionGroup {
@@ -36,32 +38,43 @@ interface OptionRow {
   additional_price: number;
 }
 
-// -------------- Main MenuManager --------------
 export function MenuManager() {
-  const {
-    menuItems,
-    addMenuItem,
-    updateMenuItem,
-    deleteMenuItem,
-  } = useMenuStore();
+  const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem } = useMenuStore();
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
+
+  // Category filter
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  // Checkboxes for filtering by featured/seasonal
+  const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
+  const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
+
+  // Options Modal
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
-  // --------------------------------------------
-  // Category filtering
-  // --------------------------------------------
-  const filteredItems = selectedCategory
-    ? menuItems.filter((item) => item.category === selectedCategory)
-    : menuItems;
+  // Memo: filter items for display
+  const filteredItems = React.useMemo(() => {
+    let list = menuItems;
 
-  // --------------------------------------------
-  // Default form data (for new items)
-  // --------------------------------------------
+    // Filter by category if selected
+    if (selectedCategory) {
+      list = list.filter((item) => item.category === selectedCategory);
+    }
+    // Filter by featured if toggled
+    if (showFeaturedOnly) {
+      list = list.filter((item) => item.featured);
+    }
+    // Filter by seasonal if toggled
+    if (showSeasonalOnly) {
+      list = list.filter((item) => item.seasonal);
+    }
+    return list;
+  }, [menuItems, selectedCategory, showFeaturedOnly, showSeasonalOnly]);
+
+  // Default data for creating a new item
   const initialFormData: MenuItemFormData = {
     name: '',
     description: '',
@@ -75,11 +88,30 @@ export function MenuManager() {
     available_from: null,
     available_until: null,
     promo_label: 'Limited Time',
+    featured: false,
   };
 
-  // --------------------------------------------
-  // Edit existing item
-  // --------------------------------------------
+  // Check that we don't exceed 4 featured items
+  function canFeatureThisItem(formData: MenuItemFormData): boolean {
+    if (!formData.featured) return true;
+
+    const isCurrentlyFeatured = menuItems.find(
+      (m) => Number(m.id) === formData.id
+    )?.featured;
+
+    // If it was already featured, no new limit check
+    if (isCurrentlyFeatured) return true;
+
+    // Count how many are featured
+    const currentlyFeaturedCount = menuItems.filter((m) => m.featured).length;
+    if (currentlyFeaturedCount >= 4) {
+      alert('You can only have 4 featured items at a time.');
+      return false;
+    }
+    return true;
+  }
+
+  // Edit existing
   const handleEdit = (item: MenuItem) => {
     setEditingItem({
       id: Number(item.id),
@@ -87,7 +119,7 @@ export function MenuManager() {
       description: item.description,
       price: item.price,
       category: item.category,
-      image: item.image, // existing URL
+      image: item.image || '',
       imageFile: null,
       menu_id: (item as any).menu_id || 1,
       advance_notice_hours: item.advance_notice_hours ?? 0,
@@ -95,30 +127,25 @@ export function MenuManager() {
       available_from: item.available_from || null,
       available_until: item.available_until || null,
       promo_label: (item as any).promo_label?.trim() || 'Limited Time',
+      featured: !!item.featured,
     });
     setIsEditing(true);
   };
 
-  // --------------------------------------------
-  // Add new item
-  // --------------------------------------------
+  // Add new
   const handleAdd = () => {
     setEditingItem(initialFormData);
     setIsEditing(true);
   };
 
-  // --------------------------------------------
-  // Delete item
-  // --------------------------------------------
+  // Delete
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       await deleteMenuItem(id);
     }
   };
 
-  // --------------------------------------------
   // Manage Options
-  // --------------------------------------------
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
     setOptionsModalOpen(true);
@@ -128,14 +155,17 @@ export function MenuManager() {
     setOptionsModalItem(null);
   };
 
-  // --------------------------------------------
-  // Submit (Create / Update)
-  // --------------------------------------------
+  // Submit changes
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
 
-    // If seasonal is checked but label is blank, use "Limited Time"
+    // If toggling featured, check limit
+    if (!canFeatureThisItem(editingItem)) {
+      return;
+    }
+
+    // If seasonal w/o label => "Limited Time"
     let finalLabel = editingItem.promo_label?.trim() || '';
     if (editingItem.seasonal && !finalLabel) {
       finalLabel = 'Limited Time';
@@ -148,10 +178,8 @@ export function MenuManager() {
 
     try {
       if (editingItem.id) {
-        // update existing
         await updateMenuItem(String(editingItem.id), payload);
       } else {
-        // create new
         await addMenuItem(payload);
       }
     } catch (err) {
@@ -162,18 +190,15 @@ export function MenuManager() {
     setEditingItem(null);
   };
 
-  // --------------------------------------------
-  // Render
-  // --------------------------------------------
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-4 sm:p-6">
       {/* Header row */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h2 className="text-2xl font-bold">Menu Management</h2>
         <button
           onClick={handleAdd}
-          className="inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2 
-                     bg-[#c1902f] text-white rounded-md 
+          className="inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2
+                     bg-[#c1902f] text-white rounded-md
                      hover:bg-[#d4a43f] whitespace-nowrap"
         >
           <Plus className="h-5 w-5 mr-2" />
@@ -181,9 +206,10 @@ export function MenuManager() {
         </button>
       </div>
 
-      {/* Category filters */}
-      <div className="mb-6">
+      {/* Category Filter Row */}
+      <div className="mb-3">
         <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
+          {/* All Categories */}
           <button
             className={
               !selectedCategory
@@ -210,6 +236,27 @@ export function MenuManager() {
         </div>
       </div>
 
+      {/* Additional Filters (Featured, Seasonal) */}
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <label className="inline-flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={showFeaturedOnly}
+            onChange={(e) => setShowFeaturedOnly(e.target.checked)}
+          />
+          <span>Featured Items</span>
+        </label>
+
+        <label className="inline-flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={showSeasonalOnly}
+            onChange={(e) => setShowSeasonalOnly(e.target.checked)}
+          />
+          <span>Seasonal Items</span>
+        </label>
+      </div>
+
       {/* Items Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.map((item) => (
@@ -224,7 +271,7 @@ export function MenuManager() {
             />
             <div className="p-4 flex flex-col flex-1">
               <div>
-                <h3 className="text-lg font-semibold">{item.name}</h3>
+                <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
                 <p className="text-sm text-gray-600">{item.description}</p>
                 {item.advance_notice_hours >= 24 && (
                   <p className="text-xs text-red-600 mt-1">
@@ -236,13 +283,18 @@ export function MenuManager() {
                     {item.promo_label?.trim() || 'Limited Time'}
                   </span>
                 )}
+                {item.featured && (
+                  <span className="inline-block bg-yellow-500 text-white text-xs rounded-full px-2 py-1 mt-1 ml-2">
+                    Featured
+                  </span>
+                )}
               </div>
               <div className="mt-auto flex justify-between items-center pt-4">
                 <span className="text-sm text-gray-500 capitalize">
                   {item.category}
                 </span>
                 <div className="flex items-center space-x-4">
-                  <span className="text-lg font-semibold">
+                  <span className="text-base sm:text-lg font-semibold">
                     ${Number(item.price).toFixed(2)}
                   </span>
                   {/* Edit Item */}
@@ -250,7 +302,7 @@ export function MenuManager() {
                     onClick={() => handleEdit(item)}
                     className="p-2 text-gray-600 hover:text-[#c1902f]"
                   >
-                    <Edit2 className="h-5 w-5" />
+                    <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                   {/* Delete Item */}
                   <button
@@ -264,7 +316,7 @@ export function MenuManager() {
                     }}
                     className="p-2 text-gray-600 hover:text-red-600"
                   >
-                    <Trash2 className="h-5 w-5" />
+                    <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                 </div>
               </div>
@@ -276,7 +328,7 @@ export function MenuManager() {
       {/* Add/Edit Modal */}
       {isEditing && editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+          <div className="bg-white rounded-lg max-w-md sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             {/* Modal Header */}
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold">
@@ -378,10 +430,7 @@ export function MenuManager() {
                     setEditingItem({ ...editingItem, advance_notice_hours: newVal });
                   }}
                 />
-                <label
-                  htmlFor="requires24"
-                  className="text-sm font-medium text-gray-700"
-                >
+                <label htmlFor="requires24" className="text-sm font-medium text-gray-700">
                   Requires 24-hour notice?
                 </label>
               </div>
@@ -409,10 +458,7 @@ export function MenuManager() {
                     });
                   }}
                 />
-                <label
-                  htmlFor="seasonal"
-                  className="text-sm font-medium text-gray-700"
-                >
+                <label htmlFor="seasonal" className="text-sm font-medium text-gray-700">
                   Seasonal / Limited Time?
                 </label>
               </div>
@@ -471,6 +517,21 @@ export function MenuManager() {
                 />
               </div>
 
+              {/* Featured checkbox */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="featured"
+                  checked={editingItem.featured}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, featured: e.target.checked })
+                  }
+                />
+                <label htmlFor="featured" className="text-sm font-medium text-gray-700">
+                  Featured?
+                </label>
+              </div>
+
               {/* Image Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -489,7 +550,7 @@ export function MenuManager() {
                   }}
                   className="w-full px-2 py-2 border rounded-md"
                 />
-                {/* If there's an existing image but no new file chosen yet */}
+                {/* Existing image preview */}
                 {editingItem.image && !editingItem.imageFile && (
                   <div className="mt-2">
                     <img
@@ -499,7 +560,7 @@ export function MenuManager() {
                     />
                   </div>
                 )}
-                {/* If a new file is chosen, show a local preview */}
+                {/* New file preview */}
                 {editingItem.imageFile && (
                   <div className="mt-2">
                     <img
@@ -511,7 +572,7 @@ export function MenuManager() {
                 )}
               </div>
 
-              {/* Manage Options (only if editing existing) */}
+              {/* Manage Options (if editing existing) */}
               {editingItem.id && (
                 <div className="pt-4">
                   <button
@@ -560,8 +621,7 @@ export function MenuManager() {
 }
 
 // --------------------------------------
-// OptionGroupsModal
-// (unchanged except for your existing code)
+// OptionGroupsModal (unchanged except your existing code)
 // --------------------------------------
 function OptionGroupsModal({
   item,
@@ -580,13 +640,12 @@ function OptionGroupsModal({
   const [newGroupRequired, setNewGroupRequired] = useState(false);
 
   // For creating new option
-  const [creatingOptionGroupId, setCreatingOptionGroupId] = useState<number | null>(
-    null
-  );
+  const [creatingOptionGroupId, setCreatingOptionGroupId] =
+    useState<number | null>(null);
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchGroups();
     // eslint-disable-next-line
   }, [item.id]);
@@ -673,9 +732,11 @@ function OptionGroupsModal({
     changes: Partial<OptionGroup>
   ) => {
     try {
+      // Optimistic update
       const updated = { ...group, ...changes };
       replaceGroupInState(updated);
 
+      // Then patch to server
       const serverGroup = await api.patch(`/option_groups/${group.id}`, changes);
       replaceGroupInState(serverGroup);
     } catch (err) {
@@ -736,9 +797,11 @@ function OptionGroupsModal({
     changes: Partial<OptionRow>
   ) => {
     try {
+      // Optimistic update
       const updatedOpt = { ...option, ...changes };
       replaceOptionInState(groupId, updatedOpt);
 
+      // Then patch to server
       const serverOpt = await api.patch(`/options/${option.id}`, changes);
       replaceOptionInState(groupId, serverOpt);
     } catch (err) {
@@ -759,7 +822,6 @@ function OptionGroupsModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      {/* ... your modal content, unchanged ... */}
       <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">
@@ -950,9 +1012,7 @@ function OptionGroupsModal({
                         type="text"
                         value={opt.name}
                         onChange={(e) =>
-                          handleUpdateOption(group.id, opt, {
-                            name: e.target.value,
-                          })
+                          handleUpdateOption(group.id, opt, { name: e.target.value })
                         }
                         className="border-b text-sm flex-1 mr-2 focus:outline-none"
                       />
