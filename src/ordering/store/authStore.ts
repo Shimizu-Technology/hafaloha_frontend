@@ -34,7 +34,7 @@ export const useAuthStore = create<AuthStore>((set) => {
     loading: false,
     error: null,
 
-    // Existing helper for signIn / signUp
+    // Used by signIn/signUp to store user & token
     setUserFromResponse: ({ jwt, user }) => {
       localStorage.setItem('token', jwt);
       localStorage.setItem('user', JSON.stringify(user));
@@ -56,6 +56,7 @@ export const useAuthStore = create<AuthStore>((set) => {
     signUp: async (email, password, firstName, lastName, phone) => {
       set({ loading: true, error: null });
       try {
+        // --- HERE: we explicitly add `restaurant_id: 1`
         const payload = {
           user: {
             email,
@@ -64,6 +65,7 @@ export const useAuthStore = create<AuthStore>((set) => {
             first_name: firstName,
             last_name: lastName,
             phone,
+            restaurant_id: 1, // <--- Hard-coded for now
           },
         };
         const { jwt, user } = await api.post('/signup', payload);
@@ -80,7 +82,7 @@ export const useAuthStore = create<AuthStore>((set) => {
       set({ user: null, loading: false, error: null });
     },
 
-    // NEW: updateUser => store the updated user in state + localStorage
+    // Allows updating user fields in local store w/o re-signing in
     updateUser: (updatedUser: User) => {
       localStorage.setItem('user', JSON.stringify(updatedUser));
       set({ user: updatedUser });
