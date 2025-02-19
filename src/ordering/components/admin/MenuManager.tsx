@@ -43,6 +43,21 @@ interface OptionRow {
   position: number; // track option order from server
 }
 
+// Helper to format a date in a nice “February 26, 2025” style
+function formatDate(dateStr?: string | null) {
+  if (!dateStr) return null;
+  const parsed = new Date(dateStr);
+  if (isNaN(parsed.getTime())) {
+    // fallback to raw string if Date parsing fails
+    return dateStr;
+  }
+  return parsed.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export function MenuManager() {
   const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem } = useMenuStore();
 
@@ -202,6 +217,26 @@ export function MenuManager() {
     setShowSeasonalOnly(checked);
   }
 
+  // A little helper for uniform badges
+  // tailwind classes: small text, bold, rounded-full, minimal padding, etc.
+  function Badge({
+    children,
+    bgColor = 'bg-gray-500',
+    textColor = 'text-white',
+  }: {
+    children: React.ReactNode;
+    bgColor?: string;
+    textColor?: string;
+  }) {
+    return (
+      <span
+        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold mr-1 mt-1 ${bgColor} ${textColor}`}
+      >
+        {children}
+      </span>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
       {/* Header row */}
@@ -273,90 +308,101 @@ export function MenuManager() {
 
       {/* Items Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredItems.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
-          >
-            <img
-              src={item.image}
-              alt={item.name}
-              className="w-full h-48 object-cover"
-            />
-            <div className="p-4 flex flex-col flex-1">
-              <div>
-                <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
-                <p className="text-sm text-gray-600">{item.description}</p>
+        {filteredItems.map((item) => {
+          // For admin: if item is seasonal, show both "Starts" and "Ends" if present
+          const fromDate = formatDate(item.available_from);
+          const untilDate = formatDate(item.available_until);
 
-                {/* Stock Status Badges */}
-                {item.stock_status === 'out_of_stock' && (
-                  <span className="inline-block bg-gray-500 text-white text-xs rounded-full px-2 py-1 mt-1">
-                    Out of Stock
-                  </span>
-                )}
-                {item.stock_status === 'low_stock' && (
-                  <span className="inline-block bg-orange-500 text-white text-xs rounded-full px-2 py-1 mt-1">
-                    Low Stock
-                  </span>
-                )}
+          let dateInfo: React.ReactNode = null;
+          if (item.seasonal && (fromDate || untilDate)) {
+            dateInfo = (
+              <p className="text-xs text-gray-600 mt-2">
+                <span className="font-semibold">Starts:</span> {fromDate || '—'}
+                <span className="mx-1 text-gray-400">•</span>
+                <span className="font-semibold">Ends:</span> {untilDate || '—'}
+              </p>
+            );
+          }
 
-                {/* Optional note */}
-                {item.status_note?.trim() && (
-                  <p className="text-xs text-gray-500 mt-1 italic">
-                    {item.status_note}
-                  </p>
-                )}
+          return (
+            <div
+              key={item.id}
+              className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
+            >
+              <img
+                src={item.image}
+                alt={item.name}
+                className="w-full h-48 object-cover"
+              />
+              <div className="p-4 flex flex-col flex-1">
+                <div>
+                  <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
+                  <p className="text-sm text-gray-600">{item.description}</p>
 
-                {item.advance_notice_hours >= 24 && (
-                  <p className="text-xs text-red-600 mt-1">
-                    Requires 24 hours notice
-                  </p>
-                )}
-                {item.seasonal && (
-                  <span className="inline-block bg-red-500 text-white text-xs rounded-full px-2 py-1 mt-1">
-                    {item.promo_label?.trim() || 'Limited Time'}
+                  {/* Now we unify all badges with the <Badge> helper */}
+                  <div className="mt-2 flex flex-wrap">
+                    {item.stock_status === 'out_of_stock' && (
+                      <Badge bgColor="bg-gray-600">Out of Stock</Badge>
+                    )}
+                    {item.stock_status === 'low_stock' && (
+                      <Badge bgColor="bg-orange-500">Low Stock</Badge>
+                    )}
+                    {item.advance_notice_hours >= 24 && (
+                      <Badge bgColor="bg-red-600">24hr Notice</Badge>
+                    )}
+                    {item.seasonal && (
+                      <Badge bgColor="bg-red-500">
+                        {item.promo_label?.trim() || 'Limited Time'}
+                      </Badge>
+                    )}
+                    {item.featured && <Badge bgColor="bg-yellow-500">Featured</Badge>}
+                  </div>
+
+                  {/* Optional note */}
+                  {item.status_note?.trim() && (
+                    <p className="text-xs text-gray-500 mt-1 italic">
+                      {item.status_note}
+                    </p>
+                  )}
+
+                  {/* Show the "Starts / Ends" info for admins */}
+                  {dateInfo}
+                </div>
+                <div className="mt-auto flex justify-between items-center pt-4">
+                  <span className="text-sm text-gray-500 capitalize">
+                    {item.category}
                   </span>
-                )}
-                {item.featured && (
-                  <span className="inline-block bg-yellow-500 text-white text-xs rounded-full px-2 py-1 mt-1 ml-2">
-                    Featured
-                  </span>
-                )}
-              </div>
-              <div className="mt-auto flex justify-between items-center pt-4">
-                <span className="text-sm text-gray-500 capitalize">
-                  {item.category}
-                </span>
-                <div className="flex items-center space-x-4">
-                  <span className="text-base sm:text-lg font-semibold">
-                    ${Number(item.price).toFixed(2)}
-                  </span>
-                  {/* Edit Item */}
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="p-2 text-gray-600 hover:text-[#c1902f]"
-                  >
-                    <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </button>
-                  {/* Delete Item */}
-                  <button
-                    onClick={() => {
-                      if (typeof item.id === 'string') {
-                        const numId = parseInt(item.id, 10);
-                        if (!Number.isNaN(numId)) handleDelete(numId);
-                      } else {
-                        handleDelete(item.id as number);
-                      }
-                    }}
-                    className="p-2 text-gray-600 hover:text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </button>
+                  <div className="flex items-center space-x-4">
+                    <span className="text-base sm:text-lg font-semibold">
+                      ${Number(item.price).toFixed(2)}
+                    </span>
+                    {/* Edit Item */}
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="p-2 text-gray-600 hover:text-[#c1902f]"
+                    >
+                      <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </button>
+                    {/* Delete Item */}
+                    <button
+                      onClick={() => {
+                        if (typeof item.id === 'string') {
+                          const numId = parseInt(item.id, 10);
+                          if (!Number.isNaN(numId)) handleDelete(numId);
+                        } else {
+                          handleDelete(item.id as number);
+                        }
+                      }}
+                      className="p-2 text-gray-600 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Add/Edit Modal */}
@@ -720,7 +766,7 @@ export function MenuManager() {
 }
 
 // --------------------------------------
-// OptionGroupsModal
+// OptionGroupsModal (unchanged below) ...
 // --------------------------------------
 function OptionGroupsModal({
   item,
