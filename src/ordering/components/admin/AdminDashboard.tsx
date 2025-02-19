@@ -44,7 +44,6 @@ export function AdminDashboard() {
   });
 
   function handleTabClick(id: Tab) {
-    console.log('[AdminDashboard] handleTabClick =>', id);
     setActiveTab(id);
     localStorage.setItem('adminTab', id);
   }
@@ -154,8 +153,6 @@ export function AdminDashboard() {
 
     return () => clearInterval(intervalId);
   }, [user, lastOrderId, activeTab]);
-
-  console.log('[AdminDashboard] render => activeTab=', activeTab, ' selectedOrderId=', selectedOrderId);
 
   return (
     <div className="min-h-screen bg-gray-50">

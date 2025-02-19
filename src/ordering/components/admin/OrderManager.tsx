@@ -23,21 +23,15 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
   const [etaMinutes, setEtaMinutes] = useState(5); // default to 5 minutes
   const [orderToPrep, setOrderToPrep] = useState<any | null>(null); // which order are we about to prepare?
 
-  console.log('[OrderManager] Rendering. orders.length=', orders.length,
-    'selectedOrderId=', selectedOrderId);
-
   // Fetch all orders on mount
   useEffect(() => {
-    console.log('[OrderManager] useEffect => fetchOrders() on mount');
     fetchOrders();
   }, [fetchOrders]);
 
   // If the parent sets a selectedOrderId => open the details modal
   useEffect(() => {
-    console.log('[OrderManager] useEffect => selectedOrderId changed =>', selectedOrderId);
     if (selectedOrderId) {
       const found = orders.find(o => Number(o.id) === selectedOrderId);
-      console.log('[OrderManager] found order =>', found);
       setSelectedOrder(found || null);
     } else {
       setSelectedOrder(null);
