@@ -5,9 +5,7 @@ import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { categories } from '../../data/menu';
-
-// Important: We'll import { api } here so we can use it in OptionGroupsModal.
-import { api } from '../../lib/api';  // adjust path if needed
+import { api } from '../../lib/api'; // adjust path if needed
 
 interface MenuItemFormData {
   id?: number;
@@ -34,6 +32,7 @@ interface OptionGroup {
   min_select: number;
   max_select: number;
   required: boolean;
+  position: number; // track group order from server
   options: OptionRow[];
 }
 
@@ -41,6 +40,7 @@ interface OptionRow {
   id: number;
   name: string;
   additional_price: number;
+  position: number; // track option order from server
 }
 
 export function MenuManager() {
@@ -117,7 +117,7 @@ export function MenuManager() {
       name: item.name,
       description: item.description,
       price: item.price,
-      category: item.category || '',  // never pass null to select
+      category: item.category || '', // never pass null to select
       image: item.image || '',
       imageFile: null,
       menu_id: (item as any).menu_id || 1,
@@ -127,10 +127,10 @@ export function MenuManager() {
       available_until: item.available_until || null,
       promo_label: item.promo_label?.trim() || 'Limited Time',
       featured: !!item.featured,
-      // rename 'limited' => 'low_stock'
-      stock_status: item.stock_status === 'limited'
-        ? 'low_stock'
-        : (item.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
+      stock_status:
+        item.stock_status === 'limited'
+          ? 'low_stock'
+          : (item.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
       status_note: item.status_note || '',
     });
     setIsEditing(true);
@@ -442,7 +442,6 @@ export function MenuManager() {
                       Category
                     </label>
                     <select
-                      // if category is null, fallback to ''
                       value={editingItem.category ?? ''}
                       onChange={(e) =>
                         setEditingItem({ ...editingItem, category: e.target.value })
@@ -730,20 +729,19 @@ function OptionGroupsModal({
   item: MenuItem;
   onClose: () => void;
 }) {
-  const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
+  const [originalOptionGroups, setOriginalOptionGroups] = useState<OptionGroup[]>([]);
+  const [draftOptionGroups, setDraftOptionGroups] = useState<OptionGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // For creating new group
+  // For creating new group in local state (not yet on server)
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMin, setNewGroupMin] = useState(0);
   const [newGroupMax, setNewGroupMax] = useState(1);
   const [newGroupRequired, setNewGroupRequired] = useState(false);
 
-  // For creating new option
-  const [creatingOptionGroupId, setCreatingOptionGroupId] =
-    useState<number | null>(null);
-  const [newOptionName, setNewOptionName] = useState('');
-  const [newOptionPrice, setNewOptionPrice] = useState(0);
+  // Track a temporary negative ID for new groups/options
+  // so we can identify them in draftOptionGroups
+  const [tempIdCounter, setTempIdCounter] = useState(-1);
 
   React.useEffect(() => {
     fetchGroups();
@@ -754,170 +752,234 @@ function OptionGroupsModal({
     setLoading(true);
     try {
       const data = await api.get(`/menu_items/${item.id}/option_groups`);
-      setOptionGroups(data);
+      // We’ll just ensure they arrive sorted by position, if present:
+      const sorted = (data as OptionGroup[]).map((g) => ({
+        ...g,
+        options: g.options.slice().sort((a, b) => (a.position || 0) - (b.position || 0)),
+      }));
+      sorted.sort((a, b) => (a.position || 0) - (b.position || 0));
+
+      setOriginalOptionGroups(sorted);
+      setDraftOptionGroups(JSON.parse(JSON.stringify(sorted)));
     } catch (err) {
       console.error(err);
-      setOptionGroups([]);
+      setOriginalOptionGroups([]);
+      setDraftOptionGroups([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const replaceGroupInState = (updated: OptionGroup) => {
-    setOptionGroups((prev) =>
-      prev.map((g) => (g.id === updated.id ? updated : g))
-    );
-  };
-  const removeGroupInState = (groupId: number) => {
-    setOptionGroups((prev) => prev.filter((g) => g.id !== groupId));
-  };
-  const addGroupToState = (created: OptionGroup) => {
-    setOptionGroups((prev) => [...prev, created]);
-  };
-  const replaceOptionInState = (groupId: number, updatedOpt: OptionRow) => {
-    setOptionGroups((prev) =>
-      prev.map((g) =>
-        g.id === groupId
-          ? {
-              ...g,
-              options: g.options.map((o) =>
-                o.id === updatedOpt.id ? updatedOpt : o
-              ),
-            }
-          : g
-      )
-    );
-  };
-  const removeOptionInState = (groupId: number, optId: number) => {
-    setOptionGroups((prev) =>
-      prev.map((g) =>
-        g.id === groupId
-          ? { ...g, options: g.options.filter((o) => o.id !== optId) }
-          : g
-      )
-    );
-  };
-  const addOptionToState = (groupId: number, newOpt: OptionRow) => {
-    setOptionGroups((prev) =>
-      prev.map((g) =>
-        g.id === groupId ? { ...g, options: [...g.options, newOpt] } : g
-      )
-    );
-  };
+  // -------------------------------------
+  // Local manipulations (no server calls)
+  // -------------------------------------
 
-  // CREATE OptionGroup
-  const handleCreateGroup = async () => {
+  // Create local group
+  const handleCreateGroup = () => {
     if (!newGroupName.trim()) return;
-    try {
-      const created = await api.post(`/menu_items/${item.id}/option_groups`, {
-        name: newGroupName,
-        min_select: newGroupMin,
-        max_select: newGroupMax,
-        required: newGroupRequired,
-      });
-      addGroupToState(created);
-      // Reset
-      setNewGroupName('');
-      setNewGroupMin(0);
-      setNewGroupMax(1);
-      setNewGroupRequired(false);
-    } catch (err) {
-      console.error(err);
-    }
+    // Just place the new group at the end by position
+    const maxPos = draftOptionGroups.reduce(
+      (acc, g) => Math.max(acc, g.position || 0),
+      0
+    );
+    const newGroup: OptionGroup = {
+      id: tempIdCounter, // negative => local
+      name: newGroupName,
+      min_select: newGroupMin,
+      max_select: newGroupMax,
+      required: newGroupRequired,
+      position: maxPos + 1, // appended at the end
+      options: [],
+    };
+    setDraftOptionGroups((prev) => [...prev, newGroup]);
+
+    // Reset
+    setNewGroupName('');
+    setNewGroupMin(0);
+    setNewGroupMax(1);
+    setNewGroupRequired(false);
+    setTempIdCounter((prevId) => prevId - 1);
   };
 
-  // UPDATE OptionGroup
-  const handleUpdateGroup = async (
-    group: OptionGroup,
-    changes: Partial<OptionGroup>
-  ) => {
-    try {
-      // Optimistic update
-      const updated = { ...group, ...changes };
-      replaceGroupInState(updated);
-
-      // Then patch to server
-      const serverGroup = await api.patch(`/option_groups/${group.id}`, changes);
-      replaceGroupInState(serverGroup);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // DELETE OptionGroup
-  const handleDeleteGroup = async (groupId: number) => {
-    if (!window.confirm('Delete this option group?')) return;
-    try {
-      removeGroupInState(groupId);
-      await api.delete(`/option_groups/${groupId}`);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // CREATE Option
-  const startCreatingOption = (groupId: number) => {
-    setCreatingOptionGroupId(groupId);
-    setNewOptionName('');
-    setNewOptionPrice(0);
-  };
-  const confirmCreateOption = async () => {
-    if (!creatingOptionGroupId || !newOptionName.trim()) {
-      setCreatingOptionGroupId(null);
-      return;
-    }
-    try {
-      const createdOption = await api.post(
-        `/option_groups/${creatingOptionGroupId}/options`,
-        {
-          name: newOptionName,
-          additional_price: newOptionPrice,
-        }
-      );
-      addOptionToState(creatingOptionGroupId, createdOption);
-
-      // Reset
-      setCreatingOptionGroupId(null);
-      setNewOptionName('');
-      setNewOptionPrice(0);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-  const cancelCreateOption = () => {
-    setCreatingOptionGroupId(null);
-    setNewOptionName('');
-    setNewOptionPrice(0);
-  };
-
-  // UPDATE Option
-  const handleUpdateOption = async (
+  // Update local group
+  const handleLocalUpdateGroup = (
     groupId: number,
-    option: OptionRow,
+    changes: Partial<Omit<OptionGroup, 'options'>>
+  ) => {
+    setDraftOptionGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, ...changes } : g))
+    );
+  };
+
+  // Delete local group
+  const handleLocalDeleteGroup = (groupId: number) => {
+    if (!window.confirm('Delete this option group?')) return;
+    setDraftOptionGroups((prev) => prev.filter((g) => g.id !== groupId));
+  };
+
+  // Create local option
+  const handleLocalCreateOption = (groupId: number) => {
+    setDraftOptionGroups((prev) =>
+      prev.map((g) => {
+        if (g.id === groupId) {
+          const maxOptPos = g.options.reduce(
+            (acc, o) => Math.max(acc, o.position || 0),
+            0
+          );
+          const newOpt: OptionRow = {
+            id: tempIdCounter,
+            name: '',
+            additional_price: 0,
+            position: maxOptPos + 1, // appended at the end
+          };
+          return { ...g, options: [...g.options, newOpt] };
+        }
+        return g;
+      })
+    );
+    setTempIdCounter((prevId) => prevId - 1);
+  };
+
+  // Update local option
+  const handleLocalUpdateOption = (
+    groupId: number,
+    optionId: number,
     changes: Partial<OptionRow>
   ) => {
-    try {
-      // Optimistic update
-      const updatedOpt = { ...option, ...changes };
-      replaceOptionInState(groupId, updatedOpt);
+    setDraftOptionGroups((prev) =>
+      prev.map((g) => {
+        if (g.id === groupId) {
+          return {
+            ...g,
+            options: g.options.map((o) =>
+              o.id === optionId ? { ...o, ...changes } : o
+            ),
+          };
+        }
+        return g;
+      })
+    );
+  };
 
-      // Then patch to server
-      const serverOpt = await api.patch(`/options/${option.id}`, changes);
-      replaceOptionInState(groupId, serverOpt);
+  // Delete local option
+  const handleLocalDeleteOption = (groupId: number, optId: number) => {
+    if (!window.confirm('Delete this option?')) return;
+    setDraftOptionGroups((prev) =>
+      prev.map((g) => {
+        if (g.id === groupId) {
+          return { ...g, options: g.options.filter((o) => o.id !== optId) };
+        }
+        return g;
+      })
+    );
+  };
+
+  // -------------------------------------
+  // Save all changes at once
+  // -------------------------------------
+  const handleSaveAllChanges = async () => {
+    try {
+      // Compare draftOptionGroups vs originalOptionGroups
+      const draftGroupIds = draftOptionGroups.map((g) => g.id);
+      const originalGroupIds = originalOptionGroups.map((g) => g.id);
+
+      // Groups to delete
+      const groupsToDelete = originalOptionGroups.filter(
+        (og) => !draftGroupIds.includes(og.id)
+      );
+      // Groups to create
+      const groupsToCreate = draftOptionGroups.filter((dg) => dg.id < 0);
+      // Groups to update
+      const groupsToUpdate = draftOptionGroups.filter(
+        (dg) => dg.id > 0 && originalGroupIds.includes(dg.id)
+      );
+
+      // Delete removed groups
+      for (const gDel of groupsToDelete) {
+        await api.delete(`/option_groups/${gDel.id}`);
+      }
+
+      // Create new groups
+      const newGroupIdMap: Record<number, number> = {};
+      for (const gNew of groupsToCreate) {
+        const created = await api.post(`/menu_items/${item.id}/option_groups`, {
+          name: gNew.name,
+          min_select: gNew.min_select,
+          max_select: gNew.max_select,
+          required: gNew.required,
+          position: gNew.position,
+        });
+        newGroupIdMap[gNew.id] = created.id; // negative => real ID
+      }
+
+      // Update existing groups
+      for (const gUpd of groupsToUpdate) {
+        await api.patch(`/option_groups/${gUpd.id}`, {
+          name: gUpd.name,
+          min_select: gUpd.min_select,
+          max_select: gUpd.max_select,
+          required: gUpd.required,
+          position: gUpd.position,
+        });
+      }
+
+      // Now handle options
+      for (const draftGroup of draftOptionGroups) {
+        let realGroupId = draftGroup.id;
+        if (realGroupId < 0 && newGroupIdMap[realGroupId]) {
+          realGroupId = newGroupIdMap[realGroupId];
+        }
+        const origGroup = originalOptionGroups.find((og) => og.id === draftGroup.id);
+        const origOptions = origGroup?.options || [];
+
+        const draftOptIds = draftGroup.options.map((o) => o.id);
+        const origOptIds = origOptions.map((o) => o.id);
+
+        // Options to delete
+        const optsToDelete = origOptions.filter((o) => !draftOptIds.includes(o.id));
+        // Options to create
+        const optsToCreate = draftGroup.options.filter((o) => o.id < 0);
+        // Options to update
+        const optsToUpdate = draftGroup.options.filter(
+          (o) => o.id > 0 && origOptIds.includes(o.id)
+        );
+
+        // Delete
+        for (const oDel of optsToDelete) {
+          await api.delete(`/options/${oDel.id}`);
+        }
+        // Create
+        for (const oNew of optsToCreate) {
+          await api.post(`/option_groups/${realGroupId}/options`, {
+            name: oNew.name,
+            additional_price: oNew.additional_price,
+            position: oNew.position,
+          });
+        }
+        // Update
+        for (const oUpd of optsToUpdate) {
+          await api.patch(`/options/${oUpd.id}`, {
+            name: oUpd.name,
+            additional_price: oUpd.additional_price,
+            position: oUpd.position,
+          });
+        }
+      }
+
+      // Refresh from server
+      await fetchGroups();
+
+      // Close
+      onClose();
     } catch (err) {
       console.error(err);
+      alert('Something went wrong saving changes.');
     }
   };
 
-  // DELETE Option
-  const handleDeleteOption = async (groupId: number, optId: number) => {
-    if (!window.confirm('Delete this option?')) return;
-    try {
-      removeOptionInState(groupId, optId);
-      await api.delete(`/options/${optId}`);
-    } catch (err) {
-      console.error(err);
-    }
+  // If user closes without saving, we discard local changes
+  const handleClose = () => {
+    onClose();
   };
 
   return (
@@ -927,7 +989,7 @@ function OptionGroupsModal({
           <h2 className="text-xl font-semibold">
             Manage Option Groups for: {item.name}
           </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button onClick={handleClose} className="text-gray-500 hover:text-gray-700">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -982,12 +1044,12 @@ function OptionGroupsModal({
               </div>
             </div>
 
-            {optionGroups.length === 0 && (
+            {draftOptionGroups.length === 0 && (
               <p className="text-sm text-gray-500">No Option Groups yet.</p>
             )}
 
             {/* Existing Groups */}
-            {optionGroups.map((group) => (
+            {draftOptionGroups.map((group) => (
               <div key={group.id} className="border rounded-md p-4 mb-4">
                 {/* Group header */}
                 <div className="flex justify-between items-center">
@@ -997,11 +1059,11 @@ function OptionGroupsModal({
                       className="text-lg font-semibold border-b focus:outline-none"
                       value={group.name}
                       onChange={(e) =>
-                        handleUpdateGroup(group, { name: e.target.value })
+                        handleLocalUpdateGroup(group.id, { name: e.target.value })
                       }
                     />
                     <div className="text-xs text-gray-500 mt-1 flex items-center space-x-3">
-                      {/* Min */}
+                      {/* Min & Max & Required */}
                       <div className="flex items-center">
                         <span>Min:</span>
                         <input
@@ -1009,13 +1071,12 @@ function OptionGroupsModal({
                           className="w-14 ml-1 border p-1 rounded text-xs"
                           value={group.min_select}
                           onChange={(e) =>
-                            handleUpdateGroup(group, {
+                            handleLocalUpdateGroup(group.id, {
                               min_select: parseInt(e.target.value) || 0,
                             })
                           }
                         />
                       </div>
-                      {/* Max */}
                       <div className="flex items-center">
                         <span>Max:</span>
                         <input
@@ -1023,19 +1084,18 @@ function OptionGroupsModal({
                           className="w-14 ml-1 border p-1 rounded text-xs"
                           value={group.max_select}
                           onChange={(e) =>
-                            handleUpdateGroup(group, {
+                            handleLocalUpdateGroup(group.id, {
                               max_select: parseInt(e.target.value) || 0,
                             })
                           }
                         />
                       </div>
-                      {/* Required */}
                       <label className="flex items-center space-x-1">
                         <input
                           type="checkbox"
                           checked={group.required}
                           onChange={(e) =>
-                            handleUpdateGroup(group, {
+                            handleLocalUpdateGroup(group.id, {
                               required: e.target.checked,
                             })
                           }
@@ -1046,7 +1106,7 @@ function OptionGroupsModal({
                   </div>
 
                   <button
-                    onClick={() => handleDeleteGroup(group.id)}
+                    onClick={() => handleLocalDeleteGroup(group.id)}
                     className="p-2 text-gray-600 hover:text-red-600"
                     title="Delete this group"
                   >
@@ -1056,47 +1116,12 @@ function OptionGroupsModal({
 
                 {/* Options */}
                 <div className="mt-4 ml-2">
-                  {creatingOptionGroupId === group.id ? (
-                    // Inline form for new Option
-                    <div className="flex items-center space-x-2 mb-2">
-                      <input
-                        type="text"
-                        className="border p-1 rounded text-sm"
-                        placeholder="Option Name"
-                        value={newOptionName}
-                        onChange={(e) => setNewOptionName(e.target.value)}
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="border p-1 rounded w-16 text-sm"
-                        placeholder="Price"
-                        value={newOptionPrice}
-                        onChange={(e) =>
-                          setNewOptionPrice(parseFloat(e.target.value) || 0)
-                        }
-                      />
-                      <button
-                        onClick={confirmCreateOption}
-                        className="px-2 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={cancelCreateOption}
-                        className="px-2 py-1 border text-sm rounded hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => startCreatingOption(group.id)}
-                      className="flex items-center px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded"
-                    >
-                      + Add Option
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleLocalCreateOption(group.id)}
+                    className="flex items-center px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded"
+                  >
+                    + Add Option
+                  </button>
 
                   {group.options.length === 0 && (
                     <p className="text-sm text-gray-400 mt-2">No options yet.</p>
@@ -1112,7 +1137,9 @@ function OptionGroupsModal({
                         type="text"
                         value={opt.name}
                         onChange={(e) =>
-                          handleUpdateOption(group.id, opt, { name: e.target.value })
+                          handleLocalUpdateOption(group.id, opt.id, {
+                            name: e.target.value,
+                          })
                         }
                         className="border-b text-sm flex-1 mr-2 focus:outline-none"
                       />
@@ -1124,7 +1151,7 @@ function OptionGroupsModal({
                           step="0.01"
                           value={opt.additional_price}
                           onChange={(e) =>
-                            handleUpdateOption(group.id, opt, {
+                            handleLocalUpdateOption(group.id, opt.id, {
                               additional_price: parseFloat(e.target.value) || 0,
                             })
                           }
@@ -1133,7 +1160,7 @@ function OptionGroupsModal({
                       </span>
                       {/* Delete option */}
                       <button
-                        onClick={() => handleDeleteOption(group.id, opt.id)}
+                        onClick={() => handleLocalDeleteOption(group.id, opt.id)}
                         className="p-1 text-gray-600 hover:text-red-600"
                         title="Delete Option"
                       >
@@ -1147,12 +1174,19 @@ function OptionGroupsModal({
           </>
         )}
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex justify-end space-x-2">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 border rounded-md hover:bg-gray-50"
           >
-            Close
+            Close (Discard)
+          </button>
+          <button
+            onClick={handleSaveAllChanges}
+            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+          >
+            <Save className="h-5 w-5 mr-2 inline" />
+            Save Changes
           </button>
         </div>
       </div>
