@@ -1,6 +1,6 @@
 // src/components/admin/MenuManager.tsx
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
@@ -32,7 +32,7 @@ interface OptionGroup {
   min_select: number;
   max_select: number;
   required: boolean;
-  position: number; // track group order from server
+  position: number; 
   options: OptionRow[];
 }
 
@@ -40,15 +40,14 @@ interface OptionRow {
   id: number;
   name: string;
   additional_price: number;
-  position: number; // track option order from server
+  position: number;
 }
 
-// Helper to format a date in a nice “February 26, 2025” style
+// Helper to format a date nicely
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return null;
   const parsed = new Date(dateStr);
   if (isNaN(parsed.getTime())) {
-    // fallback to raw string if Date parsing fails
     return dateStr;
   }
   return parsed.toLocaleDateString('en-US', {
@@ -59,7 +58,13 @@ function formatDate(dateStr?: string | null) {
 }
 
 export function MenuManager() {
-  const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem } = useMenuStore();
+  const {
+    menuItems,
+    fetchAllMenuItemsForAdmin, // we call this on mount
+    addMenuItem,
+    updateMenuItem,
+    deleteMenuItem,
+  } = useMenuStore();
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
@@ -74,6 +79,11 @@ export function MenuManager() {
   // Options Modal
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
+
+  // On mount => load ALL items (including expired)
+  React.useEffect(() => {
+    fetchAllMenuItemsForAdmin();
+  }, [fetchAllMenuItemsForAdmin]);
 
   // Filter logic
   const filteredItems = React.useMemo(() => {
@@ -109,7 +119,7 @@ export function MenuManager() {
     status_note: '',
   };
 
-  // Ensure not more than 4 featured
+  // Only allow 4 featured at a time
   function canFeatureThisItem(formData: MenuItemFormData): boolean {
     if (!formData.featured) return true;
     const isCurrentlyFeatured = menuItems.find(
@@ -132,7 +142,7 @@ export function MenuManager() {
       name: item.name,
       description: item.description,
       price: item.price,
-      category: item.category || '', // never pass null to select
+      category: item.category || '',
       image: item.image || '',
       imageFile: null,
       menu_id: (item as any).menu_id || 1,
@@ -151,7 +161,7 @@ export function MenuManager() {
     setIsEditing(true);
   };
 
-  // Add new item
+  // Add item
   const handleAdd = () => {
     setEditingItem(initialFormData);
     setIsEditing(true);
@@ -179,12 +189,8 @@ export function MenuManager() {
     e.preventDefault();
     if (!editingItem) return;
 
-    // If toggling featured => check limit
-    if (!canFeatureThisItem(editingItem)) {
-      return;
-    }
+    if (!canFeatureThisItem(editingItem)) return;
 
-    // If seasonal but no label => "Limited Time"
     let finalLabel = editingItem.promo_label?.trim() || '';
     if (editingItem.seasonal && !finalLabel) {
       finalLabel = 'Limited Time';
@@ -211,14 +217,12 @@ export function MenuManager() {
     if (checked) setShowSeasonalOnly(false);
     setShowFeaturedOnly(checked);
   }
-
   function handleToggleSeasonal(checked: boolean) {
     if (checked) setShowFeaturedOnly(false);
     setShowSeasonalOnly(checked);
   }
 
-  // A little helper for uniform badges
-  // tailwind classes: small text, bold, rounded-full, minimal padding, etc.
+  // Uniform badge
   function Badge({
     children,
     bgColor = 'bg-gray-500',
@@ -255,10 +259,9 @@ export function MenuManager() {
         </button>
       </div>
 
-      {/* Category Filter Row */}
+      {/* Category Filter */}
       <div className="mb-3">
         <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
-          {/* All Categories */}
           <button
             className={
               !selectedCategory
@@ -309,7 +312,6 @@ export function MenuManager() {
       {/* Items Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.map((item) => {
-          // For admin: if item is seasonal, show both "Starts" and "Ends" if present
           const fromDate = formatDate(item.available_from);
           const untilDate = formatDate(item.available_until);
 
@@ -325,10 +327,7 @@ export function MenuManager() {
           }
 
           return (
-            <div
-              key={item.id}
-              className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
-            >
+            <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
               <img
                 src={item.image}
                 alt={item.name}
@@ -339,7 +338,6 @@ export function MenuManager() {
                   <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
                   <p className="text-sm text-gray-600">{item.description}</p>
 
-                  {/* Now we unify all badges with the <Badge> helper */}
                   <div className="mt-2 flex flex-wrap">
                     {item.stock_status === 'out_of_stock' && (
                       <Badge bgColor="bg-gray-600">Out of Stock</Badge>
@@ -355,17 +353,17 @@ export function MenuManager() {
                         {item.promo_label?.trim() || 'Limited Time'}
                       </Badge>
                     )}
-                    {item.featured && <Badge bgColor="bg-yellow-500">Featured</Badge>}
+                    {item.featured && (
+                      <Badge bgColor="bg-yellow-500">Featured</Badge>
+                    )}
                   </div>
 
-                  {/* Optional note */}
                   {item.status_note?.trim() && (
                     <p className="text-xs text-gray-500 mt-1 italic">
                       {item.status_note}
                     </p>
                   )}
 
-                  {/* Show the "Starts / Ends" info for admins */}
                   {dateInfo}
                 </div>
                 <div className="mt-auto flex justify-between items-center pt-4">
@@ -376,14 +374,12 @@ export function MenuManager() {
                     <span className="text-base sm:text-lg font-semibold">
                       ${Number(item.price).toFixed(2)}
                     </span>
-                    {/* Edit Item */}
                     <button
                       onClick={() => handleEdit(item)}
                       className="p-2 text-gray-600 hover:text-[#c1902f]"
                     >
                       <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
-                    {/* Delete Item */}
                     <button
                       onClick={() => {
                         if (typeof item.id === 'string') {
