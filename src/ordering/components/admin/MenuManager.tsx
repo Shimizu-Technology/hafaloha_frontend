@@ -1,21 +1,26 @@
 // src/components/admin/MenuManager.tsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
-import { categories } from '../../data/menu';
-import { api } from '../../lib/api'; // adjust path if needed
+import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
+import { api } from '../../lib/api';
 
+/**
+ * Local form data for creating/updating a menu item.
+ * We use numeric category_ids to keep it simple.
+ */
 interface MenuItemFormData {
   id?: number;
   name: string;
   description: string;
   price: number;
-  category: string;
+  category_ids: number[]; // numeric category IDs
+
   menu_id?: number;
   image: string;
-  imageFile?: File | null;
+  imageFile?: File | null;  // handle new image uploads
   advance_notice_hours: number;
   seasonal: boolean;
   available_from?: string | null;
@@ -26,16 +31,16 @@ interface MenuItemFormData {
   status_note?: string | null;
 }
 
+/** Option groups (unchanged). */
 interface OptionGroup {
   id: number;
   name: string;
   min_select: number;
   max_select: number;
   required: boolean;
-  position: number; 
+  position: number;
   options: OptionRow[];
 }
-
 interface OptionRow {
   id: number;
   name: string;
@@ -43,12 +48,12 @@ interface OptionRow {
   position: number;
 }
 
-// Helper to format a date nicely
+/** Helper to format a date for display. */
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return null;
   const parsed = new Date(dateStr);
   if (isNaN(parsed.getTime())) {
-    return dateStr;
+    return dateStr; // fallback if invalid
   }
   return parsed.toLocaleDateString('en-US', {
     month: 'long',
@@ -60,36 +65,44 @@ function formatDate(dateStr?: string | null) {
 export function MenuManager() {
   const {
     menuItems,
-    fetchAllMenuItemsForAdmin, // we call this on mount
+    fetchAllMenuItemsForAdmin,
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
   } = useMenuStore();
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
+  const { categories, fetchCategories } = useCategoryStore();
 
-  // Category filter
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // The currently selected category ID (for filtering)
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
-  // Checkboxes for filtering by featured/seasonal
+  // Additional filter checkboxes
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
   const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
 
-  // Options Modal
+  // Editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
+
+  // For managing option groups
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
-  // On mount => load ALL items (including expired)
-  React.useEffect(() => {
+  // On mount => fetch all items (admin) + categories
+  useEffect(() => {
     fetchAllMenuItemsForAdmin();
-  }, [fetchAllMenuItemsForAdmin]);
+    fetchCategories();
+  }, [fetchAllMenuItemsForAdmin, fetchCategories]);
 
-  // Filter logic
-  const filteredItems = React.useMemo(() => {
+  // Filter the items in memory
+  const filteredItems = useMemo(() => {
     let list = menuItems;
+
+    // If a category is selected, only show items that have that category_id
     if (selectedCategory) {
-      list = list.filter((item) => item.category === selectedCategory);
+      list = list.filter((item) =>
+        item.category_ids?.includes(selectedCategory)
+      );
     }
     if (showFeaturedOnly) {
       list = list.filter((item) => item.featured);
@@ -100,12 +113,12 @@ export function MenuManager() {
     return list;
   }, [menuItems, selectedCategory, showFeaturedOnly, showSeasonalOnly]);
 
-  // Default form data
+  // Default form data for a new item
   const initialFormData: MenuItemFormData = {
     name: '',
     description: '',
     price: 0,
-    category: categories[0]?.id || 'appetizers',
+    category_ids: [],
     image: '',
     imageFile: null,
     menu_id: 1,
@@ -119,12 +132,15 @@ export function MenuManager() {
     status_note: '',
   };
 
-  // Only allow 4 featured at a time
+  /**
+   * Utility: enforce max 4 featured items
+   */
   function canFeatureThisItem(formData: MenuItemFormData): boolean {
     if (!formData.featured) return true;
     const isCurrentlyFeatured = menuItems.find(
       (m) => Number(m.id) === formData.id
     )?.featured;
+    // If it was already featured, that's allowed
     if (isCurrentlyFeatured) return true;
 
     const currentlyFeaturedCount = menuItems.filter((m) => m.featured).length;
@@ -135,14 +151,16 @@ export function MenuManager() {
     return true;
   }
 
-  // Edit item
+  /**
+   * Handle editing an existing item => fill form data
+   */
   const handleEdit = (item: MenuItem) => {
     setEditingItem({
       id: Number(item.id),
       name: item.name,
       description: item.description,
       price: item.price,
-      category: item.category || '',
+      category_ids: item.category_ids || [],
       image: item.image || '',
       imageFile: null,
       menu_id: (item as any).menu_id || 1,
@@ -161,20 +179,26 @@ export function MenuManager() {
     setIsEditing(true);
   };
 
-  // Add item
+  /**
+   * Handle adding a new item => blank form
+   */
   const handleAdd = () => {
     setEditingItem(initialFormData);
     setIsEditing(true);
   };
 
-  // Delete item
+  /**
+   * Delete item
+   */
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       await deleteMenuItem(id);
     }
   };
 
-  // Manage Options
+  /**
+   * Manage option groups => show the modal
+   */
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
     setOptionsModalOpen(true);
@@ -184,24 +208,30 @@ export function MenuManager() {
     setOptionsModalItem(null);
   };
 
-  // Submit
+  /**
+   * Submit the form => create or update item in the store
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
 
+    // Enforce up to 4 featured
     if (!canFeatureThisItem(editingItem)) return;
 
+    // If seasonal but no label => default "Limited Time"
     let finalLabel = editingItem.promo_label?.trim() || '';
     if (editingItem.seasonal && !finalLabel) {
       finalLabel = 'Limited Time';
     }
 
+    // Build payload
     const payload = { ...editingItem, promo_label: finalLabel };
-
     try {
       if (editingItem.id) {
+        // Updating existing item
         await updateMenuItem(String(editingItem.id), payload);
       } else {
+        // Creating new
         await addMenuItem(payload);
       }
     } catch (err) {
@@ -212,7 +242,9 @@ export function MenuManager() {
     setEditingItem(null);
   };
 
-  // Toggling filters
+  /**
+   * Toggles for featured + seasonal filters
+   */
   function handleToggleFeatured(checked: boolean) {
     if (checked) setShowSeasonalOnly(false);
     setShowFeaturedOnly(checked);
@@ -222,7 +254,9 @@ export function MenuManager() {
     setShowSeasonalOnly(checked);
   }
 
-  // Uniform badge
+  /**
+   * Helper badge component for small labels.
+   */
   function Badge({
     children,
     bgColor = 'bg-gray-500',
@@ -248,11 +282,7 @@ export function MenuManager() {
         <h2 className="text-2xl font-bold">Menu Management</h2>
         <button
           onClick={handleAdd}
-          className="
-            inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2
-            bg-[#c1902f] text-white rounded-md
-            hover:bg-[#d4a43f] whitespace-nowrap
-          "
+          className="inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
         >
           <Plus className="h-5 w-5 mr-2" />
           Add Item
@@ -262,6 +292,7 @@ export function MenuManager() {
       {/* Category Filter */}
       <div className="mb-3">
         <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
+          {/* “All Categories” */}
           <button
             className={
               !selectedCategory
@@ -272,6 +303,8 @@ export function MenuManager() {
           >
             All Categories
           </button>
+
+          {/* Real categories from the store */}
           {categories.map((cat) => (
             <button
               key={cat.id}
@@ -315,6 +348,7 @@ export function MenuManager() {
           const fromDate = formatDate(item.available_from);
           const untilDate = formatDate(item.available_until);
 
+          // If seasonal, show a small date info line
           let dateInfo: React.ReactNode = null;
           if (item.seasonal && (fromDate || untilDate)) {
             dateInfo = (
@@ -339,6 +373,7 @@ export function MenuManager() {
                   <p className="text-sm text-gray-600">{item.description}</p>
 
                   <div className="mt-2 flex flex-wrap">
+                    {/* Stock/featured badges */}
                     {item.stock_status === 'out_of_stock' && (
                       <Badge bgColor="bg-gray-600">Out of Stock</Badge>
                     )}
@@ -358,28 +393,53 @@ export function MenuManager() {
                     )}
                   </div>
 
+                  {/* Optional note */}
                   {item.status_note?.trim() && (
                     <p className="text-xs text-gray-500 mt-1 italic">
                       {item.status_note}
                     </p>
                   )}
 
+                  {/* If you want to hide category badges or positions entirely, remove this block: */}
+                  {/* 
+                  {item.category_ids?.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {item.category_ids.map((catId) => {
+                        const catObj = categories.find((c) => c.id === catId);
+                        if (!catObj) return null;
+                        return (
+                          <Badge key={catId} bgColor="bg-blue-500">
+                            {catObj.name}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                  */}
+
+                  {/* Show date range info if seasonal */}
                   {dateInfo}
                 </div>
+
                 <div className="mt-auto flex justify-between items-center pt-4">
-                  <span className="text-sm text-gray-500 capitalize">
-                    {item.category}
-                  </span>
+                  {/* Example: show first category ID if present. 
+                      If you want to hide it completely, remove these lines: */}
+                  {/* <span className="text-sm text-gray-500 capitalize">
+                    {item.category_ids?.[0] || '—'}
+                  </span> */}
+
                   <div className="flex items-center space-x-4">
                     <span className="text-base sm:text-lg font-semibold">
                       ${Number(item.price).toFixed(2)}
                     </span>
+                    {/* Edit Item */}
                     <button
                       onClick={() => handleEdit(item)}
                       className="p-2 text-gray-600 hover:text-[#c1902f]"
                     >
                       <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
+                    {/* Delete Item */}
                     <button
                       onClick={() => {
                         if (typeof item.id === 'string') {
@@ -456,51 +516,59 @@ export function MenuManager() {
                   />
                 </div>
 
-                {/* Price & Category in a row */}
-                <div className="flex flex-col sm:flex-row gap-4">
-                  {/* Price */}
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Price
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={editingItem.price}
-                      onChange={(e) =>
-                        setEditingItem({
-                          ...editingItem,
-                          price: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className="w-full px-4 py-2 border rounded-md"
-                      required
-                    />
-                  </div>
+                {/* Price */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Price
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingItem.price}
+                    onChange={(e) =>
+                      setEditingItem({
+                        ...editingItem,
+                        price: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-4 py-2 border rounded-md"
+                    required
+                  />
+                </div>
+              </div>
 
-                  {/* Category */}
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Category
-                    </label>
-                    <select
-                      value={editingItem.category ?? ''}
-                      onChange={(e) =>
-                        setEditingItem({ ...editingItem, category: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border rounded-md"
-                      required
-                    >
-                      <option value="" disabled>
-                        -- Select a Category --
-                      </option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              {/* MULTI-CATEGORY CHECKBOXES */}
+              <div>
+                <h4 className="text-md font-semibold mb-2 border-b pb-2">Categories</h4>
+                <p className="text-xs text-gray-500 mb-2">
+                  (Select one or more categories)
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {categories.map((cat) => {
+                    const checked = editingItem.category_ids.includes(cat.id);
+                    return (
+                      <label key={cat.id} className="inline-flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditingItem((prev) => ({
+                                ...prev,
+                                category_ids: [...prev.category_ids, cat.id],
+                              }));
+                            } else {
+                              setEditingItem((prev) => ({
+                                ...prev,
+                                category_ids: prev.category_ids.filter((c) => c !== cat.id),
+                              }));
+                            }
+                          }}
+                        />
+                        <span>{cat.name}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -508,9 +576,8 @@ export function MenuManager() {
               <div>
                 <h4 className="text-md font-semibold mb-2 border-b pb-2">Availability</h4>
 
-                {/* 24-hour notice + Seasonal toggles */}
+                {/* 24-hour Notice + Featured toggles */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  {/* 24-hour Notice */}
                   <label className="inline-flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -523,7 +590,6 @@ export function MenuManager() {
                     <span>Requires 24-hour notice?</span>
                   </label>
 
-                  {/* Featured */}
                   <label className="inline-flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -562,8 +628,7 @@ export function MenuManager() {
                     <span>Time-based availability? (Seasonal)</span>
                   </label>
                   <p className="text-xs text-gray-500">
-                    If checked, this item is only available between the specified start & end
-                    dates.
+                    If checked, this item is only available between the specified start & end dates.
                   </p>
                 </div>
 
@@ -624,7 +689,9 @@ export function MenuManager() {
 
               {/* INVENTORY STATUS */}
               <div>
-                <h4 className="text-md font-semibold mb-2 border-b pb-2">Inventory Status</h4>
+                <h4 className="text-md font-semibold mb-2 border-b pb-2">
+                  Inventory Status
+                </h4>
                 <div className="flex flex-col sm:flex-row gap-4">
                   {/* Stock Status */}
                   <div className="flex-1">
@@ -717,7 +784,13 @@ export function MenuManager() {
                 <div className="mt-6">
                   <button
                     type="button"
-                    onClick={() => handleManageOptions(editingItem as MenuItem)}
+                    onClick={() =>
+                      handleManageOptions({
+                        ...editingItem,
+                        id: editingItem.id.toString(),
+                        category_ids: editingItem.category_ids,
+                      } as unknown as MenuItem)
+                    }
                     className="px-4 py-2 border rounded-md hover:bg-gray-50"
                   >
                     Manage Options
@@ -739,10 +812,7 @@ export function MenuManager() {
                 </button>
                 <button
                   type="submit"
-                  className="
-                    inline-flex items-center px-4 py-2 
-                    bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]
-                  "
+                  className="inline-flex items-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
                 >
                   <Save className="h-5 w-5 mr-2" />
                   Save
@@ -761,9 +831,9 @@ export function MenuManager() {
   );
 }
 
-// --------------------------------------
-// OptionGroupsModal (unchanged below) ...
-// --------------------------------------
+/**
+ * OptionGroupsModal (unchanged)
+ */
 function OptionGroupsModal({
   item,
   onClose,
@@ -775,14 +845,11 @@ function OptionGroupsModal({
   const [draftOptionGroups, setDraftOptionGroups] = useState<OptionGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // For creating new group in local state (not yet on server)
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMin, setNewGroupMin] = useState(0);
   const [newGroupMax, setNewGroupMax] = useState(1);
   const [newGroupRequired, setNewGroupRequired] = useState(false);
 
-  // Track a temporary negative ID for new groups/options
-  // so we can identify them in draftOptionGroups
   const [tempIdCounter, setTempIdCounter] = useState(-1);
 
   React.useEffect(() => {
@@ -794,7 +861,6 @@ function OptionGroupsModal({
     setLoading(true);
     try {
       const data = await api.get(`/menu_items/${item.id}/option_groups`);
-      // We’ll just ensure they arrive sorted by position, if present:
       const sorted = (data as OptionGroup[]).map((g) => ({
         ...g,
         options: g.options.slice().sort((a, b) => (a.position || 0) - (b.position || 0)),

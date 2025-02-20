@@ -5,39 +5,37 @@ import { MenuManager } from './MenuManager';
 import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
 import { AnalyticsManager } from './AnalyticsManager';
+import { SettingsManager } from './SettingsManager'; // <== NEW
 import {
   BarChart2,
   ShoppingBag,
   LayoutGrid,
   Tag,
+  Sliders,       //  <-- Icon for “Settings”
   X as XIcon
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { api, Order } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
 
-type Tab = 'analytics' | 'orders' | 'menu' | 'promos';
+type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings';
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
 
-  // 1) Define the tabs array up here
+  // 1) Add 'settings' to the tabs array:
   const tabs = [
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'orders',    label: 'Orders',    icon: ShoppingBag },
     { id: 'menu',      label: 'Menu',      icon: LayoutGrid },
     { id: 'promos',    label: 'Promos',    icon: Tag },
+    { id: 'settings',  label: 'Settings',  icon: Sliders },
   ] as const;
 
-  // 2) Track current tab
+  // 2) Track active tab in state
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const stored = localStorage.getItem('adminTab');
-    if (
-      stored === 'analytics' ||
-      stored === 'orders' ||
-      stored === 'menu' ||
-      stored === 'promos'
-    ) {
+    if (stored && ['analytics','orders','menu','promos','settings'].includes(stored)) {
       return stored as Tab;
     }
     return 'analytics';
@@ -48,10 +46,10 @@ export function AdminDashboard() {
     localStorage.setItem('adminTab', id);
   }
 
-  // 3) We'll store the ID of an order we want to show in a modal
+  // For order modal
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
-  // 4) Polling for new orders
+  // Polling for new orders
   const [lastOrderId, setLastOrderId] = useState<number>(() => {
     const stored = localStorage.getItem('adminLastOrderId');
     return stored ? parseInt(stored, 10) || 0 : 0;
@@ -106,20 +104,15 @@ export function AdminDashboard() {
                 <div className="mt-4 text-right flex space-x-2 justify-end">
                   <button
                     onClick={() => {
-                      console.log(`[Toast] View Order clicked => order.id = ${order.id}. Current activeTab=${activeTab}`);
                       toast.dismiss(t.id);
-
-                      // If we're ALREADY on "orders", we temporarily setSelectedOrderId(null)
-                      // so that setting it again forces the modal to open.
+                      // If we're on Orders, force a re-render so the modal opens
                       if (activeTab === 'orders') {
-                        console.log('[Toast] Already on "orders" tab => forcing re-render by null => order.id');
                         setSelectedOrderId(null);
                         setTimeout(() => {
                           setSelectedOrderId(Number(order.id));
-                          console.log('[Toast] setSelectedOrderId forced to =>', order.id);
                         }, 50);
                       } else {
-                        // Switch tabs first, then set ID
+                        // Switch tab first
                         setActiveTab('orders');
                         setSelectedOrderId(Number(order.id));
                       }
@@ -157,17 +150,17 @@ export function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Manage orders, menu items, and promotions
+            Manage orders, menu items, promotions, and more
           </p>
         </div>
 
         <div className="bg-white rounded-lg shadow">
+          {/* Tab navigation */}
           <div className="border-b border-gray-200">
-            <nav className="flex -mb-px">
+            <nav className="flex -mb-px" role="tablist">
               {tabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
@@ -195,6 +188,9 @@ export function AdminDashboard() {
             )}
             {activeTab === 'menu' && <MenuManager />}
             {activeTab === 'promos' && <PromoManager />}
+
+            {/* Our new Settings tab */}
+            {activeTab === 'settings' && <SettingsManager />}
           </div>
         </div>
       </div>
