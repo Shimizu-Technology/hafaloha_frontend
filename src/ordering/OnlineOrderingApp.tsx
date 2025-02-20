@@ -67,7 +67,6 @@ function OrderingLayout() {
           <Outlet />
         </Suspense>
       </main>
-      <Footer />
 
       {showSpinner && (
         <div
