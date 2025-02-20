@@ -23,15 +23,11 @@ interface OrderStore {
     contactEmail?: string
   ) => Promise<Order>;
 
-  /**
-   * Update an order's status, optionally including an `estimated_pickup_time`.
-   * E.g. updateOrderStatus(orderId, 'preparing', '2025-02-13T12:05:00Z').
-   */
-  updateOrderStatus: (
-    orderId: string,
-    status: Order['status'],
-    pickupTime?: string
-  ) => Promise<void>;
+  /** Update just status + optional pickupTime. */
+  updateOrderStatus: (orderId: string, status: string, pickupTime?: string) => Promise<void>;
+
+  /** For admin editing an entire order's data (items, total, instructions, etc.). */
+  updateOrderData: (orderId: string, updatedOrder: any) => Promise<void>;
 
   getOrderHistory: (userId: number) => Order[];
 
@@ -49,9 +45,6 @@ interface OrderStore {
 export const useOrderStore = create<OrderStore>()(
   persist(
     (set, get) => ({
-      // -------------------------
-      // ORDER STATE
-      // -------------------------
       orders: [],
       loading: false,
       error: null,
@@ -104,13 +97,13 @@ export const useOrderStore = create<OrderStore>()(
             loading: false,
           });
 
-          // Optionally clear cart
+          // clear cart
           set({ cartItems: [] });
 
           return newOrder;
         } catch (err: any) {
           set({ error: err.message, loading: false });
-          throw err; // re-throw so the caller can show a toast, etc.
+          throw err;
         }
       },
 
@@ -121,16 +114,13 @@ export const useOrderStore = create<OrderStore>()(
       updateOrderStatus: async (orderId, status, pickupTime) => {
         set({ loading: true, error: null });
         try {
-          // Build the payload
-          const payload: any = { status };
+          const orderPayload: any = { status };
           if (pickupTime) {
-            payload.estimated_pickup_time = pickupTime;
+            orderPayload.estimated_pickup_time = pickupTime;
           }
-
           const updatedOrder = await api.patch(`/orders/${orderId}`, {
-            order: payload,
+            order: orderPayload,
           });
-
           const updatedOrders = get().orders.map((o) =>
             o.id === updatedOrder.id ? updatedOrder : o
           );
@@ -140,16 +130,27 @@ export const useOrderStore = create<OrderStore>()(
         }
       },
 
-      // Filter by userId => must match 'o.userId'
+      /** The new method: pass a whole updated order, we send it in a PATCH. */
+      updateOrderData: async (orderId, updatedOrder) => {
+        set({ loading: true, error: null });
+        try {
+          const payload = { order: updatedOrder };
+          const resp = await api.patch(`/orders/${orderId}`, payload);
+          const updatedOrders = get().orders.map((o) =>
+            o.id === resp.id ? resp : o
+          );
+          set({ orders: updatedOrders, loading: false });
+        } catch (err: any) {
+          set({ error: err.message, loading: false });
+        }
+      },
+
       getOrderHistory: (userId) => {
         return get().orders.filter((o) => o.userId === userId);
       },
 
-      // -------------------------
-      // CART STATE
-      // -------------------------
+      // CART -------------
       cartItems: [],
-
       addToCart: (item, quantity = 1) => {
         set((state) => {
           const existing = state.cartItems.find((ci) => ci.id === item.id);
@@ -168,13 +169,11 @@ export const useOrderStore = create<OrderStore>()(
           }
         });
       },
-
       removeFromCart: (itemId) => {
         set((state) => ({
           cartItems: state.cartItems.filter((ci) => ci.id !== itemId),
         }));
       },
-
       setCartQuantity: (itemId, quantity) => {
         if (quantity <= 0) {
           set((state) => ({
@@ -188,11 +187,9 @@ export const useOrderStore = create<OrderStore>()(
           }));
         }
       },
-
       clearCart: () => {
         set({ cartItems: [] });
       },
-
       setCartItemNotes: (itemId, notes) => {
         set((state) => ({
           cartItems: state.cartItems.map((ci) =>
@@ -202,8 +199,7 @@ export const useOrderStore = create<OrderStore>()(
       },
     }),
     {
-      name: 'cart-storage', // localStorage key
-      // Only persist cartItems for offline usage
+      name: 'cart-storage',
       partialize: (state) => ({ cartItems: state.cartItems }),
     }
   )

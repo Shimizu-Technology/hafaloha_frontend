@@ -10,25 +10,35 @@ interface OrderManagerProps {
 }
 
 export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManagerProps) {
-  const { orders, fetchOrders, updateOrderStatus, loading, error } = useOrderStore();
+  const {
+    orders,
+    fetchOrders,
+    updateOrderStatus,
+    updateOrderData,
+    loading,
+    error
+  } = useOrderStore();
 
-  // Local state: which order is in the “details” modal:
+  // which order is selected for the "details" modal
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
-  // Local state: which “tab” of status are we viewing?
+  // which “tab” we are viewing
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
 
-  // NEW: keep track if we’re showing the “Set ETA” modal
+  // for the “Set ETA” modal
   const [showEtaModal, setShowEtaModal] = useState(false);
-  const [etaMinutes, setEtaMinutes] = useState(5); // default to 5 minutes
-  const [orderToPrep, setOrderToPrep] = useState<any | null>(null); // which order are we about to prepare?
+  const [etaMinutes, setEtaMinutes] = useState(5);
+  const [orderToPrep, setOrderToPrep] = useState<any | null>(null);
 
-  // Fetch all orders on mount
+  // for the “Edit Order” modal
+  const [editingOrder, setEditingOrder] = useState<any | null>(null);
+
+  // fetch all orders on mount
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
 
-  // If the parent sets a selectedOrderId => open the details modal
+  // if the parent sets a selectedOrderId => open the details
   useEffect(() => {
     if (selectedOrderId) {
       const found = orders.find(o => Number(o.id) === selectedOrderId);
@@ -38,42 +48,35 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
     }
   }, [selectedOrderId, orders]);
 
-  // Filter for whichever status the admin is viewing
+  // filter the orders by selectedStatus
   const filteredOrders =
     selectedStatus === 'all'
       ? orders
       : orders.filter(order => order.status === selectedStatus);
 
   function closeModal() {
-    console.log('[OrderManager] closeModal => clearing selectedOrder');
     setSelectedOrder(null);
     if (setSelectedOrderId) {
       setSelectedOrderId(null);
     }
   }
 
-  /** Called if admin actually chooses an ETA and hits “Confirm” in the modal */
+  // handle ETA confirm => patch status=preparing & estimated_pickup_time
   async function handleConfirmEta() {
     if (!orderToPrep) {
       setShowEtaModal(false);
       return;
     }
-    // Convert ETA minutes to a Date => “now” + X minutes
-    // The backend can do it, or you can do it here. For a quick approach:
     const pickupTime = new Date(Date.now() + etaMinutes * 60_000).toISOString();
 
-    console.log(`[OrderManager] handleConfirmEta => orderId=${orderToPrep.id}, ETA=${etaMinutes}min => ${pickupTime}`);
-
-    // 1) call updateOrderStatus with “preparing” + the new pickup time
     await updateOrderStatus(orderToPrep.id, 'preparing', pickupTime);
 
-    // 2) hide the modal + reset
     setShowEtaModal(false);
     setEtaMinutes(5);
     setOrderToPrep(null);
   }
 
-  // A small helper for color badges
+  // color badges
   const getStatusBadgeColor = (status: OrderStatus) => {
     const colors = {
       pending: 'bg-yellow-100 text-yellow-800',
@@ -85,24 +88,28 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
     return colors[status];
   };
 
-  // Format a date
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'No pickup time set';
     const d = new Date(dateString);
     return isNaN(d.getTime()) ? 'No pickup time set' : d.toLocaleString();
   };
 
-  // Render
+  // Called when admin finishes editing the order in the modal
+  async function handleSaveEdit(updatedData: any) {
+    // updatedData might contain items, total, status, instructions, etc.
+    await updateOrderData(updatedData.id, updatedData);
+    setEditingOrder(null);
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       {loading && <p>Loading orders...</p>}
       {error && <p className="text-red-600">{error}</p>}
 
-      {/* Top: Title & Status Filter */}
+      {/* Top bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h2 className="text-2xl font-bold">Order Management</h2>
-
-        <div className="flex flex-nowrap space-x-3 overflow-x-auto scrollbar-hide py-1">
+        <div className="flex flex-nowrap space-x-3 overflow-x-auto py-1">
           {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(status => (
             <button
               key={status}
@@ -122,11 +129,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
         </div>
       </div>
 
-      {/* List of Orders */}
+      {/* List */}
       <div className="space-y-6">
         {filteredOrders.map(order => (
           <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
-            {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-lg font-medium text-gray-900">Order #{order.id}</h3>
@@ -161,21 +167,19 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
                       </p>
                     ))}
                   {item.notes && (
-                    <p className="text-sm text-gray-600">
-                      Notes: {item.notes}
-                    </p>
+                    <p className="text-sm text-gray-600">Notes: {item.notes}</p>
                   )}
                 </div>
               ))}
             </div>
 
-            {/* Contact & Pickup */}
+            {/* Contact & pickup */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <h4 className="text-sm font-medium text-gray-700">Customer</h4>
-                <p>{(order as any).contact_name || 'Guest'}</p>
-                <p>{(order as any).contact_phone || ''}</p>
-                <p>{(order as any).contact_email || ''}</p>
+                <p>{order.contact_name || 'Guest'}</p>
+                <p>{order.contact_phone || ''}</p>
+                <p>{order.contact_email || ''}</p>
               </div>
               <div>
                 <h4 className="text-sm font-medium text-gray-700">Pickup Time</h4>
@@ -183,7 +187,6 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
               </div>
             </div>
 
-            {/* Special Instructions & Footer */}
             <div className="mb-4">
               <h4 className="text-sm font-medium text-gray-700">Special Instructions</h4>
               <p>{order.special_instructions || 'None'}</p>
@@ -194,12 +197,18 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
                 Total: ${Number(order.total || 0).toFixed(2)}
               </p>
               <div className="flex flex-wrap gap-2">
+                {/* Edit button for admin => open the edit modal */}
+                <button
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                  onClick={() => setEditingOrder(order)}
+                >
+                  Edit
+                </button>
+
                 {order.status === 'pending' && (
                   <button
                     className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
                     onClick={() => {
-                      // Instead of calling updateOrderStatus directly,
-                      // we open the "Set ETA" modal first
                       setOrderToPrep(order);
                       setEtaMinutes(5);
                       setShowEtaModal(true);
@@ -229,7 +238,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
                     className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
                     onClick={() => updateOrderStatus(order.id, 'cancelled')}
                   >
-                    Cancel Order
+                    Cancel
                   </button>
                 )}
               </div>
@@ -238,12 +247,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
         ))}
       </div>
 
-      {/* Show the “Order Details” modal if the user clicked to see details */}
+      {/* Details modal */}
       {selectedOrder && (
         <OrderDetailsModal order={selectedOrder} onClose={closeModal} />
       )}
 
-      {/* Show the “Set ETA” modal if user is transitioning from pending -> preparing */}
+      {/* “Set ETA” modal */}
       {showEtaModal && orderToPrep && (
         <SetEtaModal
           order={orderToPrep}
@@ -256,11 +265,19 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
           onConfirm={handleConfirmEta}
         />
       )}
+
+      {/* “Edit Order” modal */}
+      {editingOrder && (
+        <AdminEditOrderModal
+          order={editingOrder}
+          onClose={() => setEditingOrder(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   );
 }
 
-// The “Details” modal (unchanged)
 function OrderDetailsModal({
   order,
   onClose
@@ -268,8 +285,6 @@ function OrderDetailsModal({
   order: any;
   onClose: () => void;
 }) {
-  console.log('[OrderDetailsModal] rendering, order.id =', order.id);
-
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-md max-w-lg w-full p-6 relative">
@@ -279,10 +294,7 @@ function OrderDetailsModal({
         >
           <span className="sr-only">Close</span>
           <svg className="h-5 w-5" fill="none" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
               d="M6 18L18 6M6 6l12 12"
             />
           </svg>
@@ -320,9 +332,8 @@ function OrderDetailsModal({
   );
 }
 
-/** 
- * This new “Set ETA” modal shows a dropdown of 5‐minute increments,
- * defaulting to 5.  The admin picks it, clicks Confirm => we call “onConfirm()”.
+/**
+ * The “Set ETA” modal for pending->preparing
  */
 function SetEtaModal({
   order,
@@ -337,8 +348,7 @@ function SetEtaModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  // Just an example list from 5 to 60 in increments of 5
-  const possibleEtas = Array.from({ length: 12 }, (_, i) => (i + 1) * 5); // [5,10,15...60]
+  const possibleEtas = Array.from({ length: 12 }, (_, i) => (i + 1) * 5);
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
@@ -389,6 +399,229 @@ function SetEtaModal({
             className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
           >
             Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * “Admin Edit Order” modal for adjusting items, total, instructions, etc.
+ * This example is minimal. We just show a text area for JSON items, total, and status.
+ * In a real app, you’d have a nicer UI for each item row, etc.
+ */
+function AdminEditOrderModal({
+  order,
+  onClose,
+  onSave,
+}: {
+  order: any;
+  onClose: () => void;
+  onSave: (updatedData: any) => void;
+}) {
+  // Local state for items, total, etc.
+  const [localItems, setLocalItems] = useState(() => {
+    // Make a shallow copy so we don’t mutate the original object
+    return order.items ? [...order.items] : [];
+  });
+  const [localTotal, setLocalTotal] = useState<string>(String(order.total || '0'));
+  const [localStatus, setLocalStatus] = useState(order.status);
+  const [localInstructions, setLocalInstructions] = useState(order.special_instructions || '');
+
+  // Handle changing a single item row
+  function handleItemChange(index: number, field: string, value: string | number) {
+    setLocalItems((prev) => {
+      const newItems = [...prev];
+      newItems[index] = {
+        ...newItems[index],
+        [field]: field === 'price' ? parseFloat(String(value)) : value,
+      };
+      return newItems;
+    });
+  }
+
+  // Remove one item row
+  function handleRemoveItem(index: number) {
+    setLocalItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // Add a new blank item row
+  function handleAddItem() {
+    setLocalItems((prev) => [
+      ...prev,
+      {
+        id: null,
+        name: '',
+        quantity: 1,
+        price: 0.0,
+        notes: '',
+      },
+    ]);
+  }
+
+  // Called by the “Save” button
+  function handleSave() {
+    // Convert total to a float
+    const parsedTotal = parseFloat(localTotal) || 0.0;
+
+    // Build our updated order data
+    const updated = {
+      ...order,
+      items: localItems,
+      total: parsedTotal,
+      status: localStatus,
+      special_instructions: localInstructions,
+    };
+
+    onSave(updated);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-md max-w-2xl w-full p-6 relative space-y-6">
+        {/* Close button (X) */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor">
+            <path
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+
+        <h3 className="text-xl font-bold">Edit Order #{order.id}</h3>
+
+        {/* ITEMS TABLE */}
+        <div>
+          <h4 className="text-sm font-semibold mb-2">Items</h4>
+          <table className="w-full border border-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="p-2 border-b text-left">Name</th>
+                <th className="p-2 border-b text-left">Qty</th>
+                <th className="p-2 border-b text-left">Price</th>
+                <th className="p-2 border-b text-left">Notes</th>
+                <th className="p-2 border-b"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {localItems.map((item, idx) => (
+                <tr key={idx} className="border-b last:border-0">
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="border w-full rounded px-2 py-1"
+                      value={item.name}
+                      onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2" style={{ width: '70px' }}>
+                    <input
+                      type="number"
+                      className="border w-full rounded px-2 py-1"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(e) => handleItemChange(idx, 'quantity', parseInt(e.target.value, 10))}
+                    />
+                  </td>
+                  <td className="p-2" style={{ width: '90px' }}>
+                    <input
+                      type="number"
+                      className="border w-full rounded px-2 py-1"
+                      step="0.01"
+                      value={item.price}
+                      onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="border w-full rounded px-2 py-1"
+                      value={item.notes || ''}
+                      onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(idx)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <button
+            type="button"
+            onClick={handleAddItem}
+            className="mt-2 inline-block px-3 py-1 bg-gray-200 text-sm rounded hover:bg-gray-300"
+          >
+            + Add Item
+          </button>
+        </div>
+
+        {/* TOTAL / STATUS / INSTRUCTIONS */}
+        <div className="flex flex-col space-y-4 md:flex-row md:space-x-4 md:space-y-0">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Total</label>
+            <input
+              type="number"
+              step="0.01"
+              className="border border-gray-300 rounded px-3 py-2 w-full"
+              value={localTotal}
+              onChange={(e) => setLocalTotal(e.target.value)}
+            />
+          </div>
+
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              className="border border-gray-300 rounded px-3 py-2 w-full"
+              value={localStatus}
+              onChange={(e) => setLocalStatus(e.target.value)}
+            >
+              {['pending', 'preparing', 'ready', 'completed', 'cancelled'].map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Special Instructions</label>
+          <textarea
+            className="border border-gray-300 rounded px-3 py-2 w-full"
+            rows={2}
+            value={localInstructions}
+            onChange={(e) => setLocalInstructions(e.target.value)}
+          />
+        </div>
+
+        {/* ACTION BUTTONS */}
+        <div className="flex justify-end space-x-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+          >
+            Save
           </button>
         </div>
       </div>
