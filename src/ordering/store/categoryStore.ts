@@ -3,9 +3,9 @@ import { create } from 'zustand';
 import { api } from '../lib/api';
 
 export interface Category {
-  id: number;        // numeric ID from your Rails DB
+  id: number;        
   name: string;
-  position?: number; // optional
+  position?: number;
   description?: string;
 }
 
@@ -25,9 +25,8 @@ export const useCategoryStore = create<CategoryStore>((set) => ({
   fetchCategories: async () => {
     set({ loading: true, error: null });
     try {
-      // Suppose your backend gives them at /admin/categories or /categories
-      // If you made a public endpoint /categories for GET, use that:
-      const data = await api.get('/admin/categories');
+      // Use the PUBLIC endpoint now:
+      const data = await api.get('/categories');
       set({ categories: data, loading: false });
     } catch (err: any) {
       set({ error: err.message, loading: false });
