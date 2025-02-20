@@ -20,7 +20,7 @@ export function SignUpForm() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If “error” is present, we already show it in the UI below
+    // If “error” changes, we can show in UI, but it's also shown in the form below
   }, [error]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -31,11 +31,10 @@ export function SignUpForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
-      return;
+      return toast.error('Passwords do not match');
     }
 
-    // Call signUp from the store
+    // Call signUp
     await signUp(
       formData.email,
       formData.password,
@@ -47,7 +46,13 @@ export function SignUpForm() {
     // If store.error is still null => success
     if (!useAuthStore.getState().error) {
       toast.success('Account created successfully!');
-      navigate('/ordering');
+      // If phone was provided, go to /verify-phone
+      if (formData.phone.trim()) {
+        navigate('/ordering/verify-phone');
+      } else {
+        // else maybe just go home
+        navigate('/ordering');
+      }
     }
   }
 
@@ -142,6 +147,7 @@ export function SignUpForm() {
             onChange={handleChange}
             className="w-full px-4 py-2 border border-gray-300 rounded-md
                        focus:ring-[#c1902f] focus:border-[#c1902f]"
+            // optional => but let's require phone for verification
             required
           />
         </div>

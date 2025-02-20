@@ -17,12 +17,11 @@ import { ForgotPasswordForm } from './components/auth/ForgotPasswordForm';
 import { ResetPasswordForm } from './components/auth/ResetPasswordForm';
 import { OrderHistory } from './components/profile/OrderHistory';
 import { ProfilePage } from './components/profile/ProfilePage';
+import { VerifyPhonePage } from './components/auth/VerifyPhonePage';
 
 import { useAuthStore } from './store/authStore';
 import { useMenuStore } from './store/menuStore';
 import { useLoadingStore } from './store/loadingStore';
-
-// Import MenuItem for the homepage display
 import { MenuItem as MenuItemCard } from './components/MenuItem';
 
 function ProtectedRoute({
@@ -141,7 +140,7 @@ export default function OnlineOrderingApp() {
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="order-confirmation" element={<OrderConfirmation />} />
 
-        {/* Admin => must be admin */}
+        {/* Admin only */}
         <Route
           path="admin"
           element={
@@ -151,13 +150,16 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        {/* Auth routes */}
+        {/* Auth */}
         <Route path="login" element={<LoginForm />} />
         <Route path="signup" element={<SignUpForm />} />
         <Route path="forgot-password" element={<ForgotPasswordForm />} />
         <Route path="reset-password" element={<ResetPasswordForm />} />
 
-        {/* Protected => /orders => must be signed in */}
+        {/* Phone verification */}
+        <Route path="verify-phone" element={<VerifyPhonePage />} />
+
+        {/* Protected user pages */}
         <Route
           path="orders"
           element={
@@ -166,8 +168,6 @@ export default function OnlineOrderingApp() {
             </ProtectedRoute>
           }
         />
-
-        {/* NEW: My Profile => must be logged in */}
         <Route
           path="profile"
           element={
@@ -177,7 +177,7 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        {/* Catch-all => /ordering => index route */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="" replace />} />
       </Route>
     </Routes>

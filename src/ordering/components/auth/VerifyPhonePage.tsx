@@ -1,0 +1,112 @@
+// src/ordering/components/auth/VerifyPhonePage.tsx
+
+import React, { useState, useEffect } from 'react';
+import { useAuthStore } from '../../store/authStore';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+
+export function VerifyPhonePage() {
+  const navigate = useNavigate();
+  const { user, verifyPhone, resendVerificationCode, loading, error } = useAuthStore();
+
+  const [code, setCode] = useState('');
+  const [resendMsg, setResendMsg] = useState<string>('');
+
+  useEffect(() => {
+    // If user is not logged in, boot to /login
+    if (!user) {
+      navigate('/login');
+    } 
+    // If already verified, no need to be here.
+    else if (user.phone_verified) {
+      navigate('/');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+
+    try {
+      await verifyPhone(code);
+      toast.success('Phone verified successfully!');
+      navigate('/');
+    } catch (err) {
+      // Typically 422 Unprocessable if code is invalid/expired.
+      toast.error('Invalid code or verification expired.');
+    }
+  }
+
+  async function handleResend() {
+    try {
+      const resp = await resendVerificationCode();
+      if (resp.message) {
+        setResendMsg(resp.message);
+        toast.success(resp.message);
+      }
+    } catch (err: any) {
+      // If the server returned 429, the error message likely has "Please wait before requesting another code"
+      if (err.message?.includes('Please wait before requesting another code')) {
+        toast.error('You must wait 1 minute before requesting another code again.');
+      } else {
+        toast.error(err.message || 'Failed to resend code.');
+      }
+    }
+  }
+
+  return (
+    <div className="max-w-md mx-auto p-6 mt-10 bg-white rounded shadow">
+      <h2 className="text-2xl font-bold mb-4 text-center">Verify Your Phone</h2>
+      <p className="text-sm text-gray-600 mb-6 text-center">
+        Please enter the code we sent to {user?.phone}.
+      </p>
+
+      {/* If our store has a general error, display it. */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded">
+          {error}
+        </div>
+      )}
+
+      {/* If the resend() call returned a success message, show it. */}
+      {resendMsg && (
+        <div className="mb-4 p-3 bg-green-50 text-green-700 border border-green-200 rounded">
+          {resendMsg}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block font-medium mb-1">Verification Code</label>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="w-full border border-gray-300 px-3 py-2 rounded"
+            placeholder="123456"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-[#c1902f] text-white py-2 rounded hover:bg-[#d4a43f] transition-colors"
+        >
+          {loading ? 'Verifying...' : 'Verify'}
+        </button>
+      </form>
+
+      <div className="mt-4 text-sm text-center">
+        Didn’t get the code?{' '}
+        <button
+          type="button"
+          disabled={loading}
+          onClick={handleResend}
+          className="text-blue-600 underline"
+        >
+          Resend
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,4 +1,5 @@
 // src/ordering/store/authStore.ts
+
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import type { User } from '../types/auth';
@@ -9,44 +10,45 @@ interface AuthStore {
   error: string | null;
 
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (
-    email: string,
-    password: string,
-    firstName: string,
-    lastName: string,
-    phone: string
-  ) => Promise<void>;
+  signUp: (email: string, password: string, firstName: string, lastName: string, phone: string) => Promise<void>;
   signOut: () => void;
-
-  // Reusable method that sets store + localStorage from an object { jwt, user }
   setUserFromResponse: (payload: { jwt: string; user: User }) => void;
-
-  // NEW: For updating user fields without re-signing in
   updateUser: (updatedUser: User) => void;
+
+  // phone verification
+  verifyPhone: (code: string) => Promise<void>;
+  resendVerificationCode: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthStore>((set) => {
-  const storedUser = localStorage.getItem('user');
-  const parsedUser: User | null = storedUser ? JSON.parse(storedUser) : null;
-
-  return {
-    user: parsedUser,
+export const useAuthStore = create<AuthStore>((set, get) => {
+  const store: AuthStore = {
+    user: null,
     loading: false,
     error: null,
 
-    // Used by signIn/signUp to store user & token
     setUserFromResponse: ({ jwt, user }) => {
+      // Save to localStorage so we persist across reloads
       localStorage.setItem('token', jwt);
       localStorage.setItem('user', JSON.stringify(user));
+
+      // Update our store state
       set({ user, loading: false, error: null });
+    },
+
+    updateUser: (updatedUser) => {
+      // Keep the user in localStorage in sync
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      set({ user: updatedUser });
     },
 
     // SIGN IN
     signIn: async (email, password) => {
       set({ loading: true, error: null });
       try {
-        const { jwt, user } = await api.post('/login', { email, password });
-        useAuthStore.getState().setUserFromResponse({ jwt, user });
+        // POST /login => { jwt, user }
+        const resp = await api.post('/login', { email, password });
+        const { jwt, user } = resp;
+        get().setUserFromResponse({ jwt, user });
       } catch (err: any) {
         set({ loading: false, error: err.message });
       }
@@ -56,7 +58,6 @@ export const useAuthStore = create<AuthStore>((set) => {
     signUp: async (email, password, firstName, lastName, phone) => {
       set({ loading: true, error: null });
       try {
-        // --- HERE: we explicitly add `restaurant_id: 1`
         const payload = {
           user: {
             email,
@@ -65,11 +66,13 @@ export const useAuthStore = create<AuthStore>((set) => {
             first_name: firstName,
             last_name: lastName,
             phone,
-            restaurant_id: 1, // <--- Hard-coded for now
+            restaurant_id: 1,
           },
         };
-        const { jwt, user } = await api.post('/signup', payload);
-        useAuthStore.getState().setUserFromResponse({ jwt, user });
+        // POST /signup => { jwt, user }
+        const resp = await api.post('/signup', payload);
+        const { jwt, user } = resp;
+        get().setUserFromResponse({ jwt, user });
       } catch (err: any) {
         set({ loading: false, error: err.message });
       }
@@ -82,10 +85,47 @@ export const useAuthStore = create<AuthStore>((set) => {
       set({ user: null, loading: false, error: null });
     },
 
-    // Allows updating user fields in local store w/o re-signing in
-    updateUser: (updatedUser: User) => {
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      set({ user: updatedUser });
+    // verifyPhone
+    verifyPhone: async (code: string) => {
+      set({ loading: true, error: null });
+      try {
+        // POST /verify_phone => { message, user }
+        const resp = await api.verifyPhone(code);
+        if (resp.user) {
+          get().updateUser(resp.user); // phone_verified => true
+        }
+        set({ loading: false });
+      } catch (err: any) {
+        set({ loading: false, error: err.message });
+        throw err;
+      }
+    },
+
+    // resendVerificationCode
+    resendVerificationCode: async () => {
+      set({ loading: true, error: null });
+      try {
+        // POST /resend_code => { message: "..."}
+        const resp = await api.resendCode();
+        set({ loading: false });
+        return resp;
+      } catch (err: any) {
+        set({ loading: false, error: err.message });
+        throw err;
+      }
     },
   };
+
+  //
+  // On store creation, rehydrate from localStorage if present
+  //
+  const existingToken = localStorage.getItem('token');
+  const existingUser = localStorage.getItem('user');
+  if (existingToken && existingUser) {
+    // We only restore the user from localStorage. 
+    // The token is read from localStorage by api.ts automatically.
+    store.user = JSON.parse(existingUser) as User;
+  }
+
+  return store;
 });
