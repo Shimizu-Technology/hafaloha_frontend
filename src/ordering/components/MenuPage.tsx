@@ -1,5 +1,6 @@
 // src/ordering/components/MenuPage.tsx
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
@@ -8,26 +9,24 @@ export function MenuPage() {
   const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
   const { categories, fetchCategories } = useCategoryStore();
 
-  // For the user's chosen category ID to filter by. If null => “All.”
+  // For category filter
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
   // Additional flags for filtering
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
   const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
 
-  // On mount, load unexpired items + categories
   useEffect(() => {
     fetchMenuItems();
     fetchCategories();
   }, [fetchMenuItems, fetchCategories]);
 
   // Combine filters: category, featured, seasonal
-  const filteredItems = React.useMemo(() => {
+  const filteredItems = useMemo(() => {
     let list = menuItems;
 
-    // Filter by selectedCategoryId if set
+    // If a category is selected, filter by that
     if (selectedCategoryId) {
-      // Each item has category_ids => numeric array
       list = list.filter((item) =>
         item.category_ids?.includes(selectedCategoryId)
       );
@@ -44,12 +43,14 @@ export function MenuPage() {
 
   // Toggling filters
   function handleToggleFeatured(checked: boolean) {
+    // If turning on "featured", turn off "seasonal"
     if (checked) {
       setShowSeasonalOnly(false);
     }
     setShowFeaturedOnly(checked);
   }
   function handleToggleSeasonal(checked: boolean) {
+    // If turning on "seasonal", turn off "featured"
     if (checked) {
       setShowFeaturedOnly(false);
     }
@@ -70,11 +71,12 @@ export function MenuPage() {
         <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
           {/* “All Items” button */}
           <button
-            className={
-              selectedCategoryId === null
-                ? 'px-4 py-2 rounded-md bg-[#c1902f] text-white'
-                : 'px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }
+            className={`
+              flex-shrink-0 px-4 py-2 rounded-md
+              ${selectedCategoryId === null 
+                ? 'bg-[#c1902f] text-white' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
+            `}
             onClick={() => setSelectedCategoryId(null)}
           >
             All Items
@@ -84,11 +86,12 @@ export function MenuPage() {
           {categories.map((cat) => (
             <button
               key={cat.id}
-              className={
-                selectedCategoryId === cat.id
-                  ? 'px-4 py-2 rounded-md bg-[#c1902f] text-white'
-                  : 'px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }
+              className={`
+                flex-shrink-0 px-4 py-2 rounded-md
+                ${selectedCategoryId === cat.id
+                  ? 'bg-[#c1902f] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
+              `}
               onClick={() => setSelectedCategoryId(cat.id)}
             >
               {cat.name}
@@ -119,7 +122,7 @@ export function MenuPage() {
       </div>
 
       {/* Menu Items Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
         {filteredItems.map((item) => (
           <MenuItem key={item.id} item={item} />
         ))}

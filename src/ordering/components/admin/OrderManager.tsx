@@ -422,7 +422,7 @@ function AdminEditOrderModal({
 }) {
   // Local state for items, total, etc.
   const [localItems, setLocalItems] = useState(() => {
-    // Make a shallow copy so we don’t mutate the original object
+    // Make a shallow copy so we don’t mutate the original array
     return order.items ? [...order.items] : [];
   });
   const [localTotal, setLocalTotal] = useState<string>(String(order.total || '0'));
@@ -479,7 +479,8 @@ function AdminEditOrderModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-md max-w-2xl w-full p-6 relative space-y-6">
+      {/* Outer container: on small screens => full width, on bigger => max-w-2xl */}
+      <div className="bg-white rounded-lg shadow-md w-full sm:max-w-2xl p-6 relative space-y-6">
         {/* Close button (X) */}
         <button
           onClick={onClose}
@@ -500,66 +501,71 @@ function AdminEditOrderModal({
         {/* ITEMS TABLE */}
         <div>
           <h4 className="text-sm font-semibold mb-2">Items</h4>
-          <table className="w-full border border-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-2 border-b text-left">Name</th>
-                <th className="p-2 border-b text-left">Qty</th>
-                <th className="p-2 border-b text-left">Price</th>
-                <th className="p-2 border-b text-left">Notes</th>
-                <th className="p-2 border-b"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {localItems.map((item, idx) => (
-                <tr key={idx} className="border-b last:border-0">
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      className="border w-full rounded px-2 py-1"
-                      value={item.name}
-                      onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-2" style={{ width: '70px' }}>
-                    <input
-                      type="number"
-                      className="border w-full rounded px-2 py-1"
-                      min={1}
-                      value={item.quantity}
-                      onChange={(e) => handleItemChange(idx, 'quantity', parseInt(e.target.value, 10))}
-                    />
-                  </td>
-                  <td className="p-2" style={{ width: '90px' }}>
-                    <input
-                      type="number"
-                      className="border w-full rounded px-2 py-1"
-                      step="0.01"
-                      value={item.price}
-                      onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      className="border w-full rounded px-2 py-1"
-                      value={item.notes || ''}
-                      onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(idx)}
-                      className="text-red-600 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </td>
+          {/* Wrap the table in an overflow-x-auto so it scrolls on small screens */}
+          <div className="overflow-x-auto">
+            <table className="w-full border border-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="p-2 border-b text-left">Name</th>
+                  <th className="p-2 border-b text-left">Qty</th>
+                  <th className="p-2 border-b text-left">Price</th>
+                  <th className="p-2 border-b text-left">Notes</th>
+                  <th className="p-2 border-b"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {localItems.map((item, idx) => (
+                  <tr key={idx} className="border-b last:border-0">
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        className="border w-full rounded px-2 py-1"
+                        value={item.name}
+                        onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                      />
+                    </td>
+                    <td className="p-2" style={{ width: '70px' }}>
+                      <input
+                        type="number"
+                        className="border w-full rounded px-2 py-1"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(e) =>
+                          handleItemChange(idx, 'quantity', parseInt(e.target.value, 10))
+                        }
+                      />
+                    </td>
+                    <td className="p-2" style={{ width: '90px' }}>
+                      <input
+                        type="number"
+                        className="border w-full rounded px-2 py-1"
+                        step="0.01"
+                        value={item.price}
+                        onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        className="border w-full rounded px-2 py-1"
+                        value={item.notes || ''}
+                        onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
+                      />
+                    </td>
+                    <td className="p-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(idx)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <button
             type="button"
@@ -573,7 +579,9 @@ function AdminEditOrderModal({
         {/* TOTAL / STATUS / INSTRUCTIONS */}
         <div className="flex flex-col space-y-4 md:flex-row md:space-x-4 md:space-y-0">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Total</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Total
+            </label>
             <input
               type="number"
               step="0.01"
@@ -584,7 +592,9 @@ function AdminEditOrderModal({
           </div>
 
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status
+            </label>
             <select
               className="border border-gray-300 rounded px-3 py-2 w-full"
               value={localStatus}
@@ -600,7 +610,9 @@ function AdminEditOrderModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Special Instructions</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Special Instructions
+          </label>
           <textarea
             className="border border-gray-300 rounded px-3 py-2 w-full"
             rows={2}

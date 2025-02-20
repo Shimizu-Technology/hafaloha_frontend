@@ -1,21 +1,13 @@
 // src/ordering/components/admin/settings/CategoriesSettings.tsx
-//
-// Explanation:
-// - We keep a hidden "position" usage so it always defaults to 0 in the code.
-// - We do NOT display or edit 'position' in the table or the form. 
-//   That way, the database field remains available for future reordering logic,
-//   but it's invisible to admins right now.
 
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../../lib/api';
 
-// Categories can have a "position" column for custom ordering. 
-// Currently, we keep it hidden from the UI. 
 interface Category {
   id: number;
   name: string;
-  position?: number; // not shown in the UI, but still stored in DB
+  position?: number; // stored in DB but hidden from the UI
 }
 
 export function CategoriesSettings() {
@@ -38,8 +30,7 @@ export function CategoriesSettings() {
     setError(null);
     try {
       const data = await api.get('/admin/categories');
-      // If you want to sort by position behind the scenes, you can do:
-      // data.sort((a:Category,b:Category) => (a.position||0) - (b.position||0));
+      // data.sort((a: Category, b: Category) => (a.position || 0) - (b.position || 0));
       setCategories(data);
     } catch (err: any) {
       setError(err.message);
@@ -52,11 +43,10 @@ export function CategoriesSettings() {
     e.preventDefault();
     if (!newName.trim()) return;
     try {
-      // We still set 'position' under the hood, but always 0 or some default
       const response = await api.post('/admin/categories', {
         category: {
           name: newName,
-          position: 0  // hidden from user, always zero for now
+          position: 0,
         },
       });
       setCategories([...categories, response]);
@@ -85,11 +75,12 @@ export function CategoriesSettings() {
     if (!name.trim()) return;
 
     try {
-      // Same approach: we keep 'position' but default to 0
       const response = await api.patch(`/admin/categories/${id}`, {
         category: { name, position: 0 },
       });
-      setCategories(categories.map((c) => (c.id === response.id ? response : c)));
+      setCategories(
+        categories.map((c) => (c.id === response.id ? response : c))
+      );
       setEditingCategory(null);
       toast.success('Updated category');
     } catch (err: any) {
@@ -105,7 +96,10 @@ export function CategoriesSettings() {
       {loading && <p className="text-gray-500 mb-3">Loading...</p>}
 
       {/* New Category Form */}
-      <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-2 mb-4 items-start sm:items-end">
+      <form
+        onSubmit={handleCreate}
+        className="flex flex-col gap-2 mb-4 items-start sm:flex-row sm:items-end"
+      >
         <div className="flex flex-col">
           <label className="text-sm font-medium text-gray-700 mb-1">
             New Category Name
@@ -114,7 +108,7 @@ export function CategoriesSettings() {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="border p-2 rounded w-52"
+            className="border p-2 rounded w-48 sm:w-60"
             placeholder="e.g. Beverages"
           />
         </div>
@@ -144,12 +138,18 @@ export function CategoriesSettings() {
                 return (
                   <tr key={cat.id} className="border-b">
                     <td className="px-4 py-2">
-                      <form onSubmit={handleEditSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <form
+                        onSubmit={handleEditSubmit}
+                        className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                      >
                         <input
                           type="text"
                           value={editingCategory.name}
                           onChange={(e) =>
-                            setEditingCategory({ ...editingCategory, name: e.target.value })
+                            setEditingCategory({
+                              ...editingCategory,
+                              name: e.target.value,
+                            })
                           }
                           className="border p-2 rounded w-40 sm:w-60"
                         />
@@ -209,10 +209,8 @@ export function CategoriesSettings() {
       </div>
 
       {/* 
-        NOTE: The 'position' column is still stored in the DB but 
-        is hidden from this UI. If, in the future, you want to enable 
-        custom ordering, you can show a numeric input or drag-and-drop 
-        UI that sets 'position'. Right now we always set it to 0.
+        NOTE: The 'position' column is stored in DB but 
+        hidden from this UI. We'll always set position=0 for now.
       */}
     </div>
   );
