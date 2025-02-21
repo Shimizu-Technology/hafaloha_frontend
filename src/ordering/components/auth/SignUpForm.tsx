@@ -1,8 +1,9 @@
 // src/ordering/components/auth/SignUpForm.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { Mail, Lock, User, Phone } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 
 export function SignUpForm() {
@@ -20,7 +21,7 @@ export function SignUpForm() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If “error” changes, we can show in UI, but it's also shown in the form below
+    // If "error" changes, we show it below. 
   }, [error]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -30,11 +31,11 @@ export function SignUpForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
     if (formData.password !== formData.confirmPassword) {
       return toast.error('Passwords do not match');
     }
 
-    // Call signUp
     await signUp(
       formData.email,
       formData.password,
@@ -43,22 +44,22 @@ export function SignUpForm() {
       formData.phone
     );
 
-    // If store.error is still null => success
     if (!useAuthStore.getState().error) {
       toast.success('Account created successfully!');
-      // If phone was provided, go to /verify-phone
+
       if (formData.phone.trim()) {
         navigate('/ordering/verify-phone');
       } else {
-        // else maybe just go home
         navigate('/ordering');
       }
     }
   }
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">Create an Account</h2>
+    <div className="max-w-sm w-full mx-auto mt-8 px-6 py-8 bg-white shadow-xl rounded-lg border border-gray-100">
+      <h2 className="text-3xl font-extrabold text-gray-900 text-center mb-6">
+        Create an Account
+      </h2>
 
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
@@ -66,144 +67,163 @@ export function SignUpForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {/* First Name */}
         <div>
-          <label
-            htmlFor="firstName"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            <User className="inline-block w-4 h-4 mr-2" />
+          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+            <User className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
             First Name
           </label>
           <input
             type="text"
             id="firstName"
             name="firstName"
+            placeholder="John"
             value={formData.firstName}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md
-                       focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="
+              block w-full px-4 py-2 mt-1 text-base border border-gray-300 rounded-md
+              focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-transparent
+              placeholder-gray-400
+            "
             required
           />
         </div>
 
         {/* Last Name */}
         <div>
-          <label
-            htmlFor="lastName"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            <User className="inline-block w-4 h-4 mr-2" />
+          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+            <User className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
             Last Name
           </label>
           <input
             type="text"
             id="lastName"
             name="lastName"
+            placeholder="Doe"
             value={formData.lastName}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md
-                       focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="
+              block w-full px-4 py-2 mt-1 text-base border border-gray-300 rounded-md
+              focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-transparent
+              placeholder-gray-400
+            "
             required
           />
         </div>
 
         {/* Email */}
         <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            <Mail className="inline-block w-4 h-4 mr-2" />
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <Mail className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
             Email
           </label>
           <input
             type="email"
             id="email"
             name="email"
+            placeholder="you@example.com"
             value={formData.email}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md
-                       focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="
+              block w-full px-4 py-2 mt-1 text-base border border-gray-300 rounded-md
+              focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-transparent
+              placeholder-gray-400
+            "
             required
           />
         </div>
 
         {/* Phone */}
         <div>
-          <label
-            htmlFor="phone"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            <Phone className="inline-block w-4 h-4 mr-2" />
+          <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+            <Phone className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
             Phone
           </label>
           <input
             type="tel"
             id="phone"
             name="phone"
+            placeholder="+1671"
             value={formData.phone}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md
-                       focus:ring-[#c1902f] focus:border-[#c1902f]"
-            // optional => but let's require phone for verification
+            className="
+              block w-full px-4 py-2 mt-1 text-base border border-gray-300 rounded-md
+              focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-transparent
+              placeholder-gray-400
+            "
             required
           />
         </div>
 
         {/* Password */}
         <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            <Lock className="inline-block w-4 h-4 mr-2" />
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <Lock className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
             Password
           </label>
           <input
             type="password"
             id="password"
             name="password"
+            placeholder="••••••••"
             value={formData.password}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md
-                       focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="
+              block w-full px-4 py-2 mt-1 text-base border border-gray-300 rounded-md
+              focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-transparent
+              placeholder-gray-400
+            "
             required
           />
         </div>
 
         {/* Confirm Password */}
         <div>
-          <label
-            htmlFor="confirmPassword"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            <Lock className="inline-block w-4 h-4 mr-2" />
+          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+            <Lock className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
             Confirm Password
           </label>
           <input
             type="password"
             id="confirmPassword"
             name="confirmPassword"
+            placeholder="••••••••"
             value={formData.confirmPassword}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md
-                       focus:ring-[#c1902f] focus:border-[#c1902f]"
+            className="
+              block w-full px-4 py-2 mt-1 text-base border border-gray-300 rounded-md
+              focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-transparent
+              placeholder-gray-400
+            "
             required
           />
         </div>
 
+        {/* Submit Button */}
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-[#c1902f] text-white py-2 px-4 rounded-md
-                     hover:bg-[#d4a43f] transition-colors duration-200
-                     disabled:opacity-50"
+          className="
+            inline-flex items-center justify-center w-full px-4 py-3 mt-1 text-base font-medium
+            text-white bg-[#c1902f] border border-transparent rounded-md
+            hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f]
+            transition-colors duration-200 disabled:opacity-50
+          "
         >
           {loading ? 'Creating account...' : 'Sign Up'}
         </button>
       </form>
+
+      <div className="mt-6 text-center text-sm">
+        <p className="text-gray-600">Already have an account?</p>
+        <Link
+          to="/ordering/login"
+          className="font-medium text-blue-600 hover:underline"
+        >
+          Sign In
+        </Link>
+      </div>
     </div>
   );
 }
