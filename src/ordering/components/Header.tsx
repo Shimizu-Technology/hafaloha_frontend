@@ -149,7 +149,7 @@ export function Header() {
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => setIsDropdownOpen(false)}
                         >
-                          Manage Orders
+                          Admin Dashboard
                         </Link>
                         <hr className="my-1" />
                       </>
@@ -290,7 +290,7 @@ export function Header() {
                       "
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Manage Orders
+                      Admin Dashboard
                     </Link>
                     <hr className="my-1" />
                   </>
