@@ -1,10 +1,14 @@
 // src/ordering/components/auth/SignUpForm.tsx
-
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { Mail, Lock, User, Phone } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+
+/** Checks if phone is +1671 followed by exactly 7 digits. */
+function isValidGuamPhone(phoneStr: string) {
+  return /^\+1671\d{7}$/.test(phoneStr);
+}
 
 export function SignUpForm() {
   const { signUp, loading, error } = useAuthStore();
@@ -12,7 +16,7 @@ export function SignUpForm() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    phone: '+1671',
+    phone: '+1671', // Default to +1671 so user sees that placeholder
     email: '',
     password: '',
     confirmPassword: '',
@@ -21,7 +25,7 @@ export function SignUpForm() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If "error" changes, we show it below. 
+    // If "error" changes, we could show it below or handle it.
   }, [error]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -36,22 +40,26 @@ export function SignUpForm() {
       return toast.error('Passwords do not match');
     }
 
+    const finalPhone = formData.phone.trim();
+    // Ensure phone is +1671 followed by 7 digits
+    if (!isValidGuamPhone(finalPhone)) {
+      toast.error('Phone number must be +1671 followed by 7 digits');
+      return;
+    }
+
+    // Proceed with signUp
     await signUp(
       formData.email,
       formData.password,
       formData.firstName,
       formData.lastName,
-      formData.phone
+      finalPhone
     );
 
     if (!useAuthStore.getState().error) {
       toast.success('Account created successfully!');
-
-      if (formData.phone.trim()) {
-        navigate('/ordering/verify-phone');
-      } else {
-        navigate('/ordering');
-      }
+      // Navigate to phone verification
+      navigate('/ordering/verify-phone');
     }
   }
 

@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Calendar,
-  Clock,
   Users,
   Mail,
   MapPin,
@@ -31,6 +30,11 @@ interface ConfirmationData extends ReservationData {
   confirmed: boolean;
 }
 
+/** Checks if phone is +1671 followed by exactly 7 digits. */
+function isValidGuamPhone(phoneStr: string) {
+  return /^\+1671\d{7}$/.test(phoneStr);
+}
+
 export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
   const [formData, setFormData] = useState<ReservationData>({
     date: '',
@@ -39,19 +43,20 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
     duration: '1 hour',
     firstName: '',
     lastName: '',
-    phone: '',       // We'll handle pre-fill in useEffect
+    phone: '', // We'll default to +1671 on open if blank
     email: '',
   });
   const [confirmation, setConfirmation] = useState<ConfirmationData | null>(null);
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
 
-  // On mount or open, if phone is blank => set it to +1671
+  // On open, if phone is blank => set +1671
   useEffect(() => {
     if (isOpen && formData.phone.trim() === '') {
       setFormData((prev) => ({ ...prev, phone: '+1671' }));
     }
   }, [isOpen]);
 
+  // Fetch available time slots if date/partySize changes
   useEffect(() => {
     if (!formData.date || !formData.partySize) {
       setTimeSlots([]);
@@ -71,36 +76,40 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
 
   function handleShare() {
     if (!confirmation) return;
-    const text = `I just made a reservation at Håfaloha!\n\nDate: ${confirmation.date}
+    const text = `I just made a reservation at Håfaloha!
+    
+Date: ${confirmation.date}
 Time: ${confirmation.time}
 Party Size: ${confirmation.partySize} people`;
+
     if (navigator.share) {
       navigator.share({ title: 'Håfaloha Reservation', text }).catch(console.error);
     }
   }
 
-  // On final submit, if phone is still exactly "+1671", treat it as blank
-  function normalizePhone(input: string) {
-    const trimmed = input.trim();
-    // Also handle variants like "+1671-"
-    if (trimmed === '+1671' || trimmed === '+1671-') {
-      return '';
-    }
-    return trimmed;
+  function parseDuration(durStr: string): number {
+    const num = parseFloat(durStr);
+    if (isNaN(num)) return 60;
+    return Math.round(num * 60);
   }
 
   async function handleSubmitReal(e: React.FormEvent) {
     e.preventDefault();
+
     if (!formData.date || !formData.time) {
       alert('Please fill out date and time');
       return;
     }
 
+    const finalPhone = formData.phone.trim();
+    // Must match +1671 plus 7 digits
+    if (!isValidGuamPhone(finalPhone)) {
+      alert('Phone number must be +1671 followed by 7 digits');
+      return;
+    }
+
     try {
       const start_time = `${formData.date}T${formData.time}:00`;
-
-      // Use our normalizer
-      const finalPhone = normalizePhone(formData.phone);
 
       await createReservation({
         reservation: {
@@ -115,21 +124,22 @@ Party Size: ${confirmation.partySize} people`;
         },
       });
 
-      setConfirmation({ ...formData, phone: finalPhone, confirmed: true });
+      // Show confirmation screen
+      setConfirmation({
+        ...formData,
+        phone: finalPhone,
+        confirmed: true,
+      });
     } catch (err) {
       console.error('Failed to create reservation:', err);
       alert('Reservation failed. Check console for details.');
     }
   }
 
-  function parseDuration(durStr: string): number {
-    const num = parseFloat(durStr);
-    if (isNaN(num)) return 60;
-    return Math.round(num * 60);
-  }
-
+  // ---------------------------------------------------------------------
+  // CONFIRMATION SCREEN after successful booking
+  // ---------------------------------------------------------------------
   if (confirmation) {
-    // Confirmation screen
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
         <div className="relative bg-white rounded-lg w-full max-w-2xl">
@@ -215,7 +225,9 @@ Party Size: ${confirmation.partySize} people`;
     );
   }
 
-  // The main form
+  // ---------------------------------------------------------------------
+  // MAIN FORM (shown before confirmation)
+  // ---------------------------------------------------------------------
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
       <div className="relative bg-white rounded-lg w-full max-w-2xl">
@@ -254,7 +266,10 @@ Party Size: ${confirmation.partySize} people`;
                 <select
                   value={formData.partySize}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, partySize: parseInt(e.target.value, 10) }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      partySize: parseInt(e.target.value, 10),
+                    }))
                   }
                   className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2
                              focus:border-[#c1902f] focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
@@ -380,9 +395,10 @@ Party Size: ${confirmation.partySize} people`;
   );
 }
 
+/** Utility to format time slots like "12:00" => "12:00 PM". */
 function formatTime(t: string) {
   const [hh, mm] = t.split(':').map(Number);
-  if (isNaN(hh)) return t;
+  if (isNaN(hh)) return t; // fallback
   const date = new Date(2020, 0, 1, hh, mm);
   return date.toLocaleString('en-US', {
     hour: 'numeric',

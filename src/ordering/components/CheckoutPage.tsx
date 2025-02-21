@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { CreditCard, Mail, Phone, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-import { useAuthStore } from '../store/authStore';  // We import our auth store
+import { useAuthStore } from '../store/authStore';
 import { usePromoStore } from '../store/promoStore';
 import { useOrderStore } from '../store/orderStore';
 import { PickupInfo } from './location/PickupInfo';
@@ -20,6 +20,11 @@ interface CheckoutFormData {
   promoCode: string;
 }
 
+/** Checks if phone is +1671 followed by exactly 7 digits. */
+function isValidGuamPhone(phoneStr: string) {
+  return /^\+1671\d{7}$/.test(phoneStr);
+}
+
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -28,31 +33,31 @@ export function CheckoutPage() {
   const addOrder = useOrderStore((state) => state.addOrder);
 
   const { validatePromoCode, applyDiscount } = usePromoStore();
-
   const rawTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const initialFormData: CheckoutFormData = {
     name: user ? `${user.first_name} ${user.last_name}` : '',
     email: user?.email || '',
-    phone: user?.phone || '',  // if user has a phone, use it, else blank => we'll fill +1671 below
+    phone: user?.phone || '', // If user has a phone, use it; else blank => we set +1671 below
     cardNumber: '',
     expiryDate: '',
     cvv: '',
     specialInstructions: '',
-    promoCode: ''
+    promoCode: '',
   };
 
   const [formData, setFormData] = useState<CheckoutFormData>(initialFormData);
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
 
-  // On mount or if phone changes from user => if blank => set +1671
+  // On mount, if phone blank => set +1671
   useEffect(() => {
     if (formData.phone.trim() === '') {
       setFormData((prev) => ({ ...prev, phone: '+1671' }));
     }
   }, []);
 
+  // If user changes (e.g. logs in), update form data
   useEffect(() => {
     if (user) {
       setFormData((prev) => ({
@@ -88,26 +93,22 @@ export function CheckoutPage() {
     }
   }
 
-  // If user leaves phone as +1671 => treat as blank
-  function normalizePhone(phoneStr: string) {
-    const trimmed = phoneStr.trim();
-    if (trimmed === '+1671' || trimmed === '+1671-') {
-      return '';
-    }
-    return trimmed;
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // Check if any item needs 24-hr notice
+    const hasAny24hrItem = cartItems.some(
+      (it) => (it.advance_notice_hours ?? 0) >= 24
+    );
+
+    const finalPhone = formData.phone.trim();
+    // Must match +1671 plus 7 digits
+    if (!isValidGuamPhone(finalPhone)) {
+      toast.error('Phone number must be +1671 followed by 7 digits');
+      return;
+    }
+
     try {
-      // Check for 24 hr item
-      const hasAny24hrItem = cartItems.some(
-        (it) => (it.advance_notice_hours ?? 0) >= 24
-      );
-
-      // Normalize phone
-      const finalPhone = normalizePhone(formData.phone);
-
       const newOrder = await addOrder(
         cartItems,
         finalTotal,
@@ -120,7 +121,6 @@ export function CheckoutPage() {
       toast.success('Order placed successfully!');
 
       const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
-
       navigate('/ordering/order-confirmation', {
         state: {
           orderId: newOrder.id || '12345',
@@ -146,6 +146,7 @@ export function CheckoutPage() {
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Contact Information</h2>
               <div className="space-y-4">
+                {/* NAME */}
                 <div>
                   <label
                     htmlFor="name"
@@ -165,6 +166,8 @@ export function CheckoutPage() {
                       focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
+
+                {/* EMAIL */}
                 <div>
                   <label
                     htmlFor="email"
@@ -184,6 +187,8 @@ export function CheckoutPage() {
                       focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
                 </div>
+
+                {/* PHONE */}
                 <div>
                   <label
                     htmlFor="phone"
