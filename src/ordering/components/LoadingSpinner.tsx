@@ -1,6 +1,6 @@
 // src/ordering/components/LoadingSpinner.tsx
 import React from 'react';
-import HafalohaLogo from '../assets/hafaloha-logo.png';
+import HafalohaLogo from '../assets/Hafaloha-Fat-Pua.png';
 
 export function LoadingSpinner() {
 
