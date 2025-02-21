@@ -68,7 +68,7 @@ export function SignUpForm() {
     if (!useAuthStore.getState().error) {
       toast.success('Account created successfully!');
       // Navigate to phone verification
-      navigate('/ordering/verify-phone');
+      navigate('/verify-phone');
     }
   }
 
@@ -235,7 +235,7 @@ export function SignUpForm() {
       <div className="mt-6 text-center text-sm">
         <p className="text-gray-600">Already have an account?</p>
         <Link
-          to="/ordering/login"
+          to="/login"
           className="font-medium text-blue-600 hover:underline"
         >
           Sign In

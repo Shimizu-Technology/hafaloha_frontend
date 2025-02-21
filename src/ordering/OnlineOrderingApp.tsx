@@ -2,7 +2,6 @@
 import React, { useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 
-import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
 import { CartPage } from './components/CartPage';
@@ -32,8 +31,8 @@ function ProtectedRoute({
   adminOnly?: boolean;
 }) {
   const { user } = useAuthStore();
-  if (!user) return <Navigate to="login" replace />;
-  if (adminOnly && user.role !== 'admin') return <Navigate to="" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (adminOnly && user.role !== 'admin') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -90,20 +89,18 @@ function OrderingLayout() {
 export default function OnlineOrderingApp() {
   const { menuItems, fetchMenuItems } = useMenuStore();
 
-  // On mount, load menu items
   useEffect(() => {
     fetchMenuItems();
   }, [fetchMenuItems]);
 
   // Filter for featured items
   const featuredItems = menuItems.filter((item) => item.featured);
-  // Limit to 4 (though our server also enforces it)
   const featuredSlice = featuredItems.slice(0, 4);
 
   return (
     <Routes>
       <Route element={<OrderingLayout />}>
-        {/* index => /ordering => Hero & sample items */}
+        {/* index => "/" => hero & popular items */}
         <Route
           index
           element={
@@ -116,7 +113,6 @@ export default function OnlineOrderingApp() {
                       Popular Items
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                      {/* Show up to 4 featured items */}
                       {featuredSlice.map((item) => (
                         <MenuItemCard key={item.id} item={item} />
                       ))}
@@ -131,15 +127,15 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        {/* The main menu page => each <MenuItemCard> calls store.addToCart */}
+        {/* /menu => the MenuPage */}
         <Route path="menu" element={<MenuPage />} />
 
-        {/* The cart / checkout => reads cart from store */}
+        {/* /cart => Cart */}
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="order-confirmation" element={<OrderConfirmation />} />
 
-        {/* Admin only */}
+        {/* Admin only => /admin */}
         <Route
           path="admin"
           element={
@@ -158,7 +154,7 @@ export default function OnlineOrderingApp() {
         {/* Phone verification */}
         <Route path="verify-phone" element={<VerifyPhonePage />} />
 
-        {/* Protected user pages */}
+        {/* Protected user pages => /orders, /profile */}
         <Route
           path="orders"
           element={
@@ -176,8 +172,8 @@ export default function OnlineOrderingApp() {
           }
         />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="" replace />} />
+        {/* If unknown => redirect to root */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );

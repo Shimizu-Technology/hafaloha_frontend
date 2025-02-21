@@ -1,5 +1,4 @@
 // src/ordering/components/Header.tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ShoppingCart,
@@ -18,11 +17,11 @@ import { toast } from 'react-hot-toast';
 export function Header() {
   const { user, signOut } = useAuthStore();
 
-  // Pull cart items from store and count them
+  // Cart items
   const cartItems = useOrderStore((state) => state.cartItems);
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
-  // Bounce animation for cart icon
+  // Animate cart icon
   const [cartBounce, setCartBounce] = useState(false);
   const prevCartCountRef = useRef(cartCount);
 
@@ -38,7 +37,7 @@ export function Header() {
   // Mobile menu toggle
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Dropdown (desktop) for profile/admin links
+  // Profile/Admin dropdown (desktop)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -55,18 +54,17 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Check if user is admin
+  // Admin check
   const isAdmin = user?.role === 'admin';
 
-  // This is the first name we display in the nav bar.
-  // If user has no first_name, we fall back to email or 'Guest'.
+  // Display name
   const firstName = user?.first_name || user?.email || 'Guest';
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Mobile menu button (hamburger) */}
+          {/* Mobile menu button */}
           <button
             className="p-2 rounded-md text-gray-700 hover:bg-gray-200 active:scale-95 lg:hidden"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -79,9 +77,9 @@ export function Header() {
             )}
           </button>
 
-          {/* Logo => link to /ordering */}
+          {/* Logo => link to "/" */}
           <Link
-            to="/ordering"
+            to="/"
             className="
               flex items-center text-2xl font-bold text-gray-900
               hover:text-black transition-colors
@@ -93,12 +91,11 @@ export function Header() {
           {/* Desktop Nav (hidden on mobile) */}
           <nav className="hidden lg:flex items-center space-x-8">
             <Link
-              to="/ordering/menu"
+              to="/menu"
               className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
             >
               Menu
             </Link>
-
             <div className="flex items-center text-gray-700 whitespace-nowrap">
               <Clock className="h-4 w-4 mr-2" />
               <span>11AM-9PM</span>
@@ -118,7 +115,7 @@ export function Header() {
 
           {/* Right side: Profile & Cart */}
           <div className="flex items-center space-x-4">
-            {/* If user is logged in => show dropdown button */}
+            {/* If user is logged in => dropdown */}
             {user ? (
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -145,7 +142,7 @@ export function Header() {
                           Manage Reservations
                         </Link>
                         <Link
-                          to="/ordering/admin"
+                          to="/admin"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => setIsDropdownOpen(false)}
                         >
@@ -157,14 +154,14 @@ export function Header() {
 
                     {/* Normal user links */}
                     <Link
-                      to="/ordering/orders"
+                      to="/orders"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => setIsDropdownOpen(false)}
                     >
                       Order History
                     </Link>
                     <Link
-                      to="/ordering/profile"
+                      to="/profile"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => setIsDropdownOpen(false)}
                     >
@@ -189,14 +186,14 @@ export function Header() {
               // If not logged in => show Sign In/Up (desktop only)
               <div className="hidden lg:flex space-x-2">
                 <Link
-                  to="/ordering/login"
+                  to="/login"
                   className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
                   Sign In
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
-                  to="/ordering/signup"
+                  to="/signup"
                   className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
                   Sign Up
@@ -206,7 +203,7 @@ export function Header() {
 
             {/* Cart icon */}
             <Link
-              to="/ordering/cart"
+              to="/cart"
               className="p-2 relative text-gray-700 hover:text-gray-900 hover:bg-gray-200 active:scale-95 rounded-md"
               aria-label="Shopping cart"
             >
@@ -234,11 +231,9 @@ export function Header() {
         <div className="lg:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1">
             <Link
-              to="/ordering/menu"
-              className="
-                block px-3 py-2 rounded-md text-base font-medium text-gray-700
-                hover:text-gray-900 hover:bg-gray-50
-              "
+              to="/menu"
+              className="block px-3 py-2 rounded-md text-base font-medium text-gray-700
+                         hover:text-gray-900 hover:bg-gray-50"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Menu
@@ -266,7 +261,6 @@ export function Header() {
 
             {user ? (
               <>
-                {/* Admin Tools (mobile) */}
                 {isAdmin && (
                   <>
                     <div className="px-3 py-1 text-xs font-semibold text-gray-400">
@@ -274,20 +268,16 @@ export function Header() {
                     </div>
                     <Link
                       to="/reservations/dashboard"
-                      className="
-                        block px-3 py-2 rounded-md text-base font-medium
-                        text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                      "
+                      className="block px-3 py-2 rounded-md text-base font-medium
+                                 text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Manage Reservations
                     </Link>
                     <Link
-                      to="/ordering/admin"
-                      className="
-                        block px-3 py-2 rounded-md text-base font-medium
-                        text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                      "
+                      to="/admin"
+                      className="block px-3 py-2 rounded-md text-base font-medium
+                                 text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Admin Dashboard
@@ -297,21 +287,17 @@ export function Header() {
                 )}
 
                 <Link
-                  to="/ordering/orders"
-                  className="
-                    block px-3 py-2 rounded-md text-base font-medium
-                    text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                  "
+                  to="/orders"
+                  className="block px-3 py-2 rounded-md text-base font-medium
+                             text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Order History
                 </Link>
                 <Link
-                  to="/ordering/profile"
-                  className="
-                    block px-3 py-2 rounded-md text-base font-medium
-                    text-gray-700 hover:text-gray-900 hover:bg-gray-50
-                  "
+                  to="/profile"
+                  className="block px-3 py-2 rounded-md text-base font-medium
+                             text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   My Profile
@@ -335,7 +321,7 @@ export function Header() {
             ) : (
               <>
                 <Link
-                  to="/ordering/login"
+                  to="/login"
                   className="
                     block px-3 py-2 rounded-md text-base font-medium
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
@@ -345,7 +331,7 @@ export function Header() {
                   Sign In
                 </Link>
                 <Link
-                  to="/ordering/signup"
+                  to="/signup"
                   className="
                     block px-3 py-2 rounded-md text-base font-medium
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50

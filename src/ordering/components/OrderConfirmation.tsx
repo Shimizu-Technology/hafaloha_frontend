@@ -55,7 +55,7 @@ export function OrderConfirmation() {
 
         <div className="space-x-4">
           <Link
-            to="/ordering/menu"
+            to="/menu"
             className="inline-flex items-center px-6 py-3 border border-transparent
                        text-base font-medium rounded-md text-white bg-[#c1902f]
                        hover:bg-[#d4a43f]"
@@ -63,7 +63,7 @@ export function OrderConfirmation() {
             Order More
           </Link>
           <Link
-            to="/ordering"
+            to="/"
             className="inline-flex items-center px-6 py-3 border border-[#c1902f]
                        text-base font-medium rounded-md text-[#c1902f]
                        hover:bg-gray-50"

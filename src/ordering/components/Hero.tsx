@@ -30,7 +30,7 @@ export function Hero() {
         {/* Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row gap-4">
           <Link
-            to="/ordering/menu"
+            to="/menu"
             className="inline-flex items-center justify-center px-6 py-3
                        border border-transparent text-base font-medium rounded-md 
                        text-gray-900 bg-[#c1902f]

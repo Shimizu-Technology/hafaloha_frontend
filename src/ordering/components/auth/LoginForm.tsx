@@ -94,7 +94,7 @@ export function LoginForm() {
 
       {/* Forgot Password */}
       <div className="mt-4 text-center text-sm">
-        <Link to="/ordering/forgot-password" className="text-blue-600 hover:underline">
+        <Link to="/forgot-password" className="text-blue-600 hover:underline">
           Forgot Password?
         </Link>
       </div>
@@ -103,7 +103,7 @@ export function LoginForm() {
       <div className="mt-6 text-center text-sm">
         <p className="text-gray-600">Don’t have an account?</p>
         <Link
-          to="/ordering/signup"
+          to="/signup"
           className="font-medium text-blue-600 hover:underline"
         >
           Sign Up

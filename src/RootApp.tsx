@@ -1,6 +1,6 @@
 // src/RootApp.tsx
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './reservations/context/AuthContext';
 
@@ -14,19 +14,15 @@ export default function RootApp() {
     <AuthProvider>
       <BrowserRouter>
         <ScrollToTop />
-        {/* Provide the Toast container at root level */}
         <Toaster position="top-right" reverseOrder={false} />
 
         <Routes>
           <Route element={<GlobalLayout />}>
-            {/* /ordering/* => the Online Ordering routes */}
-            <Route path="/ordering/*" element={<OnlineOrderingApp />} />
-
-            {/* /reservations/* => the Reservations routes */}
+            {/* Serve Reservations at /reservations/* */}
             <Route path="/reservations/*" element={<ReservationsApp />} />
 
-            {/* Catch-all => go to /ordering */}
-            <Route path="*" element={<Navigate to="/ordering" replace />} />
+            {/* Everything else => OnlineOrderingApp at the root */}
+            <Route path="/*" element={<OnlineOrderingApp />} />
           </Route>
         </Routes>
       </BrowserRouter>

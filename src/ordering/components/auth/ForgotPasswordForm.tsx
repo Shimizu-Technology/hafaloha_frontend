@@ -78,7 +78,7 @@ export function ForgotPasswordForm() {
       <div className="mt-4 text-sm text-center">
         <button
           type="button"
-          onClick={() => navigate('/ordering/login')}
+          onClick={() => navigate('/login')}
           className="text-blue-600 hover:underline"
         >
           Back to Login

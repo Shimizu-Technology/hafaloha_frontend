@@ -30,7 +30,7 @@ export function CartPage() {
           Add some delicious items to get started!
         </p>
         <Link
-          to="/ordering/menu"
+          to="/menu"
           className="inline-flex items-center px-6 py-3 border border-transparent
                      text-base font-medium rounded-md text-white
                      bg-[#c1902f] hover:bg-[#d4a43f]"
@@ -150,7 +150,7 @@ export function CartPage() {
                 className="w-full flex items-center justify-center px-6 py-3 border
                            border-transparent text-base font-medium rounded-md text-white
                            bg-[#c1902f] hover:bg-[#d4a43f]"
-                onClick={() => navigate('/ordering/checkout')}
+                onClick={() => navigate('/checkout')}
               >
                 Proceed to Checkout
                 <ArrowRight className="ml-2 h-5 w-5" />

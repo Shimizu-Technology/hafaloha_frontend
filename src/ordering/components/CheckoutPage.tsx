@@ -125,7 +125,7 @@ export function CheckoutPage() {
       toast.success('Order placed successfully!');
 
       const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
-      navigate('/ordering/order-confirmation', {
+      navigate('/order-confirmation', {
         state: {
           orderId: newOrder.id || '12345',
           total: finalTotal,
