@@ -12,7 +12,7 @@ import { PickupInfo } from './location/PickupInfo';
 interface CheckoutFormData {
   name: string;
   email: string;
-  phone: string; // We'll pre-fill +1671 if empty
+  phone: string;
   cardNumber: string;
   expiryDate: string;
   cvv: string;
@@ -20,9 +20,12 @@ interface CheckoutFormData {
   promoCode: string;
 }
 
-/** Checks if phone is +1671 followed by exactly 7 digits. */
-function isValidGuamPhone(phoneStr: string) {
-  return /^\+1671\d{7}$/.test(phoneStr);
+/**
+ * Allows a plus sign, then 3 or 4 digits for “area code,” then exactly 7 more digits.
+ * e.g. +16711234567 or +17025551234 or +9251234567
+ */
+function isValidPhone(phoneStr: string) {
+  return /^\+\d{3,4}\d{7}$/.test(phoneStr);
 }
 
 export function CheckoutPage() {
@@ -38,7 +41,7 @@ export function CheckoutPage() {
   const initialFormData: CheckoutFormData = {
     name: user ? `${user.first_name} ${user.last_name}` : '',
     email: user?.email || '',
-    phone: user?.phone || '', // If user has a phone, use it; else blank => we set +1671 below
+    phone: user?.phone || '', // if user has phone => use it, else blank => +1671 later
     cardNumber: '',
     expiryDate: '',
     cvv: '',
@@ -50,14 +53,14 @@ export function CheckoutPage() {
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
 
-  // On mount, if phone blank => set +1671
+  // If phone is blank => prefill +1671
   useEffect(() => {
     if (formData.phone.trim() === '') {
       setFormData((prev) => ({ ...prev, phone: '+1671' }));
     }
   }, []);
 
-  // If user changes (e.g. logs in), update form data
+  // If user changes (logs in/out), update name/email/phone
   useEffect(() => {
     if (user) {
       setFormData((prev) => ({
@@ -102,9 +105,10 @@ export function CheckoutPage() {
     );
 
     const finalPhone = formData.phone.trim();
-    // Must match +1671 plus 7 digits
-    if (!isValidGuamPhone(finalPhone)) {
-      toast.error('Phone number must be +1671 followed by 7 digits');
+    if (!isValidPhone(finalPhone)) {
+      toast.error(
+        'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
+      );
       return;
     }
 

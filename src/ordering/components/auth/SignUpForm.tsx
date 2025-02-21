@@ -5,9 +5,15 @@ import { Mail, Lock, User, Phone } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 
-/** Checks if phone is +1671 followed by exactly 7 digits. */
-function isValidGuamPhone(phoneStr: string) {
-  return /^\+1671\d{7}$/.test(phoneStr);
+/**
+ * Allows a plus sign, then 3 or 4 digits for “country+area code,” then exactly 7 digits.
+ * Examples:
+ *   +16711234567  => 4 digits for area code (1671), then 7 digits
+ *   +17025551234  => 4 digits (1702) + 7 digits
+ *   +9251234567   => 3 digits (925) + 7 digits => total 10 digits after the plus
+ */
+function isValidPhone(phoneStr: string) {
+  return /^\+\d{3,4}\d{7}$/.test(phoneStr);
 }
 
 export function SignUpForm() {
@@ -16,7 +22,9 @@ export function SignUpForm() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    phone: '+1671', // Default to +1671 so user sees that placeholder
+    // Default to +1671 so they see the Guam code,
+    // but they can edit to e.g. +1702 or +925 + ...
+    phone: '+1671',
     email: '',
     password: '',
     confirmPassword: '',
@@ -25,7 +33,7 @@ export function SignUpForm() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If "error" changes, we could show it below or handle it.
+    // If "error" changes, we could display or handle it
   }, [error]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -41,9 +49,10 @@ export function SignUpForm() {
     }
 
     const finalPhone = formData.phone.trim();
-    // Ensure phone is +1671 followed by 7 digits
-    if (!isValidGuamPhone(finalPhone)) {
-      toast.error('Phone number must be +1671 followed by 7 digits');
+    if (!isValidPhone(finalPhone)) {
+      toast.error(
+        'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
+      );
       return;
     }
 

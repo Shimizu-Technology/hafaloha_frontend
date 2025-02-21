@@ -22,7 +22,7 @@ interface ReservationData {
   duration: string;
   firstName: string;
   lastName: string;
-  phone: string;  // We'll pre-fill +1671
+  phone: string; // We'll prefill +1671 if blank
   email: string;
 }
 
@@ -30,9 +30,12 @@ interface ConfirmationData extends ReservationData {
   confirmed: boolean;
 }
 
-/** Checks if phone is +1671 followed by exactly 7 digits. */
-function isValidGuamPhone(phoneStr: string) {
-  return /^\+1671\d{7}$/.test(phoneStr);
+/**
+ * 3-4 digit “area code” + 7 local digits => total 10-11 digits after the plus.
+ * e.g. +16711234567, +9251234567, etc.
+ */
+function isValidPhone(phoneStr: string) {
+  return /^\+\d{3,4}\d{7}$/.test(phoneStr);
 }
 
 export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
@@ -43,20 +46,20 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps) {
     duration: '1 hour',
     firstName: '',
     lastName: '',
-    phone: '', // We'll default to +1671 on open if blank
+    phone: '',
     email: '',
   });
   const [confirmation, setConfirmation] = useState<ConfirmationData | null>(null);
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
 
-  // On open, if phone is blank => set +1671
+  // On open, if phone is blank => set +1671 as the default
   useEffect(() => {
     if (isOpen && formData.phone.trim() === '') {
       setFormData((prev) => ({ ...prev, phone: '+1671' }));
     }
   }, [isOpen]);
 
-  // Fetch available time slots if date/partySize changes
+  // Whenever date or party size changes => fetch new time slots
   useEffect(() => {
     if (!formData.date || !formData.partySize) {
       setTimeSlots([]);
@@ -102,9 +105,8 @@ Party Size: ${confirmation.partySize} people`;
     }
 
     const finalPhone = formData.phone.trim();
-    // Must match +1671 plus 7 digits
-    if (!isValidGuamPhone(finalPhone)) {
-      alert('Phone number must be +1671 followed by 7 digits');
+    if (!isValidPhone(finalPhone)) {
+      alert('Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567');
       return;
     }
 
@@ -124,7 +126,7 @@ Party Size: ${confirmation.partySize} people`;
         },
       });
 
-      // Show confirmation screen
+      // If successful => Show confirmation
       setConfirmation({
         ...formData,
         phone: finalPhone,
@@ -136,9 +138,9 @@ Party Size: ${confirmation.partySize} people`;
     }
   }
 
-  // ---------------------------------------------------------------------
-  // CONFIRMATION SCREEN after successful booking
-  // ---------------------------------------------------------------------
+  // ------------------------------------------------------
+  // CONFIRMATION SCREEN
+  // ------------------------------------------------------
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
@@ -225,9 +227,9 @@ Party Size: ${confirmation.partySize} people`;
     );
   }
 
-  // ---------------------------------------------------------------------
-  // MAIN FORM (shown before confirmation)
-  // ---------------------------------------------------------------------
+  // ------------------------------------------------------
+  // MAIN FORM
+  // ------------------------------------------------------
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
       <div className="relative bg-white rounded-lg w-full max-w-2xl">
@@ -395,10 +397,10 @@ Party Size: ${confirmation.partySize} people`;
   );
 }
 
-/** Utility to format time slots like "12:00" => "12:00 PM". */
+/** Formats "12:00" => "12:00 PM" for displayed slots. */
 function formatTime(t: string) {
   const [hh, mm] = t.split(':').map(Number);
-  if (isNaN(hh)) return t; // fallback
+  if (isNaN(hh)) return t;
   const date = new Date(2020, 0, 1, hh, mm);
   return date.toLocaleString('en-US', {
     hour: 'numeric',
