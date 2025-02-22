@@ -1,4 +1,5 @@
 // src/ordering/OnlineOrderingApp.tsx
+
 import React, { useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 
@@ -22,6 +23,7 @@ import { useAuthStore } from './store/authStore';
 import { useMenuStore } from './store/menuStore';
 import { useLoadingStore } from './store/loadingStore';
 import { MenuItem as MenuItemCard } from './components/MenuItem';
+import { useSiteSettingsStore } from './store/siteSettingsStore'; // <-- IMPORTANT
 
 function ProtectedRoute({
   children,
@@ -43,6 +45,7 @@ function OrderingLayout() {
 
   React.useEffect(() => {
     if (loadingCount > 0) {
+      // Start a short timer so spinner doesn’t show if loading is very quick
       if (!timerId) {
         const id = setTimeout(() => {
           setShowSpinner(true);
@@ -51,6 +54,7 @@ function OrderingLayout() {
         setTimerId(id);
       }
     } else {
+      // No more loading → clear timer and hide spinner
       if (timerId) {
         clearTimeout(timerId);
         setTimerId(null);
@@ -88,10 +92,12 @@ function OrderingLayout() {
 
 export default function OnlineOrderingApp() {
   const { menuItems, fetchMenuItems } = useMenuStore();
+  const { fetchSiteSettings } = useSiteSettingsStore(); // <-- destructure the store method
 
   useEffect(() => {
-    fetchMenuItems();
-  }, [fetchMenuItems]);
+    fetchMenuItems();        // load menu items
+    fetchSiteSettings();     // load hero/spinner image URLs
+  }, [fetchMenuItems, fetchSiteSettings]);
 
   // Filter for featured items
   const featuredItems = menuItems.filter((item) => item.featured);

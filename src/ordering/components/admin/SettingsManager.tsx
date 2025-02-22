@@ -1,9 +1,8 @@
 // src/ordering/components/admin/SettingsManager.tsx
 import React, { useState } from 'react';
-import { CategoriesSettings } from './settings/CategoriesSettings'; 
-// or inline the code if you prefer
-// import { OperatingHoursSettings } from './settings/OperatingHoursSettings';
-// import { GeneralSettings } from './settings/GeneralSettings';
+import { CategoriesSettings } from './settings/CategoriesSettings';
+// ADD THIS import:
+import { GeneralSettings } from './settings/GeneralSettings';
 
 type SettingsTab = 'general' | 'categories';
 
@@ -13,14 +12,12 @@ export function SettingsManager() {
   const tabs = [
     { id: 'general', label: 'General' },
     { id: 'categories', label: 'Categories' },
-    // e.g. { id:'hours', label:'Operating Hours' }
   ];
 
   return (
     <div className="p-4">
       <h2 className="text-xl font-semibold mb-4">Admin Settings</h2>
 
-      {/* Sub-tabs for different sections of settings */}
       <div className="mb-4 border-b border-gray-200 flex space-x-2">
         {tabs.map(({ id, label }) => (
           <button
@@ -37,14 +34,11 @@ export function SettingsManager() {
         ))}
       </div>
 
-      {/* Render the active sub-tab */}
+      {/* RENDER THE GENERAL SETTINGS COMPONENT */}
       {activeSettingsTab === 'general' && (
         <div>
           <h3 className="text-lg font-semibold mb-2">General Settings</h3>
-          <p className="text-sm text-gray-600">
-            (Restaurant name, address, etc. here, or anything else considered “general.”)
-          </p>
-          {/* <GeneralSettings /> */}
+          <GeneralSettings />
         </div>
       )}
 

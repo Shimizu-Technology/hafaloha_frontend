@@ -2,17 +2,25 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ReservationModal } from './reservation/ReservationModal';
-import heroImage from '../assets/hafaloha_hero.jpg';
+
+import { useSiteSettingsStore } from '../store/siteSettingsStore';
+import fallbackHero from '../assets/hafaloha_hero.jpg';
 
 export function Hero() {
   const [showReservationModal, setShowReservationModal] = useState(false);
+
+  // Pull the dynamic heroImageUrl from the store
+  const heroImageUrl = useSiteSettingsStore((state) => state.heroImageUrl);
+
+  // If the dynamic URL is null/empty, use the fallback image
+  const backgroundImage = heroImageUrl || fallbackHero;
 
   return (
     <div className="relative bg-gray-900">
       <div className="absolute inset-0">
         <img
           className="w-full h-full object-cover"
-          src={heroImage}
+          src={backgroundImage}
           alt="Hawaiian beach backdrop"
         />
         <div className="absolute inset-0 bg-gray-900 opacity-75" />
@@ -24,7 +32,8 @@ export function Hero() {
           Experience the Flavors of Two Islands
         </h1>
         <p className="mt-6 text-lg sm:text-xl text-gray-300 max-w-3xl">
-          Where Chamorro and Hawaiian cuisines come together to create an unforgettable dining experience
+          Where Chamorro and Hawaiian cuisines come together to create 
+          an unforgettable dining experience
         </p>
 
         {/* Buttons */}
