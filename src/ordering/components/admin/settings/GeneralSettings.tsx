@@ -76,8 +76,7 @@ export function GeneralSettings() {
           {/* Optional intro text */}
           <p className="text-sm text-gray-600">
             Update the images displayed on your homepage’s hero section and
-            the loading spinner. Using “object-contain” ensures the entire 
-            image is shown without cropping.
+            the loading spinner.
           </p>
 
           {/* Grid for Hero & Spinner cards */}
