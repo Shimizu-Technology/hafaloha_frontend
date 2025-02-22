@@ -1,10 +1,11 @@
 // src/ordering/components/admin/SettingsManager.tsx
+
 import React, { useState } from 'react';
 import { CategoriesSettings } from './settings/CategoriesSettings';
-// ADD THIS import:
 import { GeneralSettings } from './settings/GeneralSettings';
+import { UsersSettings } from './settings/UsersSettings';
 
-type SettingsTab = 'general' | 'categories';
+type SettingsTab = 'general' | 'categories' | 'users';
 
 export function SettingsManager() {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
@@ -12,6 +13,7 @@ export function SettingsManager() {
   const tabs = [
     { id: 'general', label: 'General' },
     { id: 'categories', label: 'Categories' },
+    { id: 'users', label: 'Users' },
   ];
 
   return (
@@ -34,7 +36,6 @@ export function SettingsManager() {
         ))}
       </div>
 
-      {/* RENDER THE GENERAL SETTINGS COMPONENT */}
       {activeSettingsTab === 'general' && (
         <div>
           <h3 className="text-lg font-semibold mb-2">General Settings</h3>
@@ -46,6 +47,13 @@ export function SettingsManager() {
         <div>
           <h3 className="text-lg font-semibold mb-2">Categories</h3>
           <CategoriesSettings />
+        </div>
+      )}
+
+      {activeSettingsTab === 'users' && (
+        <div>
+          <h3 className="text-lg font-semibold mb-2">User Management</h3>
+          <UsersSettings />
         </div>
       )}
     </div>

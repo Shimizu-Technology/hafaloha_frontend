@@ -92,6 +92,7 @@ export const api = {
       if (!res.ok) {
         throw new Error(await res.text());
       }
+      // Return something truthy or parsed if you want
       return true;
     } finally {
       useLoadingStore.getState().stopLoading();
@@ -168,9 +169,7 @@ export const api = {
   },
 };
 
-/**
- * Convenience method for the special menu_items/:id/upload_image endpoint
- */
+// If you have a special helper for menu item images:
 export async function uploadMenuItemImage(itemId: string, file: File) {
   const formData = new FormData();
   formData.append('image', file);
