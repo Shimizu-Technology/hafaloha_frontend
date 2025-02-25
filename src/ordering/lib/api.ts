@@ -1,6 +1,8 @@
 // src/ordering/lib/api.ts
+
 import { useLoadingStore } from '../store/loadingStore';
 
+// Dynamically pick base URL from environment variable or default:
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const api = {
@@ -24,6 +26,7 @@ export const api = {
 
   /**
    * Special GET that does NOT show the global spinner overlay.
+   * Useful for background refreshes or silent queries
    */
   async getBackground(endpoint: string) {
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -37,6 +40,7 @@ export const api = {
     return res.json();
   },
 
+  // POST JSON
   async post(endpoint: string, data: any) {
     useLoadingStore.getState().startLoading();
     try {
@@ -91,16 +95,15 @@ export const api = {
       if (!res.ok) {
         throw new Error(await res.text());
       }
-      // Return something truthy or parsed if you want
-      return true;
+      return true; // or return res.json() if the backend returns something
     } finally {
       useLoadingStore.getState().stopLoading();
     }
   },
 
   /**
-   * For multipart form-data requests (file uploads).
-   * We do NOT set 'Content-Type'; the browser auto-adds the boundary.
+   * For file uploads via multipart/form-data.
+   * We do NOT set 'Content-Type'; browser auto-adds boundaries.
    */
   async upload(endpoint: string, method: 'POST' | 'PATCH', formData: FormData) {
     useLoadingStore.getState().startLoading();
@@ -161,14 +164,17 @@ export const api = {
       if (!res.ok) {
         throw new Error(await res.text());
       }
-      return res.json(); // { message: "...", ... }
+      return res.json();
     } finally {
       useLoadingStore.getState().stopLoading();
     }
   },
 
+  // -------------------------------------------
+  //  Analytics Endpoints
+  // -------------------------------------------
+
   /**
-   * NEW: For retrieving the monthly/custom “customer orders” report
    * GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD
    */
   async getCustomerOrdersReport(start?: string, end?: string) {
@@ -178,23 +184,97 @@ export const api = {
       if (start) params.set('start', start);
       if (end)   params.set('end', end);
 
-      const url = `${API_BASE_URL}/admin/analytics/customer_orders?${params.toString()}`;
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/admin/analytics/customer_orders?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
       if (!res.ok) {
         throw new Error(await res.text());
       }
-      return res.json();
+      return res.json(); // e.g. { start_date, end_date, results: [...] }
+    } finally {
+      useLoadingStore.getState().stopLoading();
+    }
+  },
+
+  /**
+   * GET /admin/analytics/revenue_trend?interval=day|week|month&start=...&end=...
+   */
+  async getRevenueTrend(interval = 'day', start?: string, end?: string) {
+    useLoadingStore.getState().startLoading();
+    try {
+      const params = new URLSearchParams({ interval });
+      if (start) params.set('start', start);
+      if (end)   params.set('end', end);
+
+      const res = await fetch(
+        `${API_BASE_URL}/admin/analytics/revenue_trend?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json(); // { data: [ { label, revenue }, ... ], etc. }
+    } finally {
+      useLoadingStore.getState().stopLoading();
+    }
+  },
+
+  /**
+   * GET /admin/analytics/top_items?limit=5&start=...&end=...
+   */
+  async getTopItems(limit = 5, start?: string, end?: string) {
+    useLoadingStore.getState().startLoading();
+    try {
+      const params = new URLSearchParams({ limit: limit.toString() });
+      if (start) params.set('start', start);
+      if (end)   params.set('end', end);
+
+      const res = await fetch(
+        `${API_BASE_URL}/admin/analytics/top_items?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json(); // { top_items: [...] }
+    } finally {
+      useLoadingStore.getState().stopLoading();
+    }
+  },
+
+  /**
+   * GET /admin/analytics/income_statement?year=YYYY
+   */
+  async getIncomeStatement(year?: number) {
+    useLoadingStore.getState().startLoading();
+    try {
+      const y = year || new Date().getFullYear();
+      const res = await fetch(
+        `${API_BASE_URL}/admin/analytics/income_statement?year=${y}`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json(); // { income_statement: [...] }
     } finally {
       useLoadingStore.getState().stopLoading();
     }
   },
 };
 
-// If you have a special helper for menu item images:
+/**
+ * If you have a special helper for menu item images:
+ */
 export async function uploadMenuItemImage(itemId: string, file: File) {
   const formData = new FormData();
   formData.append('image', file);

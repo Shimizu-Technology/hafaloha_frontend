@@ -1,26 +1,17 @@
 // src/ordering/components/admin/AnalyticsManager.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  BarChart, Bar, ResponsiveContainer
+  ResponsiveContainer
 } from 'recharts';
-import { DollarSign, TrendingUp, Clock, ShoppingBag, Calendar } from 'lucide-react';
-import { useOrderStore } from '../../store/orderStore';
+import * as XLSX from 'xlsx';
 import { api } from '../../lib/api';
-import * as XLSX from 'xlsx';  // for Excel export
 
-type TimeFrame = '7days' | '30days' | '90days' | '1year' | 'custom';
-
-interface DateRange {
-  start: Date;
-  end: Date;
-}
-
+// ------------------- Types -------------------
 interface CustomerOrderItem {
   name: string;
   quantity: number;
 }
-
 interface CustomerOrderReport {
   user_id: number | null;
   user_name: string;
@@ -32,315 +23,380 @@ interface CustomerOrderReport {
 type SortColumn = 'user_name' | 'total_spent' | 'order_count';
 type SortDirection = 'asc' | 'desc';
 
+interface RevenueTrendItem {
+  label: string;
+  revenue: number;
+}
+interface TopItem {
+  item_name: string;
+  quantity_sold: number;
+  revenue: number;
+}
+interface IncomeStatementRow {
+  month: string; // e.g. "January"
+  revenue: number;
+}
+
+// For date-range presets
+type PresetRange = '1m' | '3m' | '6m' | '1y' | 'all' | null;
+
+// ------------------- Helper to sort reports -------------------
+function sortReports(
+  data: CustomerOrderReport[],
+  column: SortColumn,
+  direction: SortDirection
+) {
+  const copy = [...data];
+  copy.sort((a, b) => {
+    let valA: string | number = '';
+    let valB: string | number = '';
+
+    if (column === 'user_name') {
+      valA = a.user_name.toLowerCase();
+      valB = b.user_name.toLowerCase();
+    } else if (column === 'total_spent') {
+      valA = a.total_spent;
+      valB = b.total_spent;
+    } else if (column === 'order_count') {
+      valA = a.order_count;
+      valB = b.order_count;
+    }
+
+    if (valA < valB) return direction === 'asc' ? -1 : 1;
+    if (valA > valB) return direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+  return copy;
+}
+
+// ------------------- Main Component -------------------
 export function AnalyticsManager() {
-  const { orders } = useOrderStore();
+  // ----- 1) Date Range States + Preset -----
+  // Default to last 30 days
+  const defaultStart = new Date();
+  defaultStart.setDate(defaultStart.getDate() - 30);
 
-  // Timeframe + date range
-  const [timeframe, setTimeframe] = useState<TimeFrame>('7days');
-  const [customRange, setCustomRange] = useState<DateRange>({
-    start: new Date(),
-    end: new Date(),
-  });
-  const [showCustomRange, setShowCustomRange] = useState(false);
+  const [startDate, setStartDate] = useState(defaultStart.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedPreset, setSelectedPreset] = useState<PresetRange>(null);
 
-  const [reportStart, setReportStart] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().split('T')[0];
-  });
-  const [reportEnd, setReportEnd] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 1);
-    d.setDate(0);
-    return d.toISOString().split('T')[0];
-  });
-
-  const [customerOrdersReport, setCustomerOrdersReport] = useState<CustomerOrderReport[]>([]);
-
-  // Sorting states for Guest table
-  const [guestSortColumn, setGuestSortColumn] = useState<SortColumn>('user_name');
-  const [guestSortDirection, setGuestSortDirection] = useState<SortDirection>('asc');
-
-  // Sorting states for Registered table
-  const [registeredSortColumn, setRegisteredSortColumn] = useState<SortColumn>('user_name');
-  const [registeredSortDirection, setRegisteredSortDirection] = useState<SortDirection>('asc');
-
-  function handleTimeframeChange(tf: TimeFrame) {
-    setTimeframe(tf);
-    setShowCustomRange(tf === 'custom');
+  // Manually changing date => reset preset
+  function handleChangeStartDate(value: string) {
+    setStartDate(value);
+    setSelectedPreset(null);
+  }
+  function handleChangeEndDate(value: string) {
+    setEndDate(value);
+    setSelectedPreset(null);
   }
 
-  function handleCustomRangeChange(type: 'start' | 'end', value: string) {
-    setCustomRange((prev) => ({
-      ...prev,
-      [type]: new Date(value),
-    }));
-  }
+  // Preset date range logic
+  function setPresetRange(preset: Exclude<PresetRange, null>) {
+    const now = new Date();
+    let start = new Date();
 
-  async function fetchCustomerOrdersReport() {
-    try {
-      const data = await api.getCustomerOrdersReport(reportStart, reportEnd);
-      setCustomerOrdersReport(data.results);
-    } catch (error) {
-      console.error(error);
+    switch (preset) {
+      case '1m':
+        start.setMonth(now.getMonth() - 1);
+        break;
+      case '3m':
+        start.setMonth(now.getMonth() - 3);
+        break;
+      case '6m':
+        start.setMonth(now.getMonth() - 6);
+        break;
+      case '1y':
+        start.setFullYear(now.getFullYear() - 1);
+        break;
+      case 'all':
+        start = new Date('1970-01-01');
+        break;
     }
+    setStartDate(start.toISOString().split('T')[0]);
+    setEndDate(now.toISOString().split('T')[0]);
+    setSelectedPreset(preset);
   }
 
-  // Guest sorting
-  function handleGuestSort(column: SortColumn) {
-    if (guestSortColumn === column) {
-      setGuestSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setGuestSortColumn(column);
-      setGuestSortDirection('asc');
-    }
-  }
+  // ----- 2) Analytics States -----
+  const [ordersData, setOrdersData] = useState<CustomerOrderReport[]>([]);
+  const [guestSortCol, setGuestSortCol] = useState<SortColumn>('user_name');
+  const [guestSortDir, setGuestSortDir] = useState<SortDirection>('asc');
+  const [regSortCol, setRegSortCol] = useState<SortColumn>('user_name');
+  const [regSortDir, setRegSortDir] = useState<SortDirection>('asc');
 
-  // Registered sorting
-  function handleRegisteredSort(column: SortColumn) {
-    if (registeredSortColumn === column) {
-      setRegisteredSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setRegisteredSortColumn(column);
-      setRegisteredSortDirection('asc');
-    }
-  }
+  const [revenueTrend, setRevenueTrend] = useState<RevenueTrendItem[]>([]);
+  const [topItems, setTopItems] = useState<TopItem[]>([]);
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [incomeStatement, setIncomeStatement] = useState<IncomeStatementRow[]>([]);
 
-  // Generic “sort array” function
-  function sortData(
-    data: CustomerOrderReport[],
-    sortCol: SortColumn,
-    sortDir: SortDirection
-  ): CustomerOrderReport[] {
-    const sorted = [...data];
-    sorted.sort((a, b) => {
-      let valA: string | number = '';
-      let valB: string | number = '';
-
-      if (sortCol === 'user_name') {
-        valA = a.user_name.toLowerCase();
-        valB = b.user_name.toLowerCase();
-      } else if (sortCol === 'total_spent') {
-        valA = a.total_spent;
-        valB = b.total_spent;
-      } else if (sortCol === 'order_count') {
-        valA = a.order_count;
-        valB = b.order_count;
-      }
-
-      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return sorted;
-  }
-
-  // Split into Guest vs. Registered and sort each set separately
+  // ----- 3) Derived: Guest vs Registered -----
   const guestRows = useMemo(() => {
-    const guestData = customerOrdersReport.filter((r) => r.user_id === null);
-    return sortData(guestData, guestSortColumn, guestSortDirection);
-  }, [customerOrdersReport, guestSortColumn, guestSortDirection]);
+    const guests = ordersData.filter((r) => r.user_id === null);
+    return sortReports(guests, guestSortCol, guestSortDir);
+  }, [ordersData, guestSortCol, guestSortDir]);
 
   const registeredRows = useMemo(() => {
-    const regData = customerOrdersReport.filter((r) => r.user_id !== null);
-    return sortData(regData, registeredSortColumn, registeredSortDirection);
-  }, [customerOrdersReport, registeredSortColumn, registeredSortDirection]);
+    const regs = ordersData.filter((r) => r.user_id !== null);
+    return sortReports(regs, regSortCol, regSortDir);
+  }, [ordersData, regSortCol, regSortDir]);
 
-  /**
-   * 
-   * Excel Export:
-   *   -> 2 sheets: "Summary" and "Details"
-   *   -> In each sheet, we put two sections:
-   *      1) GUEST table
-   *      2) blank row
-   *      3) REGISTERED table
-   *
-   * That way each sheet has consistent columns, and we avoid mixing columns in one table.
-   */
-  function exportReportToExcel() {
-    if (customerOrdersReport.length === 0) {
-      alert('No report data to export!');
+  // ----- 4) Load Analytics -----
+  async function loadAnalytics() {
+    try {
+      // 1) Customer Orders
+      const custRes = await api.getCustomerOrdersReport(startDate, endDate);
+      setOrdersData(custRes.results);
+
+      // 2) Revenue Trend (day-based)
+      const revTrend = await api.getRevenueTrend('day', startDate, endDate);
+      setRevenueTrend(revTrend.data);
+
+      // 3) Top Items => limit=5
+      const topRes = await api.getTopItems(5, startDate, endDate);
+      setTopItems(topRes.top_items);
+
+      // 4) Income Statement => by year
+      const incRes = await api.getIncomeStatement(year);
+      setIncomeStatement(incRes.income_statement);
+
+    } catch (err) {
+      console.error(err);
+      alert('Failed to load analytics. Check console for details.');
+    }
+  }
+
+  // ----- 5) On Mount: Load default data -----
+  React.useEffect(() => {
+    // On first mount, fetch with the default date range
+    loadAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ----- 6) Export to Excel (Customer Orders) -----
+  function exportOrdersToExcel() {
+    if (ordersData.length === 0) {
+      alert('No data to export');
       return;
     }
 
-    // GUEST Summary
-    const guestSummaryRows = guestRows.map((row) => {
-      const totalItemCount = row.items.reduce((sum, i) => sum + i.quantity, 0);
-      return {
-        Customer: row.user_name,
-        'Total Spent': row.total_spent,
-        'Order Count': row.order_count,
-        'Total Items': totalItemCount,
-      };
-    });
+    // Summaries
+    const guestSummary = guestRows.map((r) => ({
+      Customer: r.user_name,
+      'Total Spent': r.total_spent,
+      'Order Count': r.order_count,
+      'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
+    }));
+    const regSummary = registeredRows.map((r) => ({
+      Customer: r.user_name,
+      'Total Spent': r.total_spent,
+      'Order Count': r.order_count,
+      'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
+    }));
 
-    // REGISTERED Summary
-    const registeredSummaryRows = registeredRows.map((row) => {
-      const totalItemCount = row.items.reduce((sum, i) => sum + i.quantity, 0);
-      return {
-        Customer: row.user_name,
-        'Total Spent': row.total_spent,
-        'Order Count': row.order_count,
-        'Total Items': totalItemCount,
-      };
-    });
-
-    // GUEST Details
-    const guestDetailRows: Array<Record<string, any>> = [];
+    // Details
+    const guestDetails: Array<Record<string, any>> = [];
     guestRows.forEach((r) => {
-      r.items.forEach((item) => {
-        guestDetailRows.push({
+      r.items.forEach((itm) => {
+        guestDetails.push({
           Customer: r.user_name,
-          'Item Name': item.name,
-          Quantity: item.quantity,
+          'Item Name': itm.name,
+          Quantity: itm.quantity,
         });
       });
     });
-
-    // REGISTERED Details
-    const registeredDetailRows: Array<Record<string, any>> = [];
+    const regDetails: Array<Record<string, any>> = [];
     registeredRows.forEach((r) => {
-      r.items.forEach((item) => {
-        registeredDetailRows.push({
+      r.items.forEach((itm) => {
+        regDetails.push({
           Customer: r.user_name,
-          'Item Name': item.name,
-          Quantity: item.quantity,
+          'Item Name': itm.name,
+          Quantity: itm.quantity,
         });
       });
     });
 
-    // Create workbook
-    const workbook = XLSX.utils.book_new();
-
-    // 1) SUMMARY sheet
+    // Construct workbook
+    const wb = XLSX.utils.book_new();
+    // Summary sheet
     {
-      // We place Guest summary first, then a blank row, then Registered summary.
-      const summaryData: Array<Record<string, any>> = [];
-      // Add all guest summary
-      summaryData.push(...guestSummaryRows);
-      // Add a blank row
-      summaryData.push({});
-      // Then registered summary
-      summaryData.push(...registeredSummaryRows);
+      const data: any[] = [];
+      data.push(...guestSummary);
+      data.push({});
+      data.push(...regSummary);
 
-      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+      const sheet = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, sheet, 'Summary');
+    }
+    // Details sheet
+    {
+      const data2: any[] = [];
+      data2.push(...guestDetails);
+      data2.push({});
+      data2.push(...regDetails);
+
+      const sheet2 = XLSX.utils.json_to_sheet(data2);
+      XLSX.utils.book_append_sheet(wb, sheet2, 'Details');
     }
 
-    // 2) DETAILS sheet
-    {
-      // Same pattern: guest detail, blank row, registered detail
-      const detailsData: Array<Record<string, any>> = [];
-      detailsData.push(...guestDetailRows);
-      detailsData.push({});
-      detailsData.push(...registeredDetailRows);
-
-      const detailsSheet = XLSX.utils.json_to_sheet(detailsData);
-      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'Details');
-    }
-
-    const fileName = `CustomerOrders_${reportStart}_to_${reportEnd}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+    XLSX.writeFile(wb, `CustomerOrders_${startDate}_to_${endDate}.xlsx`);
   }
 
+  // ----- 7) Render -----
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 px-3 md:px-6 lg:px-8 py-4">
       {/* 
-        ...
-        Possibly timeframe UI, summary cards, etc.
+        ============================================
+        (A) Date Range + Preset Buttons + Load 
+        ============================================
       */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-lg font-semibold mb-3">Analytics Date Range</h3>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-xl font-semibold mb-4 text-gray-800">Monthly Customer Orders Report</h3>
-        
         <div className="flex flex-wrap items-end gap-4 mb-4">
+          {/* Start Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Start Date
+            </label>
             <input
               type="date"
-              value={reportStart}
-              onChange={(e) => setReportStart(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-1 w-44"
+              value={startDate}
+              onChange={(e) => handleChangeStartDate(e.target.value)}
+              className="border rounded px-3 py-1 w-44"
             />
           </div>
 
+          {/* End Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              End Date
+            </label>
             <input
               type="date"
-              value={reportEnd}
-              onChange={(e) => setReportEnd(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-1 w-44"
+              value={endDate}
+              onChange={(e) => handleChangeEndDate(e.target.value)}
+              className="border rounded px-3 py-1 w-44"
             />
           </div>
-
-          <button
-            onClick={fetchCustomerOrdersReport}
-            className="px-4 py-2 bg-[#c1902f] text-white font-medium rounded hover:bg-[#b2872c]"
-          >
-            Load Report
-          </button>
-
-          {customerOrdersReport.length > 0 && (
-            <button
-              onClick={exportReportToExcel}
-              className="px-4 py-2 bg-green-600 text-white font-medium rounded hover:bg-green-700"
-            >
-              Export to Excel
-            </button>
-          )}
         </div>
 
-        {/* ============== GUEST ORDERS TABLE ============== */}
+        {/* Preset Range Buttons */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {( ['1m','3m','6m','1y','all'] as const ).map((preset) => {
+            const isSelected = selectedPreset === preset;
+            return (
+              <button
+                key={preset}
+                onClick={() => setPresetRange(preset)}
+                className={
+                  isSelected
+                    ? 'px-3 py-1 bg-blue-500 text-white rounded'
+                    : 'px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200'
+                }
+              >
+                {preset === '1m' && 'Last 1 Month'}
+                {preset === '3m' && 'Last 3 Months'}
+                {preset === '6m' && 'Last 6 Months'}
+                {preset === '1y' && 'Last 1 Year'}
+                {preset === 'all' && 'All Time'}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* "Load Analytics" button */}
+        <button
+          onClick={loadAnalytics}
+          className="px-4 py-2 bg-[#c1902f] text-white rounded hover:bg-[#b2872c]"
+        >
+          Load Analytics
+        </button>
+      </div>
+
+      {/* 
+        ============================================
+        (B) Customer Orders (with Export to Excel)
+        ============================================
+      */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-xl font-bold mb-4">Customer Orders</h3>
+
+        {/* Export button if data is present */}
+        {ordersData.length > 0 && (
+          <button
+            onClick={exportOrdersToExcel}
+            className="mb-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Export to Excel
+          </button>
+        )}
+
+        {/* Guest Orders */}
         {guestRows.length > 0 && (
-          <>
-            <h4 className="text-lg font-semibold mb-2 text-gray-700">Guest Orders</h4>
-            <div className="overflow-x-auto mb-6">
-              <table className="table-fixed w-full border border-gray-200 text-sm">
-                <colgroup>
-                  <col className="w-1/5" />
-                  <col className="w-1/5" />
-                  <col className="w-1/5" />
-                  <col className="w-2/5" />
-                </colgroup>
+          <div className="mb-6">
+            <h4 className="font-semibold text-lg mb-2">Guest Orders</h4>
+            <div className="overflow-x-auto">
+              <table className="table-auto w-full text-sm border border-gray-200">
                 <thead className="bg-gray-100 border-b border-gray-200">
                   <tr>
                     <th
-                      onClick={() => handleGuestSort('user_name')}
-                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                      className="px-4 py-2 text-left font-semibold cursor-pointer"
+                      onClick={() => {
+                        if (guestSortCol === 'user_name') {
+                          setGuestSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setGuestSortCol('user_name');
+                          setGuestSortDir('asc');
+                        }
+                      }}
                     >
                       Customer
                     </th>
                     <th
-                      onClick={() => handleGuestSort('total_spent')}
-                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                      className="px-4 py-2 text-left font-semibold cursor-pointer"
+                      onClick={() => {
+                        if (guestSortCol === 'total_spent') {
+                          setGuestSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setGuestSortCol('total_spent');
+                          setGuestSortDir('asc');
+                        }
+                      }}
                     >
                       Total Spent
                     </th>
                     <th
-                      onClick={() => handleGuestSort('order_count')}
-                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                      className="px-4 py-2 text-left font-semibold cursor-pointer"
+                      onClick={() => {
+                        if (guestSortCol === 'order_count') {
+                          setGuestSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setGuestSortCol('order_count');
+                          setGuestSortDir('asc');
+                        }
+                      }}
                     >
                       Orders
                     </th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                    <th className="px-4 py-2 text-left font-semibold">
                       Items
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {guestRows.map((r, idx) => (
-                    <tr key={`${r.user_name}-${idx}`} className="border-b last:border-b-0 hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-800">{r.user_name}</td>
-                      <td className="px-4 py-2 text-gray-800 font-medium">
-                        ${r.total_spent.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-2 text-gray-800">{r.order_count}</td>
-                      <td className="px-4 py-2 text-gray-800">
-                        {r.items.map((item, idx2) => (
-                          <div key={idx2}>
-                            {item.name}{' '}
-                            <span className="text-gray-600">x {item.quantity}</span>
+                  {guestRows.map((g, idx) => (
+                    <tr 
+                      key={idx} 
+                      className="border-b last:border-b-0 hover:bg-gray-50"
+                    >
+                      <td className="px-4 py-2">{g.user_name}</td>
+                      <td className="px-4 py-2">${g.total_spent.toFixed(2)}</td>
+                      <td className="px-4 py-2">{g.order_count}</td>
+                      <td className="px-4 py-2">
+                        {g.items.map((itm, i2) => (
+                          <div key={i2}>
+                            {itm.name}{' '}
+                            <span className="text-gray-600">x {itm.quantity}</span>
                           </div>
                         ))}
                       </td>
@@ -349,59 +405,75 @@ export function AnalyticsManager() {
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
 
-        {/* =========== REGISTERED USERS TABLE =========== */}
+        {/* Registered Users */}
         {registeredRows.length > 0 && (
-          <>
-            <h4 className="text-lg font-semibold mb-2 text-gray-700">Registered Users</h4>
+          <div>
+            <h4 className="font-semibold text-lg mb-2">Registered Users</h4>
             <div className="overflow-x-auto">
-              <table className="table-fixed w-full border border-gray-200 text-sm">
-                <colgroup>
-                  <col className="w-1/5" />
-                  <col className="w-1/5" />
-                  <col className="w-1/5" />
-                  <col className="w-2/5" />
-                </colgroup>
+              <table className="table-auto w-full text-sm border border-gray-200">
                 <thead className="bg-gray-100 border-b border-gray-200">
                   <tr>
                     <th
-                      onClick={() => handleRegisteredSort('user_name')}
-                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                      className="px-4 py-2 text-left font-semibold cursor-pointer"
+                      onClick={() => {
+                        if (regSortCol === 'user_name') {
+                          setRegSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setRegSortCol('user_name');
+                          setRegSortDir('asc');
+                        }
+                      }}
                     >
                       Customer
                     </th>
                     <th
-                      onClick={() => handleRegisteredSort('total_spent')}
-                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                      className="px-4 py-2 text-left font-semibold cursor-pointer"
+                      onClick={() => {
+                        if (regSortCol === 'total_spent') {
+                          setRegSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setRegSortCol('total_spent');
+                          setRegSortDir('asc');
+                        }
+                      }}
                     >
                       Total Spent
                     </th>
                     <th
-                      onClick={() => handleRegisteredSort('order_count')}
-                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                      className="px-4 py-2 text-left font-semibold cursor-pointer"
+                      onClick={() => {
+                        if (regSortCol === 'order_count') {
+                          setRegSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setRegSortCol('order_count');
+                          setRegSortDir('asc');
+                        }
+                      }}
                     >
                       Orders
                     </th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                    <th className="px-4 py-2 text-left font-semibold">
                       Items
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {registeredRows.map((r, idx) => (
-                    <tr key={`${r.user_id}-${idx}`} className="border-b last:border-b-0 hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-800">{r.user_name}</td>
-                      <td className="px-4 py-2 text-gray-800 font-medium">
-                        ${r.total_spent.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-2 text-gray-800">{r.order_count}</td>
-                      <td className="px-4 py-2 text-gray-800">
-                        {r.items.map((item, idx2) => (
-                          <div key={idx2}>
-                            {item.name}{' '}
-                            <span className="text-gray-600">x {item.quantity}</span>
+                    <tr
+                      key={idx}
+                      className="border-b last:border-b-0 hover:bg-gray-50"
+                    >
+                      <td className="px-4 py-2">{r.user_name}</td>
+                      <td className="px-4 py-2">${r.total_spent.toFixed(2)}</td>
+                      <td className="px-4 py-2">{r.order_count}</td>
+                      <td className="px-4 py-2">
+                        {r.items.map((itm, i2) => (
+                          <div key={i2}>
+                            {itm.name}{' '}
+                            <span className="text-gray-600">x {itm.quantity}</span>
                           </div>
                         ))}
                       </td>
@@ -410,11 +482,119 @@ export function AnalyticsManager() {
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
 
-        {customerOrdersReport.length === 0 && (
-          <p className="text-gray-500 text-sm">No results found.</p>
+        {/* If no orders at all */}
+        {!ordersData.length && (
+          <p className="text-gray-500 mt-2">
+            No orders found for this range.
+          </p>
+        )}
+      </div>
+
+      {/* 
+        ============================================
+        (C) Revenue Trend 
+        ============================================
+      */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-xl font-bold mb-4">Revenue Trend</h3>
+        {revenueTrend.length > 0 ? (
+          <div className="h-64 sm:h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={revenueTrend} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" fontSize={12} />
+                <YAxis fontSize={12} />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#8884d8"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                  name="Revenue"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="text-gray-500">No revenue data in this range.</p>
+        )}
+      </div>
+
+      {/* 
+        ============================================
+        (D) Top Items
+        ============================================
+      */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-xl font-bold mb-4">Top Items</h3>
+        {topItems.length > 0 ? (
+          <div className="flex flex-col space-y-2">
+            {topItems.map((t, i) => (
+              <div
+                key={i}
+                className="flex justify-between items-center bg-gray-50 rounded p-2"
+              >
+                <div className="text-gray-700 font-medium">
+                  {t.item_name}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {t.quantity_sold} sold, ${t.revenue.toFixed(2)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500">No item sales in this range.</p>
+        )}
+      </div>
+
+      {/* 
+        ============================================
+        (E) Income Statement => Year
+        ============================================
+      */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-xl font-bold mb-4">Income Statement (Yearly)</h3>
+        <div className="flex items-center gap-2 mb-4">
+          <label className="text-sm font-medium">Year:</label>
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="border rounded px-3 py-1 w-24"
+          />
+        </div>
+
+        {incomeStatement.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="table-auto w-full text-sm border border-gray-200">
+              <thead className="bg-gray-100 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-2 text-left font-semibold">Month</th>
+                  <th className="px-4 py-2 text-left font-semibold">Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incomeStatement.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-b last:border-b-0 hover:bg-gray-50"
+                  >
+                    <td className="px-4 py-2">{row.month}</td>
+                    <td className="px-4 py-2">${row.revenue.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-500">No data for year {year}.</p>
         )}
       </div>
     </div>
