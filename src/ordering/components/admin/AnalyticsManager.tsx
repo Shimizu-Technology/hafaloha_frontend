@@ -1,8 +1,13 @@
-// src/ordering/componenets/admin/AnalyticsManager.tsx
-import React, { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, ResponsiveContainer } from 'recharts';
+// src/ordering/components/admin/AnalyticsManager.tsx
+import React, { useState, useMemo } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart, Bar, ResponsiveContainer
+} from 'recharts';
 import { DollarSign, TrendingUp, Clock, ShoppingBag, Calendar } from 'lucide-react';
 import { useOrderStore } from '../../store/orderStore';
+import { api } from '../../lib/api';
+import * as XLSX from 'xlsx';  // for Excel export
 
 type TimeFrame = '7days' | '30days' | '90days' | '1year' | 'custom';
 
@@ -11,295 +16,406 @@ interface DateRange {
   end: Date;
 }
 
+interface CustomerOrderItem {
+  name: string;
+  quantity: number;
+}
+
+interface CustomerOrderReport {
+  user_id: number | null;
+  user_name: string;
+  total_spent: number;
+  order_count: number;
+  items: CustomerOrderItem[];
+}
+
+type SortColumn = 'user_name' | 'total_spent' | 'order_count';
+type SortDirection = 'asc' | 'desc';
+
 export function AnalyticsManager() {
   const { orders } = useOrderStore();
+
+  // Timeframe + date range
   const [timeframe, setTimeframe] = useState<TimeFrame>('7days');
   const [customRange, setCustomRange] = useState<DateRange>({
     start: new Date(),
-    end: new Date()
+    end: new Date(),
   });
   const [showCustomRange, setShowCustomRange] = useState(false);
 
-  // Get date range based on timeframe
-  const getDateRange = (tf: TimeFrame): DateRange => {
-    const end = new Date();
-    const start = new Date();
-
-    switch (tf) {
-      case '7days':
-        start.setDate(end.getDate() - 7);
-        break;
-      case '30days':
-        start.setDate(end.getDate() - 30);
-        break;
-      case '90days':
-        start.setDate(end.getDate() - 90);
-        break;
-      case '1year':
-        start.setFullYear(end.getFullYear() - 1);
-        break;
-      case 'custom':
-        return customRange;
-    }
-
-    return { start, end };
-  };
-
-  const dateRange = getDateRange(timeframe);
-
-  // Filter orders within date range
-  const filteredOrders = orders.filter(order => {
-    const orderDate = new Date(order.createdAt);
-    return orderDate >= dateRange.start && orderDate <= dateRange.end;
+  const [reportStart, setReportStart] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [reportEnd, setReportEnd] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    d.setDate(0);
+    return d.toISOString().split('T')[0];
   });
 
-  // Calculate daily sales for the selected timeframe
-  const getDailySales = () => {
-    const days = Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24));
-    const datesArray = [...Array(days)].map((_, i) => {
-      const date = new Date(dateRange.start);
-      date.setDate(date.getDate() + i);
-      return date.toISOString().split('T')[0];
-    });
+  const [customerOrdersReport, setCustomerOrdersReport] = useState<CustomerOrderReport[]>([]);
 
-    return datesArray.map(date => {
-      const dayOrders = filteredOrders.filter(order => 
-        order.createdAt.split('T')[0] === date &&
-        order.status !== 'cancelled'
-      );
+  // Sorting states for Guest table
+  const [guestSortColumn, setGuestSortColumn] = useState<SortColumn>('user_name');
+  const [guestSortDirection, setGuestSortDirection] = useState<SortDirection>('asc');
+
+  // Sorting states for Registered table
+  const [registeredSortColumn, setRegisteredSortColumn] = useState<SortColumn>('user_name');
+  const [registeredSortDirection, setRegisteredSortDirection] = useState<SortDirection>('asc');
+
+  function handleTimeframeChange(tf: TimeFrame) {
+    setTimeframe(tf);
+    setShowCustomRange(tf === 'custom');
+  }
+
+  function handleCustomRangeChange(type: 'start' | 'end', value: string) {
+    setCustomRange((prev) => ({
+      ...prev,
+      [type]: new Date(value),
+    }));
+  }
+
+  async function fetchCustomerOrdersReport() {
+    try {
+      const data = await api.getCustomerOrdersReport(reportStart, reportEnd);
+      setCustomerOrdersReport(data.results);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  // Guest sorting
+  function handleGuestSort(column: SortColumn) {
+    if (guestSortColumn === column) {
+      setGuestSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setGuestSortColumn(column);
+      setGuestSortDirection('asc');
+    }
+  }
+
+  // Registered sorting
+  function handleRegisteredSort(column: SortColumn) {
+    if (registeredSortColumn === column) {
+      setRegisteredSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setRegisteredSortColumn(column);
+      setRegisteredSortDirection('asc');
+    }
+  }
+
+  // Generic “sort array” function
+  function sortData(
+    data: CustomerOrderReport[],
+    sortCol: SortColumn,
+    sortDir: SortDirection
+  ): CustomerOrderReport[] {
+    const sorted = [...data];
+    sorted.sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
+
+      if (sortCol === 'user_name') {
+        valA = a.user_name.toLowerCase();
+        valB = b.user_name.toLowerCase();
+      } else if (sortCol === 'total_spent') {
+        valA = a.total_spent;
+        valB = b.total_spent;
+      } else if (sortCol === 'order_count') {
+        valA = a.order_count;
+        valB = b.order_count;
+      }
+
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }
+
+  // Split into Guest vs. Registered and sort each set separately
+  const guestRows = useMemo(() => {
+    const guestData = customerOrdersReport.filter((r) => r.user_id === null);
+    return sortData(guestData, guestSortColumn, guestSortDirection);
+  }, [customerOrdersReport, guestSortColumn, guestSortDirection]);
+
+  const registeredRows = useMemo(() => {
+    const regData = customerOrdersReport.filter((r) => r.user_id !== null);
+    return sortData(regData, registeredSortColumn, registeredSortDirection);
+  }, [customerOrdersReport, registeredSortColumn, registeredSortDirection]);
+
+  /**
+   * 
+   * Excel Export:
+   *   -> 2 sheets: "Summary" and "Details"
+   *   -> In each sheet, we put two sections:
+   *      1) GUEST table
+   *      2) blank row
+   *      3) REGISTERED table
+   *
+   * That way each sheet has consistent columns, and we avoid mixing columns in one table.
+   */
+  function exportReportToExcel() {
+    if (customerOrdersReport.length === 0) {
+      alert('No report data to export!');
+      return;
+    }
+
+    // GUEST Summary
+    const guestSummaryRows = guestRows.map((row) => {
+      const totalItemCount = row.items.reduce((sum, i) => sum + i.quantity, 0);
       return {
-        date: new Date(date).toLocaleDateString('en-US', 
-          timeframe === '1year' ? { month: 'short', day: 'numeric' } : { weekday: 'short', day: 'numeric' }
-        ),
-        sales: dayOrders.reduce((sum, order) => sum + order.total, 0),
-        orders: dayOrders.length
+        Customer: row.user_name,
+        'Total Spent': row.total_spent,
+        'Order Count': row.order_count,
+        'Total Items': totalItemCount,
       };
     });
-  };
 
-  // Calculate hourly order distribution
-  const hourlyOrders = Array(24).fill(0).map((_, hour) => ({
-    hour: hour,
-    orders: filteredOrders.filter(order => 
-      new Date(order.createdAt).getHours() === hour &&
-      order.status !== 'cancelled'
-    ).length
-  }));
-
-  // Calculate top selling categories
-  const categoryTotals = filteredOrders.reduce((acc, order) => {
-    order.items.forEach(item => {
-      const category = item.category || 'unknown';
-      acc[category] = (acc[category] || 0) + (item.quantity * item.price);
+    // REGISTERED Summary
+    const registeredSummaryRows = registeredRows.map((row) => {
+      const totalItemCount = row.items.reduce((sum, i) => sum + i.quantity, 0);
+      return {
+        Customer: row.user_name,
+        'Total Spent': row.total_spent,
+        'Order Count': row.order_count,
+        'Total Items': totalItemCount,
+      };
     });
-    return acc;
-  }, {} as Record<string, number>);
 
-  const topCategories = Object.entries(categoryTotals)
-    .map(([category, total]) => ({
-      category: category.charAt(0).toUpperCase() + category.slice(1),
-      total
-    }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 5);
+    // GUEST Details
+    const guestDetailRows: Array<Record<string, any>> = [];
+    guestRows.forEach((r) => {
+      r.items.forEach((item) => {
+        guestDetailRows.push({
+          Customer: r.user_name,
+          'Item Name': item.name,
+          Quantity: item.quantity,
+        });
+      });
+    });
 
-  // Calculate total stats
-  const totalStats = {
-    revenue: filteredOrders.reduce((sum, order) => 
-      order.status !== 'cancelled' ? sum + order.total : sum, 0
-    ),
-    orders: filteredOrders.filter(order => order.status !== 'cancelled').length,
-    averageOrder: filteredOrders.length > 0 ? 
-      filteredOrders.reduce((sum, order) => 
-        order.status !== 'cancelled' ? sum + order.total : sum, 0
-      ) / filteredOrders.filter(order => order.status !== 'cancelled').length : 0
-  };
+    // REGISTERED Details
+    const registeredDetailRows: Array<Record<string, any>> = [];
+    registeredRows.forEach((r) => {
+      r.items.forEach((item) => {
+        registeredDetailRows.push({
+          Customer: r.user_name,
+          'Item Name': item.name,
+          Quantity: item.quantity,
+        });
+      });
+    });
 
-  const handleTimeframeChange = (tf: TimeFrame) => {
-    setTimeframe(tf);
-    if (tf === 'custom') {
-      setShowCustomRange(true);
-    } else {
-      setShowCustomRange(false);
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+
+    // 1) SUMMARY sheet
+    {
+      // We place Guest summary first, then a blank row, then Registered summary.
+      const summaryData: Array<Record<string, any>> = [];
+      // Add all guest summary
+      summaryData.push(...guestSummaryRows);
+      // Add a blank row
+      summaryData.push({});
+      // Then registered summary
+      summaryData.push(...registeredSummaryRows);
+
+      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
     }
-  };
 
-  const handleCustomRangeChange = (type: 'start' | 'end', value: string) => {
-    setCustomRange(prev => ({
-      ...prev,
-      [type]: new Date(value)
-    }));
-  };
+    // 2) DETAILS sheet
+    {
+      // Same pattern: guest detail, blank row, registered detail
+      const detailsData: Array<Record<string, any>> = [];
+      detailsData.push(...guestDetailRows);
+      detailsData.push({});
+      detailsData.push(...registeredDetailRows);
+
+      const detailsSheet = XLSX.utils.json_to_sheet(detailsData);
+      XLSX.utils.book_append_sheet(workbook, detailsSheet, 'Details');
+    }
+
+    const fileName = `CustomerOrders_${reportStart}_to_${reportEnd}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  }
 
   return (
     <div className="space-y-8">
-      {/* Timeframe Selection */}
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="text-sm font-medium text-gray-700">
-            <Calendar className="h-4 w-4 inline-block mr-2" />
-            Time Range:
-          </span>
-          {[
-            { id: '7days', label: 'Last 7 Days' },
-            { id: '30days', label: 'Last 30 Days' },
-            { id: '90days', label: 'Last 90 Days' },
-            { id: '1year', label: 'Last Year' },
-            { id: 'custom', label: 'Custom Range' }
-          ].map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => handleTimeframeChange(id as TimeFrame)}
-              className={`px-4 py-2 rounded-md text-sm ${
-                timeframe === id
-                  ? 'bg-[#c1902f] text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* 
+        ...
+        Possibly timeframe UI, summary cards, etc.
+      */}
 
-        {showCustomRange && (
-          <div className="mt-4 flex items-center gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={customRange.start.toISOString().split('T')[0]}
-                onChange={(e) => handleCustomRangeChange('start', e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
-                className="px-3 py-2 border rounded-md"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                End Date
-              </label>
-              <input
-                type="date"
-                value={customRange.end.toISOString().split('T')[0]}
-                onChange={(e) => handleCustomRangeChange('end', e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
-                className="px-3 py-2 border rounded-md"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold">${totalStats.revenue.toFixed(2)}</p>
-            </div>
-            <DollarSign className="h-8 w-8 text-[#c1902f]" />
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Orders</p>
-              <p className="text-2xl font-bold">{totalStats.orders}</p>
-            </div>
-            <ShoppingBag className="h-8 w-8 text-[#c1902f]" />
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Average Order Value</p>
-              <p className="text-2xl font-bold">${totalStats.averageOrder.toFixed(2)}</p>
-            </div>
-            <TrendingUp className="h-8 w-8 text-[#c1902f]" />
-          </div>
-        </div>
-      </div>
-
-      {/* Sales Chart */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold mb-4">Sales Overview</h3>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={getDailySales()}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="date"
-                interval={timeframe === '1year' ? 30 : timeframe === '90days' ? 7 : 'preserveEnd'}
-                angle={-45}
-                textAnchor="end"
-                height={60}
-              />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip />
-              <Legend />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="sales"
-                stroke="#c1902f"
-                name="Sales ($)"
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="orders"
-                stroke="#82ca9d"
-                name="Orders"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        <h3 className="text-xl font-semibold mb-4 text-gray-800">Monthly Customer Orders Report</h3>
+        
+        <div className="flex flex-wrap items-end gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <input
+              type="date"
+              value={reportStart}
+              onChange={(e) => setReportStart(e.target.value)}
+              className="border border-gray-300 rounded px-3 py-1 w-44"
+            />
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Peak Hours Chart */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock className="h-5 w-5 text-[#c1902f]" />
-            <h3 className="text-lg font-semibold">Peak Order Times</h3>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <input
+              type="date"
+              value={reportEnd}
+              onChange={(e) => setReportEnd(e.target.value)}
+              className="border border-gray-300 rounded px-3 py-1 w-44"
+            />
           </div>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hourlyOrders}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="hour"
-                  tickFormatter={(hour) => `${hour}:00`}
-                />
-                <YAxis />
-                <Tooltip
-                  labelFormatter={(hour) => `${hour}:00`}
-                  formatter={(value) => [`${value} orders`, 'Orders']}
-                />
-                <Bar dataKey="orders" fill="#c1902f" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+
+          <button
+            onClick={fetchCustomerOrdersReport}
+            className="px-4 py-2 bg-[#c1902f] text-white font-medium rounded hover:bg-[#b2872c]"
+          >
+            Load Report
+          </button>
+
+          {customerOrdersReport.length > 0 && (
+            <button
+              onClick={exportReportToExcel}
+              className="px-4 py-2 bg-green-600 text-white font-medium rounded hover:bg-green-700"
+            >
+              Export to Excel
+            </button>
+          )}
         </div>
 
-        {/* Top Categories */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold mb-4">Top Categories</h3>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topCategories} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="category" type="category" width={100} />
-                <Tooltip />
-                <Bar dataKey="total" fill="#c1902f" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        {/* ============== GUEST ORDERS TABLE ============== */}
+        {guestRows.length > 0 && (
+          <>
+            <h4 className="text-lg font-semibold mb-2 text-gray-700">Guest Orders</h4>
+            <div className="overflow-x-auto mb-6">
+              <table className="table-fixed w-full border border-gray-200 text-sm">
+                <colgroup>
+                  <col className="w-1/5" />
+                  <col className="w-1/5" />
+                  <col className="w-1/5" />
+                  <col className="w-2/5" />
+                </colgroup>
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th
+                      onClick={() => handleGuestSort('user_name')}
+                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                    >
+                      Customer
+                    </th>
+                    <th
+                      onClick={() => handleGuestSort('total_spent')}
+                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                    >
+                      Total Spent
+                    </th>
+                    <th
+                      onClick={() => handleGuestSort('order_count')}
+                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                    >
+                      Orders
+                    </th>
+                    <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                      Items
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {guestRows.map((r, idx) => (
+                    <tr key={`${r.user_name}-${idx}`} className="border-b last:border-b-0 hover:bg-gray-50">
+                      <td className="px-4 py-2 text-gray-800">{r.user_name}</td>
+                      <td className="px-4 py-2 text-gray-800 font-medium">
+                        ${r.total_spent.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 text-gray-800">{r.order_count}</td>
+                      <td className="px-4 py-2 text-gray-800">
+                        {r.items.map((item, idx2) => (
+                          <div key={idx2}>
+                            {item.name}{' '}
+                            <span className="text-gray-600">x {item.quantity}</span>
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* =========== REGISTERED USERS TABLE =========== */}
+        {registeredRows.length > 0 && (
+          <>
+            <h4 className="text-lg font-semibold mb-2 text-gray-700">Registered Users</h4>
+            <div className="overflow-x-auto">
+              <table className="table-fixed w-full border border-gray-200 text-sm">
+                <colgroup>
+                  <col className="w-1/5" />
+                  <col className="w-1/5" />
+                  <col className="w-1/5" />
+                  <col className="w-2/5" />
+                </colgroup>
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th
+                      onClick={() => handleRegisteredSort('user_name')}
+                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                    >
+                      Customer
+                    </th>
+                    <th
+                      onClick={() => handleRegisteredSort('total_spent')}
+                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                    >
+                      Total Spent
+                    </th>
+                    <th
+                      onClick={() => handleRegisteredSort('order_count')}
+                      className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer"
+                    >
+                      Orders
+                    </th>
+                    <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                      Items
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {registeredRows.map((r, idx) => (
+                    <tr key={`${r.user_id}-${idx}`} className="border-b last:border-b-0 hover:bg-gray-50">
+                      <td className="px-4 py-2 text-gray-800">{r.user_name}</td>
+                      <td className="px-4 py-2 text-gray-800 font-medium">
+                        ${r.total_spent.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 text-gray-800">{r.order_count}</td>
+                      <td className="px-4 py-2 text-gray-800">
+                        {r.items.map((item, idx2) => (
+                          <div key={idx2}>
+                            {item.name}{' '}
+                            <span className="text-gray-600">x {item.quantity}</span>
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {customerOrdersReport.length === 0 && (
+          <p className="text-gray-500 text-sm">No results found.</p>
+        )}
       </div>
     </div>
   );

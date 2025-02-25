@@ -1,7 +1,6 @@
 // src/ordering/lib/api.ts
 import { useLoadingStore } from '../store/loadingStore';
 
-// Dynamically choose base URL from environment or fallback:
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const api = {
@@ -163,6 +162,32 @@ export const api = {
         throw new Error(await res.text());
       }
       return res.json(); // { message: "...", ... }
+    } finally {
+      useLoadingStore.getState().stopLoading();
+    }
+  },
+
+  /**
+   * NEW: For retrieving the monthly/custom “customer orders” report
+   * GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD
+   */
+  async getCustomerOrdersReport(start?: string, end?: string) {
+    useLoadingStore.getState().startLoading();
+    try {
+      const params = new URLSearchParams();
+      if (start) params.set('start', start);
+      if (end)   params.set('end', end);
+
+      const url = `${API_BASE_URL}/admin/analytics/customer_orders?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
     } finally {
       useLoadingStore.getState().stopLoading();
     }
