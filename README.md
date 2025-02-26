@@ -1,176 +1,271 @@
-# Hafaloha Frontend
+# **Hafaloha Frontend**
 
-This is the **frontend** of the Hafaloha application. It provides two main functionalities:
-1. **Reservations** interface (for booking tables/seats).
-2. **Ordering** interface (for placing food orders).
+A React-based frontend for the Hafaloha multi-tenant restaurant management SaaS platform.
 
-The frontend is built with React.js with Typescript and is hosted on **Netlify**.
+## **Overview**
+
+Hafaloha frontend provides user interfaces for:
+
+1. **Online Ordering** - Browse menus, customize items, and place orders
+2. **Reservations** - Book tables, view availability, and manage reservations
+3. **Admin Dashboard** - Manage menus, track orders, configure restaurant settings, and view analytics
+
+The frontend is built with **React.js** with **TypeScript**, styled with **Tailwind CSS**, and uses **Zustand** for state management. It communicates with the Hafaloha API backend through a RESTful interface.
 
 ---
 
-## **Key Features**
+## **Multi-tenant Architecture**
 
-- **Reservation Management**: Users can book reservations, view availability, and manage their bookings.
-- **Online Ordering**: Customers can browse the menu, add items to a cart, and place orders.
-- **Notifications**: Integrated with ClickSend (SMS) and SendGrid (email) for customers, as well as Wassenger (WhatsApp group messages) for internal staff notifications (these are triggered by the backend).
-- **Hosted on Netlify**: Automated deployments from the main branch.
+Hafaloha is designed as a SaaS (Software as a Service) platform that supports multiple restaurants, each with their own branding, configuration, and data. The frontend supports this multi-tenant approach through several key features:
+
+### 1. Restaurant Context
+
+The frontend maintains restaurant context through:
+
+- **JWT Tokens** - Contains restaurant_id claim for authenticated users
+- **Default Restaurant ID** - For public pages (configured in environment)
+- **Restaurant Selector** - For super admin users managing multiple restaurants
+
+```typescript
+// src/shared/config.ts
+export const config = {
+  // API base URL
+  apiBaseUrl: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  
+  // Default restaurant ID (for public endpoints)
+  restaurantId: import.meta.env.VITE_RESTAURANT_ID || '1',
+};
+```
+
+### 2. API Client with Restaurant Context
+
+The API client automatically adds restaurant context to requests:
+
+```typescript
+// Add restaurant_id to the data payload if needed
+if (needsRestaurantContext(endpoint) && !data.restaurant_id) {
+  const token = localStorage.getItem('token') || '';
+  const restaurantId = getRestaurantId(token) || DEFAULT_RESTAURANT_ID;
+  
+  if (restaurantId) {
+    data = { ...data, restaurant_id: restaurantId };
+  }
+}
+```
+
+### 3. JWT Token Handling
+
+The frontend extracts and uses restaurant context from JWT tokens:
+
+```typescript
+// Get restaurant ID from JWT token
+export function getRestaurantId(token: string): string | null {
+  if (!token) return null;
+  
+  try {
+    const payload = decodeJwt(token);
+    return payload.restaurant_id;
+  } catch (e) {
+    console.error('Error getting restaurant ID from token:', e);
+    return null;
+  }
+}
+```
+
+### 4. Restaurant-Specific UI
+
+For admin users who manage multiple restaurants, a RestaurantSelector component allows switching contexts:
+
+```tsx
+<RestaurantSelector
+  restaurants={restaurants}
+  currentRestaurantId={selectedRestaurantId}
+  onChange={setSelectedRestaurantId}
+/>
+```
+
+### 5. CORS Configuration Management
+
+Admins can configure allowed origins for each restaurant through the AllowedOriginsSettings component:
+
+```tsx
+<AllowedOriginsSettings onSaved={handleSaved} />
+```
 
 ---
 
 ## **Project Structure**
+
 ```
 .
-├── .env
-├── README.md
-├── directoryStructure.json
-├── eslint.config.js
-├── generateTree.js
-├── index.html
-├── package-lock.json
-├── package.json
-├── postcss.config.js
-├── public
-│   ├── _redirects
-│   └── hafaloha-logo-white-bg.png
-├── src
-│   ├── GlobalLayout.tsx
-│   ├── RootApp.tsx
-│   ├── index.css
-│   ├── main.tsx
-│   ├── ordering
+├── src/
+│   ├── GlobalLayout.tsx        # Global layout wrapper
+│   ├── RootApp.tsx             # Root application component
+│   ├── main.tsx                # Application entry point
+│   ├── ordering/               # Online ordering application
 │   │   ├── OnlineOrderingApp.tsx
-│   │   ├── assets
-│   │   │   ├── Hafaloha-circle-logo.png
-│   │   │   ├── hafaloha-logo.png
-│   │   │   └── hafaloha_hero.jpg
-│   │   ├── components
-│   │   │   ├── CartPage.tsx
-│   │   │   ├── CheckoutPage.tsx
-│   │   │   ├── CustomizationModal.tsx
-│   │   │   ├── Footer.tsx
-│   │   │   ├── Header.tsx
-│   │   │   ├── Hero.tsx
-│   │   │   ├── LoadingSpinner.tsx
-│   │   │   ├── MenuItem.tsx
-│   │   │   ├── MenuPage.tsx
-│   │   │   ├── OrderConfirmation.tsx
-│   │   │   ├── admin
-│   │   │   │   ├── AdminDashboard.tsx
-│   │   │   │   ├── AnalyticsManager.tsx
-│   │   │   │   ├── InventoryManager.tsx
-│   │   │   │   ├── MenuManager.tsx
-│   │   │   │   ├── OrderManager.tsx
-│   │   │   │   └── PromoManager.tsx
-│   │   │   ├── auth
-│   │   │   │   ├── LoginForm.tsx
-│   │   │   │   └── SignUpForm.tsx
-│   │   │   ├── location
-│   │   │   │   └── PickupInfo.tsx
-│   │   │   ├── loyalty
-│   │   │   │   └── LoyaltyTeaser.tsx
-│   │   │   ├── profile
-│   │   │   │   └── OrderHistory.tsx
-│   │   │   ├── reservation
-│   │   │   │   └── ReservationModal.tsx
-│   │   │   └── upsell
-│   │   │       └── UpsellModal.tsx
-│   │   ├── context
-│   │   │   └── AuthContext.tsx
-│   │   ├── data
-│   │   │   └── menu.ts
-│   │   ├── lib
-│   │   │   └── api.ts
-│   │   ├── store
-│   │   │   ├── authStore.ts
-│   │   │   ├── inventoryStore.ts
-│   │   │   ├── loadingStore.ts
-│   │   │   ├── menuStore.ts
-│   │   │   ├── notificationStore.ts
-│   │   │   ├── orderStore.ts
-│   │   │   └── promoStore.ts
-│   │   └── types
-│   │       ├── auth.ts
-│   │       ├── inventory.ts
-│   │       ├── menu.ts
-│   │       ├── order.ts
-│   │       └── promo.ts
-│   ├── reservations
+│   │   ├── components/
+│   │   │   ├── admin/          # Admin dashboard components
+│   │   │   ├── auth/           # Authentication components
+│   │   │   └── ...
+│   │   ├── context/
+│   │   ├── lib/
+│   │   │   └── api.ts          # API client for ordering
+│   │   ├── store/              # Zustand state stores
+│   │   └── types/              # TypeScript type definitions
+│   ├── reservations/           # Reservations application
 │   │   ├── ReservationsApp.tsx
-│   │   ├── assets
-│   │   ├── components
-│   │   │   ├── AdminSettings.tsx
-│   │   │   ├── FloorManager.tsx
-│   │   │   ├── FloorTabs.tsx
-│   │   │   ├── HomePage.tsx
-│   │   │   ├── LoginPage.tsx
-│   │   │   ├── ProfilePage.tsx
-│   │   │   ├── RenameSeatsModal.tsx
-│   │   │   ├── ReservationForm.tsx
-│   │   │   ├── ReservationFormModal.tsx
-│   │   │   ├── ReservationModal.tsx
-│   │   │   ├── SeatLayoutCanvas.tsx
-│   │   │   ├── SeatLayoutEditor.tsx
-│   │   │   ├── SeatPreferenceMapModal.tsx
-│   │   │   ├── SeatPreferenceWizard.tsx
-│   │   │   ├── SignupPage.tsx
-│   │   │   ├── StaffDashboard.tsx
-│   │   │   ├── WaitlistForm.tsx
-│   │   │   ├── dashboard
-│   │   │   │   ├── LayoutTab.tsx
-│   │   │   │   ├── ReservationsTab.tsx
-│   │   │   │   ├── SeatingTab.tsx
-│   │   │   │   ├── SettingsTab.tsx
-│   │   │   │   └── WaitlistTab.tsx
-│   │   │   └── modals
-│   │   ├── context
-│   │   │   ├── AuthContext.tsx
-│   │   │   └── DateFilterContext.tsx
-│   │   ├── services
-│   │   │   └── api.ts
-│   │   └── types
-│   │       └── index.ts
-│   ├── shared
-│   │   └── ScrollToTop.tsx
-│   └── vite-env.d.ts
-├── tailwind.config.js
-├── tsconfig.app.json
-├── tsconfig.json
-├── tsconfig.node.json
-└── vite.config.ts
+│   │   ├── components/
+│   │   │   ├── dashboard/      # Reservation management dashboard
+│   │   │   └── ...
+│   │   ├── services/
+│   │   │   └── api.ts          # API client for reservations
+│   │   └── types/
+│   └── shared/                 # Shared modules across applications
+│       ├── config.ts           # Configuration including restaurant ID
+│       └── utils/
+│           └── jwt.ts          # JWT handling utilities
+└── ...
 ```
+
+---
+
+## **Key Components**
+
+### 1. Authentication
+
+- **LoginForm/SignUpForm** - User authentication
+- **AuthContext/AuthStore** - Manage authentication state
+- **JWT Utilities** - Handle token expiration and restaurant context
+
+### 2. Online Ordering
+
+- **MenuPage** - Display menu items by category
+- **MenuItem** - Individual menu item with customization options
+- **CartPage** - Shopping cart management
+- **CheckoutPage** - Complete order placement
+
+### 3. Reservations
+
+- **ReservationForm** - Book new reservations
+- **SeatLayoutCanvas** - Visual table layout
+- **SeatPreferenceWizard** - Select preferred seating
+
+### 4. Admin Dashboard
+
+- **AdminDashboard** - Main admin interface
+- **MenuManager** - Manage menu items and categories
+- **OrderManager** - View and process orders
+- **AnalyticsManager** - View business metrics
+- **RestaurantSelector** - Switch between restaurants (for super admins)
+- **AllowedOriginsSettings** - Configure CORS for restaurant frontends
 
 ---
 
 ## **Environment Variables**
 
-The frontend typically needs minimal environment variables. Common ones might be:
+The frontend requires these environment variables:
 
-- `VITE_API_BASE_URL` – Base URL for the backend API (Rails on Render).
+- `VITE_API_URL` - Base URL of the Hafaloha API (e.g., 'http://localhost:3000')
+- `VITE_RESTAURANT_ID` - Default restaurant ID for public pages
 
-For Netlify, you can add these in **Site Settings → Build & Deploy → Environment**.
+For local development, create a `.env.local` file in the project root:
+
+```
+VITE_API_URL=http://localhost:3000
+VITE_RESTAURANT_ID=1
+```
+
+For production, set these variables in your hosting environment (e.g., Netlify environment variables).
 
 ---
 
 ## **Local Development**
 
-1. **Install dependencies**:
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/YourUsername/hafaloha-frontend.git
+   cd hafaloha-frontend
+   ```
+
+2. **Install Dependencies**
    ```bash
    npm install
    ```
-1. **Start the Server**:
+
+3. **Start the Development Server**
    ```bash
    npm run dev
-By default, it runs at http://localhost:5173 (Vite’s default) or similar.
+   ```
+   This will start the development server at `http://localhost:5173`.
 
-API Integration:
-
-The frontend makes requests to VITE_API_BASE_URL. Make sure it points to the local backend (e.g. http://localhost:3000) when developing and to the production backend for production.
-
-Relevant Services
-Netlify – hosting for the frontend.
-AWS S3 – storing menu item images (the frontend displays images from S3 URLs).
-(Optional) Environment variables to configure the backend API endpoint.
-Further Information
-For details about the backend (ordering logic, SMS/WhatsApp, etc.), see the Backend README or your project’s main doc.
+4. **Build for Production**
+   ```bash
+   npm run build
+   ```
+   The built files will be in the `dist` directory.
 
 ---
+
+## **Deployment**
+
+### Netlify Deployment
+
+1. **Connect your GitHub repository to Netlify**
+
+2. **Configure Build Settings**
+   - Build command: `npm run build`
+   - Publish directory: `dist`
+
+3. **Set Environment Variables**
+   - `VITE_API_URL` - Your production API URL
+   - `VITE_RESTAURANT_ID` - Default restaurant ID
+
+4. **Configure Redirects**
+   Create a `_redirects` file in the `public` directory:
+   ```
+   /* /index.html 200
+   ```
+   This enables client-side routing for SPAs.
+
+### Restaurant-Specific Deployments
+
+For a true multi-tenant setup, you can deploy restaurant-specific frontends:
+
+1. **Create a separate Netlify site for each restaurant**
+2. **Set VITE_RESTAURANT_ID to the specific restaurant's ID**
+3. **Use custom domains for each restaurant** (e.g., restaurant-name.hafaloha.com)
+4. **Configure allowed origins in the restaurant settings in the admin dashboard**
+
+---
+
+## **Integration with Backend**
+
+The frontend integrates with the Hafaloha API backend through RESTful API calls. Key integration points include:
+
+1. **Authentication** - JWT tokens with restaurant context
+2. **Restaurant Context** - Automatic filtering of data by restaurant
+3. **Image Storage** - S3 URLs for menu item images and site assets
+4. **Notifications** - Display status from backend notification systems
+
+The backend README contains more details about the API endpoints and multi-tenant architecture.
+
+---
+
+## **Browser Compatibility**
+
+Hafaloha frontend is compatible with:
+- Chrome (latest 2 versions)
+- Firefox (latest 2 versions)
+- Safari (latest 2 versions)
+- Edge (latest version)
+
+---
+
+## **Contact & Support**
+
+For questions about the frontend architecture, React components, or state management, please contact the development team.
+
+---
+
+**Hafaloha - Your Restaurant Management SaaS Platform**
