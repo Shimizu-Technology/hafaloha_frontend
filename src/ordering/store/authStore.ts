@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import type { User } from '../types/auth';
+import { isTokenExpired, getRestaurantId, decodeJwt } from '../../shared/utils/jwt';
 
 interface AuthStore {
   user: User | null;
@@ -27,6 +28,14 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     error: null,
 
     setUserFromResponse: ({ jwt, user }) => {
+      // Check if the token has a restaurant_id and add it to the user object if not present
+      if (!user.restaurant_id) {
+        const restaurantId = getRestaurantId(jwt);
+        if (restaurantId) {
+          user = { ...user, restaurant_id: restaurantId };
+        }
+      }
+      
       // Save to localStorage so we persist across reloads
       localStorage.setItem('token', jwt);
       localStorage.setItem('user', JSON.stringify(user));
@@ -121,10 +130,29 @@ export const useAuthStore = create<AuthStore>((set, get) => {
   //
   const existingToken = localStorage.getItem('token');
   const existingUser = localStorage.getItem('user');
+  
   if (existingToken && existingUser) {
-    // We only restore the user from localStorage. 
-    // The token is read from localStorage by api.ts automatically.
-    store.user = JSON.parse(existingUser) as User;
+    // Check if token is expired
+    if (isTokenExpired(existingToken)) {
+      // Token is expired, clear localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    } else {
+      // Token is valid, restore user from localStorage
+      let user = JSON.parse(existingUser) as User;
+      
+      // Check if user has restaurant_id, if not extract it from token
+      if (!user.restaurant_id) {
+        const restaurantId = getRestaurantId(existingToken);
+        if (restaurantId) {
+          user = { ...user, restaurant_id: restaurantId };
+        }
+      }
+      
+      // We only restore the user from localStorage. 
+      // The token is read from localStorage by api.ts automatically.
+      store.user = user;
+    }
   }
 
   return store;

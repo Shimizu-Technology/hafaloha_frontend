@@ -1,9 +1,21 @@
 // src/reservations/services/api.ts
 
 import axios from 'axios';
+import { isTokenExpired, getRestaurantId } from '../../shared/utils/jwt';
 
 // Depending on your environment setup, you might have a VITE_API_URL or fallback to localhost:
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Default restaurant ID from environment (for public endpoints)
+const DEFAULT_RESTAURANT_ID = import.meta.env.VITE_RESTAURANT_ID;
+
+// Endpoints that require restaurant_id parameter
+const RESTAURANT_CONTEXT_ENDPOINTS = [
+  'availability',
+  'layouts',
+  'reservations',
+  'waitlist_entries',
+  'seat_allocations'
+];
 
 // Create an Axios instance
 export const apiClient = axios.create({ baseURL });
@@ -11,11 +23,50 @@ export const apiClient = axios.create({ baseURL });
 // Automatically attach the JWT token from localStorage, if present
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
+  
+  // Check token expiration
+  if (token) {
+    if (isTokenExpired(token)) {
+      // Token is expired, redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return Promise.reject(new Error('Session expired. Please log in again.'));
+    }
+    
+    if (config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // Add restaurant_id to params for endpoints that need it
+    if (config.url && RESTAURANT_CONTEXT_ENDPOINTS.some(endpoint => config.url?.includes(endpoint))) {
+      const restaurantId = getRestaurantId(token) || DEFAULT_RESTAURANT_ID;
+      
+      if (restaurantId) {
+        config.params = config.params || {};
+        if (!config.params.restaurant_id) {
+          config.params.restaurant_id = restaurantId;
+        }
+      }
+    }
   }
+  
   return config;
 });
+
+// Add response interceptor to handle 401 errors
+apiClient.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response && error.response.status === 401) {
+      // Clear auth state and redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ─────────────────────────────────────────────────────────────────
 // RESTAURANT
@@ -80,7 +131,7 @@ export async function fetchReservations(params?: { date?: string }) {
 
 export async function createReservation(data: {
   reservation: {
-    restaurant_id?: number;
+    restaurant_id?: number | string;
     start_time: string;
     party_size: number;
     status?: string;
@@ -91,6 +142,14 @@ export async function createReservation(data: {
     contact_email?: string;
   }
 }) {
+  // Add restaurant_id if not provided
+  if (!data.reservation.restaurant_id) {
+    const token = localStorage.getItem('token') || '';
+    const restaurantId = getRestaurantId(token) || DEFAULT_RESTAURANT_ID;
+    if (restaurantId) {
+      data.reservation.restaurant_id = restaurantId;
+    }
+  }
   const resp = await apiClient.post('/reservations', data);
   return resp.data;
 }
@@ -118,8 +177,16 @@ export async function createWaitlistEntry(data: {
   contact_phone?: string;
   check_in_time?: string;
   status?: string;
-  restaurant_id?: number;
+  restaurant_id?: number | string;
 }) {
+  // Add restaurant_id if not provided
+  if (!data.restaurant_id) {
+    const token = localStorage.getItem('token') || '';
+    const restaurantId = getRestaurantId(token) || DEFAULT_RESTAURANT_ID;
+    if (restaurantId) {
+      data.restaurant_id = restaurantId;
+    }
+  }
   const resp = await apiClient.post('/waitlist_entries', data);
   return resp.data;
 }
@@ -177,8 +244,15 @@ export async function seatAllocationArrive(payload: { occupant_type: string; occ
 // AVAILABILITY
 // ─────────────────────────────────────────────────────────────────
 export async function fetchAvailability(date: string, partySize: number) {
+  const token = localStorage.getItem('token') || '';
+  const restaurantId = getRestaurantId(token) || DEFAULT_RESTAURANT_ID;
+  
   const resp = await apiClient.get('/availability', {
-    params: { date, party_size: partySize },
+    params: { 
+      date, 
+      party_size: partySize,
+      restaurant_id: restaurantId
+    },
   });
   return resp.data;
 }
@@ -193,8 +267,15 @@ export async function signupUser(data: {
   email: string;
   password: string;
   password_confirmation: string;
-  restaurant_id?: number;
+  restaurant_id?: number | string;
 }) {
+  // Add restaurant_id if not provided
+  if (!data.restaurant_id) {
+    const restaurantId = DEFAULT_RESTAURANT_ID;
+    if (restaurantId) {
+      data.restaurant_id = restaurantId;
+    }
+  }
   const resp = await apiClient.post('/signup', data);
   return resp.data;
 }

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { toast } from 'react-hot-toast';
+import AllowedOriginsSettings from './AllowedOriginsSettings';
 
 interface SiteSettings {
   id: number;
@@ -72,7 +73,8 @@ export function GeneralSettings() {
   return (
     <div className="mt-4">
       {settings && (
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="space-y-12">
+          <form onSubmit={handleSubmit} className="space-y-8">
           {/* Optional intro text */}
           <p className="text-sm text-gray-600">
             Update the images displayed on your homepage’s hero section and
@@ -183,7 +185,16 @@ export function GeneralSettings() {
               {loading ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
-        </form>
+          </form>
+          
+          {/* CORS Configuration Section */}
+          <div className="border-t pt-8">
+            <h3 className="text-lg font-medium text-gray-900 mb-6">CORS Configuration</h3>
+            <AllowedOriginsSettings 
+              onSaved={() => toast.success('Allowed origins updated successfully')}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

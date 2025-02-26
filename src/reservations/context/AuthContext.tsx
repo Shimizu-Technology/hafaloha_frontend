@@ -2,12 +2,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { loginUser } from '../services/api';  // We'll call loginUser from api.ts
 import { apiClient } from '../services/api';   // We might import it if we want to set defaults, or not needed
                                                // if the interceptor is handling everything
+import { isTokenExpired, getRestaurantId } from '../../shared/utils/jwt';
 export interface AuthUser {
   id: string;
   email: string;
   name?: string;
   role?: string;
   phone?: string;
+  restaurant_id?: string;
 }
 
 interface AuthContextType {
@@ -29,6 +31,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
 
+    // Check if token is expired
+    if (token && isTokenExpired(token)) {
+      // Token is expired, clear localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setIsLoading(false);
+      return;
+    }
+
     // If a token exists, the apiClient interceptor will pick it up from localStorage
     // so we don't necessarily have to do apiClient.defaults.headers.common.
     // But you can do it if you like:
@@ -36,9 +47,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     //   apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     // }
 
-    if (storedUser) {
+    if (storedUser && token) {
       try {
-        const parsedUser: AuthUser = JSON.parse(storedUser);
+        let parsedUser: AuthUser = JSON.parse(storedUser);
+        
+        // Check if user has restaurant_id, if not extract it from token
+        if (!parsedUser.restaurant_id) {
+          const restaurantId = getRestaurantId(token);
+          if (restaurantId) {
+            parsedUser = { ...parsedUser, restaurant_id: restaurantId };
+            // Update localStorage with the enhanced user object
+            localStorage.setItem('user', JSON.stringify(parsedUser));
+          }
+        }
+        
         setUser(parsedUser);
       } catch (err) {
         console.error('Error parsing stored user:', err);
@@ -60,14 +82,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Hit our loginUser from the API
     const { jwt, user: userData } = await loginUser(email, password);
 
+    // Check if the token has a restaurant_id and add it to the user object if not present
+    let enhancedUserData = { ...userData };
+    if (!enhancedUserData.restaurant_id) {
+      const restaurantId = getRestaurantId(jwt);
+      if (restaurantId) {
+        enhancedUserData.restaurant_id = restaurantId;
+      }
+    }
+
     // store in localStorage
     localStorage.setItem('token', jwt);
-    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('user', JSON.stringify(enhancedUserData));
 
     // If you wanted to also set apiClient.defaults (not strictly needed with the interceptor):
     // apiClient.defaults.headers.common['Authorization'] = `Bearer ${jwt}`;
 
-    setUser(userData);
+    setUser(enhancedUserData);
   };
 
   // *** LOGOUT ***
@@ -82,13 +113,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // *** NEW: loginWithJwtUser ***
   const loginWithJwtUser = (jwt: string, userData: AuthUser) => {
+    // Check if the token has a restaurant_id and add it to the user object if not present
+    let enhancedUserData = { ...userData };
+    if (!enhancedUserData.restaurant_id) {
+      const restaurantId = getRestaurantId(jwt);
+      if (restaurantId) {
+        enhancedUserData.restaurant_id = restaurantId;
+      }
+    }
+
     localStorage.setItem('token', jwt);
-    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('user', JSON.stringify(enhancedUserData));
 
     // Optionally do:
     // apiClient.defaults.headers.common['Authorization'] = `Bearer ${jwt}`;
 
-    setUser(userData);
+    setUser(enhancedUserData);
   };
 
   return (

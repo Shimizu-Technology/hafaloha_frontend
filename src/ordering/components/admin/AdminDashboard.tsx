@@ -6,6 +6,7 @@ import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
 import { AnalyticsManager } from './AnalyticsManager';
 import { SettingsManager } from './SettingsManager';
+import RestaurantSelector from './RestaurantSelector';
 import {
   BarChart2,
   ShoppingBag,
@@ -15,13 +16,17 @@ import {
   X as XIcon
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { api, Order } from '../../lib/api';
+import { api } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
+import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
 
 type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings';
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
+  const [currentRestaurantId, setCurrentRestaurantId] = useState<string | undefined>(
+    user?.restaurant_id
+  );
 
   // List of tabs
   const tabs = [
@@ -150,10 +155,25 @@ export function AdminDashboard() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Manage orders, menu items, promotions, and more
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+              <p className="mt-2 text-sm text-gray-600">
+                Manage orders, menu items, promotions, and more
+              </p>
+            </div>
+            
+            {/* Only show for super_admin users who can manage multiple restaurants */}
+            {user?.role === 'super_admin' && (
+              <div className="mt-4 md:mt-0 md:ml-4 w-full md:w-64">
+                <RestaurantSelector 
+                  onRestaurantChange={(restaurantId) => {
+                    setCurrentRestaurantId(restaurantId);
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow">
@@ -183,16 +203,17 @@ export function AdminDashboard() {
 
           {/* Tab content */}
           <div className="p-4">
-            {activeTab === 'analytics' && <AnalyticsManager />}
+            {activeTab === 'analytics' && <AnalyticsManager restaurantId={currentRestaurantId} />}
             {activeTab === 'orders' && (
               <OrderManager
                 selectedOrderId={selectedOrderId}
                 setSelectedOrderId={setSelectedOrderId}
+                restaurantId={currentRestaurantId}
               />
             )}
-            {activeTab === 'menu' && <MenuManager />}
-            {activeTab === 'promos' && <PromoManager />}
-            {activeTab === 'settings' && <SettingsManager />}
+            {activeTab === 'menu' && <MenuManager restaurantId={currentRestaurantId} />}
+            {activeTab === 'promos' && <PromoManager restaurantId={currentRestaurantId} />}
+            {activeTab === 'settings' && <SettingsManager restaurantId={currentRestaurantId} />}
           </div>
         </div>
       </div>
