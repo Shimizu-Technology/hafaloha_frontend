@@ -1,9 +1,10 @@
 // src/ordering/components/admin/settings/GeneralSettings.tsx
 
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api } from '../../../../shared/api';
 import { toast } from 'react-hot-toast';
 import AllowedOriginsSettings from './AllowedOriginsSettings';
+import { LoadingSpinner } from '../../../../shared/components/ui';
 
 interface SiteSettings {
   id: number;
@@ -24,7 +25,7 @@ export function GeneralSettings() {
   async function fetchSiteSettings() {
     setLoading(true);
     try {
-      const data = await api.get('/admin/site_settings');
+      const data = await api.get<SiteSettings>('/admin/site_settings');
       setSettings(data);
     } catch (err: any) {
       console.error('Failed to load site settings:', err);
@@ -50,24 +51,57 @@ export function GeneralSettings() {
       if (heroFile)    formData.append('hero_image', heroFile);
       if (spinnerFile) formData.append('spinner_image', spinnerFile);
 
-      const updated = await api.upload('/admin/site_settings', 'PATCH', formData);
+      // Show loading overlay
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.width = '100%';
+      overlay.style.height = '100%';
+      overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      overlay.style.display = 'flex';
+      overlay.style.justifyContent = 'center';
+      overlay.style.alignItems = 'center';
+      overlay.style.zIndex = '9999';
+      
+      const spinnerContainer = document.createElement('div');
+      spinnerContainer.innerHTML = '<div class="bg-gray-800 p-4 rounded flex flex-col items-center justify-center"><div class="bg-white p-2 rounded mb-2"><img src="' + (settings.spinner_image_url || '/hafaloha-logo-white-bg.png') + '" alt="Loading..." class="h-16 w-16 animate-spin object-contain" /></div><p class="text-white font-medium">Loading...</p></div>';
+      overlay.appendChild(spinnerContainer);
+      
+      document.body.appendChild(overlay);
+
+      const updated = await api.upload<SiteSettings>('/admin/site_settings', formData, 'PATCH');
       setSettings(updated);
       toast.success('Site settings updated!');
 
       // Clear file inputs
       setHeroFile(null);
       setSpinnerFile(null);
+      
+      // Update the site settings store to reflect the new spinner image
+      // This will ensure the LoadingSpinner component uses the new image
+      const siteSettingsStore = await import('../../../../shared/store/siteSettingsStore');
+      siteSettingsStore.useSiteSettingsStore.getState().fetchSiteSettings();
+      
+      // Remove the loading overlay
+      document.body.removeChild(overlay);
     } catch (err: any) {
       console.error('Failed to update site settings:', err);
       toast.error('Failed to update settings');
+      
+      // Remove the loading overlay in case of error
+      const overlay = document.querySelector('div[style*="position: fixed"][style*="z-index: 9999"]');
+      if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  // If we’re still loading for the very first time:
+  // If we're still loading for the very first time:
   if (loading && !settings) {
-    return <p className="text-gray-500 mt-4">Loading site settings...</p>;
+    return <LoadingSpinner className="mx-auto mt-8" />;
   }
 
   return (
@@ -77,7 +111,7 @@ export function GeneralSettings() {
           <form onSubmit={handleSubmit} className="space-y-8">
           {/* Optional intro text */}
           <p className="text-sm text-gray-600">
-            Update the images displayed on your homepage’s hero section and
+            Update the images displayed on your homepage's hero section and
             the loading spinner.
           </p>
 

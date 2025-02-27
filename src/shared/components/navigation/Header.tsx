@@ -1,4 +1,4 @@
-// src/ordering/components/Header.tsx
+// src/shared/components/navigation/Header.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ShoppingCart,
@@ -10,16 +10,66 @@ import {
   User,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../shared/auth';
-import { useOrderStore } from '../store/orderStore';
+import { useAuth } from '../../auth';
 import { toast } from 'react-hot-toast';
+
+// Create a custom hook to safely use the order store
+function useCartItems() {
+  // Default empty state
+  const [cartItems, setCartItems] = useState<any[]>([]);
+  
+  // Effect to load the order store if available
+  useEffect(() => {
+    let mounted = true;
+    let unsubscribe: (() => void) | undefined;
+    
+    const loadOrderStore = async () => {
+      try {
+        // Dynamic import
+        const orderingModule = await import('../../../ordering/store/orderStore');
+        
+        if (!mounted) return;
+        
+        if (orderingModule && orderingModule.useOrderStore) {
+          // Get initial cart items
+          const store = orderingModule.useOrderStore.getState();
+          if (store && Array.isArray(store.cartItems)) {
+            setCartItems(store.cartItems);
+          }
+          
+          // Subscribe to changes
+          unsubscribe = orderingModule.useOrderStore.subscribe(
+            (state: any) => {
+              if (mounted && Array.isArray(state.cartItems)) {
+                setCartItems(state.cartItems);
+              }
+            }
+          );
+        }
+      } catch (e) {
+        console.log('Order store not available, using empty cart');
+      }
+    };
+    
+    // Execute the async function
+    loadOrderStore();
+    
+    // Cleanup function
+    return () => {
+      mounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+  
+  return cartItems;
+}
 
 export function Header() {
   const { user, logout: signOut } = useAuth();
 
-  // Cart items
-  const cartItems = useOrderStore((state) => state.cartItems);
-  const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  // Cart items - will only have items in the ordering app context
+  const cartItems = useCartItems();
+  const cartCount = cartItems.reduce((acc: number, item: any) => acc + item.quantity, 0);
 
   // Animate cart icon
   const [cartBounce, setCartBounce] = useState(false);
@@ -95,6 +145,12 @@ export function Header() {
               className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
             >
               Menu
+            </Link>
+            <Link
+              to="/reservations"
+              className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
+            >
+              Reservations
             </Link>
             <div className="flex items-center text-gray-700 whitespace-nowrap">
               <Clock className="h-4 w-4 mr-2" />
@@ -237,6 +293,14 @@ export function Header() {
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Menu
+            </Link>
+            <Link
+              to="/reservations"
+              className="block px-3 py-2 rounded-md text-base font-medium text-gray-700
+                         hover:text-gray-900 hover:bg-gray-50"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Reservations
             </Link>
             <div className="px-3 py-2 text-base font-medium text-gray-700 flex items-center">
               <Clock className="inline-block h-4 w-4 mr-2" />

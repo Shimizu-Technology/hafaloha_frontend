@@ -5,37 +5,22 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import * as XLSX from 'xlsx';
-import { api } from '../../lib/api';
+import { 
+  api, 
+  getCustomerOrdersReport, 
+  getRevenueTrend, 
+  getTopItems, 
+  getIncomeStatement,
+  CustomerOrderItem,
+  CustomerOrderReport,
+  RevenueTrendItem,
+  TopItem,
+  IncomeStatementRow
+} from '../../../shared/api';
 
 // ------------------- Types -------------------
-interface CustomerOrderItem {
-  name: string;
-  quantity: number;
-}
-interface CustomerOrderReport {
-  user_id: number | null;
-  user_name: string;
-  total_spent: number;
-  order_count: number;
-  items: CustomerOrderItem[];
-}
-
 type SortColumn = 'user_name' | 'total_spent' | 'order_count';
 type SortDirection = 'asc' | 'desc';
-
-interface RevenueTrendItem {
-  label: string;
-  revenue: number;
-}
-interface TopItem {
-  item_name: string;
-  quantity_sold: number;
-  revenue: number;
-}
-interface IncomeStatementRow {
-  month: string; // e.g. "January"
-  revenue: number;
-}
 
 // For date-range presets
 type PresetRange = '1m' | '3m' | '6m' | '1y' | 'all' | null;
@@ -144,23 +129,23 @@ export function AnalyticsManager() {
   async function loadAnalytics() {
     try {
       // 1) Customer Orders
-      const custRes = await api.getCustomerOrdersReport(startDate, endDate);
-      setOrdersData(custRes.results);
+      const custRes = await getCustomerOrdersReport(startDate, endDate);
+      setOrdersData(custRes.results || []);
 
       // 2) Revenue Trend (day-based)
-      const revTrend = await api.getRevenueTrend('day', startDate, endDate);
-      setRevenueTrend(revTrend.data);
+      const revTrend = await getRevenueTrend('day', startDate, endDate);
+      setRevenueTrend(revTrend.data || []);
 
       // 3) Top Items => limit=5
-      const topRes = await api.getTopItems(5, startDate, endDate);
-      setTopItems(topRes.top_items);
+      const topRes = await getTopItems(5, startDate, endDate);
+      setTopItems(topRes.top_items || []);
 
       // 4) Income Statement => by year
-      const incRes = await api.getIncomeStatement(year);
-      setIncomeStatement(incRes.income_statement);
+      const incRes = await getIncomeStatement(year);
+      setIncomeStatement(incRes.income_statement || []);
 
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load analytics:', err);
       alert('Failed to load analytics. Check console for details.');
     }
   }

@@ -2,12 +2,11 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { AuthProvider } from './reservations/context/AuthContext';
+import { AuthProvider, ScrollToTop } from './shared';
 
 import GlobalLayout from './GlobalLayout';
 import ReservationsApp from './reservations/ReservationsApp';
 import OnlineOrderingApp from './ordering/OnlineOrderingApp';
-import { ScrollToTop } from './shared/ScrollToTop';
 
 export default function RootApp() {
   return (

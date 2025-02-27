@@ -1,24 +1,24 @@
-// src/ordering/components/profile/ProfilePage.tsx
+// src/shared/components/profile/ProfilePage.tsx
 
 import React, { useState, useEffect } from 'react';
-import { api } from '../../../shared/api';
+import { api } from '../../api';
 import { toast } from 'react-hot-toast';
-import { useAuth } from '../../../shared/auth';
-import { User } from '../../../shared/types/auth';
-import { useAuthStore } from '../../../shared/auth/authStore';
+import { useAuth } from '../../auth';
+import { User } from '../../types/auth';
+import { useAuthStore } from '../../auth/authStore';
 
 export function ProfilePage() {
   const { user } = useAuth(); // Read the user from shared auth
   const updateUserInStore = useAuthStore((state) => state.updateUser);
 
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // form fields
   const [firstName, setFirstName] = useState('');
-  const [lastName,  setLastName]  = useState('');
-  const [phone,     setPhone]     = useState('');
-  const [email,     setEmail]     = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
 
   useEffect(() => {
     // If we have a user in the store, populate the form with it
@@ -178,3 +178,5 @@ export function ProfilePage() {
     </div>
   );
 }
+
+export default ProfilePage;

@@ -5,7 +5,8 @@ import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
-import { api } from '../../lib/api';
+import { api, uploadMenuItemImage } from '../../lib/api';
+import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 
 /**
  * Local form data for creating/updating a menu item.
@@ -208,6 +209,9 @@ export function MenuManager() {
     setOptionsModalItem(null);
   };
 
+  // Use our loading overlay hook
+  const { withLoading, LoadingOverlayComponent } = useLoadingOverlay();
+
   /**
    * Submit the form => create or update item in the store
    */
@@ -224,22 +228,113 @@ export function MenuManager() {
       finalLabel = 'Limited Time';
     }
 
-    // Build payload
-    const payload = { ...editingItem, promo_label: finalLabel };
     try {
-      if (editingItem.id) {
-        // Updating existing item
-        await updateMenuItem(String(editingItem.id), payload);
-      } else {
-        // Creating new
-        await addMenuItem(payload);
-      }
+      await withLoading(async () => {
+        // First handle the basic item data
+        let updatedItem: any;
+        
+        if (editingItem.id) {
+          // Updating existing item
+          const { id, imageFile, ...rest } = editingItem;
+          if (id) {
+            const payload = { 
+              ...rest, 
+              promo_label: finalLabel
+            };
+            updatedItem = await updateMenuItem(String(id), payload);
+            
+            // If there's a new image file, upload it separately using the dedicated endpoint
+            if (imageFile instanceof File) {
+              console.log("Uploading image file for menu item:", id);
+              await uploadMenuItemImage(String(id), imageFile);
+              
+              // Fetch the latest data to include the new image URL
+              updatedItem = await api.get(`/menu_items/${id}`);
+            }
+            
+            // Refresh the menu items list to show the updated item immediately
+            await fetchAllMenuItemsForAdmin();
+            
+            // Update the editing item with the latest data
+            if (updatedItem) {
+              setEditingItem({
+                id: Number(updatedItem.id),
+                name: updatedItem.name,
+                description: updatedItem.description,
+                price: updatedItem.price,
+                category_ids: updatedItem.category_ids || [],
+                image: updatedItem.image_url || updatedItem.image || '',
+                imageFile: null,
+                menu_id: (updatedItem as any).menu_id || 1,
+                advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
+                seasonal: !!updatedItem.seasonal,
+                available_from: updatedItem.available_from || null,
+                available_until: updatedItem.available_until || null,
+                promo_label: updatedItem.promo_label?.trim() || 'Limited Time',
+                featured: !!updatedItem.featured,
+                stock_status: updatedItem.stock_status === 'limited'
+                  ? 'low_stock'
+                  : (updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
+                status_note: updatedItem.status_note || '',
+              });
+            }
+          }
+        } else {
+          // Creating new
+          const { imageFile, id, ...rest } = editingItem;
+          const payload = { 
+            ...rest, 
+            promo_label: finalLabel
+          };
+          updatedItem = await addMenuItem(payload);
+          
+          // If there's a new image file and we have the new item ID, upload the image
+          if (updatedItem && updatedItem.id && imageFile instanceof File) {
+            console.log("Uploading image file for new menu item:", updatedItem.id);
+            await uploadMenuItemImage(updatedItem.id, imageFile);
+            
+            // Fetch the latest data to include the new image URL
+            updatedItem = await api.get(`/menu_items/${updatedItem.id}`);
+          }
+          
+          // Refresh the menu items list to show the new item immediately
+          await fetchAllMenuItemsForAdmin();
+          
+          // Update the editing item with the latest data
+          if (updatedItem) {
+            setEditingItem({
+              id: Number(updatedItem.id),
+              name: updatedItem.name,
+              description: updatedItem.description,
+              price: updatedItem.price,
+              category_ids: updatedItem.category_ids || [],
+              image: updatedItem.image_url || updatedItem.image || '',
+              imageFile: null,
+              menu_id: (updatedItem as any).menu_id || 1,
+              advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
+              seasonal: !!updatedItem.seasonal,
+              available_from: updatedItem.available_from || null,
+              available_until: updatedItem.available_until || null,
+              promo_label: updatedItem.promo_label?.trim() || 'Limited Time',
+              featured: !!updatedItem.featured,
+              stock_status: updatedItem.stock_status === 'limited'
+                ? 'low_stock'
+                : (updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
+              status_note: updatedItem.status_note || '',
+            });
+          }
+          
+          // For new items, we might want to keep the modal open for adding options
+          // The user can close it manually when they're ready
+        }
+      });
+      
+      // Don't close the form automatically - let the user close it when they're ready
+      // setIsEditing(false);
+      // setEditingItem(null);
     } catch (err) {
       console.error('Failed to save menu item:', err);
     }
-
-    setIsEditing(false);
-    setEditingItem(null);
   };
 
   /**
@@ -277,6 +372,8 @@ export function MenuManager() {
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
+      {/* Loading overlay will be shown when isLoading is true */}
+      {LoadingOverlayComponent}
       {/* Header row */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h2 className="text-2xl font-bold">Menu Management</h2>
@@ -292,7 +389,7 @@ export function MenuManager() {
       {/* Category Filter */}
       <div className="mb-3">
         <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
-          {/* “All Categories” */}
+          {/* "All Categories" */}
           <button
             className={
               !selectedCategory
@@ -380,7 +477,7 @@ export function MenuManager() {
                     {item.stock_status === 'low_stock' && (
                       <Badge bgColor="bg-orange-500">Low Stock</Badge>
                     )}
-                    {item.advance_notice_hours >= 24 && (
+                    {(item.advance_notice_hours ?? 0) >= 24 && (
                       <Badge bgColor="bg-red-600">24hr Notice</Badge>
                     )}
                     {item.seasonal && (
@@ -553,15 +650,21 @@ export function MenuManager() {
                           checked={checked}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setEditingItem((prev) => ({
-                                ...prev,
-                                category_ids: [...prev.category_ids, cat.id],
-                              }));
+                              setEditingItem((prev) => {
+                                if (!prev) return prev;
+                                return {
+                                  ...prev,
+                                  category_ids: [...prev.category_ids, cat.id],
+                                };
+                              });
                             } else {
-                              setEditingItem((prev) => ({
-                                ...prev,
-                                category_ids: prev.category_ids.filter((c) => c !== cat.id),
-                              }));
+                              setEditingItem((prev) => {
+                                if (!prev) return prev;
+                                return {
+                                  ...prev,
+                                  category_ids: prev.category_ids.filter((c) => c !== cat.id),
+                                };
+                              });
                             }
                           }}
                         />
@@ -611,6 +714,8 @@ export function MenuManager() {
                       onChange={(e) => {
                         const turnedOn = e.target.checked;
                         setEditingItem((prev) => {
+                          if (!prev) return prev;
+                          
                           let newLabel = prev.promo_label;
                           if (turnedOn && (!newLabel || !newLabel.trim())) {
                             newLabel = 'Limited Time';
@@ -682,7 +787,7 @@ export function MenuManager() {
                       setEditingItem({ ...editingItem, promo_label: e.target.value })
                     }
                     className="w-full px-4 py-2 border rounded-md"
-                    placeholder='e.g. "Valentine’s Special"'
+                    placeholder={'e.g. "Valentine\'s Special"'}
                   />
                 </div>
               </div>
@@ -716,8 +821,8 @@ export function MenuManager() {
                       <option value="low_stock">Low Stock</option>
                     </select>
                     <p className="text-xs text-gray-500 mt-1">
-                      “Low Stock” shows a warning but still allows ordering.
-                      “Out of Stock” disables ordering.
+                      "Low Stock" shows a warning but still allows ordering.
+                      "Out of Stock" disables ordering.
                     </p>
                   </div>
 
@@ -733,7 +838,7 @@ export function MenuManager() {
                       }
                       className="w-full px-4 py-2 border rounded-md"
                       rows={2}
-                      placeholder='e.g. "Supplier delayed; we’re using a temporary sauce."'
+                      placeholder={'e.g. "Supplier delayed; we\'re using a temporary sauce."'}
                     />
                   </div>
                 </div>
@@ -784,13 +889,15 @@ export function MenuManager() {
                 <div className="mt-6">
                   <button
                     type="button"
-                    onClick={() =>
+                  onClick={() => {
+                    if (editingItem.id) {
                       handleManageOptions({
                         ...editingItem,
                         id: editingItem.id.toString(),
                         category_ids: editingItem.category_ids,
-                      } as unknown as MenuItem)
+                      } as unknown as MenuItem);
                     }
+                  }}
                     className="px-4 py-2 border rounded-md hover:bg-gray-50"
                   >
                     Manage Options
@@ -1010,7 +1117,7 @@ function OptionGroupsModal({
       // Create new groups
       const newGroupIdMap: Record<number, number> = {};
       for (const gNew of groupsToCreate) {
-        const created = await api.post(`/menu_items/${item.id}/option_groups`, {
+        const created: any = await api.post(`/menu_items/${item.id}/option_groups`, {
           name: gNew.name,
           min_select: gNew.min_select,
           max_select: gNew.max_select,

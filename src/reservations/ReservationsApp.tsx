@@ -2,11 +2,10 @@
 
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
+import { useAuth, ProtectedRoute } from '../shared';
 
-import LoginPage from './components/LoginPage';
-import SignupPage from './components/SignupPage';
-import ProfilePage from './components/ProfilePage';
+import { LoginForm, SignUpForm } from '../shared/components/auth';
+import { ProfilePage } from '../shared/components/profile';
 import StaffDashboard from './components/StaffDashboard';
 import ReservationsTab from './components/dashboard/ReservationsTab';
 import WaitlistTab from './components/dashboard/WaitlistTab';
@@ -16,20 +15,12 @@ import SettingsTab from './components/dashboard/SettingsTab';
 
 import { DateFilterProvider } from './context/DateFilterContext';
 
-/** A minimal route guard that requires a user to be logged in. */
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-  if (isLoading) return <div>Loading...</div>;
-  if (!user) return <Navigate to="login" />;
-  return <>{children}</>;
-}
-
 export default function ReservationsApp() {
   return (
     <Routes>
       {/* Public routes for Reservations domain */}
-      <Route path="login" element={<LoginPage />} />
-      <Route path="signup" element={<SignupPage />} />
+      <Route path="login" element={<LoginForm />} />
+      <Route path="signup" element={<SignUpForm />} />
 
       {/* Example protected route => /reservations/profile */}
       <Route

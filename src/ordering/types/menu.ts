@@ -22,8 +22,11 @@ export interface OptionGroup {
   options: MenuOption[];
 }
 
+/**
+ * API response shape for a menu item 
+ */
 export interface MenuItem {
-  // If Rails returns numeric IDs, you can do `id: number;`
+  // API returns string IDs, but we sometimes work with them as numbers
   id: string;
   name: string;
   description: string;
@@ -35,13 +38,33 @@ export interface MenuItem {
    */
   category_ids?: number[];
 
-  image: string; // from image_url
+  // Image-related properties
+  image: string;  // Used for display - this is REQUIRED (set fallback if needed)
+  image_url?: string; // Raw response from API
+
+  // Menu related
+  menu_id?: number;
+  
+  // Option groups
   option_groups?: OptionGroup[];
+  
+  // Availability
   advance_notice_hours?: number;
   seasonal?: boolean;
   available_from?: string | null;
   available_until?: string | null;
+  promo_label?: string | null;
   featured?: boolean;
-  stock_status?: 'in_stock' | 'out_of_stock' | 'low_stock';
+  
+  // Inventory status
+  stock_status?: 'in_stock' | 'out_of_stock' | 'low_stock' | 'limited';
   status_note?: string | null;
+}
+
+/**
+ * Extended MenuItem type for form handling with file upload
+ */
+export interface MenuItemFormData extends Omit<MenuItem, 'id'> {
+  id?: number | string;
+  imageFile?: File | null;
 }

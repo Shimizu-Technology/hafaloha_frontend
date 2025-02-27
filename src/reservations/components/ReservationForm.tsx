@@ -15,9 +15,24 @@ import {
   Share2,
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../shared/auth';
 import { toast } from 'react-hot-toast';
-import { fetchAvailability, createReservation } from '../services/api';
+import { api } from '../../shared/api';
+
+// Define API types
+interface AvailabilityResponse {
+  slots: string[];
+  date: string;
+}
+
+// Define API functions
+const fetchAvailability = async (date: string, partySize: number): Promise<AvailabilityResponse> => {
+  return api.get<AvailabilityResponse>(`/availability?date=${date}&party_size=${partySize}`);
+};
+
+const createReservation = async (data: any): Promise<any> => {
+  return api.post<any>('/reservations', data);
+};
 
 /** Helpers */
 function formatYYYYMMDD(dateObj: Date): string {

@@ -9,39 +9,24 @@ import { CartPage } from './components/CartPage';
 import { CheckoutPage } from './components/CheckoutPage';
 import { OrderConfirmation } from './components/OrderConfirmation';
 import AdminDashboard from './components/admin/AdminDashboard';
-import { LoadingSpinner } from './components/LoadingSpinner';
+import { LoadingSpinner } from '../shared/components/ui';
 import { LoyaltyTeaser } from './components/loyalty/LoyaltyTeaser';
-import { LoginForm } from './components/auth/LoginForm';
-import { SignUpForm } from './components/auth/SignUpForm';
-import { ForgotPasswordForm } from './components/auth/ForgotPasswordForm';
-import { ResetPasswordForm } from './components/auth/ResetPasswordForm';
+import { LoginForm, SignUpForm, ForgotPasswordForm, ResetPasswordForm, VerifyPhonePage } from '../shared/components/auth';
 import { OrderHistory } from './components/profile/OrderHistory';
-import { ProfilePage } from './components/profile/ProfilePage';
-import { VerifyPhonePage } from './components/auth/VerifyPhonePage';
+import { ProfilePage } from '../shared/components/profile';
 
-import { useAuthStore } from './store/authStore';
+import { useAuthStore } from '../shared/auth';
 import { useMenuStore } from './store/menuStore';
 import { useLoadingStore } from './store/loadingStore';
 import { MenuItem as MenuItemCard } from './components/MenuItem';
 import { useSiteSettingsStore } from './store/siteSettingsStore'; // <-- IMPORTANT
 
-function ProtectedRoute({
-  children,
-  adminOnly = false,
-}: {
-  children: React.ReactNode;
-  adminOnly?: boolean;
-}) {
-  const { user } = useAuthStore();
-  if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== 'admin') return <Navigate to="/" replace />;
-  return <>{children}</>;
-}
+import { ProtectedRoute } from '../shared';
 
 function OrderingLayout() {
   const loadingCount = useLoadingStore((state) => state.loadingCount);
   const [showSpinner, setShowSpinner] = React.useState(false);
-  const [timerId, setTimerId] = React.useState<NodeJS.Timeout | null>(null);
+  const [timerId, setTimerId] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     if (loadingCount > 0) {
