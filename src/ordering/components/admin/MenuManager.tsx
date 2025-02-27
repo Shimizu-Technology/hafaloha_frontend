@@ -7,6 +7,7 @@ import type { MenuItem } from '../../types/menu';
 import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
 import { api, uploadMenuItemImage } from '../../lib/api';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
+import { Tooltip } from '../../../shared/components/ui';
 
 /**
  * Local form data for creating/updating a menu item.
@@ -582,13 +583,29 @@ export function MenuManager() {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* BASIC INFO */}
               <div>
-                <h4 className="text-md font-semibold mb-2 border-b pb-2">Basic Info</h4>
+                <div className="flex items-center mb-2 border-b pb-2">
+                  <h4 className="text-md font-semibold">Basic Info</h4>
+                  <Tooltip 
+                    content="Enter the essential information about this menu item."
+                    position="right"
+                    icon
+                    iconClassName="ml-1 h-4 w-4"
+                  />
+                </div>
 
                 {/* Name & Description */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Name <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <Tooltip 
+                      content="The name of the dish as it will appear on the menu."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
+                    />
+                  </div>
                   <input
                     type="text"
                     value={editingItem.name}
@@ -600,9 +617,17 @@ export function MenuManager() {
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
+                  <div className="flex items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Description
+                    </label>
+                    <Tooltip 
+                      content="A brief description of the dish, including key ingredients or preparation methods."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
+                    />
+                  </div>
                   <textarea
                     value={editingItem.description}
                     onChange={(e) =>
@@ -615,9 +640,17 @@ export function MenuManager() {
 
                 {/* Price */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Price
-                  </label>
+                  <div className="flex items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Price
+                    </label>
+                    <Tooltip 
+                      content="The base price of the item in dollars. Additional charges may apply for options."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
+                    />
+                  </div>
                   <input
                     type="number"
                     step="0.01"
@@ -636,7 +669,15 @@ export function MenuManager() {
 
               {/* MULTI-CATEGORY CHECKBOXES */}
               <div>
-                <h4 className="text-md font-semibold mb-2 border-b pb-2">Categories</h4>
+                <div className="flex items-center mb-2 border-b pb-2">
+                  <h4 className="text-md font-semibold">Categories</h4>
+                  <Tooltip 
+                    content="Assign this item to one or more menu categories. Items can appear in multiple sections of the menu."
+                    position="right"
+                    icon
+                    iconClassName="ml-1 h-4 w-4"
+                  />
+                </div>
                 <p className="text-xs text-gray-500 mb-2">
                   (Select one or more categories)
                 </p>
@@ -677,61 +718,93 @@ export function MenuManager() {
 
               {/* AVAILABILITY */}
               <div>
-                <h4 className="text-md font-semibold mb-2 border-b pb-2">Availability</h4>
+                <div className="flex items-center mb-2 border-b pb-2">
+                  <h4 className="text-md font-semibold">Availability</h4>
+                  <Tooltip 
+                    content="Control when this item is available to customers and whether it requires advance notice."
+                    position="right"
+                    icon
+                    iconClassName="ml-1 h-4 w-4"
+                  />
+                </div>
 
                 {/* 24-hour Notice + Featured toggles */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <label className="inline-flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={editingItem.advance_notice_hours >= 24}
-                      onChange={(e) => {
-                        const newVal = e.target.checked ? 24 : 0;
-                        setEditingItem({ ...editingItem, advance_notice_hours: newVal });
-                      }}
+                  <div className="flex items-center">
+                    <label className="inline-flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={editingItem.advance_notice_hours >= 24}
+                        onChange={(e) => {
+                          const newVal = e.target.checked ? 24 : 0;
+                          setEditingItem({ ...editingItem, advance_notice_hours: newVal });
+                        }}
+                      />
+                      <span>Requires 24-hour notice?</span>
+                    </label>
+                    <Tooltip 
+                      content="Enable this for items that need to be prepared in advance, like special orders or catering."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
                     />
-                    <span>Requires 24-hour notice?</span>
-                  </label>
+                  </div>
 
-                  <label className="inline-flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={editingItem.featured}
-                      onChange={(e) =>
-                        setEditingItem({ ...editingItem, featured: e.target.checked })
-                      }
+                  <div className="flex items-center">
+                    <label className="inline-flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={editingItem.featured}
+                        onChange={(e) =>
+                          setEditingItem({ ...editingItem, featured: e.target.checked })
+                        }
+                      />
+                      <span>Featured?</span>
+                    </label>
+                    <Tooltip 
+                      content="Featured items appear in the highlighted section of the menu. Limited to 4 items."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
                     />
-                    <span>Featured?</span>
-                  </label>
+                  </div>
                 </div>
 
                 {/* Seasonal */}
                 <div className="mt-4">
-                  <label className="inline-flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={editingItem.seasonal}
-                      onChange={(e) => {
-                        const turnedOn = e.target.checked;
-                        setEditingItem((prev) => {
-                          if (!prev) return prev;
-                          
-                          let newLabel = prev.promo_label;
-                          if (turnedOn && (!newLabel || !newLabel.trim())) {
-                            newLabel = 'Limited Time';
-                          }
-                          return {
-                            ...prev,
-                            seasonal: turnedOn,
-                            available_from: turnedOn ? prev.available_from : null,
-                            available_until: turnedOn ? prev.available_until : null,
-                            promo_label: newLabel,
-                          };
-                        });
-                      }}
+                  <div className="flex items-center">
+                    <label className="inline-flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={editingItem.seasonal}
+                        onChange={(e) => {
+                          const turnedOn = e.target.checked;
+                          setEditingItem((prev) => {
+                            if (!prev) return prev;
+                            
+                            let newLabel = prev.promo_label;
+                            if (turnedOn && (!newLabel || !newLabel.trim())) {
+                              newLabel = 'Limited Time';
+                            }
+                            return {
+                              ...prev,
+                              seasonal: turnedOn,
+                              available_from: turnedOn ? prev.available_from : null,
+                              available_until: turnedOn ? prev.available_until : null,
+                              promo_label: newLabel,
+                            };
+                          });
+                        }}
+                      />
+                      <span>Time-based availability? (Seasonal)</span>
+                    </label>
+                    <Tooltip 
+                      content="Use for seasonal items or limited-time promotions that are only available during specific dates."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
                     />
-                    <span>Time-based availability? (Seasonal)</span>
-                  </label>
+                  </div>
                   <p className="text-xs text-gray-500">
                     If checked, this item is only available between the specified start & end dates.
                   </p>
@@ -794,15 +867,31 @@ export function MenuManager() {
 
               {/* INVENTORY STATUS */}
               <div>
-                <h4 className="text-md font-semibold mb-2 border-b pb-2">
-                  Inventory Status
-                </h4>
+                <div className="flex items-center mb-2 border-b pb-2">
+                  <h4 className="text-md font-semibold">
+                    Inventory Status
+                  </h4>
+                  <Tooltip 
+                    content="Manage the current availability of this item based on your inventory."
+                    position="right"
+                    icon
+                    iconClassName="ml-1 h-4 w-4"
+                  />
+                </div>
                 <div className="flex flex-col sm:flex-row gap-4">
                   {/* Stock Status */}
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Inventory Status
-                    </label>
+                    <div className="flex items-center mb-1">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Inventory Status
+                      </label>
+                      <Tooltip 
+                        content="Set the current availability status. 'Low Stock' shows a warning but still allows ordering. 'Out of Stock' disables ordering."
+                        position="top"
+                        icon
+                        iconClassName="ml-1 h-4 w-4"
+                      />
+                    </div>
                     <select
                       value={editingItem.stock_status ?? 'in_stock'}
                       onChange={(e) =>
@@ -828,9 +917,17 @@ export function MenuManager() {
 
                   {/* Status Note */}
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Status Note (Optional)
-                    </label>
+                    <div className="flex items-center mb-1">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Status Note (Optional)
+                      </label>
+                      <Tooltip 
+                        content="Add a note to explain the current status, such as 'Temporarily using a different sauce' or 'Back in stock next week'."
+                        position="top"
+                        icon
+                        iconClassName="ml-1 h-4 w-4"
+                      />
+                    </div>
                     <textarea
                       value={editingItem.status_note ?? ''}
                       onChange={(e) =>
@@ -846,11 +943,27 @@ export function MenuManager() {
 
               {/* IMAGES */}
               <div>
-                <h4 className="text-md font-semibold mb-2 border-b pb-2">Images</h4>
+                <div className="flex items-center mb-2 border-b pb-2">
+                  <h4 className="text-md font-semibold">Images</h4>
+                  <Tooltip 
+                    content="Upload an image of this menu item."
+                    position="right"
+                    icon
+                    iconClassName="ml-1 h-4 w-4"
+                  />
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Image Upload
-                  </label>
+                  <div className="flex items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Image Upload
+                    </label>
+                    <Tooltip 
+                      content="Recommended size: 800x600 pixels. JPG or PNG format."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
+                    />
+                  </div>
                   <input
                     type="file"
                     accept="image/*"

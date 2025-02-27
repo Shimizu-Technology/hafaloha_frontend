@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../../shared/auth';
 import { toast } from 'react-hot-toast';
 import { api } from '../../shared/api';
+import { Tooltip } from '../../shared/components/ui';
 
 // Define API types
 interface AvailabilityResponse {
@@ -448,12 +449,20 @@ export default function ReservationForm({
 
           {/* Party Size */}
           <div className="space-y-1">
-            <label
-              htmlFor="partySize"
-              className="block text-sm sm:text-base font-medium text-gray-700"
-            >
-              Party Size
-            </label>
+            <div className="flex items-center">
+              <label
+                htmlFor="partySize"
+                className="block text-sm sm:text-base font-medium text-gray-700"
+              >
+                Party Size
+              </label>
+              <Tooltip 
+                content="Enter the number of people in your party. This helps us allocate the right table size for your group."
+                position="top"
+                icon
+                iconClassName="ml-1 h-4 w-4"
+              />
+            </div>
             <div className="relative">
               <Users className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               <input
@@ -480,9 +489,17 @@ export default function ReservationForm({
 
           {/* Duration => React Select */}
           <div className="space-y-1">
-            <label className="block text-sm sm:text-base font-medium text-gray-700">
-              Duration (minutes)
-            </label>
+            <div className="flex items-center">
+              <label className="block text-sm sm:text-base font-medium text-gray-700">
+                Duration
+              </label>
+              <Tooltip 
+                content="Select how long you expect to need the table. This helps us manage reservations efficiently."
+                position="top"
+                icon
+                iconClassName="ml-1 h-4 w-4"
+              />
+            </div>
             <Select<DurationOption>
               options={durationOptions}
               placeholder="Select duration"
@@ -546,12 +563,20 @@ export default function ReservationForm({
 
           {/* Phone */}
           <div className="space-y-1">
-            <label
-              htmlFor="phone"
-              className="block text-sm sm:text-base font-medium text-gray-700"
-            >
-              Phone {user ? '(Optional)' : '(Required)'}
-            </label>
+            <div className="flex items-center">
+              <label
+                htmlFor="phone"
+                className="block text-sm sm:text-base font-medium text-gray-700"
+              >
+                Phone {user ? '(Optional)' : '(Required)'}
+              </label>
+              <Tooltip 
+                content="We may contact you about your reservation. Include country code (e.g., +1671 for Guam)."
+                position="top"
+                icon
+                iconClassName="ml-1 h-4 w-4"
+              />
+            </div>
             <div className="relative">
               <Phone className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               <input

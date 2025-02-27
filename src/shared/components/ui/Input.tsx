@@ -1,15 +1,18 @@
 // src/shared/components/ui/Input.tsx
 
 import React, { InputHTMLAttributes, forwardRef } from 'react';
+import { Tooltip } from './Tooltip';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   fullWidth?: boolean;
+  tooltip?: React.ReactNode;
+  tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, fullWidth = false, className = '', ...props }, ref) => {
+  ({ label, error, fullWidth = false, className = '', tooltip, tooltipPosition = 'top', ...props }, ref) => {
     // Base classes
     const baseClasses = 'block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm';
     
@@ -27,13 +30,25 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       ${className}
     `;
     
+    const labelElement = label && (
+      <div className="flex items-center">
+        <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 mb-1">
+          {label}
+        </label>
+        {tooltip && (
+          <Tooltip 
+            content={tooltip} 
+            position={tooltipPosition}
+            icon
+            iconClassName="ml-1 h-4 w-4"
+          />
+        )}
+      </div>
+    );
+
     return (
       <div className={fullWidth ? 'w-full' : ''}>
-        {label && (
-          <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 mb-1">
-            {label}
-          </label>
-        )}
+        {labelElement}
         <div className="relative">
           <input
             ref={ref}

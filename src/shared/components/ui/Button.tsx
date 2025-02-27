@@ -1,6 +1,7 @@
 // src/shared/components/ui/Button.tsx
 
 import React, { ButtonHTMLAttributes } from 'react';
+import { Tooltip } from './Tooltip';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'danger';
@@ -8,6 +9,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
   fullWidth?: boolean;
   children: React.ReactNode;
+  tooltip?: React.ReactNode;
+  tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -18,6 +21,8 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   className = '',
   disabled,
+  tooltip,
+  tooltipPosition = 'top',
   ...props
 }) => {
   // Base classes
@@ -54,12 +59,8 @@ export const Button: React.FC<ButtonProps> = ({
     ${className}
   `;
   
-  return (
-    <button
-      className={buttonClasses}
-      disabled={disabled || isLoading}
-      {...props}
-    >
+  const buttonContent = (
+    <>
       {isLoading ? (
         <>
           <svg
@@ -87,6 +88,32 @@ export const Button: React.FC<ButtonProps> = ({
       ) : (
         children
       )}
+    </>
+  );
+
+  // If tooltip is provided, wrap the button in a tooltip
+  if (tooltip) {
+    return (
+      <Tooltip content={tooltip} position={tooltipPosition}>
+        <button
+          className={buttonClasses}
+          disabled={disabled || isLoading}
+          {...props}
+        >
+          {buttonContent}
+        </button>
+      </Tooltip>
+    );
+  }
+
+  // Otherwise, render the button directly
+  return (
+    <button
+      className={buttonClasses}
+      disabled={disabled || isLoading}
+      {...props}
+    >
+      {buttonContent}
     </button>
   );
 };
