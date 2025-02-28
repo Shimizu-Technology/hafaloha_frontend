@@ -1,6 +1,7 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense } from 'react';
+import { Palette, Store, List, Users } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const GeneralSettings = lazy(() => import('./settings/GeneralSettings').then(module => ({ default: module.GeneralSettings })));
@@ -18,10 +19,10 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('branding');
 
   const tabs = [
-    { id: 'branding', label: 'Branding' },
-    { id: 'restaurant', label: 'Restaurant' },
-    { id: 'categories', label: 'Categories' },
-    { id: 'users', label: 'Users' },
+    { id: 'branding', label: 'Branding', icon: Palette },
+    { id: 'restaurant', label: 'Restaurant', icon: Store },
+    { id: 'categories', label: 'Categories', icon: List },
+    { id: 'users', label: 'Users', icon: Users },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -61,20 +62,28 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     <div className="p-4">
       <h2 className="text-xl font-semibold mb-4">Admin Settings</h2>
 
-      <div className="mb-6 border-b border-gray-200 flex space-x-2">
-        {tabs.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setActiveSettingsTab(id as SettingsTab)}
-            className={`px-4 py-2 border-b-2 ${
-              activeSettingsTab === id
-                ? 'border-[#c1902f] text-[#c1902f]'
-                : 'border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* Mobile-friendly tab navigation similar to main admin dashboard */}
+      <div className="mb-6 border-b border-gray-200 overflow-x-auto">
+        <nav className="flex -mb-px" role="tablist">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveSettingsTab(id as SettingsTab)}
+              className={`
+                flex-shrink-0 whitespace-nowrap px-4 py-4 border-b-2
+                text-center font-medium text-sm
+                ${
+                  activeSettingsTab === id
+                    ? 'border-[#c1902f] text-[#c1902f]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              <Icon className="h-5 w-5 mx-auto mb-1" />
+              {label}
+            </button>
+          ))}
+        </nav>
       </div>
 
       <Suspense fallback={<TabLoadingPlaceholder />}>

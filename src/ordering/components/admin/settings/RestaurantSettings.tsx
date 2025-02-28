@@ -139,10 +139,11 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
           </p>
           
           <form onSubmit={handleRestaurantUpdate} className="space-y-8">
+            {/* Basic Information Section */}
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Basic Information</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
                 <Input
                   label="Restaurant Name"
                   value={restaurant.name}
@@ -158,7 +159,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
                   placeholder="Enter restaurant address"
                 />
 
-                <div className="col-span-1">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Phone Number
                     <span className="ml-1 text-gray-500 text-xs" title="Enter in format: +16719893444">ⓘ</span>
@@ -179,11 +180,12 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
               </div>
             </div>
 
+            {/* Reservation Settings Section */}
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Reservation Settings</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="col-span-1">
+              <div className="space-y-4">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Time Zone</label>
                   <select
                     value={restaurant.time_zone}
@@ -198,45 +200,48 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
                   </select>
                 </div>
                 
-                <div className="col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Time Slot Interval (minutes)
-                    <span className="ml-1 text-gray-500 text-xs" title="The interval in minutes between available reservation time slots">ⓘ</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="60"
-                    value={restaurant.time_slot_interval.toString()}
-                    onChange={(e) => setRestaurant({...restaurant, time_slot_interval: parseInt(e.target.value) || 30})}
-                    placeholder="30"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
-                  />
-                </div>
-                
-                <div className="col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Default Reservation Length (minutes)
-                    <span className="ml-1 text-gray-500 text-xs" title="The default duration for reservations in minutes">ⓘ</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="15"
-                    max="240"
-                    value={restaurant.default_reservation_length.toString()}
-                    onChange={(e) => setRestaurant({...restaurant, default_reservation_length: parseInt(e.target.value) || 60})}
-                    placeholder="60"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Time Slot Interval (minutes)
+                      <span className="ml-1 text-gray-500 text-xs" title="The interval in minutes between available reservation time slots">ⓘ</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="5"
+                      max="60"
+                      value={restaurant.time_slot_interval.toString()}
+                      onChange={(e) => setRestaurant({...restaurant, time_slot_interval: parseInt(e.target.value) || 30})}
+                      placeholder="30"
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Default Reservation Length (minutes)
+                      <span className="ml-1 text-gray-500 text-xs" title="The default duration for reservations in minutes">ⓘ</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="15"
+                      max="240"
+                      value={restaurant.default_reservation_length.toString()}
+                      onChange={(e) => setRestaurant({...restaurant, default_reservation_length: parseInt(e.target.value) || 60})}
+                      placeholder="60"
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end pt-4">
+            {/* Save Button - Full width on mobile */}
+            <div className="pt-4">
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex items-center px-5 py-2
+                className="w-full sm:w-auto sm:ml-auto sm:flex sm:items-center px-5 py-2
                           bg-[#c1902f] text-white font-medium 
                           rounded-md hover:bg-[#d4a43f]
                           focus:outline-none focus:ring-2 focus:ring-[#c1902f]

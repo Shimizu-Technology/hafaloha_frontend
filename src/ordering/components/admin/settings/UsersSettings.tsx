@@ -123,11 +123,10 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
 
   return (
     <div className="space-y-6">
-      {/* Controls row */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        {/* Left side: Search & Filter & Sort */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-          {/* Search input */}
+      {/* Controls section - mobile optimized */}
+      <div className="space-y-4 mb-4">
+        {/* Search input - full width on mobile */}
+        <div className="w-full">
           <input
             type="text"
             placeholder="Search by name or email..."
@@ -136,11 +135,14 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
               setPage(1); // reset to page 1
               setSearchTerm(e.target.value);
             }}
-            className="border border-gray-300 rounded-md px-3 py-1
+            className="border border-gray-300 rounded-md px-3 py-2
                        text-sm focus:outline-none focus:ring-1 
-                       focus:ring-[#c1902f] w-64"
+                       focus:ring-[#c1902f] w-full"
           />
-
+        </div>
+        
+        {/* Filters row */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* Role filter */}
           <select
             value={filterRole}
@@ -148,8 +150,8 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
               setPage(1);
               setFilterRole(e.target.value as RoleFilter);
             }}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm
-                       focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
+            className="border border-gray-300 rounded-md px-2 py-1.5 text-sm
+                       focus:outline-none focus:ring-1 focus:ring-[#c1902f] flex-1 min-w-[120px]"
           >
             <option value="all">All Roles</option>
             <option value="admin">Admin</option>
@@ -157,60 +159,58 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
           </select>
 
           {/* Sort dropdown */}
-          <div className="flex items-center space-x-2">
-            <select
-              value={sortBy}
-              onChange={(e) => {
-                setSortBy(e.target.value as SortBy);
-                setPage(1);
-              }}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm 
-                         focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
-            >
-              <option value="created_at">Sort: Date Created</option>
-              <option value="email">Sort: Email</option>
-            </select>
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value as SortBy);
+              setPage(1);
+            }}
+            className="border border-gray-300 rounded-md px-2 py-1.5 text-sm 
+                       focus:outline-none focus:ring-1 focus:ring-[#c1902f] flex-1 min-w-[120px]"
+          >
+            <option value="created_at">Sort: Date Created</option>
+            <option value="email">Sort: Email</option>
+          </select>
 
-            <select
-              value={sortDir}
-              onChange={(e) => {
-                setSortDir(e.target.value as SortDir);
-                setPage(1);
-              }}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm
-                         focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
-            >
-              <option value="desc">DESC</option>
-              <option value="asc">ASC</option>
-            </select>
-          </div>
+          <select
+            value={sortDir}
+            onChange={(e) => {
+              setSortDir(e.target.value as SortDir);
+              setPage(1);
+            }}
+            className="border border-gray-300 rounded-md px-2 py-1.5 text-sm
+                       focus:outline-none focus:ring-1 focus:ring-[#c1902f] w-20"
+          >
+            <option value="desc">DESC</option>
+            <option value="asc">ASC</option>
+          </select>
         </div>
 
-        {/* Create User Button */}
+        {/* Create User Button - full width on mobile */}
         <button
           onClick={handleCreateNewUser}
-          className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]
+          className="w-full sm:w-auto px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]
                      text-sm"
         >
           + Create New User
         </button>
       </div>
 
-      {/* Users Table */}
+      {/* Users Table - with responsive design */}
       <div className="bg-white border border-gray-200 rounded-md shadow-sm overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-700 w-1/5">
+              <th className="px-4 py-3 text-left font-medium text-gray-700">
                 Name
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-700 w-1/4">
+              <th className="px-4 py-3 text-left font-medium text-gray-700 hidden sm:table-cell">
                 Email
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-700 w-1/6">
+              <th className="px-4 py-3 text-left font-medium text-gray-700">
                 Role
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-700 w-1/6">
+              <th className="px-4 py-3 text-left font-medium text-gray-700 hidden md:table-cell">
                 Created
               </th>
             </tr>
@@ -228,12 +228,18 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
                   onClick={() => handleUserClick(user)}
                   className="hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
                 >
-                  <td className="px-4 py-2">{fullName}</td>
-                  <td className="px-4 py-2 text-gray-700">{user.email}</td>
-                  <td className="px-4 py-2 capitalize text-gray-600">
-                    {user.role}
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{fullName}</div>
+                    {/* Show email on mobile when email column is hidden */}
+                    <div className="text-xs text-gray-500 sm:hidden">{user.email}</div>
                   </td>
-                  <td className="px-4 py-2 text-gray-500">
+                  <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">{user.email}</td>
+                  <td className="px-4 py-3 capitalize text-gray-600">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100">
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
                     {formatDate(user.created_at)}
                   </td>
                 </tr>
@@ -250,23 +256,23 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
         )}
       </div>
 
-      {/* Pagination Controls */}
-      <div className="flex justify-between items-center mt-2 text-sm">
-        <div>
+      {/* Pagination Controls - mobile friendly */}
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-4 text-sm gap-2">
+        <div className="text-gray-600 w-full sm:w-auto text-center sm:text-left">
           Page {page} of {Math.max(totalPages, 1)}
         </div>
-        <div className="space-x-2">
+        <div className="flex justify-center w-full sm:w-auto space-x-2">
           <button
             onClick={handlePrevPage}
             disabled={page <= 1}
-            className="px-3 py-1 border rounded disabled:opacity-50"
+            className="px-4 py-2 border rounded-md disabled:opacity-50 w-24"
           >
             Prev
           </button>
           <button
             onClick={handleNextPage}
             disabled={page >= totalPages}
-            className="px-3 py-1 border rounded disabled:opacity-50"
+            className="px-4 py-2 border rounded-md disabled:opacity-50 w-24"
           >
             Next
           </button>

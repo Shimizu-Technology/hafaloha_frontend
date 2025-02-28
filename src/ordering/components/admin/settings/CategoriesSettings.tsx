@@ -99,53 +99,67 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
       {error && <p className="text-red-600 mb-3">{error}</p>}
       {loading && <p className="text-gray-500 mb-3">Loading...</p>}
 
-      {/* New Category Form */}
+      {/* New Category Form - Mobile Optimized */}
       <form
         onSubmit={handleCreate}
-        className="flex flex-col gap-2 mb-4 items-start sm:flex-row sm:items-end"
+        className="mb-6 space-y-3"
       >
-        <div className="flex flex-col">
-          <label className="text-sm font-medium text-gray-700 mb-1">
+        <div className="w-full">
+          <label className="text-sm font-medium text-gray-700 mb-1 block">
             New Category Name
           </label>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="border p-2 rounded w-48 sm:w-60"
-            placeholder="e.g. Beverages"
-          />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="border p-2 rounded flex-1"
+              placeholder="e.g. Beverages"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-[#c1902f] text-white rounded hover:bg-[#d4a43f]"
+            >
+              Add Category
+            </button>
+          </div>
         </div>
-        <button
-          type="submit"
-          className="mt-2 sm:mt-auto px-4 py-2 bg-[#c1902f] text-white rounded hover:bg-[#d4a43f] h-10"
-        >
-          Add
-        </button>
       </form>
 
-      {/* Categories List */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full border text-sm text-gray-700">
-          <thead className="bg-gray-100 text-gray-700">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium">Name</th>
-              <th className="px-4 py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories.map((cat) => {
-              const isEditing = editingCategory && editingCategory.id === cat.id;
+      {/* Loading state */}
+      {loading && (
+        <div className="text-center py-4">
+          <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-[#c1902f] border-r-2 border-b-2 border-gray-200"></div>
+          <p className="mt-2 text-sm text-gray-500">Loading categories...</p>
+        </div>
+      )}
 
-              if (isEditing) {
-                // Inline editing row
-                return (
-                  <tr key={cat.id} className="border-b">
-                    <td className="px-4 py-2">
-                      <form
-                        onSubmit={handleEditSubmit}
-                        className="flex flex-col gap-2 sm:flex-row sm:items-center"
-                      >
+      {/* Error state */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* Categories List - Mobile Optimized */}
+      <div className="bg-white border border-gray-200 rounded-md shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm text-gray-700">
+            <thead className="bg-gray-50 text-gray-700">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">Name</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((cat) => {
+                const isEditing = editingCategory && editingCategory.id === cat.id;
+
+                if (isEditing) {
+                  // Inline editing row
+                  return (
+                    <tr key={cat.id} className="border-b">
+                      <td className="px-4 py-3">
                         <input
                           type="text"
                           value={editingCategory.name}
@@ -155,61 +169,62 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
                               name: e.target.value,
                             })
                           }
-                          className="border p-2 rounded w-40 sm:w-60"
+                          className="border p-2 rounded w-full"
+                          autoFocus
                         />
-                      </form>
-                    </td>
-                    <td className="px-4 py-2 space-x-2 sm:space-x-3">
-                      <button
-                        onClick={handleEditSubmit}
-                        className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingCategory(null)}
-                        className="px-3 py-1 border rounded text-sm"
-                      >
-                        Cancel
-                      </button>
-                    </td>
-                  </tr>
-                );
-              } else {
-                // Normal row (read-only)
-                return (
-                  <tr key={cat.id} className="border-b">
-                    <td className="px-4 py-2">
-                      <span className="font-medium">{cat.name}</span>
-                    </td>
-                    <td className="px-4 py-2 space-x-2 sm:space-x-3">
-                      <button
-                        onClick={() => setEditingCategory(cat)}
-                        className="px-2 py-1 border rounded text-sm hover:bg-gray-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(cat.id)}
-                        className="px-2 py-1 text-red-600 border border-red-600 rounded text-sm hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                );
-              }
-            })}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={handleEditSubmit}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 text-sm mr-2"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingCategory(null)}
+                          className="px-3 py-1.5 border rounded text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                } else {
+                  // Normal row (read-only)
+                  return (
+                    <tr key={cat.id} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <span className="font-medium">{cat.name}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => setEditingCategory(cat)}
+                          className="px-3 py-1.5 border rounded text-sm hover:bg-gray-100 mr-2"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(cat.id)}
+                          className="px-3 py-1.5 text-red-600 border border-red-600 rounded text-sm hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
+              })}
 
-            {categories.length === 0 && !loading && (
-              <tr>
-                <td colSpan={2} className="px-4 py-4 text-center text-gray-500">
-                  No categories yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              {categories.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={2} className="px-4 py-6 text-center text-gray-500">
+                    No categories yet. Add your first category above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* 
