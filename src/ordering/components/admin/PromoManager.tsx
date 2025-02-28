@@ -12,7 +12,11 @@ interface PromoFormData {
   description?: string;
 }
 
-export function PromoManager() {
+interface PromoManagerProps {
+  restaurantId?: string;
+}
+
+export function PromoManager({ restaurantId }: PromoManagerProps) {
   const {
     promoCodes,
     fetchPromoCodes,

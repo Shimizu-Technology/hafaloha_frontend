@@ -12,7 +12,11 @@ interface SiteSettings {
   spinner_image_url: string | null;
 }
 
-export function GeneralSettings() {
+interface GeneralSettingsProps {
+  restaurantId?: string;
+}
+
+export function GeneralSettings({ restaurantId }: GeneralSettingsProps) {
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [heroFile, setHeroFile] = useState<File | null>(null);
   const [spinnerFile, setSpinnerFile] = useState<File | null>(null);

@@ -22,7 +22,11 @@ type RoleFilter = 'all' | 'admin' | 'customer';
 type SortBy = 'created_at' | 'email';
 type SortDir = 'asc' | 'desc';
 
-export function UsersSettings() {
+interface UsersSettingsProps {
+  restaurantId?: string;
+}
+
+export function UsersSettings({ restaurantId }: UsersSettingsProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -47,6 +51,13 @@ export function UsersSettings() {
     fetchUsers();
   }, [searchTerm, filterRole, sortBy, sortDir, page]);
 
+  interface UsersResponse {
+    users: User[];
+    total_count: number;
+    page: number;
+    per_page: number;
+  }
+
   async function fetchUsers() {
     try {
       const params = new URLSearchParams();
@@ -59,7 +70,7 @@ export function UsersSettings() {
       params.append('sort_dir', sortDir);
 
       const url = `/admin/users?${params.toString()}`;
-      const data = await api.get(url);
+      const data = await api.get<UsersResponse>(url);
 
       // data = { users, total_count, page, per_page }
       setUsers(data.users);

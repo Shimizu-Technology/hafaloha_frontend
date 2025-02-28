@@ -53,6 +53,9 @@ export function AdminDashboard() {
   // For order modal
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
+  // Constants for configuration
+  const POLLING_INTERVAL = 5000; // 5 seconds - could be moved to a config file or environment variable
+
   // Polling for new orders
   const [lastOrderId, setLastOrderId] = useState<number>(() => {
     const stored = localStorage.getItem('adminLastOrderId');
@@ -60,11 +63,16 @@ export function AdminDashboard() {
   });
 
   useEffect(() => {
+    // Only run polling for admin users
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
       return;
     }
 
-    const intervalId = setInterval(async () => {
+    // Set up polling with visibility detection
+    let pollingInterval: number | null = null;
+    
+    // Function to check for new orders
+    const checkForNewOrders = async () => {
       try {
         const url = `/orders/new_since/${lastOrderId}`;
         const newOrders: Order[] = await api.get(url);
@@ -145,10 +153,54 @@ export function AdminDashboard() {
         }
       } catch (err) {
         console.error('[AdminDashboard] Failed to poll new orders:', err);
+        // Error is logged but polling continues
       }
-    }, 5000);
-
-    return () => clearInterval(intervalId);
+    };
+    
+    // Function to start polling
+    const startPolling = () => {
+      // Clear any existing interval first
+      if (pollingInterval) clearInterval(pollingInterval);
+      
+      // Set up new interval
+      pollingInterval = setInterval(() => {
+        checkForNewOrders().catch(error => {
+          console.error('[AdminDashboard] Error checking for new orders:', error);
+          // Continue polling even if there's an error
+        });
+      }, POLLING_INTERVAL);
+    };
+    
+    // Function to stop polling
+    const stopPolling = () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    };
+    
+    // Start polling immediately
+    startPolling();
+    
+    // Set up visibility change detection to pause polling when tab is not visible
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        // When becoming visible again, check immediately then start polling
+        checkForNewOrders().catch(console.error);
+        startPolling();
+      }
+    };
+    
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Clean up on component unmount
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user, lastOrderId, activeTab]);
 
   return (

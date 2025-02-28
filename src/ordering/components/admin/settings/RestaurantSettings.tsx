@@ -24,7 +24,11 @@ const timezoneOptions = [
   { value: 'Europe/Paris', label: 'Europe/Paris (UTC+01:00)' },
 ];
 
-export function RestaurantSettings() {
+interface RestaurantSettingsProps {
+  restaurantId?: string;
+}
+
+export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(false);
   const { updateRestaurant, fetchRestaurant } = useRestaurantStore();

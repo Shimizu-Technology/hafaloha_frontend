@@ -10,7 +10,11 @@ const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module 
 
 type SettingsTab = 'branding' | 'restaurant' | 'categories' | 'users';
 
-export function SettingsManager() {
+interface SettingsManagerProps {
+  restaurantId?: string;
+}
+
+export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('branding');
 
   const tabs = [
@@ -31,21 +35,21 @@ export function SettingsManager() {
   const renderTabContent = () => {
     switch (activeSettingsTab) {
       case 'branding':
-        return <GeneralSettings />;
+        return <GeneralSettings restaurantId={restaurantId} />;
       case 'restaurant':
-        return <RestaurantSettings />;
+        return <RestaurantSettings restaurantId={restaurantId} />;
       case 'categories':
         return (
           <div>
             <h3 className="text-lg font-semibold mb-4">Categories</h3>
-            <CategoriesSettings />
+            <CategoriesSettings restaurantId={restaurantId} />
           </div>
         );
       case 'users':
         return (
           <div>
             <h3 className="text-lg font-semibold mb-4">User Management</h3>
-            <UsersSettings />
+            <UsersSettings restaurantId={restaurantId} />
           </div>
         );
       default:

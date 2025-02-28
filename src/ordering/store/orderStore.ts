@@ -3,8 +3,18 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../lib/api';
 
-import type { Order } from '../types/order';
-import type { CartItem } from '../types/menu';
+import type { Order, OrderItem } from '../types/order';
+
+// Define CartItem type since it's not exported from menu.ts
+export interface CartItem extends Omit<OrderItem, 'id'> {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  notes?: string;
+  customizations?: any[];
+  advance_notice_hours?: number;
+}
 
 interface OrderStore {
   orders: Order[];
@@ -12,6 +22,7 @@ interface OrderStore {
   error: string | null;
 
   fetchOrders: () => Promise<void>;
+  fetchOrdersQuietly: () => Promise<void>;
 
   /** Creates a new order in the backend and returns it. */
   addOrder: (
@@ -53,10 +64,23 @@ export const useOrderStore = create<OrderStore>()(
       fetchOrders: async () => {
         set({ loading: true, error: null });
         try {
-          const orders = await api.get('/orders');
+          const orders = await api.get<Order[]>('/orders');
           set({ orders, loading: false });
         } catch (err: any) {
           set({ error: err.message, loading: false });
+        }
+      },
+
+      // GET /orders without showing loading state
+      fetchOrdersQuietly: async () => {
+        try {
+          const orders = await api.get<Order[]>('/orders');
+          // Only update orders, don't change loading state
+          set({ orders });
+        } catch (err: any) {
+          // Only update error, don't change loading state
+          set({ error: err.message });
+          console.error('Error fetching orders:', err.message);
         }
       },
 
@@ -89,7 +113,7 @@ export const useOrderStore = create<OrderStore>()(
             },
           };
 
-          const newOrder = await api.post('/orders', payload);
+          const newOrder = await api.post<Order>('/orders', payload);
 
           // Insert new order into state
           set({
@@ -118,7 +142,7 @@ export const useOrderStore = create<OrderStore>()(
           if (pickupTime) {
             orderPayload.estimated_pickup_time = pickupTime;
           }
-          const updatedOrder = await api.patch(`/orders/${orderId}`, {
+          const updatedOrder = await api.patch<Order>(`/orders/${orderId}`, {
             order: orderPayload,
           });
           const updatedOrders = get().orders.map((o) =>
@@ -135,7 +159,7 @@ export const useOrderStore = create<OrderStore>()(
         set({ loading: true, error: null });
         try {
           const payload = { order: updatedOrder };
-          const resp = await api.patch(`/orders/${orderId}`, payload);
+          const resp = await api.patch<Order>(`/orders/${orderId}`, payload);
           const updatedOrders = get().orders.map((o) =>
             o.id === resp.id ? resp : o
           );
@@ -146,7 +170,8 @@ export const useOrderStore = create<OrderStore>()(
       },
 
       getOrderHistory: (userId) => {
-        return get().orders.filter((o) => o.userId === userId);
+        // Filter orders by user ID if available
+        return get().orders.filter((o) => (o as any).userId === userId);
       },
 
       // CART -------------

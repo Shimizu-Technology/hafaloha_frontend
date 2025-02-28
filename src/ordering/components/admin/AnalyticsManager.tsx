@@ -55,7 +55,11 @@ function sortReports(
 }
 
 // ------------------- Main Component -------------------
-export function AnalyticsManager() {
+interface AnalyticsManagerProps {
+  restaurantId?: string;
+}
+
+export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   // ----- 1) Date Range States + Preset -----
   // Default to last 30 days
   const defaultStart = new Date();

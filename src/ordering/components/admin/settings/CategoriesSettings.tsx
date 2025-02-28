@@ -10,7 +10,11 @@ interface Category {
   position?: number; // stored in DB but hidden from the UI
 }
 
-export function CategoriesSettings() {
+interface CategoriesSettingsProps {
+  restaurantId?: string;
+}
+
+export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +33,7 @@ export function CategoriesSettings() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get('/admin/categories');
+      const data = await api.get<Category[]>('/admin/categories');
       // data.sort((a: Category, b: Category) => (a.position || 0) - (b.position || 0));
       setCategories(data);
     } catch (err: any) {
@@ -43,7 +47,7 @@ export function CategoriesSettings() {
     e.preventDefault();
     if (!newName.trim()) return;
     try {
-      const response = await api.post('/admin/categories', {
+      const response = await api.post<Category>('/admin/categories', {
         category: {
           name: newName,
           position: 0,
@@ -75,7 +79,7 @@ export function CategoriesSettings() {
     if (!name.trim()) return;
 
     try {
-      const response = await api.patch(`/admin/categories/${id}`, {
+      const response = await api.patch<Category>(`/admin/categories/${id}`, {
         category: { name, position: 0 },
       });
       setCategories(

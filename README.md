@@ -197,7 +197,7 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 
 - **AdminDashboard** - Main admin interface
 - **MenuManager** - Manage menu items and categories
-- **OrderManager** - View and process orders
+- **OrderManager** - View and process orders with real-time auto-refresh functionality
 - **AnalyticsManager** - View business metrics
 - **RestaurantSettings** - Configure restaurant information with real-time updates
 - **GeneralSettings** - Manage site-wide settings like hero and spinner images
@@ -280,6 +280,72 @@ For a true multi-tenant setup, you can deploy restaurant-specific frontends:
 2. **Set VITE_RESTAURANT_ID to the specific restaurant's ID**
 3. **Use custom domains for each restaurant** (e.g., restaurant-name.hafaloha.com)
 4. **Configure allowed origins in the restaurant settings in the admin dashboard**
+
+---
+
+## **Real-time Updates and Polling**
+
+Hafaloha implements intelligent polling mechanisms to provide real-time updates without requiring manual page refreshes:
+
+### 1. Order Management Auto-refresh
+
+The OrderManager component automatically refreshes order data every 30 seconds using an optimized approach:
+
+```typescript
+// Constants for configuration
+const POLLING_INTERVAL = 30000; // 30 seconds
+
+// Set up polling with visibility detection
+useEffect(() => {
+  // Initial fetch with loading state
+  fetchOrders();
+  
+  let pollingInterval: number | null = null;
+  
+  // Function to start polling
+  const startPolling = () => {
+    if (pollingInterval) clearInterval(pollingInterval);
+    
+    pollingInterval = window.setInterval(() => {
+      // Use the quiet fetch that doesn't trigger loading indicators
+      useOrderStore.getState().fetchOrdersQuietly();
+    }, POLLING_INTERVAL);
+  };
+  
+  // Start polling immediately
+  startPolling();
+  
+  // Pause polling when tab is not visible
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  // Clean up on unmount
+  return () => {
+    if (pollingInterval) clearInterval(pollingInterval);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, [fetchOrders]);
+```
+
+Key features of this implementation:
+- **Quiet Fetching**: Uses `fetchOrdersQuietly()` which updates data without triggering loading states, preventing UI "shake"
+- **Visibility Detection**: Pauses polling when the browser tab is not visible to save resources
+- **Automatic Resumption**: Immediately fetches fresh data when the tab becomes visible again
+- **Clean Cleanup**: Properly removes intervals and event listeners on component unmount
+
+### 2. Restaurant Data Polling
+
+As shown earlier, the RestaurantProvider also implements polling to keep restaurant data fresh:
+
+```typescript
+// Set up polling to keep data fresh
+const intervalId = setInterval(() => {
+  fetchRestaurant();
+}, 30000);
+
+return () => clearInterval(intervalId);
+```
+
+These polling mechanisms ensure that admins always see the most up-to-date information without manual intervention.
 
 ---
 

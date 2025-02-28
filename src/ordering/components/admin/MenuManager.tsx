@@ -64,7 +64,11 @@ function formatDate(dateStr?: string | null) {
   });
 }
 
-export function MenuManager() {
+interface MenuManagerProps {
+  restaurantId?: string;
+}
+
+export function MenuManager({ restaurantId }: MenuManagerProps) {
   const {
     menuItems,
     fetchAllMenuItemsForAdmin,

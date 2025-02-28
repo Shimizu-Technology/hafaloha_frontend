@@ -8,9 +8,10 @@ type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 interface OrderManagerProps {
   selectedOrderId?: number | null;
   setSelectedOrderId?: (id: number | null) => void;
+  restaurantId?: string;
 }
 
-export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManagerProps) {
+export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId }: OrderManagerProps) {
   const {
     orders,
     fetchOrders,
@@ -40,9 +41,63 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
   // for mobile menu
   const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
 
-  // fetch all orders on mount
+  // Constants for configuration - auto-refresh interval
+  const POLLING_INTERVAL = 30000; // 30 seconds - could be moved to a config file or environment variable
+
+  // State to track if we're currently refreshing data
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // fetch all orders on mount and set up polling for automatic refreshes
   useEffect(() => {
+    // Initial fetch - this one can show loading state
     fetchOrders();
+    
+    // Set up polling with visibility detection
+    let pollingInterval: number | null = null;
+    
+    // Function to start polling
+    const startPolling = () => {
+      // Clear any existing interval first
+      if (pollingInterval) clearInterval(pollingInterval);
+      
+      // Set up new interval with the quiet fetch that doesn't trigger loading indicators
+      pollingInterval = window.setInterval(() => {
+        // Use the fetchOrdersQuietly function from the store
+        // This won't update the loading state, preventing UI "shake"
+        useOrderStore.getState().fetchOrdersQuietly();
+      }, POLLING_INTERVAL);
+    };
+    
+    // Function to stop polling
+    const stopPolling = () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    };
+    
+    // Start polling immediately
+    startPolling();
+    
+    // Set up visibility change detection to pause polling when tab is not visible
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        // When becoming visible again, fetch immediately then start polling
+        useOrderStore.getState().fetchOrdersQuietly();
+        startPolling();
+      }
+    };
+    
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Clean up on component unmount
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchOrders]);
 
   // if the parent sets a selectedOrderId => open the details

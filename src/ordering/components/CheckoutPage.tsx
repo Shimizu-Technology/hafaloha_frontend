@@ -84,13 +84,19 @@ export function CheckoutPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   }
 
-  function handleApplyPromo() {
+  async function handleApplyPromo() {
     const isValid = validatePromoCode(formData.promoCode);
     if (isValid) {
-      const discounted = applyDiscount(rawTotal, formData.promoCode);
-      setFinalTotal(discounted);
-      setAppliedPromo(formData.promoCode);
-      toast.success(`Promo code ${formData.promoCode} applied!`);
+      try {
+        // Get the discounted total and update state - handle the Promise properly
+        const discountedTotal = await applyDiscount(rawTotal, formData.promoCode);
+        setFinalTotal(discountedTotal);
+        setAppliedPromo(formData.promoCode);
+        toast.success(`Promo code ${formData.promoCode} applied!`);
+      } catch (error) {
+        console.error('Error applying discount:', error);
+        toast.error('Failed to apply promo code. Please try again.');
+      }
     } else {
       toast.error('Invalid or expired promo code');
     }
