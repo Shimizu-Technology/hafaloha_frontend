@@ -285,6 +285,7 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
           user={selectedUser}
           isCreateMode={isCreateMode}
           onClose={handleModalClose}
+          restaurantId={restaurantId}
         />
       )}
     </div>

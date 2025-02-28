@@ -24,9 +24,10 @@ interface UserModalProps {
   user: User | null;
   isCreateMode: boolean;
   onClose: (didChange: boolean) => void;
+  restaurantId?: string;
 }
 
-export function UserModal({ user, isCreateMode, onClose }: UserModalProps) {
+export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserModalProps) {
   // If creating new => default phone to +1671; otherwise load existing phone
   const [email, setEmail] = useState(user?.email || '');
   const [firstName, setFirstName] = useState(user?.first_name || '');
@@ -55,6 +56,7 @@ export function UserModal({ user, isCreateMode, onClose }: UserModalProps) {
           last_name: lastName,
           phone: finalPhone || undefined, // if blank => undefined
           role,
+          restaurant_id: restaurantId
         });
         toast.success('User created!');
         onClose(true);
