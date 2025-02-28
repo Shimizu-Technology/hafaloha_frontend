@@ -94,7 +94,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
                   <User className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  First Name
+                  First Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -116,7 +116,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
                   <User className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Last Name
+                  Last Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -138,7 +138,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                   <Mail className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Email
+                  Email <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
@@ -160,7 +160,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                   <Phone className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Phone
+                  Phone <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
@@ -182,7 +182,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                   <Lock className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Password
+                  Password <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="password"
@@ -204,7 +204,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
                   <Lock className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Confirm Password
+                  Confirm Password <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="password"

@@ -9,10 +9,11 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   fullWidth?: boolean;
   tooltip?: React.ReactNode;
   tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
+  required?: boolean;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, fullWidth = false, className = '', tooltip, tooltipPosition = 'top', ...props }, ref) => {
+  ({ label, error, fullWidth = false, className = '', tooltip, tooltipPosition = 'top', required, ...props }, ref) => {
     // Base classes
     const baseClasses = 'block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm';
     
@@ -34,6 +35,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       <div className="flex items-center">
         <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 mb-1">
           {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
         </label>
         {tooltip && (
           <Tooltip 

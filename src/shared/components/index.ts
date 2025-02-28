@@ -12,5 +12,8 @@ export * from './auth';
 // Export navigation components
 export * from './navigation';
 
+// Export example components
+export * from './examples';
+
 // Export ScrollToTop
 export * from '../ScrollToTop';

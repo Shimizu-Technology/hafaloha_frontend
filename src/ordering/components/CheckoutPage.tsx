@@ -21,7 +21,7 @@ interface CheckoutFormData {
 }
 
 /**
- * Allows a plus sign, then 3 or 4 digits for “area code,” then exactly 7 more digits.
+ * Allows a plus sign, then 3 or 4 digits for "area code," then exactly 7 more digits.
  * e.g. +16711234567 or +17025551234 or +9251234567
  */
 function isValidPhone(phoneStr: string) {
@@ -157,7 +157,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <User className="inline-block w-4 h-4 mr-2" />
-                    Full Name
+                    Full Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -178,7 +178,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <Mail className="inline-block w-4 h-4 mr-2" />
-                    Email
+                    Email <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="email"
@@ -199,7 +199,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <Phone className="inline-block w-4 h-4 mr-2" />
-                    Phone
+                    Phone <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="tel"
@@ -226,7 +226,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <CreditCard className="inline-block w-4 h-4 mr-2" />
-                    Card Number
+                    Card Number <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -247,7 +247,7 @@ export function CheckoutPage() {
                       htmlFor="expiryDate"
                       className="block text-sm font-medium text-gray-700 mb-1"
                     >
-                      Expiry Date
+                      Expiry Date <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -266,7 +266,7 @@ export function CheckoutPage() {
                       htmlFor="cvv"
                       className="block text-sm font-medium text-gray-700 mb-1"
                     >
-                      CVV
+                      CVV <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"

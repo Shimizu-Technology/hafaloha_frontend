@@ -130,12 +130,13 @@ export function UserModal({ user, isCreateMode, onClose }: UserModalProps) {
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Email
+              Email <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
               className="mt-1 block w-full border border-gray-300 rounded-md
                          focus:ring-[#c1902f] focus:border-[#c1902f] p-2"
             />
@@ -172,13 +173,14 @@ export function UserModal({ user, isCreateMode, onClose }: UserModalProps) {
           {/* Phone */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Phone
+              Phone <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+1671"
+              required
               className="mt-1 w-full border border-gray-300 rounded-md
                          focus:ring-[#c1902f] focus:border-[#c1902f] p-2"
             />
@@ -187,11 +189,12 @@ export function UserModal({ user, isCreateMode, onClose }: UserModalProps) {
           {/* Role */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Role
+              Role <span className="text-red-500">*</span>
             </label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
+              required
               className="mt-1 block w-full border border-gray-300 rounded-md
                          focus:ring-[#c1902f] focus:border-[#c1902f] 
                          p-2 text-base"
