@@ -1,6 +1,7 @@
 // src/ordering/components/admin/OrderManager.tsx
 import React, { useEffect, useState } from 'react';
 import { useOrderStore } from '../../store/orderStore';
+import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed';
 
@@ -141,40 +142,38 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
       </div>
 
       {/* Filters and controls - mobile optimized */}
-      <div className="mb-6 space-y-4">
-        {/* Sort dropdown - mobile friendly */}
-        <div className="flex justify-between items-center">
-          <div className="relative">
-            <select
-              value={sortNewestFirst ? "newest" : "oldest"}
-              onChange={(e) => setSortNewestFirst(e.target.value === "newest")}
-              className="appearance-none bg-white border border-gray-300 rounded-md pl-4 pr-10 py-2 text-sm"
-            >
-              <option value="newest">Sort: Newest First</option>
-              <option value="oldest">Sort: Oldest First</option>
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"></path>
-              </svg>
-            </div>
+      <div className="mb-6 space-y-5">
+        {/* Sort and count area */}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+          <div className="w-full sm:w-auto">
+            <MobileSelect
+              options={[
+                { value: 'newest', label: 'Sort: Newest First' },
+                { value: 'oldest', label: 'Sort: Oldest First' }
+              ]}
+              value={sortNewestFirst ? 'newest' : 'oldest'}
+              onChange={(value) => setSortNewestFirst(value === 'newest')}
+            />
           </div>
           
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 font-medium">
             {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
           </div>
         </div>
 
-        {/* Status filter buttons - horizontal scrolling */}
-        <div className="mb-3">
-          <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
+        {/* Status filter buttons - horizontal scrolling with improved mobile styling */}
+        <div className="relative">
+          {/* Scrollable container */}
+          <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1">
             <button
               onClick={() => setSelectedStatus('all')}
-              className={
-                selectedStatus === 'all'
-                  ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
-                  : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }
+              className={`
+                whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0
+                ${selectedStatus === 'all'
+                  ? 'bg-[#c1902f] text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }
+              `}
             >
               All Orders
             </button>
@@ -182,11 +181,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
               <button
                 key={status}
                 onClick={() => setSelectedStatus(status)}
-                className={
-                  selectedStatus === status
-                    ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
-                    : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }
+                className={`
+                  whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0
+                  ${selectedStatus === status
+                    ? 'bg-[#c1902f] text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }
+                `}
               >
                 {status.charAt(0).toUpperCase() + status.slice(1)}
               </button>
@@ -195,8 +196,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
         </div>
       </div>
 
-      {/* Orders list - mobile optimized */}
-      <div className="space-y-4">
+      {/* Orders list - further mobile optimized */}
+      <div className="space-y-4 pb-16">
         {filteredOrders.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-4 text-center">
             <p className="text-gray-500">No orders found matching your filters</p>
@@ -522,10 +523,16 @@ function SetEtaModal({
   onConfirm: () => void;
 }) {
   const possibleEtas = Array.from({ length: 12 }, (_, i) => (i + 1) * 5);
+  
+  // Create options array for MobileSelect
+  const etaOptions = possibleEtas.map(minutes => ({
+    value: String(minutes),
+    label: `${minutes} minutes`
+  }));
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-md max-w-sm w-full p-4 relative">
+      <div className="bg-white rounded-lg shadow-md w-full max-w-sm p-5 relative">
         <button
           onClick={onClose}
           className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
@@ -539,37 +546,29 @@ function SetEtaModal({
         </button>
 
         <h3 className="text-lg font-bold mb-3">Set ETA for Order #{order.id}</h3>
-        <p className="text-sm text-gray-600 mb-3">
+        <p className="text-sm text-gray-600 mb-4">
           How many minutes until this order is ready?
         </p>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            ETA (in minutes)
-          </label>
-          <select
-            value={etaMinutes}
-            onChange={(e) => setEtaMinutes(Number(e.target.value))}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-          >
-            {possibleEtas.map((m) => (
-              <option key={m} value={m}>
-                {m} minutes
-              </option>
-            ))}
-          </select>
+        <div className="mb-6">
+          <MobileSelect
+            label="ETA (in minutes)"
+            options={etaOptions}
+            value={String(etaMinutes)}
+            onChange={(value) => setEtaMinutes(Number(value))}
+          />
         </div>
 
-        <div className="flex justify-end space-x-2">
+        <div className="flex justify-end space-x-3">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
+            className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-md text-base font-medium hover:bg-gray-300"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-3 py-1.5 bg-[#c1902f] text-white rounded-md text-sm hover:bg-[#d4a43f]"
+            className="px-5 py-2.5 bg-[#c1902f] text-white rounded-md text-base font-medium hover:bg-[#d4a43f]"
           >
             Confirm
           </button>
@@ -759,43 +758,43 @@ function AdminEditOrderModal({
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-base font-medium text-gray-700 mb-2">
                 Total
               </label>
               <input
                 type="number"
                 step="0.01"
-                className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
+                className="border-2 border-gray-300 rounded px-4 py-3 w-full text-base"
+                style={{ fontSize: '16px' }} /* Prevent iOS zoom on focus */
                 value={localTotal}
                 onChange={(e) => setLocalTotal(e.target.value)}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
-              </label>
-              <select
-                className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
+              <MobileSelect
+                label="Status"
+                options={[
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'preparing', label: 'Preparing' },
+                  { value: 'ready', label: 'Ready' },
+                  { value: 'completed', label: 'Completed' },
+                  { value: 'cancelled', label: 'Cancelled' }
+                ]}
                 value={localStatus}
-                onChange={(e) => setLocalStatus(e.target.value)}
-              >
-                {['pending', 'preparing', 'ready', 'completed', 'cancelled'].map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setLocalStatus(value)}
+              />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-base font-medium text-gray-700 mb-2">
               Special Instructions
             </label>
             <textarea
-              className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
-              rows={2}
+              className="border-2 border-gray-300 rounded px-4 py-3 w-full text-base"
+              style={{ fontSize: '16px' }} /* Prevent iOS zoom on focus */
+              rows={3}
               value={localInstructions}
               onChange={(e) => setLocalInstructions(e.target.value)}
             />
@@ -803,16 +802,16 @@ function AdminEditOrderModal({
         </div>
 
         {/* ACTION BUTTONS */}
-        <div className="flex justify-end space-x-2 pt-2">
+        <div className="flex justify-end space-x-3 pt-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
+            className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-md text-base font-medium hover:bg-gray-300"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm hover:bg-[#d4a43f]"
+            className="px-5 py-2.5 bg-[#c1902f] text-white rounded-md text-base font-medium hover:bg-[#d4a43f]"
           >
             Save
           </button>
