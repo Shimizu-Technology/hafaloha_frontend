@@ -46,6 +46,11 @@ export function AdminDashboard() {
   });
 
   function handleTabClick(id: Tab) {
+    // If switching to orders tab, reset the selectedOrderId to prevent auto-opening the modal
+    if (id === 'orders') {
+      setSelectedOrderId(null);
+    }
+    
     setActiveTab(id);
     localStorage.setItem('adminTab', id);
   }
