@@ -84,9 +84,51 @@ For admin users who manage multiple restaurants, a RestaurantSelector component 
 />
 ```
 
-### 5. CORS Configuration Management
+### 5. Restaurant Data Management
 
-Admins can configure allowed origins for each restaurant through the AllowedOriginsSettings component:
+The application uses a centralized restaurant store to manage restaurant data and ensure real-time updates across all components:
+
+```typescript
+// src/shared/store/restaurantStore.ts
+export const useRestaurantStore = create<RestaurantStore>((set, get) => ({
+  restaurant: null,
+  loading: false,
+  error: null,
+  fetchRestaurant: async () => {
+    // Fetch restaurant data from API
+  },
+  updateRestaurant: async (data: Partial<Restaurant>) => {
+    // Update restaurant data in both API and local state
+  }
+}));
+```
+
+The RestaurantProvider component ensures that restaurant data is always up-to-date:
+
+```tsx
+// src/shared/components/restaurant/RestaurantProvider.tsx
+export function RestaurantProvider({ children }: RestaurantProviderProps) {
+  const { fetchRestaurant } = useRestaurantStore();
+  
+  useEffect(() => {
+    // Fetch restaurant data on mount
+    fetchRestaurant();
+    
+    // Set up polling to keep data fresh
+    const intervalId = setInterval(() => {
+      fetchRestaurant();
+    }, 30000);
+    
+    return () => clearInterval(intervalId);
+  }, [fetchRestaurant]);
+  
+  return <>{children}</>;
+}
+```
+
+### 6. CORS Configuration Management
+
+Admins can configure allowed origins for each restaurant through the AllowedOriginsSettings component (currently hidden in the UI but functionality is preserved):
 
 ```tsx
 <AllowedOriginsSettings onSaved={handleSaved} />
@@ -157,8 +199,10 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **MenuManager** - Manage menu items and categories
 - **OrderManager** - View and process orders
 - **AnalyticsManager** - View business metrics
+- **RestaurantSettings** - Configure restaurant information with real-time updates
+- **GeneralSettings** - Manage site-wide settings like hero and spinner images
 - **RestaurantSelector** - Switch between restaurants (for super admins)
-- **AllowedOriginsSettings** - Configure CORS for restaurant frontends
+- **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
 
 ---
 
