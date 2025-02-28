@@ -84,36 +84,94 @@ export function AdminDashboard() {
             const totalPrice = (order.total ?? 0).toFixed(2);
             const contactName = (order as any).contact_name || 'N/A';
 
+            // Get status badge color
+            const getStatusBadgeColor = (status: string) => {
+              const colors = {
+                pending: 'bg-yellow-100 text-yellow-800',
+                preparing: 'bg-blue-100 text-blue-800',
+                ready: 'bg-green-100 text-green-800',
+                completed: 'bg-gray-100 text-gray-800',
+                cancelled: 'bg-red-100 text-red-800',
+                confirmed: 'bg-purple-100 text-purple-800',
+              };
+              return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+            };
+            
+            // Format item names for display (limit to 2 items with "and X more")
+            const formatItemNames = (items: any[]) => {
+              if (!items || items.length === 0) return 'No items';
+              
+              if (items.length === 1) {
+                return items[0].name;
+              }
+              
+              if (items.length === 2) {
+                return `${items[0].name} and ${items[1].name}`;
+              }
+              
+              return `${items[0].name} and ${items.length - 1} more`;
+            };
+            
             toast.custom((t) => (
               <div
-                className="relative bg-white rounded-lg shadow-lg p-4 max-w-sm border border-gray-200"
-                style={{ minWidth: '260px' }}
+                className="relative bg-white rounded-xl shadow-lg p-4 max-w-sm border border-gray-100"
+                style={{ minWidth: '280px', maxWidth: '95vw' }}
               >
+                {/* Close button */}
                 <button
                   onClick={() => toast.dismiss(t.id)}
-                  className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
+                  className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 transition-colors"
                 >
                   <XIcon className="h-4 w-4" />
                 </button>
 
-                <div className="flex items-center space-x-2">
-                  <ShoppingBag className="h-6 w-6 text-[#c1902f]" />
-                  <h4 className="text-sm font-semibold text-gray-900">
-                    New Order #{order.id}
-                  </h4>
+                {/* Header with icon, order number and status */}
+                <div className="flex items-start mb-3">
+                  <div className="bg-[#c1902f] bg-opacity-10 p-2 rounded-lg mr-3 flex-shrink-0">
+                    <ShoppingBag className="h-5 w-5 text-[#c1902f]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-base font-bold text-gray-900 truncate pr-2">
+                        New Order #{order.id}
+                      </h4>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
+                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{createdAtStr}</p>
+                  </div>
                 </div>
 
-                <div className="mt-3 text-sm text-gray-700">
-                  <p className="text-xs text-gray-500">Created: {createdAtStr}</p>
-                  <p className="mt-1">
-                    {itemCount} item{itemCount !== 1 ? 's' : ''} • ${totalPrice}
-                  </p>
-                  <p className="mt-1">
-                    <span className="font-medium">Name:</span> {contactName}
-                  </p>
+                {/* Order details */}
+                <div className="space-y-3 mb-3">
+                  {/* Items preview */}
+                  <div className="bg-gray-50 rounded-lg p-2.5">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-medium text-gray-500">ITEMS</span>
+                      <span className="text-xs font-medium">${totalPrice}</span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {formatItemNames(order.items)}
+                    </p>
+                  </div>
+                  
+                  {/* Customer info */}
+                  <div className="flex items-center space-x-2">
+                    <div className="h-7 w-7 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-blue-700 font-medium text-sm">
+                        {contactName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800 truncate">{contactName}</p>
+                      <p className="text-xs text-gray-500">Customer</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-4 text-right flex space-x-2 justify-end">
+                {/* Action buttons */}
+                <div className="flex space-x-2">
                   <button
                     onClick={() => {
                       toast.dismiss(t.id);
@@ -129,13 +187,13 @@ export function AdminDashboard() {
                         setSelectedOrderId(Number(order.id));
                       }
                     }}
-                    className="bg-[#c1902f] text-white px-3 py-1 rounded hover:bg-[#d4a43f] text-sm"
+                    className="flex-1 bg-[#c1902f] text-white px-3 py-2 rounded-lg font-medium text-sm hover:bg-[#d4a43f] transition-colors shadow-sm"
                   >
                     View Order
                   </button>
                   <button
                     onClick={() => toast.dismiss(t.id)}
-                    className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-200 transition-colors"
                   >
                     Dismiss
                   </button>
