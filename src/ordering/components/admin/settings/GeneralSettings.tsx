@@ -221,13 +221,14 @@ export function GeneralSettings() {
           </div>
           </form>
           
-          {/* CORS Configuration Section */}
+          {/* CORS Configuration Section - Hidden temporarily
           <div className="border-t pt-8">
             <h3 className="text-lg font-medium text-gray-900 mb-6">CORS Configuration</h3>
             <AllowedOriginsSettings 
               onSaved={() => toast.success('Allowed origins updated successfully')}
             />
           </div>
+          */}
         </div>
       )}
     </div>
