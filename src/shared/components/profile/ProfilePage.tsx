@@ -6,13 +6,17 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../auth';
 import { User } from '../../types/auth';
 import { useAuthStore } from '../../auth/authStore';
+import { Input } from '../ui/Input';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 
 export function ProfilePage() {
   const { user } = useAuth(); // Read the user from shared auth
   const updateUserInStore = useAuthStore((state) => state.updateUser);
 
   const [loading, setLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // form fields
   const [firstName, setFirstName] = useState('');
@@ -57,8 +61,9 @@ export function ProfilePage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setSaveLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       if (!user) {
@@ -80,97 +85,128 @@ export function ProfilePage() {
       // 2) Update the authStore => triggers Header re-render with new name
       updateUserInStore(updatedUser);
 
+      // Show success message in the component instead of toast
+      setSuccessMessage('Profile updated successfully!');
+      
+      // Still show toast for additional feedback
       toast.success('Profile updated successfully!');
     } catch (err: any) {
       setError(err.message);
       toast.error('Failed to update profile');
     } finally {
-      setLoading(false);
+      setSaveLoading(false);
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-3xl w-full mx-auto px-4 sm:px-6 py-8">
-      <div className="bg-white border border-gray-200 shadow-lg rounded-lg p-6 sm:p-8 space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+    <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 py-8">
+      <div className="bg-white border border-gray-200 shadow-sm rounded-lg p-6 sm:p-8 md:p-10">
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">My Profile</h1>
 
         {error && (
-          <div className="text-red-600 bg-red-50 border border-red-200 rounded p-3">
+          <div className="mb-6 text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
             {error}
           </div>
         )}
 
-        {loading && <p className="text-sm text-gray-500">Saving...</p>}
+        {successMessage && (
+          <div className="mb-6 text-green-600 bg-green-50 border border-green-200 rounded-md p-3">
+            {successMessage}
+          </div>
+        )}
 
-        <form onSubmit={handleSave} className="space-y-6">
+        <form onSubmit={handleSave} className="space-y-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* First Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                First Name
-              </label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#c1902f] focus:border-[#c1902f]"
-              />
-            </div>
+            <Input
+              label="First Name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First Name"
+              id="firstName"
+              fullWidth
+            />
+            
             {/* Last Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Last Name
-              </label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#c1902f] focus:border-[#c1902f]"
-              />
-            </div>
+            <Input
+              label="Last Name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last Name"
+              id="lastName"
+              fullWidth
+            />
           </div>
 
           {/* Phone */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone
-            </label>
-            <input
-              type="text"
-              placeholder="+1 (671) 123-9999"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#c1902f] focus:border-[#c1902f]"
-            />
-          </div>
+          <Input
+            label="Phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+1 (671) 123-9999"
+            id="phone"
+            fullWidth
+          />
 
           {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              placeholder="name@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#c1902f] focus:border-[#c1902f]"
-            />
-          </div>
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@example.com"
+            id="email"
+            fullWidth
+          />
 
-          <div className="pt-4 flex justify-end">
+          <div className="pt-6 flex justify-end">
             <button
               type="submit"
-              disabled={loading}
-              className="
-                inline-flex items-center px-5 py-2
+              disabled={saveLoading}
+              className={`
+                inline-flex items-center px-6 py-3 text-lg
                 bg-[#c1902f] text-white font-medium
                 rounded-md hover:bg-[#d4a43f]
                 focus:outline-none focus:ring-2 focus:ring-offset-2
-                focus:ring-[#c1902f] active:scale-95
-              "
+                focus:ring-[#c1902f] transition-all
+                ${saveLoading ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'}
+              `}
             >
-              {loading ? 'Saving...' : 'Save'}
+              {saveLoading ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                'Save'
+              )}
             </button>
           </div>
         </form>
