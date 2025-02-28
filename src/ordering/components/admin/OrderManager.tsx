@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 
-type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed';
 
 interface OrderManagerProps {
   selectedOrderId?: number | null;
@@ -22,16 +22,22 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
   // which order is selected for the "details" modal
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
-  // which “tab” we are viewing
+  // which "tab" we are viewing
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
 
-  // for the “Set ETA” modal
+  // sort direction (true = newest first, false = oldest first)
+  const [sortNewestFirst, setSortNewestFirst] = useState(true);
+
+  // for the "Set ETA" modal
   const [showEtaModal, setShowEtaModal] = useState(false);
   const [etaMinutes, setEtaMinutes] = useState(5);
   const [orderToPrep, setOrderToPrep] = useState<any | null>(null);
 
-  // for the “Edit Order” modal
+  // for the "Edit Order" modal
   const [editingOrder, setEditingOrder] = useState<any | null>(null);
+
+  // for mobile menu
+  const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
 
   // fetch all orders on mount
   useEffect(() => {
@@ -48,11 +54,22 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
     }
   }, [selectedOrderId, orders]);
 
+  // Sort orders by creation date
+  const sortedOrders = [...orders].sort((a, b) => {
+    // Convert strings to Date objects for comparison
+    const dateA = new Date(a.createdAt || 0);
+    const dateB = new Date(b.createdAt || 0);
+    // Sort based on sortNewestFirst flag
+    return sortNewestFirst 
+      ? dateB.getTime() - dateA.getTime() // newest first
+      : dateA.getTime() - dateB.getTime(); // oldest first
+  });
+
   // filter the orders by selectedStatus
   const filteredOrders =
     selectedStatus === 'all'
-      ? orders
-      : orders.filter(order => order.status === selectedStatus);
+      ? sortedOrders
+      : sortedOrders.filter(order => order.status === selectedStatus);
 
   function closeModal() {
     setSelectedOrder(null);
@@ -84,6 +101,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
       ready: 'bg-green-100 text-green-800',
       completed: 'bg-gray-100 text-gray-800',
       cancelled: 'bg-red-100 text-red-800',
+      confirmed: 'bg-purple-100 text-purple-800', // Added confirmed status
     };
     return colors[status];
   };
@@ -101,158 +119,307 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
     setEditingOrder(null);
   }
 
+  // Toggle sort direction
+  const toggleSortDirection = () => {
+    setSortNewestFirst(!sortNewestFirst);
+  };
+
+  // Toggle order actions menu
+  const toggleOrderActions = (orderId: number) => {
+    setShowOrderActions(showOrderActions === orderId ? null : orderId);
+  };
+
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-6">
       {loading && <p>Loading orders...</p>}
       {error && <p className="text-red-600">{error}</p>}
 
-      {/* Top bar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+      {/* Header section */}
+      <div className="mb-4">
         <h2 className="text-2xl font-bold">Order Management</h2>
-        <div className="flex flex-nowrap space-x-3 overflow-x-auto py-1">
-          {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(status => (
-            <button
-              key={status}
-              onClick={() => setSelectedStatus(status)}
-              className={`
-                flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-md 
-                ${
-                  selectedStatus === status
-                    ? 'bg-[#c1902f] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }
-              `}
+        <p className="text-gray-600 text-sm">Manage and track customer orders</p>
+      </div>
+
+      {/* Filters and controls - mobile optimized */}
+      <div className="mb-6 space-y-4">
+        {/* Sort dropdown - mobile friendly */}
+        <div className="flex justify-between items-center">
+          <div className="relative">
+            <select
+              value={sortNewestFirst ? "newest" : "oldest"}
+              onChange={(e) => setSortNewestFirst(e.target.value === "newest")}
+              className="appearance-none bg-white border border-gray-300 rounded-md pl-4 pr-10 py-2 text-sm"
             >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
+              <option value="newest">Sort: Newest First</option>
+              <option value="oldest">Sort: Oldest First</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"></path>
+              </svg>
+            </div>
+          </div>
+          
+          <div className="text-sm text-gray-500">
+            {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+          </div>
+        </div>
+
+        {/* Status filter buttons - horizontal scrolling */}
+        <div className="mb-3">
+          <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
+            <button
+              onClick={() => setSelectedStatus('all')}
+              className={
+                selectedStatus === 'all'
+                  ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
+                  : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }
+            >
+              All Orders
             </button>
-          ))}
+            {(['pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(status => (
+              <button
+                key={status}
+                onClick={() => setSelectedStatus(status)}
+                className={
+                  selectedStatus === status
+                    ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
+                    : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* List */}
-      <div className="space-y-6">
-        {filteredOrders.map(order => (
-          <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">Order #{order.id}</h3>
-                {order.createdAt && (
-                  <p className="text-sm text-gray-500">
-                    {new Date(order.createdAt).toLocaleString()}
-                  </p>
-                )}
-              </div>
-              <span
-                className={`
-                  px-3 py-1 rounded-full text-sm font-medium
-                  ${getStatusBadgeColor(order.status)}
-                `}
-              >
-                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-              </span>
-            </div>
-
-            {/* Items */}
-            <div className="border-t border-b py-4 mb-4">
-              <h4 className="font-medium mb-2">Order Items:</h4>
-              {order.items.map((item: any, index: number) => (
-                <div key={index} className="mb-2">
-                  <p className="font-medium">
-                    {item.name} × {item.quantity}
-                  </p>
-                  {item.customizations &&
-                    Object.entries(item.customizations).map(([gName, values]) => (
-                      <p key={gName} className="text-sm text-gray-600">
-                        {gName}: {(values as string[]).join(', ')}
-                      </p>
-                    ))}
-                  {item.notes && (
-                    <p className="text-sm text-gray-600">Notes: {item.notes}</p>
+      {/* Orders list - mobile optimized */}
+      <div className="space-y-4">
+        {filteredOrders.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm p-4 text-center">
+            <p className="text-gray-500">No orders found matching your filters</p>
+          </div>
+        ) : (
+          filteredOrders.map(order => (
+            <div key={order.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Order header - more compact for mobile */}
+              <div className="flex justify-between items-center p-3 border-b border-gray-100">
+                <div>
+                  <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
+                  {order.createdAt && (
+                    <p className="text-xs text-gray-500">
+                      {new Date(order.createdAt).toLocaleString()}
+                    </p>
                   )}
                 </div>
-              ))}
-            </div>
-
-            {/* Contact & pickup */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <h4 className="text-sm font-medium text-gray-700">Customer</h4>
-                <p>{order.contact_name || 'Guest'}</p>
-                <p>{order.contact_phone || ''}</p>
-                <p>{order.contact_email || ''}</p>
-              </div>
-              <div>
-                <h4 className="text-sm font-medium text-gray-700">Pickup Time</h4>
-                <p>{formatDate(order.estimatedPickupTime)}</p>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <h4 className="text-sm font-medium text-gray-700">Special Instructions</h4>
-              <p>{order.special_instructions || 'None'}</p>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <p className="font-medium">
-                Total: ${Number(order.total || 0).toFixed(2)}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {/* Edit button for admin => open the edit modal */}
-                <button
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  onClick={() => setEditingOrder(order)}
-                >
-                  Edit
-                </button>
-
-                {order.status === 'pending' && (
-                  <button
-                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                    onClick={() => {
-                      setOrderToPrep(order);
-                      setEtaMinutes(5);
-                      setShowEtaModal(true);
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`
+                      px-2 py-1 rounded-full text-xs font-medium
+                      ${getStatusBadgeColor(order.status)}
+                    `}
+                  >
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </span>
+                  <div 
+                    className="text-gray-400 hover:text-gray-600 relative cursor-pointer p-1"
+                    onClick={() => toggleOrderActions(Number(order.id))}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Order actions"
+                    aria-haspopup="true"
+                    aria-expanded={showOrderActions === Number(order.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleOrderActions(Number(order.id));
+                      }
                     }}
                   >
-                    Start Preparing
-                  </button>
-                )}
-                {order.status === 'preparing' && (
-                  <button
-                    className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-                    onClick={() => updateOrderStatus(order.id, 'ready')}
-                  >
-                    Mark as Ready
-                  </button>
-                )}
-                {order.status === 'ready' && (
-                  <button
-                    className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
-                    onClick={() => updateOrderStatus(order.id, 'completed')}
-                  >
-                    Complete Order
-                  </button>
-                )}
-                {(order.status === 'pending' || order.status === 'preparing') && (
-                  <button
-                    className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
-                    onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                  >
-                    Cancel
-                  </button>
-                )}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="1"></circle>
+                      <circle cx="19" cy="12" r="1"></circle>
+                      <circle cx="5" cy="12" r="1"></circle>
+                    </svg>
+                    
+                    {/* Dropdown menu for mobile */}
+                    {showOrderActions === Number(order.id) && (
+                      <div className="absolute right-0 top-full mt-1 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                        <div className="py-1" role="menu" aria-orientation="vertical">
+                          <button
+                            className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingOrder(order);
+                              setShowOrderActions(null);
+                            }}
+                          >
+                            Edit Order
+                          </button>
+
+                          {order.status === 'pending' && (
+                            <button
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOrderToPrep(order);
+                                setEtaMinutes(5);
+                                setShowEtaModal(true);
+                                setShowOrderActions(null);
+                              }}
+                            >
+                              Start Preparing
+                            </button>
+                          )}
+                          
+                          {order.status === 'preparing' && (
+                            <button
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateOrderStatus(order.id, 'ready');
+                                setShowOrderActions(null);
+                              }}
+                            >
+                              Mark as Ready
+                            </button>
+                          )}
+                          
+                          {order.status === 'ready' && (
+                            <button
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateOrderStatus(order.id, 'completed');
+                                setShowOrderActions(null);
+                              }}
+                            >
+                              Complete Order
+                            </button>
+                          )}
+                          
+                          {(order.status === 'pending' || order.status === 'preparing') && (
+                            <button
+                              className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateOrderStatus(order.id, 'cancelled');
+                                setShowOrderActions(null);
+                              }}
+                            >
+                              Cancel Order
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Order content - simplified for mobile */}
+              <div className="p-3">
+                {/* Items with prices aligned to right */}
+                <div className="mb-4">
+                  <h4 className="font-medium text-sm text-gray-700 mb-2">Order Items:</h4>
+                  <div className="space-y-1">
+                    {order.items.map((item: any, index: number) => (
+                      <div key={index} className="flex justify-between text-sm">
+                        <div>
+                          <span className="font-medium">
+                            {item.name} × {item.quantity}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          ${Number(item.price * item.quantity).toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Customer info - more compact */}
+                <div className="text-xs space-y-2 mb-3">
+                  {order.contact_name && (
+                    <div>
+                      <span className="font-medium text-gray-700">Customer: </span>
+                      <span>{order.contact_name}</span>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <span className="font-medium text-gray-700">Pickup: </span>
+                    <span>{formatDate((order as any).estimatedPickupTime || (order as any).estimated_pickup_time)}</span>
+                  </div>
+                  
+                  {((order as any).special_instructions || (order as any).specialInstructions) && (
+                    <div>
+                      <span className="font-medium text-gray-700">Instructions: </span>
+                      <span>{(order as any).special_instructions || (order as any).specialInstructions}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Total */}
+                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+                  <p className="font-medium text-sm">
+                    Total: ${Number(order.total || 0).toFixed(2)}
+                  </p>
+                  
+                  {/* Status-specific action button for larger screens */}
+                  <div className="hidden sm:block">
+                    {order.status === 'pending' && (
+                      <button
+                        className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
+                        onClick={() => {
+                          setOrderToPrep(order);
+                          setEtaMinutes(5);
+                          setShowEtaModal(true);
+                        }}
+                      >
+                        Start Preparing
+                      </button>
+                    )}
+                    {order.status === 'preparing' && (
+                      <button
+                        className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"
+                        onClick={() => updateOrderStatus(order.id, 'ready')}
+                      >
+                        Mark as Ready
+                      </button>
+                    )}
+                    {order.status === 'ready' && (
+                      <button
+                        className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600"
+                        onClick={() => updateOrderStatus(order.id, 'completed')}
+                      >
+                        Complete
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
+
+      {/* Click outside handler for order actions dropdown */}
+      {showOrderActions !== null && (
+        <div 
+          className="fixed inset-0 h-full w-full z-0"
+          onClick={() => setShowOrderActions(null)}
+        ></div>
+      )}
 
       {/* Details modal */}
       {selectedOrder && (
         <OrderDetailsModal order={selectedOrder} onClose={closeModal} />
       )}
 
-      {/* “Set ETA” modal */}
+      {/* "Set ETA" modal */}
       {showEtaModal && orderToPrep && (
         <SetEtaModal
           order={orderToPrep}
@@ -266,7 +433,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId }: OrderManag
         />
       )}
 
-      {/* “Edit Order” modal */}
+      {/* "Edit Order" modal */}
       {editingOrder && (
         <AdminEditOrderModal
           order={editingOrder}
@@ -287,7 +454,7 @@ function OrderDetailsModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-md max-w-lg w-full p-6 relative">
+      <div className="bg-white rounded-lg shadow-md max-w-lg w-full p-4 relative">
         <button
           onClick={onClose}
           className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
@@ -300,40 +467,46 @@ function OrderDetailsModal({
           </svg>
         </button>
 
-        <h3 className="text-xl font-bold mb-4">Order #{order.id}</h3>
-        <p className="text-sm text-gray-500 mb-4">
+        <h3 className="text-lg font-bold mb-3">Order #{order.id}</h3>
+        <p className="text-xs text-gray-500 mb-3">
           Placed: {new Date(order.createdAt).toLocaleString()}
         </p>
 
-        <p className="font-medium mb-2">Items:</p>
-        {order.items.map((item: any, idx: number) => (
-          <div key={idx} className="mb-2">
-            <p>
-              {item.name} × {item.quantity}
-            </p>
-            {item.notes && (
-              <p className="text-sm text-gray-600">Notes: {item.notes}</p>
-            )}
-          </div>
-        ))}
+        <p className="font-medium mb-2 text-sm">Items:</p>
+        <div className="space-y-2 mb-4">
+          {order.items.map((item: any, idx: number) => (
+            <div key={idx} className="flex justify-between text-sm">
+              <div>
+                <p className="font-medium">
+                  {item.name} × {item.quantity}
+                </p>
+                {item.notes && (
+                  <p className="text-xs text-gray-600">Notes: {item.notes}</p>
+                )}
+              </div>
+              <p>${Number(item.price * item.quantity).toFixed(2)}</p>
+            </div>
+          ))}
+        </div>
 
-        <p className="font-medium mt-4">
-          Total: ${Number(order.total || 0).toFixed(2)}
-        </p>
-
-        <button
-          onClick={onClose}
-          className="mt-6 px-4 py-2 bg-[#c1902f] text-white rounded hover:bg-[#d4a43f]"
-        >
-          Close
-        </button>
+        <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
+          <p className="font-medium">
+            Total: ${Number(order.total || 0).toFixed(2)}
+          </p>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-[#c1902f] text-white text-sm rounded hover:bg-[#d4a43f]"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * The “Set ETA” modal for pending->preparing
+ * The "Set ETA" modal for pending->preparing
  */
 function SetEtaModal({
   order,
@@ -352,7 +525,7 @@ function SetEtaModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-md max-w-sm w-full p-6 relative">
+      <div className="bg-white rounded-lg shadow-md max-w-sm w-full p-4 relative">
         <button
           onClick={onClose}
           className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
@@ -365,9 +538,9 @@ function SetEtaModal({
           </svg>
         </button>
 
-        <h3 className="text-xl font-bold mb-4">Set ETA for Order #{order.id}</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          How many minutes from now until this order should be ready?
+        <h3 className="text-lg font-bold mb-3">Set ETA for Order #{order.id}</h3>
+        <p className="text-sm text-gray-600 mb-3">
+          How many minutes until this order is ready?
         </p>
 
         <div className="mb-4">
@@ -377,7 +550,7 @@ function SetEtaModal({
           <select
             value={etaMinutes}
             onChange={(e) => setEtaMinutes(Number(e.target.value))}
-            className="w-full border border-gray-300 rounded-md px-3 py-2"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
           >
             {possibleEtas.map((m) => (
               <option key={m} value={m}>
@@ -390,13 +563,13 @@ function SetEtaModal({
         <div className="flex justify-end space-x-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+            className="px-3 py-1.5 bg-[#c1902f] text-white rounded-md text-sm hover:bg-[#d4a43f]"
           >
             Confirm
           </button>
@@ -407,9 +580,7 @@ function SetEtaModal({
 }
 
 /**
- * “Admin Edit Order” modal for adjusting items, total, instructions, etc.
- * This example is minimal. We just show a text area for JSON items, total, and status.
- * In a real app, you’d have a nicer UI for each item row, etc.
+ * "Admin Edit Order" modal for adjusting items, total, instructions, etc.
  */
 function AdminEditOrderModal({
   order,
@@ -422,12 +593,12 @@ function AdminEditOrderModal({
 }) {
   // Local state for items, total, etc.
   const [localItems, setLocalItems] = useState(() => {
-    // Make a shallow copy so we don’t mutate the original array
+    // Make a shallow copy so we don't mutate the original array
     return order.items ? [...order.items] : [];
   });
   const [localTotal, setLocalTotal] = useState<string>(String(order.total || '0'));
   const [localStatus, setLocalStatus] = useState(order.status);
-  const [localInstructions, setLocalInstructions] = useState(order.special_instructions || '');
+  const [localInstructions, setLocalInstructions] = useState((order as any).special_instructions || (order as any).specialInstructions || '');
 
   // Handle changing a single item row
   function handleItemChange(index: number, field: string, value: string | number) {
@@ -460,7 +631,7 @@ function AdminEditOrderModal({
     ]);
   }
 
-  // Called by the “Save” button
+  // Called by the "Save" button
   function handleSave() {
     // Convert total to a float
     const parsedTotal = parseFloat(localTotal) || 0.0;
@@ -471,7 +642,9 @@ function AdminEditOrderModal({
       items: localItems,
       total: parsedTotal,
       status: localStatus,
+      // Include both property names to ensure compatibility
       special_instructions: localInstructions,
+      specialInstructions: localInstructions,
     };
 
     onSave(updated);
@@ -480,7 +653,7 @@ function AdminEditOrderModal({
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
       {/* Outer container: on small screens => full width, on bigger => max-w-2xl */}
-      <div className="bg-white rounded-lg shadow-md w-full sm:max-w-2xl p-6 relative space-y-6">
+      <div className="bg-white rounded-lg shadow-md w-full sm:max-w-2xl p-4 relative space-y-4 max-h-[90vh] overflow-y-auto">
         {/* Close button (X) */}
         <button
           onClick={onClose}
@@ -496,142 +669,150 @@ function AdminEditOrderModal({
           </svg>
         </button>
 
-        <h3 className="text-xl font-bold">Edit Order #{order.id}</h3>
+        <h3 className="text-lg font-bold pr-8">Edit Order #{order.id}</h3>
 
         {/* ITEMS TABLE */}
         <div>
           <h4 className="text-sm font-semibold mb-2">Items</h4>
-          {/* Wrap the table in an overflow-x-auto so it scrolls on small screens */}
-          <div className="overflow-x-auto">
-            <table className="w-full border border-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="p-2 border-b text-left">Name</th>
-                  <th className="p-2 border-b text-left">Qty</th>
-                  <th className="p-2 border-b text-left">Price</th>
-                  <th className="p-2 border-b text-left">Notes</th>
-                  <th className="p-2 border-b"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {localItems.map((item, idx) => (
-                  <tr key={idx} className="border-b last:border-0">
-                    <td className="p-2">
-                      <input
-                        type="text"
-                        className="border w-full rounded px-2 py-1"
-                        value={item.name}
-                        onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                      />
-                    </td>
-                    <td className="p-2" style={{ width: '70px' }}>
+          <div className="space-y-2 mb-2">
+            {localItems.map((item, idx) => (
+              <div key={idx} className="border border-gray-200 rounded-md p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-sm font-medium">Item {idx + 1}</h5>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveItem(idx)}
+                    className="text-red-600 text-xs hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      className="border w-full rounded px-2 py-1 text-sm"
+                      value={item.name}
+                      onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Quantity
+                      </label>
                       <input
                         type="number"
-                        className="border w-full rounded px-2 py-1"
+                        className="border w-full rounded px-2 py-1 text-sm"
                         min={1}
                         value={item.quantity}
                         onChange={(e) =>
                           handleItemChange(idx, 'quantity', parseInt(e.target.value, 10))
                         }
                       />
-                    </td>
-                    <td className="p-2" style={{ width: '90px' }}>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Price
+                      </label>
                       <input
                         type="number"
-                        className="border w-full rounded px-2 py-1"
+                        className="border w-full rounded px-2 py-1 text-sm"
                         step="0.01"
                         value={item.price}
                         onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
                       />
-                    </td>
-                    <td className="p-2">
-                      <input
-                        type="text"
-                        className="border w-full rounded px-2 py-1"
-                        value={item.notes || ''}
-                        onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
-                      />
-                    </td>
-                    <td className="p-2">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(idx)}
-                        className="text-red-600 hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Notes
+                    </label>
+                    <input
+                      type="text"
+                      className="border w-full rounded px-2 py-1 text-sm"
+                      value={item.notes || ''}
+                      onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
           <button
             type="button"
             onClick={handleAddItem}
-            className="mt-2 inline-block px-3 py-1 bg-gray-200 text-sm rounded hover:bg-gray-300"
+            className="w-full text-center px-3 py-2 bg-gray-100 text-sm rounded hover:bg-gray-200"
           >
             + Add Item
           </button>
         </div>
 
         {/* TOTAL / STATUS / INSTRUCTIONS */}
-        <div className="flex flex-col space-y-4 md:flex-row md:space-x-4 md:space-y-0">
-          <div className="flex-1">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Total
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
+                value={localTotal}
+                onChange={(e) => setLocalTotal(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Status
+              </label>
+              <select
+                className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
+                value={localStatus}
+                onChange={(e) => setLocalStatus(e.target.value)}
+              >
+                {['pending', 'preparing', 'ready', 'completed', 'cancelled'].map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Total
+              Special Instructions
             </label>
-            <input
-              type="number"
-              step="0.01"
-              className="border border-gray-300 rounded px-3 py-2 w-full"
-              value={localTotal}
-              onChange={(e) => setLocalTotal(e.target.value)}
+            <textarea
+              className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
+              rows={2}
+              value={localInstructions}
+              onChange={(e) => setLocalInstructions(e.target.value)}
             />
           </div>
-
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <select
-              className="border border-gray-300 rounded px-3 py-2 w-full"
-              value={localStatus}
-              onChange={(e) => setLocalStatus(e.target.value)}
-            >
-              {['pending', 'preparing', 'ready', 'completed', 'cancelled'].map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Special Instructions
-          </label>
-          <textarea
-            className="border border-gray-300 rounded px-3 py-2 w-full"
-            rows={2}
-            value={localInstructions}
-            onChange={(e) => setLocalInstructions(e.target.value)}
-          />
         </div>
 
         {/* ACTION BUTTONS */}
-        <div className="flex justify-end space-x-2">
+        <div className="flex justify-end space-x-2 pt-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+            className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm hover:bg-[#d4a43f]"
           >
             Save
           </button>
