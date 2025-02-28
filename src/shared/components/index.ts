@@ -15,5 +15,8 @@ export * from './navigation';
 // Export example components
 export * from './examples';
 
+// Export restaurant components
+export * from './restaurant';
+
 // Export ScrollToTop
 export * from '../ScrollToTop';

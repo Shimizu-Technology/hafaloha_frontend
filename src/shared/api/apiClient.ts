@@ -51,13 +51,22 @@ axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   // Check token expiration
   if (token) {
     if (isTokenExpired(token)) {
-      // Token is expired, clear auth state and redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      // Only logout if we're not already on the login page
+      const isLoginPage = window.location.pathname.includes('/login');
       
-      // Use the auth store to logout
-      const authStore = useAuthStore.getState();
-      authStore.logout();
+      if (!isLoginPage) {
+        // Token is expired, clear auth state and redirect to login
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        // Use the auth store to logout
+        const authStore = useAuthStore.getState();
+        authStore.logout();
+      } else {
+        // Just clear the token without redirecting
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
       
       // Reject the request
       return Promise.reject(new Error('Session expired. Please log in again.'));
@@ -65,16 +74,19 @@ axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     
     // Add token to headers
     config.headers.set('Authorization', `Bearer ${token}`);
+  }
+  
+  // Add restaurant_id to params for endpoints that need it, regardless of authentication
+  if (config.url && needsRestaurantContext(config.url)) {
+    // Get restaurant ID from token if available, otherwise use default
+    const restaurantId = token ? getRestaurantId(token) : null;
+    const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
+    const finalRestaurantId = restaurantId || defaultId;
     
-    // Add restaurant_id to params for endpoints that need it
-    if (config.url && needsRestaurantContext(config.url)) {
-      const restaurantId = getRestaurantId(token) || import.meta.env.VITE_RESTAURANT_ID || '1';
-      
-      if (restaurantId) {
-        config.params = config.params || {};
-        if (!config.params.restaurant_id) {
-          config.params.restaurant_id = restaurantId;
-        }
+    if (finalRestaurantId) {
+      config.params = config.params || {};
+      if (!config.params.restaurant_id) {
+        config.params.restaurant_id = finalRestaurantId;
       }
     }
   }
@@ -88,13 +100,19 @@ axiosInstance.interceptors.response.use(
   (error) => {
     // Handle 401 Unauthorized (expired token)
     if (error.response && error.response.status === 401) {
-      // Clear auth state and redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      // Only logout if we're not already on the login page and token exists
+      const token = localStorage.getItem('token');
+      const isLoginPage = window.location.pathname.includes('/login');
       
-      // Use the auth store to logout
-      const authStore = useAuthStore.getState();
-      authStore.logout();
+      if (token && !isLoginPage) {
+        // Clear auth state and redirect to login
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        // Use the auth store to logout
+        const authStore = useAuthStore.getState();
+        authStore.logout();
+      }
     }
     
     return Promise.reject(error);

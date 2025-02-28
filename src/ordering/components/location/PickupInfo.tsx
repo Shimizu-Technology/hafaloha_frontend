@@ -1,8 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { MapPin, Clock, Phone } from 'lucide-react';
+import { useRestaurantStore } from '../../../shared/store/restaurantStore';
+import { formatPhoneNumber } from '../../../shared/utils/formatters';
 
 export function PickupInfo() {
-  const address = "123 Marine Corps Drive, Tamuning, Guam 96913";
+  const { restaurant, fetchRestaurant, loading } = useRestaurantStore();
+  
+  useEffect(() => {
+    // Always fetch restaurant data to ensure it's up to date
+    fetchRestaurant();
+  }, [fetchRestaurant]);
+  
+  const address = restaurant?.address || "955 Pale San Vitores Rd, Tamuning, Guam 96913";
+  const phoneNumber = formatPhoneNumber(restaurant?.phone_number) || "+1 (671) 989-3444";
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
   return (
@@ -41,7 +51,7 @@ export function PickupInfo() {
           <Phone className="h-5 w-5 text-[#c1902f] mt-1 mr-3" />
           <div>
             <p className="font-medium">Contact</p>
-            <p className="text-gray-600">(671) 989-3444</p>
+            <p className="text-gray-600">{phoneNumber}</p>
             <p className="text-sm text-gray-500">
               Call us if you need to modify your order
             </p>

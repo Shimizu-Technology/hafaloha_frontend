@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Search, Clock, Users, Phone } from 'lucide-react';
 import DatePicker from 'react-datepicker';  // optional if you want a date picker
 import 'react-datepicker/dist/react-datepicker.css';
+import { formatPhoneNumber } from '../../../shared/utils/formatters';
 
 import { useDateFilter } from '../../context/DateFilterContext';
 import { fetchWaitlistEntries as apiFetchWaitlist } from '../../services/api';
@@ -152,7 +153,7 @@ export default function WaitlistTab() {
                     {w.contact_phone ? (
                       <div className="flex items-center">
                         <Phone className="h-4 w-4 text-gray-400 mr-1" />
-                        {w.contact_phone}
+                        {formatPhoneNumber(w.contact_phone)}
                       </div>
                     ) : (
                       'N/A'

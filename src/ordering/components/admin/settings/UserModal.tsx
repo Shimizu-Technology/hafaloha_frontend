@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { api } from '../../../lib/api';
 import { toast } from 'react-hot-toast';
+import { formatPhoneNumber } from '../../../../shared/utils/formatters';
 
 // Same phone check from SignUpForm
 // Matches +3-4 digits for country/area code, plus exactly 7 digits => total 10 or 11 digits after the plus
@@ -174,6 +175,7 @@ export function UserModal({ user, isCreateMode, onClose }: UserModalProps) {
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Phone <span className="text-red-500">*</span>
+              <span className="ml-1 text-gray-500 text-xs" title="Enter in format: +16719893444">ⓘ</span>
             </label>
             <input
               type="text"
@@ -184,6 +186,11 @@ export function UserModal({ user, isCreateMode, onClose }: UserModalProps) {
               className="mt-1 w-full border border-gray-300 rounded-md
                          focus:ring-[#c1902f] focus:border-[#c1902f] p-2"
             />
+            {phone && (
+              <p className="mt-1 text-sm text-gray-500">
+                Will display as: {formatPhoneNumber(phone)}
+              </p>
+            )}
           </div>
 
           {/* Role */}

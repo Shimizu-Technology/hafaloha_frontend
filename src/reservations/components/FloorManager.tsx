@@ -8,6 +8,7 @@ import {
 import { toast } from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { formatPhoneNumber } from '../../shared/utils/formatters';
 
 import ReservationModal from './ReservationModal';
 import FloorTabs from './FloorTabs';
@@ -878,7 +879,7 @@ export default function FloorManager({
                       )}
                     </div>
                     <div className="text-xs text-gray-600">
-                      Party: {r.party_size}, {r.contact_phone}
+                      Party: {r.party_size}, {r.contact_phone ? formatPhoneNumber(r.contact_phone) : 'N/A'}
                     </div>
                     {timeStr && <div className="text-xs text-blue-500">Time: {timeStr}</div>}
                     <div className="text-xs text-gray-500">Status: {r.status}</div>
@@ -908,7 +909,7 @@ export default function FloorManager({
                   >
                     <div className="font-semibold">{guestName}</div>
                     <div className="text-xs text-gray-600">
-                      Party: {w.party_size}, {w.contact_phone}
+                      Party: {w.party_size}, {w.contact_phone ? formatPhoneNumber(w.contact_phone) : 'N/A'}
                     </div>
                     {timeStr && <div className="text-xs text-blue-500">Checked in: {timeStr}</div>}
                     <div className="text-xs text-gray-500">Status: {w.status}</div>

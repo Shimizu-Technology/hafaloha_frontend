@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, Users, Phone, Mail } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { formatPhoneNumber } from '../../../shared/utils/formatters';
 
 import { useDateFilter } from '../../context/DateFilterContext';
 import ReservationModal from '../ReservationModal';
@@ -308,7 +309,7 @@ export default function ReservationsTab() {
                       {res.contact_phone && (
                         <div className="flex items-center">
                           <Phone className="h-4 w-4 text-gray-400 mr-1" />
-                          {res.contact_phone}
+                          {formatPhoneNumber(res.contact_phone)}
                         </div>
                       )}
                       {res.contact_email && (

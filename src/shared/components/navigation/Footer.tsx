@@ -1,11 +1,20 @@
 // src/shared/components/navigation/Footer.tsx
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter } from 'lucide-react';
+import { useRestaurantStore } from '../../store/restaurantStore';
+import { formatPhoneNumber } from '../../utils/formatters';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const { restaurant, fetchRestaurant } = useRestaurantStore();
+  
+  useEffect(() => {
+    if (!restaurant) {
+      fetchRestaurant();
+    }
+  }, [restaurant, fetchRestaurant]);
 
   return (
     <footer className="bg-gray-800 text-white">
@@ -77,9 +86,9 @@ export function Footer() {
           <div>
             <h3 className="text-lg font-semibold mb-4">Contact Us</h3>
             <address className="not-italic text-gray-300 space-y-2">
-              <p>123 Beach Road</p>
-              <p>Tumon Bay, Guam 96913</p>
-              <p>Phone: (671) 555-1234</p>
+              <p>{restaurant?.address || "955 Pale San Vitores Rd"}</p>
+              <p>Tamuning, Guam 96913</p>
+              <p>Phone: {formatPhoneNumber(restaurant?.phone_number) || "+1 (671) 989-3444"}</p>
               <p>Email: info@hafaloha.com</p>
             </address>
           </div>

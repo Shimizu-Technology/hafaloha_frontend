@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { XCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { formatPhoneNumber } from '../../shared/utils/formatters';
 
 import {
   fetchLayout,
@@ -291,7 +292,7 @@ export default function ReservationModal({
               </div>
               {/* Phone */}
               <div>
-                <strong>Phone:</strong> {reservation.contact_phone || '(none)'}
+                <strong>Phone:</strong> {reservation.contact_phone ? formatPhoneNumber(reservation.contact_phone) : '(none)'}
               </div>
               {/* Email */}
               <div>

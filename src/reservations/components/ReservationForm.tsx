@@ -19,6 +19,7 @@ import { useAuth } from '../../shared/auth';
 import { toast } from 'react-hot-toast';
 import { api } from '../../shared/api';
 import { Tooltip } from '../../shared/components/ui';
+import { formatPhoneNumber } from '../../shared/utils/formatters';
 
 // Define API types
 interface AvailabilityResponse {
@@ -168,7 +169,7 @@ function ReservationConfirmation({
               <div>
                 <p className="font-medium text-gray-900">Contact Information</p>
                 {reservation.phone && (
-                  <p className="text-gray-600">{reservation.phone}</p>
+                  <p className="text-gray-600">{formatPhoneNumber(reservation.phone)}</p>
                 )}
                 {reservation.email && (
                   <p className="text-gray-600">{reservation.email}</p>

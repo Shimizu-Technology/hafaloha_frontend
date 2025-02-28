@@ -12,6 +12,8 @@ import {
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth';
 import { toast } from 'react-hot-toast';
+import { useRestaurantStore } from '../../store/restaurantStore';
+import { formatPhoneNumber } from '../../utils/formatters';
 
 // Create a custom hook to safely use the order store
 function useCartItems() {
@@ -66,6 +68,7 @@ function useCartItems() {
 
 export function Header() {
   const { user, logout: signOut } = useAuth();
+  const { restaurant } = useRestaurantStore();
 
   // Cart items - will only have items in the ordering app context
   const cartItems = useCartItems();
@@ -158,15 +161,25 @@ export function Header() {
             </div>
             <div className="flex items-center text-gray-700 whitespace-nowrap">
               <MapPin className="h-4 w-4 mr-2" />
-              <span>Tamuning</span>
+              <span>{restaurant?.address ? restaurant.address.split(',')[0] : 'Tamuning'}</span>
             </div>
-            <a
-              href="tel:+16719893444"
-              className="flex items-center text-gray-700 whitespace-nowrap hover:text-gray-900"
-            >
-              <Phone className="h-4 w-4 mr-2" />
-              (671) 989-3444
-            </a>
+            {restaurant?.phone_number ? (
+              <a
+                href={`tel:${restaurant.phone_number}`}
+                className="flex items-center text-gray-700 whitespace-nowrap hover:text-gray-900"
+              >
+                <Phone className="h-4 w-4 mr-2" />
+                {formatPhoneNumber(restaurant.phone_number)}
+              </a>
+            ) : (
+              <a
+                href="tel:+16719893444"
+                className="flex items-center text-gray-700 whitespace-nowrap hover:text-gray-900"
+              >
+                <Phone className="h-4 w-4 mr-2" />
+                (671) 989-3444
+              </a>
+            )}
           </nav>
 
           {/* Right side: Profile & Cart */}
@@ -308,20 +321,35 @@ export function Header() {
             </div>
             <div className="px-3 py-2 text-base font-medium text-gray-700 flex items-center">
               <MapPin className="inline-block h-4 w-4 mr-2" />
-              Tamuning
+              {restaurant?.address ? restaurant.address.split(',')[0] : 'Tamuning'}
             </div>
-            <a
-              href="tel:+16719893444"
-              className="
-                block px-3 py-2 text-base font-medium text-gray-700
-                hover:text-gray-900 hover:bg-gray-50
-                flex items-center
-              "
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <Phone className="inline-block h-4 w-4 mr-2" />
-              (671) 989-3444
-            </a>
+            {restaurant?.phone_number ? (
+              <a
+                href={`tel:${restaurant.phone_number}`}
+                className="
+                  block px-3 py-2 text-base font-medium text-gray-700
+                  hover:text-gray-900 hover:bg-gray-50
+                  flex items-center
+                "
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <Phone className="inline-block h-4 w-4 mr-2" />
+                {formatPhoneNumber(restaurant.phone_number)}
+              </a>
+            ) : (
+              <a
+                href="tel:+16719893444"
+                className="
+                  block px-3 py-2 text-base font-medium text-gray-700
+                  hover:text-gray-900 hover:bg-gray-50
+                  flex items-center
+                "
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <Phone className="inline-block h-4 w-4 mr-2" />
+                (671) 989-3444
+              </a>
+            )}
 
             {user ? (
               <>
