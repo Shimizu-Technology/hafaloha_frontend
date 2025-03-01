@@ -1,12 +1,42 @@
 // src/ordering/components/profile/OrderHistory.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 import { useAuthStore } from '../../store/authStore';
-import { Clock, ShoppingBag } from 'lucide-react';
+import { Clock, ShoppingBag, Filter, Calendar } from 'lucide-react';
+import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
+import { Order } from '../../types/order';
+
+type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+type SortOption = 'newest' | 'oldest' | 'highest' | 'lowest';
+
+// Extended order type to handle the properties we're using that might not be in the base type
+interface ExtendedOrder extends Omit<Order, 'id'> {
+  id: string;
+  userId?: number;
+  estimatedPickupTime?: string;
+  special_instructions?: string;
+  specialInstructions?: string;
+}
+
+// Extended order item type to handle customizations
+interface ExtendedOrderItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  options?: string[];
+  notes?: string;
+  customizations?: Record<string, string[]>;
+}
 
 export function OrderHistory() {
   const { user } = useAuthStore();
-  const { getOrderHistory, fetchOrders } = useOrderStore();
+  const { getOrderHistory, fetchOrders, loading } = useOrderStore();
+
+  // State for sorting and filtering
+  const [sortOption, setSortOption] = useState<SortOption>('newest');
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
   useEffect(() => {
     // Load orders from the backend on mount
@@ -15,69 +45,247 @@ export function OrderHistory() {
 
   if (!user) return null;
 
-  const orders = getOrderHistory(user.id);
+  const orders = getOrderHistory(Number(user.id)) as ExtendedOrder[];
+
+  // Sort orders based on selected option
+  const sortedOrders = [...orders].sort((a, b) => {
+    switch (sortOption) {
+      case 'newest':
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      case 'oldest':
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case 'highest':
+        return b.total - a.total;
+      case 'lowest':
+        return a.total - b.total;
+      default:
+        return 0;
+    }
+  });
+
+  // Filter orders by status
+  const filteredOrders = statusFilter === 'all' 
+    ? sortedOrders 
+    : sortedOrders.filter(order => order.status === statusFilter);
+
+  // Get status badge color
+  const getStatusBadgeColor = (status: string) => {
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      preparing: 'bg-blue-100 text-blue-800',
+      ready: 'bg-green-100 text-green-800',
+      completed: 'bg-gray-100 text-gray-800',
+      cancelled: 'bg-red-100 text-red-800',
+      confirmed: 'bg-purple-100 text-purple-800',
+    };
+    return colors[status as keyof typeof colors] || 'bg-yellow-100 text-yellow-800';
+  };
+
+  // Format date for better display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(undefined, { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h2 className="text-2xl font-bold mb-6">Order History</h2>
+    <div className="max-w-4xl mx-auto p-4 sm:p-6">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold">Order History</h2>
+        <p className="text-sm text-gray-600">View and track your past orders</p>
+      </div>
 
-      {orders.length === 0 ? (
-        <div className="text-center py-8">
-          <ShoppingBag className="mx-auto h-12 w-12 text-gray-400" />
-          <p className="mt-4 text-gray-600">No orders yet</p>
+      {/* Filters and controls - mobile optimized */}
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+          {/* Sort dropdown */}
+          <div className="w-full sm:w-auto">
+            <MobileSelect
+              options={[
+                { value: 'newest', label: 'Sort: Newest First' },
+                { value: 'oldest', label: 'Sort: Oldest First' },
+                { value: 'highest', label: 'Sort: Highest Total' },
+                { value: 'lowest', label: 'Sort: Lowest Total' }
+              ]}
+              value={sortOption}
+              onChange={(value) => setSortOption(value as SortOption)}
+            />
+          </div>
+          
+          {/* Order count */}
+          <div className="text-sm text-gray-500 font-medium">
+            {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+          </div>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {orders.map(order => (
-            <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
+
+        {/* Filter toggle button */}
+        <button 
+          onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+          className="flex items-center text-sm font-medium text-gray-700 hover:text-[#c1902f] transition-colors"
+        >
+          <Filter className="h-4 w-4 mr-2" />
+          {isFilterExpanded ? 'Hide Filters' : 'Show Filters'}
+        </button>
+
+        {/* Expandable filter section */}
+        {isFilterExpanded && (
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Filter by Status</h3>
+            
+            {/* Status filter buttons - horizontal scrolling with improved mobile styling */}
+            <div className="relative">
+              {/* Scrollable container */}
+              <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={`
+                    whitespace-nowrap px-4 py-2 rounded-md text-xs font-medium min-w-[80px] flex-shrink-0
+                    ${statusFilter === 'all'
+                      ? 'bg-[#c1902f] text-white shadow-sm'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                  All Orders
+                </button>
+                {(['pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={`
+                      whitespace-nowrap px-4 py-2 rounded-md text-xs font-medium min-w-[80px] flex-shrink-0
+                      ${statusFilter === status
+                        ? 'bg-[#c1902f] text-white shadow-sm'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      }
+                    `}
+                  >
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Orders list */}
+      {loading ? (
+        // Loading skeleton
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 animate-pulse">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-lg font-medium">Order #{order.id}</h3>
-                  <p className="text-sm text-gray-500">
-                    {new Date(order.createdAt).toLocaleDateString()}
-                  </p>
+                  <div className="h-5 w-24 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-4 w-32 bg-gray-200 rounded"></div>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  order.status === 'completed'
-                    ? 'bg-green-100 text-green-800'
-                    : order.status === 'cancelled'
-                    ? 'bg-red-100 text-red-800'
-                    : 'bg-yellow-100 text-yellow-800'
-                }`}>
+                <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
+              </div>
+              <div className="border-t border-b py-4 mb-4 space-y-3">
+                <div className="flex justify-between">
+                  <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                  <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="h-4 w-36 bg-gray-200 rounded"></div>
+                  <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                <div className="h-4 w-24 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
+          <ShoppingBag className="mx-auto h-12 w-12 text-gray-400" />
+          <p className="mt-4 text-gray-600 font-medium">No orders yet</p>
+          <p className="text-sm text-gray-500 mt-2">Your order history will appear here once you place an order</p>
+        </div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-8 bg-white rounded-lg shadow-sm border border-gray-200">
+          <Filter className="mx-auto h-10 w-10 text-gray-400" />
+          <p className="mt-3 text-gray-600">No orders match your current filters</p>
+          <button 
+            onClick={() => {
+              setStatusFilter('all');
+              setSortOption('newest');
+            }}
+            className="mt-3 text-sm text-[#c1902f] hover:underline font-medium"
+          >
+            Clear filters
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredOrders.map(order => (
+            <div key={order.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+              {/* Order header */}
+              <div className="flex justify-between items-start p-4 border-b border-gray-100">
+                <div>
+                  <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
+                  <div className="flex items-center text-xs text-gray-500 mt-1">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    {formatDate(order.createdAt)}
+                  </div>
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
                   {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                 </span>
               </div>
 
-              <div className="border-t border-b py-4 mb-4">
-                {order.items.map((item, index) => (
-                  <div key={index} className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-medium">{item.name} × {item.quantity}</p>
-                      {item.customizations &&
-                        Object.entries(item.customizations).map(([key, values]) => (
-                          <p key={key} className="text-sm text-gray-600">
-                            {key}: {values.join(', ')}
-                          </p>
-                        ))}
-                    </div>
-                    <span>${(item.price * item.quantity).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-between items-center">
-                <div className="flex items-center text-gray-600">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Pickup Time: {new Date(order.estimatedPickupTime).toLocaleTimeString()}
+              {/* Order items */}
+              <div className="p-4 border-b border-gray-100">
+                <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Items</h4>
+                <div className="space-y-3">
+                  {order.items.map((item, index) => {
+                    const extendedItem = item as ExtendedOrderItem;
+                    return (
+                      <div key={index} className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-sm">{item.name} × {item.quantity}</p>
+                          {extendedItem.customizations &&
+                            Object.entries(extendedItem.customizations).map(([key, values]) => (
+                              <p key={key} className="text-xs text-gray-600">
+                                {key}: {values.join(', ')}
+                              </p>
+                            ))}
+                          {item.notes && (
+                            <p className="text-xs text-gray-600">Note: {item.notes}</p>
+                          )}
+                        </div>
+                        <span className="text-sm font-medium">${(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-                <p className="font-medium">Total: ${order.total.toFixed(2)}</p>
               </div>
 
-              {order.specialInstructions && (
-                <p className="mt-4 text-sm text-gray-600">
-                  Special Instructions: {order.specialInstructions}
-                </p>
-              )}
+              {/* Order footer */}
+              <div className="p-4">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                  <div className="flex items-center text-xs text-gray-600">
+                    <Clock className="h-3.5 w-3.5 mr-1.5" />
+                    Pickup: {new Date(order.estimatedPickupTime || order.pickup_time || '').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </div>
+                  <p className="text-base font-medium">Total: ${order.total.toFixed(2)}</p>
+                </div>
+
+                {(order.specialInstructions || order.special_instructions) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs text-gray-700 font-medium">Special Instructions:</p>
+                    <p className="mt-1 text-sm text-gray-600">{order.specialInstructions || order.special_instructions}</p>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
