@@ -232,7 +232,13 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
 
   // ----- 7) Render -----
   return (
-    <div className="space-y-8 px-3 md:px-6 lg:px-8 py-4">
+    <div className="p-4">
+      {/* Header section */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold">Analytics Dashboard</h2>
+        <p className="text-gray-600 text-sm">View and analyze customer data and sales trends</p>
+      </div>
+
       {/* 
         ============================================
         (A) Date Range + Preset Buttons + Load 

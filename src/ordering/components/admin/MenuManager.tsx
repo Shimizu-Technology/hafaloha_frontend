@@ -376,12 +376,17 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6">
+    <div className="p-4">
       {/* Loading overlay will be shown when isLoading is true */}
       {LoadingOverlayComponent}
-      {/* Header row */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+      {/* Header section */}
+      <div className="mb-6">
         <h2 className="text-2xl font-bold">Menu Management</h2>
+        <p className="text-gray-600 text-sm">Manage menu items, categories, and options</p>
+      </div>
+
+      {/* Action button */}
+      <div className="flex justify-end mb-6">
         <button
           onClick={handleAdd}
           className="inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"

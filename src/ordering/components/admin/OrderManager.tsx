@@ -189,12 +189,11 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-6">
-      {loading && <p>Loading orders...</p>}
-      {error && <p className="text-red-600">{error}</p>}
+    <div className="p-4">
+      {error && <p className="text-red-600 mb-4">{error}</p>}
 
       {/* Header section */}
-      <div className="mb-4">
+      <div className="mb-6">
         <h2 className="text-2xl font-bold">Order Management</h2>
         <p className="text-gray-600 text-sm">Manage and track customer orders</p>
       </div>
@@ -256,7 +255,51 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
       {/* Orders list - further mobile optimized */}
       <div className="space-y-4 pb-16">
-        {filteredOrders.length === 0 ? (
+        {loading ? (
+          // Skeleton loading state
+          Array.from({ length: 3 }).map((_, index) => (
+            <div key={`skeleton-${index}`} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse">
+              {/* Skeleton header */}
+              <div className="flex justify-between items-center p-3 border-b border-gray-100">
+                <div>
+                  <div className="h-5 w-32 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-3 w-24 bg-gray-200 rounded"></div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
+                  <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
+                </div>
+              </div>
+              
+              {/* Skeleton content */}
+              <div className="p-3">
+                <div className="mb-4">
+                  <div className="h-4 w-24 bg-gray-200 rounded mb-2"></div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                      <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="flex justify-between">
+                      <div className="h-4 w-36 bg-gray-200 rounded"></div>
+                      <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-2 mb-3">
+                  <div className="h-3 w-48 bg-gray-200 rounded"></div>
+                  <div className="h-3 w-40 bg-gray-200 rounded"></div>
+                </div>
+                
+                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+                  <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                  <div className="h-8 w-24 bg-gray-200 rounded"></div>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : filteredOrders.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-4 text-center">
             <p className="text-gray-500">No orders found matching your filters</p>
           </div>

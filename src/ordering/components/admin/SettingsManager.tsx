@@ -60,7 +60,11 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
 
   return (
     <div className="p-4">
-      <h2 className="text-xl font-semibold mb-4">Admin Settings</h2>
+      {/* Header section */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold">Admin Settings</h2>
+        <p className="text-gray-600 text-sm">Configure system settings and preferences</p>
+      </div>
 
       {/* Mobile-friendly tab navigation similar to main admin dashboard */}
       <div className="mb-6 border-b border-gray-200 overflow-x-auto">
