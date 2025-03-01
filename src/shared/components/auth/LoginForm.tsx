@@ -14,11 +14,13 @@ export function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await login({ email, password });
-
-    if (!error) {
+    try {
+      await login({ email, password });
       toast.success('Welcome back!');
       navigate('/');
+    } catch (err) {
+      // Login error is already handled by the auth store
+      // No need to do anything here as the error will be displayed in the UI
     }
   }
 
@@ -31,11 +33,18 @@ export function LoginForm() {
               Welcome Back!
             </h2>
 
-            {error && (
-              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
-                {error}
-              </div>
-            )}
+            {/* Always reserve space for error message to prevent layout shift */}
+            <div 
+              className={`mb-4 rounded-md transition-all duration-300 overflow-hidden ${
+                error ? 'bg-red-100 text-red-700 opacity-100 p-3 min-h-[50px]' : 'opacity-0 max-h-0 min-h-0 p-0 mb-0'
+              }`}
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {error === 'Request failed with status code 401' 
+                ? 'Invalid email or password. Please try again.' 
+                : error || 'Error placeholder'}
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Email */}
