@@ -19,3 +19,6 @@ export * from './utils/formatters';
 // Export shared stores
 export * from './store/siteSettingsStore';
 export * from './store/restaurantStore';
+
+// Export i18n (internationalization)
+export * from './i18n';

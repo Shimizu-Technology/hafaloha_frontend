@@ -1,6 +1,7 @@
 // src/ordering/components/MenuItem.tsx
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
@@ -11,6 +12,7 @@ interface MenuItemProps {
 }
 
 export function MenuItem({ item }: MenuItemProps) {
+  const { t } = useTranslation();
   const addToCart = useOrderStore((state) => state.addToCart);
 
   const [showCustomization, setShowCustomization] = useState(false);
@@ -22,7 +24,7 @@ export function MenuItem({ item }: MenuItemProps) {
 
   function handleQuickAdd() {
     if (isOutOfStock) {
-      alert('Sorry, this item is out of stock.');
+      alert(t('menu.outOfStockAlert'));
       return;
     }
     // For quick add, quantity=1 and no customizations
@@ -30,9 +32,7 @@ export function MenuItem({ item }: MenuItemProps) {
       {
         id: item.id,
         name: item.name,
-        description: item.description,
         price: item.price,
-        image: item.image,
         customizations: {},
       },
       1
@@ -43,7 +43,7 @@ export function MenuItem({ item }: MenuItemProps) {
 
   function handleOpenCustomization() {
     if (isOutOfStock) {
-      alert('Sorry, this item is out of stock.');
+      alert(t('menu.outOfStockAlert'));
       return;
     }
     setShowCustomization(true);
@@ -51,10 +51,10 @@ export function MenuItem({ item }: MenuItemProps) {
 
   // If item is seasonal => show promo_label or fallback "Limited Time"
   const specialLabel = item.seasonal
-    ? (item as any).promo_label?.trim() || 'Limited Time'
+    ? (item as any).promo_label?.trim() || t('menu.limitedTime')
     : null;
 
-  // Format available_until as “February 17, 2025,” etc.
+  // Format available_until as "February 17, 2025," etc.
   let formattedUntil = '';
   if (item.seasonal && item.available_until) {
     try {
@@ -92,19 +92,19 @@ export function MenuItem({ item }: MenuItemProps) {
             {/* Stock Status Badges */}
             {isOutOfStock && (
               <div className="mt-2 inline-block bg-gray-500 text-white text-xs font-bold rounded-full px-2 py-1">
-                Out of Stock
+                {t('menu.outOfStock')}
               </div>
             )}
             {isLowStock && (
               <div className="mt-2 inline-block bg-orange-400 text-white text-xs font-bold rounded-full px-2 py-1">
-                Low Stock
+                {t('menu.lowStock')}
               </div>
             )}
 
             {/* Seasonal & availability notices */}
             {item.advance_notice_hours != null && item.advance_notice_hours >= 24 && (
               <p className="mt-1 text-sm text-red-600">
-                Requires 24 hours notice
+                {t('menu.requires24HoursNotice')}
               </p>
             )}
             {specialLabel && (
@@ -114,7 +114,7 @@ export function MenuItem({ item }: MenuItemProps) {
             )}
             {formattedUntil && (
               <p className="text-xs text-gray-600 mt-1">
-                Available until {formattedUntil}
+                {t('menu.availableUntil')} {formattedUntil}
               </p>
             )}
 
@@ -145,7 +145,7 @@ export function MenuItem({ item }: MenuItemProps) {
                 `}
               >
                 <Plus className="h-5 w-5 mr-2" />
-                {isOutOfStock ? 'Unavailable' : 'Customize'}
+                {isOutOfStock ? t('menu.unavailable') : t('menu.customize')}
               </button>
             ) : (
               <button
@@ -163,14 +163,14 @@ export function MenuItem({ item }: MenuItemProps) {
                 `}
               >
                 <Plus className="h-5 w-5 mr-2" />
-                {isOutOfStock ? 'Unavailable' : 'Add to Cart'}
+                {isOutOfStock ? t('menu.unavailable') : t('menu.addToCart')}
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* If user chooses “Customize,” show the modal */}
+      {/* If user chooses "Customize," show the modal */}
       {showCustomization && (
         <CustomizationModal
           item={item}

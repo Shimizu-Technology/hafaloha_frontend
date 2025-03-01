@@ -2,10 +2,11 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, Minus, Plus } from 'lucide-react';
-import { useOrderStore } from '../store/orderStore';
-import type { CartItem } from '../types/menu';
+import { useTranslation } from 'react-i18next';
+import { useOrderStore, type CartItem } from '../store/orderStore';
 
 export function CartPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   // We pull the new action `setCartItemNotes` from our store, plus existing ones
@@ -25,9 +26,9 @@ export function CartPage() {
   if (cartItems.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
-        <h2 className="text-xl sm:text-2xl font-bold mb-4">Your cart is empty</h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-4">{t('cart.empty')}</h2>
         <p className="text-gray-600 mb-8">
-          Add some delicious items to get started!
+          {t('cart.emptyMessage')}
         </p>
         <Link
           to="/menu"
@@ -35,7 +36,7 @@ export function CartPage() {
                      text-base font-medium rounded-md text-white
                      bg-[#c1902f] hover:bg-[#d4a43f]"
         >
-          Browse Menu
+          {t('cart.browseMenu')}
         </Link>
       </div>
     );
@@ -44,7 +45,7 @@ export function CartPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">
-        Your Cart
+        {t('cart.title')}
       </h1>
 
       <div className="lg:grid lg:grid-cols-12 lg:gap-8">
@@ -73,7 +74,7 @@ export function CartPage() {
                 {/* If the item requires 24 hours, show it */}
                 {item.advance_notice_hours && item.advance_notice_hours >= 24 && (
                   <p className="mt-1 text-sm text-red-600">
-                    Requires 24 hours notice
+                    {t('menu.requires24HoursNotice')}
                   </p>
                 )}
 
@@ -92,7 +93,7 @@ export function CartPage() {
                 <textarea
                   className="mt-2 w-full border border-gray-300 rounded-md p-2 text-sm
                              focus:ring-[#c1902f] focus:border-[#c1902f]"
-                  placeholder="Any notes for this item? (e.g. 'No onions', 'Extra sauce')"
+                  placeholder={t('cart.itemNotes')}
                   value={item.notes || ''}
                   onChange={(e) => setCartItemNotes(item.id, e.target.value)}
                 />
@@ -139,11 +140,11 @@ export function CartPage() {
         <div className="lg:col-span-5 mt-8 lg:mt-0">
           <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
             <h2 className="text-lg font-medium text-gray-900 mb-4">
-              Order Summary
+              {t('cart.orderSummary')}
             </h2>
             <div className="space-y-4">
               <div className="flex justify-between text-lg font-medium">
-                <span>Total</span>
+                <span>{t('cart.total')}</span>
                 <span>${total.toFixed(2)}</span>
               </div>
               <button
@@ -152,7 +153,7 @@ export function CartPage() {
                            bg-[#c1902f] hover:bg-[#d4a43f]"
                 onClick={() => navigate('/checkout')}
               >
-                Proceed to Checkout
+                {t('cart.proceedToCheckout')}
                 <ArrowRight className="ml-2 h-5 w-5" />
               </button>
             </div>

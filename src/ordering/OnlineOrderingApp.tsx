@@ -2,6 +2,7 @@
 
 import React, { useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
@@ -76,6 +77,7 @@ function OrderingLayout() {
 }
 
 export default function OnlineOrderingApp() {
+  const { t } = useTranslation();
   const { menuItems, fetchMenuItems } = useMenuStore();
   const { fetchSiteSettings } = useSiteSettingsStore(); // <-- destructure the store method
 
@@ -101,7 +103,7 @@ export default function OnlineOrderingApp() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
                     <h2 className="text-2xl sm:text-3xl font-display text-gray-900 mb-8">
-                      Popular Items
+                      {t('home.popularItems')}
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                       {featuredSlice.map((item) => (

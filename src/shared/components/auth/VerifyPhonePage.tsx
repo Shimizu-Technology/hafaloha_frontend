@@ -4,10 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../auth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 export function VerifyPhonePage() {
   const navigate = useNavigate();
   const { user, verifyPhone, resendVerificationCode, isLoading: loading, error } = useAuth();
+  const { t } = useTranslation();
 
   const [code, setCode] = useState('');
   const [resendMsg, setResendMsg] = useState<string>('');
@@ -30,11 +32,11 @@ export function VerifyPhonePage() {
 
     try {
       await verifyPhone(code);
-      toast.success('Phone verified successfully!');
+      toast.success(t('auth.verifyPhone.successMessage'));
       navigate('/');
     } catch (err) {
       // Typically 422 Unprocessable if code is invalid/expired.
-      toast.error('Invalid code or verification expired.');
+      toast.error(t('auth.verifyPhone.invalidCodeError'));
     }
   }
 
@@ -48,9 +50,9 @@ export function VerifyPhonePage() {
     } catch (err: any) {
       // If the server returned 429, the error message likely has "Please wait before requesting another code"
       if (err.message?.includes('Please wait before requesting another code')) {
-        toast.error('You must wait 1 minute before requesting another code again.');
+        toast.error(t('auth.verifyPhone.waitBeforeResend'));
       } else {
-        toast.error(err.message || 'Failed to resend code.');
+        toast.error(err.message || t('auth.verifyPhone.resendError'));
       }
     }
   }
@@ -60,9 +62,9 @@ export function VerifyPhonePage() {
       <div className="flex flex-col items-center justify-center">
         <div className="w-full max-w-md">
           <div className="max-w-md w-full mx-auto p-6 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold mb-4 text-center">Verify Your Phone</h2>
+            <h2 className="text-2xl font-bold mb-4 text-center">{t('auth.verifyPhone.title')}</h2>
             <p className="text-sm text-gray-600 mb-6 text-center">
-              Please enter the code we sent to {user?.phone}.
+              {t('auth.verifyPhone.enterCodeMessage', { phone: user?.phone })}
             </p>
 
             {/* If our store has a general error, display it. */}
@@ -81,7 +83,7 @@ export function VerifyPhonePage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block font-medium mb-1">Verification Code</label>
+                <label className="block font-medium mb-1">{t('auth.verifyPhone.verificationCode')}</label>
                 <input
                   type="text"
                   value={code}
@@ -95,19 +97,19 @@ export function VerifyPhonePage() {
                 disabled={loading}
                 className="w-full bg-[#c1902f] text-white py-2 rounded hover:bg-[#d4a43f] transition-colors"
               >
-                {loading ? 'Verifying...' : 'Verify'}
+                {loading ? t('auth.verifyPhone.verifying') : t('auth.verifyPhone.verify')}
               </button>
             </form>
 
             <div className="mt-4 text-sm text-center">
-              Didn't get the code?{' '}
+              {t('auth.verifyPhone.didntGetCode')}{' '}
               <button
                 type="button"
                 disabled={loading}
                 onClick={handleResend}
                 className="text-blue-600 underline"
               >
-                Resend
+                {t('auth.verifyPhone.resend')}
               </button>
             </div>
           </div>

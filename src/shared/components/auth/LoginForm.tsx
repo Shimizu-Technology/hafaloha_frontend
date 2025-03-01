@@ -5,18 +5,20 @@ import { useAuth } from '../../auth';
 import { Mail, Lock } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 export function LoginForm() {
   const { login, isLoading: loading, error } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
+  const { t } = useTranslation('auth');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
       await login({ email, password });
-      toast.success('Welcome back!');
+      toast.success(t('login.welcomeBack'));
       navigate('/');
     } catch (err) {
       // Login error is already handled by the auth store
@@ -30,7 +32,7 @@ export function LoginForm() {
         <div className="w-full max-w-md">
           <div className="max-w-sm w-full mx-auto px-6 py-8 bg-white shadow-xl rounded-lg border border-gray-100">
             <h2 className="text-3xl font-extrabold text-gray-900 text-center mb-6">
-              Welcome Back!
+              {t('login.title')}
             </h2>
 
             {/* Always reserve space for error message to prevent layout shift */}
@@ -42,7 +44,7 @@ export function LoginForm() {
               aria-atomic="true"
             >
               {error === 'Request failed with status code 401' 
-                ? 'Invalid email or password. Please try again.' 
+                ? t('login.invalidCredentials')
                 : error || 'Error placeholder'}
             </div>
 
@@ -51,7 +53,7 @@ export function LoginForm() {
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                   <Mail className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Email <span className="text-red-500">*</span>
+                  {t('login.emailLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
@@ -72,7 +74,7 @@ export function LoginForm() {
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                   <Lock className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Password <span className="text-red-500">*</span>
+                  {t('login.passwordLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="password"
@@ -100,25 +102,25 @@ export function LoginForm() {
                   transition-colors duration-200 disabled:opacity-50
                 "
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? t('login.loadingButton') : t('login.submitButton')}
               </button>
             </form>
 
             {/* Forgot Password */}
             <div className="mt-4 text-center text-sm">
               <Link to="/forgot-password" className="text-blue-600 hover:underline">
-                Forgot Password?
+                {t('login.forgotPassword')}
               </Link>
             </div>
 
             {/* Sign Up Link */}
             <div className="mt-6 text-center text-sm">
-              <p className="text-gray-600">Don't have an account?</p>
+              <p className="text-gray-600">{t('login.noAccount')}</p>
               <Link
                 to="/signup"
                 className="font-medium text-blue-600 hover:underline"
               >
-                Sign Up
+                {t('login.signupLink')}
               </Link>
             </div>
           </div>

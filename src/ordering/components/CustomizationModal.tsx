@@ -1,6 +1,7 @@
 // src/ordering/components/CustomizationModal.tsx
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useOrderStore } from '../store/orderStore';
 import type { MenuItem, OptionGroup, MenuOption } from '../types/menu';
 
@@ -10,6 +11,7 @@ interface CustomizationModalProps {
 }
 
 export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
+  const { t } = useTranslation();
   const addToCart = useOrderStore((state) => state.addToCart);
 
   // 1) Track user selections: selections[groupId] = array of optionIds
@@ -54,8 +56,8 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
         // find the Option
         const opt = group.options.find((o) => o.id === optId);
         if (opt) {
-          // Use "additional_price_float" from the server, default to 0 if missing
-          const extra = opt.additional_price_float ?? 0;
+          // Use "additional_price" from the server, default to 0 if missing
+          const extra = opt.additional_price ?? 0;
           sum += extra;
         }
       }
@@ -116,12 +118,12 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
         </button>
 
         <h3 className="text-xl font-semibold mb-4">
-          Customize: {item.name}
+          {t('customization.title')}: {item.name}
         </h3>
 
         {/* If no optionGroups, just show "no customizations" */}
         {optionGroups.length === 0 ? (
-          <p>No customizations available.</p>
+          <p>{t('customization.noCustomizations')}</p>
         ) : (
           optionGroups.map((group) => {
             const groupId = group.id;
@@ -130,14 +132,14 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                 <h4 className="font-medium text-gray-700">
                   {group.name}{' '}
                   <span className="text-sm text-gray-500">
-                    (Min {group.min_select}, Max {group.max_select})
+                    {t('customization.minMax', { min: group.min_select, max: group.max_select })}
                   </span>
                 </h4>
                 <div className="mt-2 space-y-2">
                   {group.options.map((opt) => {
                     const selected = selections[groupId]?.includes(opt.id);
                     // Coerce to number
-                    const extraPrice = Number(opt.additional_price_float ?? 0);
+                    const extraPrice = Number(opt.additional_price ?? 0);
                     return (
                       <button
                         key={opt.id}
@@ -184,7 +186,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
             </button>
           </div>
           <p className="text-lg font-semibold">
-            Total: ${totalItemPrice.toFixed(2)}
+            {t('customization.total')}: ${totalItemPrice.toFixed(2)}
           </p>
         </div>
 
@@ -194,13 +196,13 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
             onClick={onClose}
             className="px-4 py-2 border rounded-md hover:bg-gray-50"
           >
-            Cancel
+            {t('customization.cancel')}
           </button>
           <button
             onClick={handleAddToCart}
             className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
           >
-            Add to Cart
+            {t('customization.addToCart')}
           </button>
         </div>
       </div>

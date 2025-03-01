@@ -1,12 +1,14 @@
 // src/ordering/components/MenuPage.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
 import { LoadingSpinner } from '../../shared/components/ui/LoadingSpinner';
 
 export function MenuPage() {
+  const { t } = useTranslation();
   const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
   const { categories, fetchCategories } = useCategoryStore();
 
@@ -61,7 +63,7 @@ export function MenuPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
-        Our Menu
+        {t('menu.title')}
       </h1>
 
       {error && <p className="text-red-600">{error}</p>}
@@ -79,7 +81,7 @@ export function MenuPage() {
             `}
             onClick={() => setSelectedCategoryId(null)}
           >
-            All Items
+            {t('menu.allItems')}
           </button>
 
           {/* Category buttons */}
@@ -108,7 +110,7 @@ export function MenuPage() {
             checked={showFeaturedOnly}
             onChange={(e) => handleToggleFeatured(e.target.checked)}
           />
-          <span>Featured Items</span>
+          <span>{t('menu.featuredItems')}</span>
         </label>
 
         <label className="inline-flex items-center space-x-2">
@@ -117,7 +119,7 @@ export function MenuPage() {
             checked={showSeasonalOnly}
             onChange={(e) => handleToggleSeasonal(e.target.checked)}
           />
-          <span>Seasonal Items</span>
+          <span>{t('menu.seasonalItems')}</span>
         </label>
       </div>
 

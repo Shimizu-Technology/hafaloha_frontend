@@ -5,6 +5,7 @@ import { useAuth } from '../../auth';
 import { Mail, Lock, User, Phone } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Allows a plus sign, then 3 or 4 digits for "country+area code," then exactly 7 digits.
@@ -40,19 +41,19 @@ export function SignUpForm() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   }
 
+  const { t } = useTranslation();
+  
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error(t('auth.signup.passwordMismatch'));
       return;
     }
 
     const finalPhone = formData.phone.trim();
     if (!isValidPhone(finalPhone)) {
-      toast.error(
-        'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
-      );
+      toast.error(t('toasts.phoneFormat'));
       return;
     }
 
@@ -67,7 +68,7 @@ export function SignUpForm() {
         restaurant_id: 1
       });
       
-      toast.success('Account created successfully!');
+      toast.success(t('auth.signup.successMessage'));
       navigate('/verify-phone');
     } catch (err) {
       console.error('Signup error:', err);
@@ -80,7 +81,7 @@ export function SignUpForm() {
         <div className="w-full max-w-md">
           <div className="max-w-sm w-full mx-auto px-6 py-8 bg-white shadow-xl rounded-lg border border-gray-100">
             <h2 className="text-3xl font-extrabold text-gray-900 text-center mb-6">
-              Create Account
+              {t('auth.signup.title')}
             </h2>
 
             {error && (
@@ -94,7 +95,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
                   <User className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  First Name <span className="text-red-500">*</span>
+                  {t('auth.signup.nameLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -116,7 +117,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
                   <User className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Last Name <span className="text-red-500">*</span>
+                  {t('auth.signup.nameLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -138,7 +139,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                   <Mail className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Email <span className="text-red-500">*</span>
+                  {t('auth.signup.emailLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
@@ -160,7 +161,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                   <Phone className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Phone <span className="text-red-500">*</span>
+                  {t('auth.signup.phoneLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
@@ -182,7 +183,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                   <Lock className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Password <span className="text-red-500">*</span>
+                  {t('auth.signup.passwordLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="password"
@@ -204,7 +205,7 @@ export function SignUpForm() {
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
                   <Lock className="inline-block w-4 h-4 mr-1 text-[#c1902f]" />
-                  Confirm Password <span className="text-red-500">*</span>
+                  {t('auth.signup.confirmPasswordLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="password"
@@ -233,18 +234,18 @@ export function SignUpForm() {
                   transition-colors duration-200 disabled:opacity-50
                 "
               >
-                {loading ? 'Creating Account...' : 'Create Account'}
+                {loading ? t('auth.signup.loadingButton') : t('auth.signup.submitButton')}
               </button>
             </form>
 
             {/* Login Link */}
             <div className="mt-6 text-center text-sm">
-              <p className="text-gray-600">Already have an account?</p>
+              <p className="text-gray-600">{t('auth.signup.alreadyHaveAccount')}</p>
               <Link
                 to="/login"
                 className="font-medium text-blue-600 hover:underline"
               >
-                Sign In
+                {t('auth.signIn')}
               </Link>
             </div>
           </div>

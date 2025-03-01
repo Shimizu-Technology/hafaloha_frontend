@@ -1,0 +1,179 @@
+{
+  "language": {
+    "english": "English",
+    "japanese": "Japanese",
+    "korean": "Korean"
+  },
+  "navigation": {
+    "home": "Home",
+    "menu": "Menu",
+    "reservations": "Reservations",
+    "cart": "Cart",
+    "profile": "Profile",
+    "orders": "Orders",
+    "admin": "Admin",
+    "adminTools": "Admin Tools",
+    "manageReservations": "Manage Reservations",
+    "adminDashboard": "Admin Dashboard",
+    "orderHistory": "Order History",
+    "myProfile": "My Profile"
+  },
+  "buttons": {
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "orderNow": "Order Now",
+    "bookTable": "Book Your Table",
+    "getNotified": "Get Notified"
+  },
+  "hero": {
+    "title": "Experience the Flavors of Two Islands",
+    "subtitle": "Where Chamorro and Hawaiian cuisines come together to create an unforgettable dining experience"
+  },
+  "home": {
+    "popularItems": "Popular Items"
+  },
+  "loyalty": {
+    "title": "Håfaloha Rewards Coming Soon!",
+    "subtitle": "Join our loyalty program and earn points with every order.",
+    "point": "Earn 1 point for every dollar spent",
+    "redeem": "Redeem points for free items and exclusive deals",
+    "comingSoonAlert": "Coming soon! Stay tuned for our loyalty program launch."
+  },
+  "menu": {
+    "title": "Our Menu",
+    "allItems": "All Items",
+    "featuredItems": "Featured Items",
+    "seasonalItems": "Seasonal Items",
+    "outOfStock": "Out of Stock",
+    "lowStock": "Low Stock",
+    "requires24HoursNotice": "Requires 24 hours notice",
+    "limitedTime": "Limited Time",
+    "availableUntil": "Available until",
+    "unavailable": "Unavailable",
+    "customize": "Customize",
+    "addToCart": "Add to Cart",
+    "outOfStockAlert": "Sorry, this item is out of stock."
+  },
+  "cart": {
+    "title": "Your Cart",
+    "empty": "Your cart is empty",
+    "emptyMessage": "Add some delicious items to get started!",
+    "browseMenu": "Browse Menu",
+    "itemNotes": "Any notes for this item? (e.g. 'No onions', 'Extra sauce')",
+    "orderSummary": "Order Summary",
+    "total": "Total",
+    "proceedToCheckout": "Proceed to Checkout"
+  },
+  "customization": {
+    "title": "Customize",
+    "noCustomizations": "No customizations available.",
+    "minMax": "Min {min}, Max {max}",
+    "total": "Total",
+    "addToCart": "Add to Cart",
+    "cancel": "Cancel"
+  },
+  "checkout": {
+    "title": "Checkout",
+    "contactInformation": "Contact Information",
+    "fullName": "Full Name",
+    "email": "Email",
+    "phone": "Phone",
+    "paymentInformation": "Payment Information",
+    "cardNumber": "Card Number",
+    "expiryDate": "Expiry Date",
+    "cvv": "CVV",
+    "specialInstructions": "Special Instructions",
+    "specialInstructionsPlaceholder": "Any special requests or notes for your order?",
+    "promoCode": "Promo Code",
+    "promoCodePlaceholder": "Enter promo code",
+    "apply": "Apply",
+    "placeOrder": "Place Order",
+    "pickupInformation": "Pickup Information",
+    "location": "Location",
+    "viewOnGoogleMaps": "View on Google Maps",
+    "hours": "Hours",
+    "openDaily": "Open Daily",
+    "ordersMustBe": "Orders must be picked up during business hours",
+    "contact": "Contact",
+    "callUsIf": "Call us if you need to modify your order",
+    "pickupInstructions": "Pickup Instructions",
+    "parkIn": "Park in the designated pickup spots",
+    "comeInside": "Come inside and show your order number at the counter",
+    "yourOrderWill": "Your order will be ready at the time indicated",
+    "total": "Total"
+  },
+  "orderConfirmation": {
+    "thankYou": "Thank You for Your Order!",
+    "orderReceived": "Your order #{orderId} has been received and is currently pending.",
+    "notice24h": "Heads up: one or more items in your order requires 24 hours notice!",
+    "etaMessage": "We'll send you an ETA as soon as the staff begins preparing your order.",
+    "showOrderNumber": "Please show your order number when picking up.",
+    "totalPaid": "Total Paid",
+    "orderMore": "Order More",
+    "returnHome": "Return Home"
+  },
+  "toasts": {
+    "promoApplied": "Promo code {code} applied!",
+    "promoError": "Failed to apply promo code. Please try again.",
+    "invalidPromo": "Invalid or expired promo code",
+    "phoneFormat": "Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567",
+    "orderSuccess": "Order placed successfully!",
+    "orderError": "Failed to place order. Please try again."
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signUp": "Sign Up"
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalidEmail": "Please enter a valid email address",
+    "serverError": "An error occurred. Please try again later.",
+    "somethingWentWrong": "Something went wrong."
+  },
+  "footer": {
+    "description": "Authentic Hawaiian cuisine with a modern twist. Serving the freshest ingredients in a relaxed, tropical atmosphere.",
+    "quickLinks": "Quick Links",
+    "contactUs": "Contact Us",
+    "phone": "Phone",
+    "email": "Email",
+    "allRightsReserved": "All rights reserved."
+  },
+  "orders": {
+    "history": "Order History",
+    "viewAndTrack": "View and track your past orders",
+    "sort": {
+      "newest": "Sort: Newest First",
+      "oldest": "Sort: Oldest First",
+      "highest": "Sort: Highest Total",
+      "lowest": "Sort: Lowest Total"
+    },
+    "filter": {
+      "show": "Show Filters",
+      "hide": "Hide Filters",
+      "byStatus": "Filter by Status",
+      "all": "All Orders",
+      "clear": "Clear filters"
+    },
+    "status": {
+      "pending": "Pending",
+      "preparing": "Preparing",
+      "ready": "Ready",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "noOrders": "No orders yet",
+    "noOrdersMessage": "Your order history will appear here once you place an order",
+    "noMatch": "No orders match your current filters",
+    "orderNumber": "Order #{{id}}",
+    "items": "Items",
+    "note": "Note",
+    "pickup": "Pickup",
+    "total": "Total",
+    "specialInstructions": "Special Instructions",
+    "ordersFound": "{{count}} {{count, plural, one {order} other {orders}}} found"
+  }
+}

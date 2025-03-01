@@ -13,9 +13,11 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../shared/auth';
 import { useOrderStore } from '../store/orderStore';
 import { toast } from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 export function Header() {
   const { user, logout: signOut } = useAuth();
+  const { t } = useTranslation();
 
   // Cart items
   const cartItems = useOrderStore((state) => state.cartItems);
@@ -172,12 +174,12 @@ export function Header() {
                     <button
                       onClick={() => {
                         signOut();
-                        toast.success('Signed out successfully!');
+                        toast.success(t('auth.signedOutSuccess'));
                         setIsDropdownOpen(false);
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
-                      Sign Out
+                      {t('auth.signOut')}
                     </button>
                   </div>
                 )}
@@ -189,14 +191,14 @@ export function Header() {
                   to="/login"
                   className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
-                  Sign In
+                  {t('auth.signIn')}
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
                   to="/signup"
                   className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
-                  Sign Up
+                  {t('auth.signUp')}
                 </Link>
               </div>
             )}
@@ -307,7 +309,7 @@ export function Header() {
                 <button
                   onClick={() => {
                     signOut();
-                    toast.success('Signed out successfully!');
+                    toast.success(t('auth.signedOutSuccess'));
                     setIsMobileMenuOpen(false);
                   }}
                   className="
@@ -315,7 +317,7 @@ export function Header() {
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
                   "
                 >
-                  Sign Out
+                  {t('auth.signOut')}
                 </button>
               </>
             ) : (
@@ -328,7 +330,7 @@ export function Header() {
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  Sign In
+                  {t('auth.signIn')}
                 </Link>
                 <Link
                   to="/signup"
@@ -338,7 +340,7 @@ export function Header() {
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  Sign Up
+                  {t('auth.signUp')}
                 </Link>
               </>
             )}

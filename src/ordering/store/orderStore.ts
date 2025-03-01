@@ -12,7 +12,9 @@ export interface CartItem extends Omit<OrderItem, 'id'> {
   price: number;
   quantity: number;
   notes?: string;
-  customizations?: any[];
+  description?: string;
+  image?: string;
+  customizations?: Record<string, string[]>;
   advance_notice_hours?: number;
 }
 

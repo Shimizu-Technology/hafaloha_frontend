@@ -1,6 +1,7 @@
 // src/ordering/components/Hero.tsx
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ReservationModal } from './reservation/ReservationModal';
 
 import { useSiteSettingsStore } from '../store/siteSettingsStore';
@@ -8,6 +9,7 @@ import fallbackHero from '../assets/hafaloha_hero.jpg';
 
 export function Hero() {
   const [showReservationModal, setShowReservationModal] = useState(false);
+  const { t } = useTranslation();
 
   // Pull the dynamic heroImageUrl from the store
   const heroImageUrl = useSiteSettingsStore((state) => state.heroImageUrl);
@@ -29,11 +31,10 @@ export function Hero() {
       <div className="relative max-w-7xl mx-auto py-16 sm:py-24 md:py-32 px-4 sm:px-6 lg:px-8">
         {/* Heading */}
         <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white">
-          Experience the Flavors of Two Islands
+          {t('hero.title')}
         </h1>
         <p className="mt-6 text-lg sm:text-xl text-gray-300 max-w-3xl">
-          Where Chamorro and Hawaiian cuisines come together to create 
-          an unforgettable dining experience
+          {t('hero.subtitle')}
         </p>
 
         {/* Buttons */}
@@ -45,7 +46,7 @@ export function Hero() {
                        text-gray-900 bg-[#c1902f]
                        hover:bg-[#d4a43f] transition-colors duration-150"
           >
-            Order Now
+            {t('buttons.orderNow')}
           </Link>
           <button
             onClick={() => setShowReservationModal(true)}
@@ -54,7 +55,7 @@ export function Hero() {
                        text-base font-medium rounded-md text-white
                        hover:bg-[#c1902f] transition-colors duration-150"
           >
-            Book Your Table
+            {t('buttons.bookTable')}
           </button>
         </div>
       </div>

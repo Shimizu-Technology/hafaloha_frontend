@@ -12,8 +12,10 @@ import {
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth';
 import { toast } from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatPhoneNumber } from '../../utils/formatters';
+import { LanguageSelector } from '../../i18n';
 
 // Create a custom hook to safely use the order store
 function useCartItems() {
@@ -67,6 +69,7 @@ function useCartItems() {
 }
 
 export function Header() {
+  const { t } = useTranslation();
   const { user, logout: signOut } = useAuth();
   const { restaurant } = useRestaurantStore();
 
@@ -147,14 +150,15 @@ export function Header() {
               to="/menu"
               className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
             >
-              Menu
+              {t('navigation.menu')}
             </Link>
             <Link
               to="/reservations"
               className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
             >
-              Reservations
+              {t('navigation.reservations')}
             </Link>
+            <LanguageSelector />
             <div className="flex items-center text-gray-700 whitespace-nowrap">
               <Clock className="h-4 w-4 mr-2" />
               <span>11AM-9PM</span>
@@ -201,21 +205,21 @@ export function Header() {
                     {isAdmin && (
                       <>
                         <div className="px-4 py-2 text-xs font-semibold text-gray-400">
-                          Admin Tools
+                          {t('navigation.adminTools')}
                         </div>
                         <Link
                           to="/reservations/dashboard"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => setIsDropdownOpen(false)}
                         >
-                          Manage Reservations
+                          {t('navigation.manageReservations')}
                         </Link>
                         <Link
                           to="/admin"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => setIsDropdownOpen(false)}
                         >
-                          Admin Dashboard
+                          {t('navigation.adminDashboard')}
                         </Link>
                         <hr className="my-1" />
                       </>
@@ -227,26 +231,26 @@ export function Header() {
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => setIsDropdownOpen(false)}
                     >
-                      Order History
+                      {t('navigation.orderHistory')}
                     </Link>
                     <Link
                       to="/profile"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => setIsDropdownOpen(false)}
                     >
-                      My Profile
+                      {t('navigation.myProfile')}
                     </Link>
                     <hr className="my-1" />
 
                     <button
                       onClick={() => {
                         signOut();
-                        toast.success('Signed out successfully!');
+                        toast.success(t('auth.signedOutSuccess'));
                         setIsDropdownOpen(false);
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
-                      Sign Out
+                      {t('auth.signOut')}
                     </button>
                   </div>
                 )}
@@ -258,14 +262,14 @@ export function Header() {
                   to="/login"
                   className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
-                  Sign In
+                  {t('auth.signIn')}
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
                   to="/signup"
                   className="text-gray-700 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 active:scale-95"
                 >
-                  Sign Up
+                  {t('auth.signUp')}
                 </Link>
               </div>
             )}
@@ -305,7 +309,7 @@ export function Header() {
                          hover:text-gray-900 hover:bg-gray-50"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              Menu
+              {t('navigation.menu')}
             </Link>
             <Link
               to="/reservations"
@@ -313,8 +317,11 @@ export function Header() {
                          hover:text-gray-900 hover:bg-gray-50"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              Reservations
+              {t('navigation.reservations')}
             </Link>
+            <div className="px-3 py-2">
+              <LanguageSelector />
+            </div>
             <div className="px-3 py-2 text-base font-medium text-gray-700 flex items-center">
               <Clock className="inline-block h-4 w-4 mr-2" />
               11AM-9PM
@@ -356,7 +363,7 @@ export function Header() {
                 {isAdmin && (
                   <>
                     <div className="px-3 py-1 text-xs font-semibold text-gray-400">
-                      Admin Tools
+                      {t('navigation.adminTools')}
                     </div>
                     <Link
                       to="/reservations/dashboard"
@@ -364,7 +371,7 @@ export function Header() {
                                  text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Manage Reservations
+                      {t('navigation.manageReservations')}
                     </Link>
                     <Link
                       to="/admin"
@@ -372,7 +379,7 @@ export function Header() {
                                  text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Admin Dashboard
+                      {t('navigation.adminDashboard')}
                     </Link>
                     <hr className="my-1" />
                   </>
@@ -384,7 +391,7 @@ export function Header() {
                              text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  Order History
+                  {t('navigation.orderHistory')}
                 </Link>
                 <Link
                   to="/profile"
@@ -392,14 +399,14 @@ export function Header() {
                              text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  My Profile
+                  {t('navigation.myProfile')}
                 </Link>
                 <hr className="my-1" />
 
                 <button
                   onClick={() => {
                     signOut();
-                    toast.success('Signed out successfully!');
+                    toast.success(t('auth.signedOutSuccess'));
                     setIsMobileMenuOpen(false);
                   }}
                   className="
@@ -407,7 +414,7 @@ export function Header() {
                     text-gray-700 hover:text-gray-900 hover:bg-gray-50
                   "
                 >
-                  Sign Out
+                  {t('auth.signOut')}
                 </button>
               </>
             ) : (
@@ -420,7 +427,7 @@ export function Header() {
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  Sign In
+                  {t('auth.signIn')}
                 </Link>
                 <Link
                   to="/signup"
@@ -430,7 +437,7 @@ export function Header() {
                   "
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  Sign Up
+                  {t('auth.signUp')}
                 </Link>
               </>
             )}

@@ -3,12 +3,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { toast } from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   const navigate = useNavigate();
 
@@ -24,11 +26,11 @@ export function ForgotPasswordForm() {
       }
       
       const res = await api.post<ForgotResponse>('/password/forgot', { email });
-      const successMsg = res.message || 'Check your email for a reset link.';
+      const successMsg = res.message || t('auth.forgotPassword.defaultSuccessMessage');
       setMessage(successMsg);
       toast.success(successMsg);
     } catch (err: any) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || t('errors.somethingWentWrong'));
     } finally {
       setLoading(false);
     }
@@ -39,7 +41,7 @@ export function ForgotPasswordForm() {
       <div className="flex flex-col items-center justify-center">
         <div className="w-full max-w-md">
           <div className="max-w-md w-full mx-auto p-6 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold mb-6 text-center">Forgot Password</h2>
+            <h2 className="text-2xl font-bold mb-6 text-center">{t('auth.forgotPassword.title')}</h2>
 
             {error && (
               <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
@@ -58,7 +60,7 @@ export function ForgotPasswordForm() {
                   htmlFor="email"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Enter your email address
+                  {t('auth.forgotPassword.enterEmail')}
                 </label>
                 <input
                   type="email"
@@ -78,7 +80,7 @@ export function ForgotPasswordForm() {
                           hover:bg-[#d4a43f] transition-colors duration-200
                           disabled:opacity-50"
               >
-                {loading ? 'Sending...' : 'Send Reset Link'}
+                {loading ? t('auth.forgotPassword.sending') : t('auth.forgotPassword.sendResetLink')}
               </button>
             </form>
 
@@ -88,7 +90,7 @@ export function ForgotPasswordForm() {
                 onClick={() => navigate('/login')}
                 className="text-blue-600 hover:underline"
               >
-                Back to Login
+                {t('auth.forgotPassword.backToLogin')}
               </button>
             </div>
           </div>

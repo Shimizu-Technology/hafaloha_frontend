@@ -1,0 +1,179 @@
+{
+  "language": {
+    "english": "英語",
+    "japanese": "日本語",
+    "korean": "韓国語"
+  },
+  "navigation": {
+    "home": "ホーム",
+    "menu": "メニュー",
+    "reservations": "予約",
+    "cart": "カート",
+    "profile": "プロフィール",
+    "orders": "注文履歴",
+    "admin": "管理",
+    "adminTools": "管理ツール",
+    "manageReservations": "予約管理",
+    "adminDashboard": "管理ダッシュボード",
+    "orderHistory": "注文履歴",
+    "myProfile": "マイプロフィール"
+  },
+  "buttons": {
+    "submit": "送信",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "back": "戻る",
+    "orderNow": "今すぐ注文",
+    "bookTable": "テーブルを予約",
+    "getNotified": "通知を受け取る"
+  },
+  "hero": {
+    "title": "二つの島の味を体験",
+    "subtitle": "チャモロとハワイアン料理が融合し、忘れられない食事体験を提供します"
+  },
+  "home": {
+    "popularItems": "人気商品"
+  },
+  "loyalty": {
+    "title": "Håfalohaリワードが近日公開！",
+    "subtitle": "ロイヤルティプログラムに参加して、注文ごとにポイントを獲得しましょう。",
+    "point": "1ドルごとに1ポイント獲得",
+    "redeem": "ポイントを無料アイテムや特別オファーに交換",
+    "comingSoonAlert": "近日公開！ロイヤルティプログラムの開始をお楽しみに。"
+  },
+  "menu": {
+    "title": "メニュー",
+    "allItems": "全ての商品",
+    "featuredItems": "おすすめ商品",
+    "seasonalItems": "季節限定商品",
+    "outOfStock": "在庫切れ",
+    "lowStock": "残りわずか",
+    "requires24HoursNotice": "24時間前の通知が必要",
+    "limitedTime": "期間限定",
+    "availableUntil": "提供期間",
+    "unavailable": "提供終了",
+    "customize": "カスタマイズ",
+    "addToCart": "カートに追加",
+    "outOfStockAlert": "申し訳ありませんが、この商品は在庫切れです。"
+  },
+  "cart": {
+    "title": "カート",
+    "empty": "カートは空です",
+    "emptyMessage": "おいしい商品を追加して始めましょう！",
+    "browseMenu": "メニューを見る",
+    "itemNotes": "この商品に関する備考（例：「玉ねぎ抜き」、「ソース多め」）",
+    "orderSummary": "注文概要",
+    "total": "合計",
+    "proceedToCheckout": "チェックアウトに進む"
+  },
+  "customization": {
+    "title": "カスタマイズ",
+    "noCustomizations": "カスタマイズオプションはありません。",
+    "minMax": "最小 {min}、最大 {max}",
+    "total": "合計",
+    "addToCart": "カートに追加",
+    "cancel": "キャンセル"
+  },
+  "checkout": {
+    "title": "チェックアウト",
+    "contactInformation": "連絡先情報",
+    "fullName": "氏名",
+    "email": "メールアドレス",
+    "phone": "電話番号",
+    "paymentInformation": "支払い情報",
+    "cardNumber": "カード番号",
+    "expiryDate": "有効期限",
+    "cvv": "セキュリティコード",
+    "specialInstructions": "特別な指示",
+    "specialInstructionsPlaceholder": "ご注文に関する特別なリクエストやメモはありますか？",
+    "promoCode": "プロモコード",
+    "promoCodePlaceholder": "プロモコードを入力",
+    "apply": "適用",
+    "placeOrder": "注文する",
+    "pickupInformation": "受け取り情報",
+    "location": "場所",
+    "viewOnGoogleMaps": "Googleマップで見る",
+    "hours": "営業時間",
+    "openDaily": "毎日営業",
+    "ordersMustBe": "注文は営業時間内に受け取る必要があります",
+    "contact": "連絡先",
+    "callUsIf": "注文を変更する必要がある場合はお電話ください",
+    "pickupInstructions": "受け取り手順",
+    "parkIn": "指定された受け取り場所に駐車してください",
+    "comeInside": "店内に入り、カウンターで注文番号をお伝えください",
+    "yourOrderWill": "注文は指定された時間に準備されます",
+    "total": "合計"
+  },
+  "orderConfirmation": {
+    "thankYou": "ご注文ありがとうございます！",
+    "orderReceived": "注文番号#{orderId}を受け付けました。現在処理中です。",
+    "notice24h": "注意：注文に24時間前の通知が必要な商品が含まれています！",
+    "etaMessage": "スタッフが注文の準備を始めると、到着予定時刻をお知らせします。",
+    "showOrderNumber": "受け取りの際は注文番号をお伝えください。",
+    "totalPaid": "お支払い合計",
+    "orderMore": "さらに注文する",
+    "returnHome": "ホームに戻る"
+  },
+  "toasts": {
+    "promoApplied": "プロモコード {code} が適用されました！",
+    "promoError": "プロモコードの適用に失敗しました。もう一度お試しください。",
+    "invalidPromo": "無効または期限切れのプロモコードです",
+    "phoneFormat": "電話番号は +（3〜4桁の市外局番）+ 7桁の形式で入力してください。例：+16711234567",
+    "orderSuccess": "注文が完了しました！",
+    "orderError": "注文に失敗しました。もう一度お試しください。"
+  },
+  "auth": {
+    "signIn": "ログイン",
+    "signUp": "新規登録"
+  },
+  "errors": {
+    "required": "この項目は必須です",
+    "invalidEmail": "有効なメールアドレスを入力してください",
+    "serverError": "エラーが発生しました。後でもう一度お試しください。",
+    "somethingWentWrong": "問題が発生しました。"
+  },
+  "footer": {
+    "description": "モダンなアレンジを加えた本格的なハワイアン料理。リラックスした南国の雰囲気の中で、最も新鮮な食材を提供しています。",
+    "quickLinks": "クイックリンク",
+    "contactUs": "お問い合わせ",
+    "phone": "電話",
+    "email": "メール",
+    "allRightsReserved": "All rights reserved."
+  },
+  "orders": {
+    "history": "注文履歴",
+    "viewAndTrack": "過去の注文を表示・追跡",
+    "sort": {
+      "newest": "並び替え: 最新順",
+      "oldest": "並び替え: 古い順",
+      "highest": "並び替え: 金額高い順",
+      "lowest": "並び替え: 金額低い順"
+    },
+    "filter": {
+      "show": "フィルターを表示",
+      "hide": "フィルターを非表示",
+      "byStatus": "ステータスでフィルター",
+      "all": "すべての注文",
+      "clear": "フィルターをクリア"
+    },
+    "status": {
+      "pending": "保留中",
+      "preparing": "準備中",
+      "ready": "準備完了",
+      "completed": "完了",
+      "cancelled": "キャンセル"
+    },
+    "noOrders": "注文はまだありません",
+    "noOrdersMessage": "注文すると、ここに注文履歴が表示されます",
+    "noMatch": "現在のフィルターに一致する注文はありません",
+    "orderNumber": "注文番号 #{{id}}",
+    "items": "商品",
+    "note": "備考",
+    "pickup": "受け取り",
+    "total": "合計",
+    "specialInstructions": "特別な指示",
+    "ordersFound": "{{count}}件の注文が見つかりました"
+  }
+}

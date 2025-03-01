@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreditCard, Mail, Phone, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 
 import { useAuthStore } from '../store/authStore';
@@ -29,6 +30,7 @@ function isValidPhone(phoneStr: string) {
 }
 
 export function CheckoutPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
@@ -92,13 +94,13 @@ export function CheckoutPage() {
         const discountedTotal = await applyDiscount(rawTotal, formData.promoCode);
         setFinalTotal(discountedTotal);
         setAppliedPromo(formData.promoCode);
-        toast.success(`Promo code ${formData.promoCode} applied!`);
+        toast.success(t('toasts.promoApplied', { code: formData.promoCode }));
       } catch (error) {
         console.error('Error applying discount:', error);
-        toast.error('Failed to apply promo code. Please try again.');
+        toast.error(t('toasts.promoError'));
       }
     } else {
-      toast.error('Invalid or expired promo code');
+      toast.error(t('toasts.invalidPromo'));
     }
   }
 
@@ -112,9 +114,7 @@ export function CheckoutPage() {
 
     const finalPhone = formData.phone.trim();
     if (!isValidPhone(finalPhone)) {
-      toast.error(
-        'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
-      );
+      toast.error(t('toasts.phoneFormat'));
       return;
     }
 
@@ -128,7 +128,7 @@ export function CheckoutPage() {
         formData.email
       );
 
-      toast.success('Order placed successfully!');
+      toast.success(t('toasts.orderSuccess'));
 
       const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
       navigate('/order-confirmation', {
@@ -141,20 +141,20 @@ export function CheckoutPage() {
       });
     } catch (err: any) {
       console.error('Failed to create order:', err);
-      toast.error('Failed to place order. Please try again.');
+      toast.error(t('toasts.orderError'));
     }
   }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">{t('checkout.title')}</h1>
       <div className="lg:grid lg:grid-cols-12 lg:gap-8">
         {/* LEFT: The form */}
         <div className="lg:col-span-7">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Contact Info */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Contact Information</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('checkout.contactInformation')}</h2>
               <div className="space-y-4">
                 {/* NAME */}
                 <div>
@@ -163,7 +163,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <User className="inline-block w-4 h-4 mr-2" />
-                    Full Name <span className="text-red-500">*</span>
+                    {t('checkout.fullName')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -184,7 +184,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <Mail className="inline-block w-4 h-4 mr-2" />
-                    Email <span className="text-red-500">*</span>
+                    {t('checkout.email')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="email"
@@ -205,7 +205,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <Phone className="inline-block w-4 h-4 mr-2" />
-                    Phone <span className="text-red-500">*</span>
+                    {t('checkout.phone')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="tel"
@@ -224,7 +224,7 @@ export function CheckoutPage() {
 
             {/* Payment Info */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('checkout.paymentInformation')}</h2>
               <div className="space-y-4">
                 <div>
                   <label
@@ -232,7 +232,7 @@ export function CheckoutPage() {
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
                     <CreditCard className="inline-block w-4 h-4 mr-2" />
-                    Card Number <span className="text-red-500">*</span>
+                    {t('checkout.cardNumber')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -253,7 +253,7 @@ export function CheckoutPage() {
                       htmlFor="expiryDate"
                       className="block text-sm font-medium text-gray-700 mb-1"
                     >
-                      Expiry Date <span className="text-red-500">*</span>
+                      {t('checkout.expiryDate')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -272,7 +272,7 @@ export function CheckoutPage() {
                       htmlFor="cvv"
                       className="block text-sm font-medium text-gray-700 mb-1"
                     >
-                      CVV <span className="text-red-500">*</span>
+                      {t('checkout.cvv')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -292,12 +292,12 @@ export function CheckoutPage() {
 
             {/* Special Instructions */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Special Instructions</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('checkout.specialInstructions')}</h2>
               <textarea
                 name="specialInstructions"
                 value={formData.specialInstructions}
                 onChange={handleInputChange}
-                placeholder="Any special requests or notes for your order?"
+                placeholder={t('checkout.specialInstructionsPlaceholder')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md
                   focus:ring-[#c1902f] focus:border-[#c1902f]"
                 rows={3}
@@ -311,7 +311,7 @@ export function CheckoutPage() {
                   htmlFor="promoCode"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Promo Code
+                  {t('checkout.promoCode')}
                 </label>
                 <div className="flex space-x-2">
                   <input
@@ -320,7 +320,7 @@ export function CheckoutPage() {
                     name="promoCode"
                     value={formData.promoCode}
                     onChange={handleInputChange}
-                    placeholder="Enter promo code"
+                    placeholder={t('checkout.promoCodePlaceholder')}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-md
                       focus:ring-[#c1902f] focus:border-[#c1902f]"
                   />
@@ -330,13 +330,13 @@ export function CheckoutPage() {
                     className="px-4 py-2 bg-gray-100 text-gray-700
                       rounded-md hover:bg-gray-200"
                   >
-                    Apply
+                    {t('checkout.apply')}
                   </button>
                 </div>
               </div>
 
               <div className="flex justify-between items-center mb-4">
-                <span className="text-lg font-medium">Total</span>
+                <span className="text-lg font-medium">{t('checkout.total')}</span>
                 <div className="text-right">
                   {appliedPromo && (
                     <span className="block text-sm text-gray-500 line-through">
@@ -355,7 +355,7 @@ export function CheckoutPage() {
                 className="w-full bg-[#c1902f] text-white py-3 px-4
                   rounded-md hover:bg-[#d4a43f] transition-colors duration-200"
               >
-                Place Order
+                {t('checkout.placeOrder')}
               </button>
             </div>
           </form>
