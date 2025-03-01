@@ -106,7 +106,8 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
         phone_number: restaurant.phone_number,
         time_zone: restaurant.time_zone,
         time_slot_interval: restaurant.time_slot_interval,
-        default_reservation_length: restaurant.default_reservation_length
+        default_reservation_length: restaurant.default_reservation_length,
+        admin_settings: restaurant.admin_settings
       });
       
       // Fetch the updated restaurant data to ensure all components have the latest data
@@ -176,6 +177,36 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
                       Will display as: {formatPhoneNumber(restaurant.phone_number)}
                     </p>
                   )}
+                </div>
+              </div>
+            </div>
+
+            {/* Notification Settings Section */}
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Notification Settings</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    WhatsApp Group ID
+                    <span className="ml-1 text-gray-500 text-xs" title="The WhatsApp group ID for order notifications">ⓘ</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={restaurant.admin_settings?.whatsapp_group_id || ''}
+                    onChange={(e) => setRestaurant({
+                      ...restaurant, 
+                      admin_settings: {
+                        ...restaurant.admin_settings,
+                        whatsapp_group_id: e.target.value
+                      }
+                    })}
+                    placeholder="Enter WhatsApp group ID (e.g., 123456789@g.us)"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    This ID is used to send order notifications to a WhatsApp group.
+                  </p>
                 </div>
               </div>
             </div>
