@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
+import { LoadingSpinner } from '../../shared/components/ui/LoadingSpinner';
 
 export function MenuPage() {
   const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
@@ -63,7 +64,6 @@ export function MenuPage() {
         Our Menu
       </h1>
 
-      {loading && <p>Loading menu...</p>}
       {error && <p className="text-red-600">{error}</p>}
 
       {/* Horizontally scrollable categories */}
@@ -121,11 +121,19 @@ export function MenuPage() {
         </label>
       </div>
 
-      {/* Menu Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-        {filteredItems.map((item) => (
-          <MenuItem key={item.id} item={item} />
-        ))}
+      {/* Menu Items Grid with min-height to prevent layout shift */}
+      <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
+        {loading ? (
+          <div className="flex justify-center items-center h-[300px]">
+            <LoadingSpinner className="bg-transparent" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+            {filteredItems.map((item) => (
+              <MenuItem key={item.id} item={item} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
