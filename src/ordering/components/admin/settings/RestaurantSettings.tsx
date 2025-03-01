@@ -106,7 +106,8 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
         phone_number: restaurant.phone_number,
         time_zone: restaurant.time_zone,
         time_slot_interval: restaurant.time_slot_interval,
-        default_reservation_length: restaurant.default_reservation_length
+        default_reservation_length: restaurant.default_reservation_length,
+        frontend_id: restaurant.frontend_id
       });
       
       // Fetch the updated restaurant data to ensure all components have the latest data
@@ -179,6 +180,13 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
                 </div>
               </div>
             </div>
+
+            {/* Frontend information - hidden from user editing */}
+            <input 
+              type="hidden" 
+              name="frontend_id" 
+              value={restaurant.frontend_id || 'hafaloha'} 
+            />
 
             {/* Reservation Settings Section */}
             <div className="space-y-6">

@@ -13,6 +13,7 @@ export interface Restaurant {
   default_reservation_length: number;
   admin_settings: Record<string, any>;
   allowed_origins: string[];
+  frontend_id?: string;
 }
 
 interface RestaurantStore {

@@ -1,15 +1,16 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense } from 'react';
-import { Palette, Store, List, Users } from 'lucide-react';
+import { Palette, Store, List, Users, Bell } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const GeneralSettings = lazy(() => import('./settings/GeneralSettings').then(module => ({ default: module.GeneralSettings })));
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
 const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').then(module => ({ default: module.CategoriesSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
+const NotificationTemplatesManager = lazy(() => import('./settings/NotificationTemplatesManager').then(module => ({ default: module.NotificationTemplatesManager })));
 
-type SettingsTab = 'branding' | 'restaurant' | 'categories' | 'users';
+type SettingsTab = 'branding' | 'restaurant' | 'categories' | 'users' | 'notifications';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -23,6 +24,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'restaurant', label: 'Restaurant', icon: Store },
     { id: 'categories', label: 'Categories', icon: List },
     { id: 'users', label: 'Users', icon: Users },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -51,6 +53,13 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
           <div>
             <h3 className="text-lg font-semibold mb-4">User Management</h3>
             <UsersSettings restaurantId={restaurantId} />
+          </div>
+        );
+      case 'notifications':
+        return (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Notification Templates</h3>
+            <NotificationTemplatesManager restaurantId={restaurantId} />
           </div>
         );
       default:
