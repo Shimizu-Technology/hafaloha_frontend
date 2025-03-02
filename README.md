@@ -148,11 +148,7 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 │   │   ├── OnlineOrderingApp.tsx
 │   │   ├── components/
 │   │   │   ├── admin/          # Admin dashboard components
-│   │   │   ├── auth/           # Authentication components
 │   │   │   └── ...
-│   │   ├── context/
-│   │   ├── lib/
-│   │   │   └── api.ts          # API client for ordering
 │   │   ├── store/              # Zustand state stores
 │   │   └── types/              # TypeScript type definitions
 │   ├── reservations/           # Reservations application
@@ -160,14 +156,25 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 │   │   ├── components/
 │   │   │   ├── dashboard/      # Reservation management dashboard
 │   │   │   └── ...
-│   │   ├── services/
-│   │   │   └── api.ts          # API client for reservations
 │   │   └── types/
 │   └── shared/                 # Shared modules across applications
-│       ├── config.ts           # Configuration including restaurant ID
-│       └── utils/
-│           └── jwt.ts          # JWT handling utilities
-└── ...
+│       ├── api/                # Shared API client and endpoints
+│       ├── auth/               # Authentication components and store
+│       ├── components/         # Shared UI components
+│       │   ├── auth/           # Authentication forms
+│       │   ├── navigation/     # Header and Footer
+│       │   ├── profile/        # User profile components
+│       │   ├── restaurant/     # Restaurant context provider
+│       │   └── ui/             # Reusable UI components
+│       ├── i18n/               # Internationalization
+│       ├── store/              # Shared state stores
+│       ├── types/              # Shared type definitions
+│       └── utils/              # Utility functions
+└── public/
+    └── locales/                # Translation files
+        ├── en/                 # English
+        ├── ja/                 # Japanese
+        └── ko/                 # Korean
 ```
 
 ---
@@ -203,6 +210,29 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **GeneralSettings** - Manage site-wide settings like hero and spinner images
 - **RestaurantSelector** - Switch between restaurants (for super admins)
 - **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
+
+### 5. Shared Components
+
+- **Header/Footer** - Navigation components used across all applications
+- **ProfilePage** - User profile management
+- **RestaurantProvider** - Provides restaurant context to components
+
+---
+
+## **Code Organization**
+
+The codebase has been reorganized to improve maintainability and reduce duplication:
+
+1. **Shared Components** - Common components like Header, Footer, and authentication forms have been moved to the shared directory
+2. **Shared API Client** - A unified API client is used across all applications
+3. **Shared Auth Store** - Authentication state is managed in a single location
+4. **Shared Types** - Common TypeScript interfaces are defined once and reused
+
+This organization allows for:
+- Consistent UI/UX across applications
+- Reduced code duplication
+- Easier maintenance
+- Better type safety
 
 ---
 
