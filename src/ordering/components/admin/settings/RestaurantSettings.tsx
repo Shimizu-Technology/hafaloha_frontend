@@ -347,315 +347,357 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
   }
 
   return (
-    <div className="mt-4 relative">
-      {/* Loading overlay - styled to match the image provided */}
+    <div className="relative mt-4">
+      {/* Loading overlay */}
       {loading && restaurant && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50 backdrop-blur-sm transition-opacity duration-300">
           <LoadingSpinner showText={true} />
         </div>
       )}
       
       {restaurant && (
-        <div>
-          <p className="text-sm text-gray-600 mb-6">
-            Configure your restaurant's basic information and reservation settings.
-          </p>
-          
-          <form onSubmit={handleRestaurantUpdate} className="space-y-8">
-            {/* Basic Information Section */}
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Basic Information</h3>
-              
-              <div className="space-y-4">
-                <Input
-                  label="Restaurant Name"
-                  value={restaurant.name}
-                  onChange={(e) => setRestaurant({...restaurant, name: e.target.value})}
-                  placeholder="Enter restaurant name"
-                  required
-                />
+        <div className="w-full">
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-[#c1902f]" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+              </svg>
+              Restaurant Settings
+            </h2>
+            <p className="text-sm text-gray-600 mb-6 ml-8">
+              Configure your restaurant's information, branding, and reservation settings.
+            </p>
+            
+            <form onSubmit={handleRestaurantUpdate} className="space-y-8">
+              {/* Basic Information Section */}
+              <div className="bg-white border border-gray-100 rounded-lg shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
+                  <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#c1902f]" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12z" clipRule="evenodd" />
+                    </svg>
+                    Basic Information
+                  </h3>
+                </div>
                 
-                <Input
-                  label="Address"
-                  value={restaurant.address || ''}
-                  onChange={(e) => setRestaurant({...restaurant, address: e.target.value})}
-                  placeholder="Enter restaurant address"
-                />
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number
-                    <span className="ml-1 text-gray-500 text-xs" title="Enter in format: +16719893444">ⓘ</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={restaurant.phone_number || ''}
-                    onChange={(e) => setRestaurant({...restaurant, phone_number: e.target.value})}
-                    placeholder="Enter restaurant phone number"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
+                <div className="p-5 space-y-4">
+                  <Input
+                    label="Restaurant Name"
+                    value={restaurant.name}
+                    onChange={(e) => setRestaurant({...restaurant, name: e.target.value})}
+                    placeholder="Enter restaurant name"
+                    required
                   />
-                  {restaurant.phone_number && (
-                    <p className="mt-1 text-sm text-gray-500">
-                      Will display as: {formatPhoneNumber(restaurant.phone_number)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Notification Settings Section */}
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Notification Settings</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    WhatsApp Group ID
-                    <span className="ml-1 text-gray-500 text-xs" title="The WhatsApp group ID for order notifications">ⓘ</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={restaurant.admin_settings?.whatsapp_group_id || ''}
-                    onChange={(e) => setRestaurant({
-                      ...restaurant, 
-                      admin_settings: {
-                        ...restaurant.admin_settings,
-                        whatsapp_group_id: e.target.value
-                      }
-                    })}
-                    placeholder="Enter WhatsApp group ID (e.g., 123456789@g.us)"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
+                  
+                  <Input
+                    label="Address"
+                    value={restaurant.address || ''}
+                    onChange={(e) => setRestaurant({...restaurant, address: e.target.value})}
+                    placeholder="Enter restaurant address"
                   />
-                  <p className="mt-1 text-sm text-gray-500">
-                    This ID is used to send order notifications to a WhatsApp group.
-                  </p>
-                </div>
 
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email Header Color
-                    <span className="ml-1 text-gray-500 text-xs" title="The color used for email headers">ⓘ</span>
-                  </label>
-                  <div className="flex items-center">
-                    <input
-                      type="color"
-                      value={restaurant.admin_settings?.email_header_color || '#c1902f'}
-                      onChange={(e) => setRestaurant({
-                        ...restaurant, 
-                        admin_settings: {
-                          ...restaurant.admin_settings,
-                          email_header_color: e.target.value
-                        }
-                      })}
-                      className="h-10 w-20 p-0 border border-gray-300 rounded"
-                    />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                      Phone Number
+                      <span className="ml-1 text-gray-500 text-xs rounded-full bg-gray-100 w-4 h-4 inline-flex items-center justify-center" title="Enter in format: +16719893444">ⓘ</span>
+                    </label>
                     <input
                       type="text"
-                      value={restaurant.admin_settings?.email_header_color || '#c1902f'}
+                      value={restaurant.phone_number || ''}
+                      onChange={(e) => setRestaurant({...restaurant, phone_number: e.target.value})}
+                      placeholder="Enter restaurant phone number"
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
+                    />
+                    {restaurant.phone_number && (
+                      <p className="mt-1 text-sm text-gray-500 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                        </svg>
+                        Will display as: {formatPhoneNumber(restaurant.phone_number)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notification Settings Section */}
+              <div className="bg-white border border-gray-100 rounded-lg shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
+                  <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#c1902f]" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                    </svg>
+                    Notification Settings
+                  </h3>
+                </div>
+                
+                <div className="p-5 space-y-5">
+                  <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      WhatsApp Group ID
+                      <span className="ml-1 text-gray-500 text-xs rounded-full bg-gray-100 w-4 h-4 inline-flex items-center justify-center" title="The WhatsApp group ID for order notifications">ⓘ</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={restaurant.admin_settings?.whatsapp_group_id || ''}
                       onChange={(e) => setRestaurant({
                         ...restaurant, 
                         admin_settings: {
                           ...restaurant.admin_settings,
-                          email_header_color: e.target.value
+                          whatsapp_group_id: e.target.value
                         }
                       })}
-                      placeholder="#c1902f"
-                      className="ml-2 block w-32 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
+                      placeholder="Enter WhatsApp group ID (e.g., 123456789@g.us)"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
                     />
+                    <p className="mt-2 text-sm text-gray-500 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      This ID is used to send order notifications to a WhatsApp group.
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-gray-500">
-                    This color is used for the header background in email notifications.
-                  </p>
+
+                  <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      Email Header Color
+                      <span className="ml-1 text-gray-500 text-xs rounded-full bg-gray-100 w-4 h-4 inline-flex items-center justify-center" title="The color used for email headers">ⓘ</span>
+                    </label>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <input
+                        type="color"
+                        value={restaurant.admin_settings?.email_header_color || '#c1902f'}
+                        onChange={(e) => setRestaurant({
+                          ...restaurant, 
+                          admin_settings: {
+                            ...restaurant.admin_settings,
+                            email_header_color: e.target.value
+                          }
+                        })}
+                        className="h-10 w-full sm:w-20 p-0 border border-gray-300 rounded cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={restaurant.admin_settings?.email_header_color || '#c1902f'}
+                        onChange={(e) => setRestaurant({
+                          ...restaurant, 
+                          admin_settings: {
+                            ...restaurant.admin_settings,
+                            email_header_color: e.target.value
+                          }
+                        })}
+                        placeholder="#c1902f"
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
+                      />
+                    </div>
+                    <p className="mt-2 text-sm text-gray-500 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      This color is used for the header background in email notifications.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Brand Images Section */}
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Brand Images</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* HERO IMAGE CARD */}
-                <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 flex flex-col">
-                  <h4 className="text-base font-semibold mb-4 text-gray-800">
-                    Hero Image
-                  </h4>
-
-                  {/* Show preview if available, otherwise show the saved image */}
-                  {heroPreview ? (
-                    <div className="relative">
-                      <img
-                        src={heroPreview}
-                        alt="Hero Preview"
-                        className="mb-3 w-full max-h-48 object-contain border rounded-md"
-                      />
-                      <div className="absolute top-0 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-bl-md">
-                        Preview
-                      </div>
-                    </div>
-                  ) : restaurant.admin_settings?.hero_image_url ? (
-                    <img
-                      src={restaurant.admin_settings.hero_image_url}
-                      alt="Current Hero"
-                      className="mb-3 w-full max-h-48 object-contain border rounded-md"
-                    />
-                  ) : (
-                    <div className="mb-3 w-full h-32 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded-md">
-                      <p className="text-sm text-gray-500">No hero image set yet</p>
-                    </div>
-                  )}
-
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700">
-                      Choose a new file:
-                    </span>
-                    <input
-                      type="file"
-                      name="hero_image"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleImageFileChange(file, 'hero');
-                        }
-                      }}
-                      className="mt-1 block w-full cursor-pointer text-sm
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-[#c1902f] file:text-white
-                                hover:file:bg-[#d4a43f]"
-                    />
-                  </label>
-                </div>
-
-                {/* SPINNER IMAGE CARD */}
-                <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 flex flex-col">
-                  <h4 className="text-base font-semibold mb-4 text-gray-800">
-                    Spinner Image
-                  </h4>
-
-                  {/* Show preview if available, otherwise show the saved image */}
-                  {spinnerPreview ? (
-                    <div className="relative">
-                      <img
-                        src={spinnerPreview}
-                        alt="Spinner Preview"
-                        className="mb-3 w-full max-h-48 object-contain border rounded-md"
-                      />
-                      <div className="absolute top-0 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-bl-md">
-                        Preview
-                      </div>
-                    </div>
-                  ) : restaurant.admin_settings?.spinner_image_url ? (
-                    <img
-                      src={restaurant.admin_settings.spinner_image_url}
-                      alt="Current Spinner"
-                      className="mb-3 w-full max-h-48 object-contain border rounded-md"
-                    />
-                  ) : (
-                    <div className="mb-3 w-full h-32 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded-md">
-                      <p className="text-sm text-gray-500">No spinner image set yet</p>
-                    </div>
-                  )}
-
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700">
-                      Choose a new file:
-                    </span>
-                    <input
-                      type="file"
-                      name="spinner_image"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleImageFileChange(file, 'spinner');
-                        }
-                      }}
-                      className="mt-1 block w-full cursor-pointer text-sm
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-[#c1902f] file:text-white
-                                hover:file:bg-[#d4a43f]"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Reservation Settings Section */}
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Reservation Settings</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time Zone</label>
-                  <select
-                    value={restaurant.time_zone}
-                    onChange={(e) => setRestaurant({...restaurant, time_zone: e.target.value})}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm rounded-md"
-                  >
-                    {timezoneOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+              {/* Brand Images Section */}
+              <div className="bg-white border border-gray-100 rounded-lg shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
+                  <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#c1902f]" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                    </svg>
+                    Brand Images
+                  </h3>
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Time Slot Interval (minutes)
-                      <span className="ml-1 text-gray-500 text-xs" title="The interval in minutes between available reservation time slots">ⓘ</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="60"
-                      value={restaurant.time_slot_interval.toString()}
-                      onChange={(e) => setRestaurant({...restaurant, time_slot_interval: parseInt(e.target.value) || 30})}
-                      placeholder="30"
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Default Reservation Length (minutes)
-                      <span className="ml-1 text-gray-500 text-xs" title="The default duration for reservations in minutes">ⓘ</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="15"
-                      max="240"
-                      value={restaurant.default_reservation_length.toString()}
-                      onChange={(e) => setRestaurant({...restaurant, default_reservation_length: parseInt(e.target.value) || 60})}
-                      placeholder="60"
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
-                    />
+                <div className="p-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* HERO IMAGE CARD */}
+                    <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 flex flex-col">
+                      <h4 className="text-base font-semibold mb-3 text-gray-800">Hero Image</h4>
+
+                      {/* Show preview if available, otherwise show the saved image */}
+                      {heroPreview ? (
+                        <div className="relative">
+                          <img
+                            src={heroPreview}
+                            alt="Hero Preview"
+                            className="mb-3 w-full h-48 object-contain border rounded-md bg-white"
+                          />
+                          <div className="absolute top-0 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-bl-md">
+                            Preview
+                          </div>
+                        </div>
+                      ) : restaurant.admin_settings?.hero_image_url ? (
+                        <div className="relative">
+                          <img
+                            src={restaurant.admin_settings.hero_image_url}
+                            alt="Current Hero"
+                            className="mb-3 w-full h-48 object-contain border rounded-md bg-white"
+                          />
+                        </div>
+                      ) : (
+                        <div className="mb-3 w-full h-48 flex items-center justify-center bg-white border border-dashed border-gray-300 rounded-md">
+                          <p className="text-sm text-gray-500">No hero image set yet</p>
+                        </div>
+                      )}
+
+                      <label className="block mt-2">
+                        <span className="text-sm font-medium text-gray-700">Choose a new file:</span>
+                        <input
+                          type="file"
+                          name="hero_image"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleImageFileChange(file, 'hero');
+                            }
+                          }}
+                          className="mt-1 block w-full cursor-pointer text-sm
+                                    file:mr-4 file:py-2 file:px-4
+                                    file:rounded file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-[#c1902f] file:text-white
+                                    hover:file:bg-[#d4a43f]"
+                        />
+                      </label>
+                    </div>
+
+                    {/* SPINNER IMAGE CARD */}
+                    <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 flex flex-col">
+                      <h4 className="text-base font-semibold mb-3 text-gray-800">Spinner Image</h4>
+
+                      {/* Show preview if available, otherwise show the saved image */}
+                      {spinnerPreview ? (
+                        <div className="relative">
+                          <img
+                            src={spinnerPreview}
+                            alt="Spinner Preview"
+                            className="mb-3 w-full h-48 object-contain border rounded-md bg-white"
+                          />
+                          <div className="absolute top-0 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-bl-md">
+                            Preview
+                          </div>
+                        </div>
+                      ) : restaurant.admin_settings?.spinner_image_url ? (
+                        <div className="relative">
+                          <img
+                            src={restaurant.admin_settings.spinner_image_url}
+                            alt="Current Spinner"
+                            className="mb-3 w-full h-48 object-contain border rounded-md bg-white"
+                          />
+                        </div>
+                      ) : (
+                        <div className="mb-3 w-full h-48 flex items-center justify-center bg-white border border-dashed border-gray-300 rounded-md">
+                          <p className="text-sm text-gray-500">No spinner image set yet</p>
+                        </div>
+                      )}
+
+                      <label className="block mt-2">
+                        <span className="text-sm font-medium text-gray-700">Choose a new file:</span>
+                        <input
+                          type="file"
+                          name="spinner_image"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleImageFileChange(file, 'spinner');
+                            }
+                          }}
+                          className="mt-1 block w-full cursor-pointer text-sm
+                                    file:mr-4 file:py-2 file:px-4
+                                    file:rounded file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-[#c1902f] file:text-white
+                                    hover:file:bg-[#d4a43f]"
+                        />
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Save Button - Full width on mobile */}
-            <div className="pt-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full sm:w-auto sm:ml-auto sm:flex sm:items-center px-5 py-2
-                          bg-[#c1902f] text-white font-medium 
-                          rounded-md hover:bg-[#d4a43f]
-                          focus:outline-none focus:ring-2 focus:ring-[#c1902f]
-                          transition-colors"
-              >
-                {loading ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-          </form>
+              {/* Reservation Settings Section */}
+              <div className="bg-white border border-gray-100 rounded-lg shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
+                  <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#c1902f]" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                    </svg>
+                    Reservation Settings
+                  </h3>
+                </div>
+                
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Zone</label>
+                    <select
+                      value={restaurant.time_zone}
+                      onChange={(e) => setRestaurant({...restaurant, time_zone: e.target.value})}
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm rounded-md"
+                    >
+                      {timezoneOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        Time Slot Interval (minutes)
+                        <span className="ml-1 text-gray-500 text-xs rounded-full bg-gray-100 w-4 h-4 inline-flex items-center justify-center" title="The interval in minutes between available reservation time slots">ⓘ</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="5"
+                        max="60"
+                        value={restaurant.time_slot_interval.toString()}
+                        onChange={(e) => setRestaurant({...restaurant, time_slot_interval: parseInt(e.target.value) || 30})}
+                        placeholder="30"
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        Default Reservation Length (minutes)
+                        <span className="ml-1 text-gray-500 text-xs rounded-full bg-gray-100 w-4 h-4 inline-flex items-center justify-center" title="The default duration for reservations in minutes">ⓘ</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="15"
+                        max="240"
+                        value={restaurant.default_reservation_length.toString()}
+                        onChange={(e) => setRestaurant({...restaurant, default_reservation_length: parseInt(e.target.value) || 60})}
+                        placeholder="60"
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full sm:w-auto px-5 py-2 bg-[#c1902f] text-white font-medium 
+                            rounded-md hover:bg-[#d4a43f]
+                            focus:outline-none focus:ring-2 focus:ring-[#c1902f]
+                            transition-colors shadow-sm"
+                >
+                  {loading ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
