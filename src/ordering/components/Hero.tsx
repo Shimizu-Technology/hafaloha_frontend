@@ -3,17 +3,22 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ReservationModal } from './reservation/ReservationModal';
 
+import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { useSiteSettingsStore } from '../store/siteSettingsStore';
 import fallbackHero from '../assets/hafaloha_hero.jpg';
 
 export function Hero() {
   const [showReservationModal, setShowReservationModal] = useState(false);
 
-  // Pull the dynamic heroImageUrl from the store
-  const heroImageUrl = useSiteSettingsStore((state) => state.heroImageUrl);
-
-  // If the dynamic URL is null/empty, use the fallback image
-  const backgroundImage = heroImageUrl || fallbackHero;
+  // Get the restaurant from the store
+  const restaurant = useRestaurantStore((state) => state.restaurant);
+  
+  // Pull the dynamic heroImageUrl from the restaurant's admin_settings or fall back to the site settings
+  const siteHeroImageUrl = useSiteSettingsStore((state) => state.heroImageUrl);
+  const restaurantHeroImageUrl = restaurant?.admin_settings?.hero_image_url;
+  
+  // Priority: 1. Restaurant's hero image, 2. Site settings hero image, 3. Fallback image
+  const backgroundImage = restaurantHeroImageUrl || siteHeroImageUrl || fallbackHero;
 
   return (
     <div className="relative bg-gray-900">

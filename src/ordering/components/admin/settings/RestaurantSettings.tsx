@@ -3,10 +3,88 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { Input, LoadingSpinner } from '../../../../shared/components/ui';
-import { fetchRestaurant as apiFetchRestaurant, fetchRestaurants } from '../../../../shared/api/endpoints/restaurants';
-import { MobileSelect } from '../../../../shared/components/ui/MobileSelect';
+import { 
+  fetchRestaurant as apiFetchRestaurant, 
+  fetchRestaurants,
+  updateRestaurant as apiUpdateRestaurant,
+  uploadRestaurantImages
+} from '../../../../shared/api/endpoints/restaurants';
 import { formatPhoneNumber } from '../../../../shared/utils/formatters';
 import { useRestaurantStore, Restaurant } from '../../../../shared/store/restaurantStore';
+import ReactDOM from 'react-dom/client';
+
+// Helper function to create an object URL for preview (faster than base64)
+const createImagePreview = (file: File): string => {
+  return URL.createObjectURL(file);
+};
+
+// Helper function to compress an image before uploading
+const compressImage = async (file: File, maxSizeMB = 1): Promise<File> => {
+  // If the file is already small, don't compress it
+  if (file.size < maxSizeMB * 1024 * 1024) {
+    return file;
+  }
+
+  // Use canvas to compress the image
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      
+      // Calculate new dimensions while maintaining aspect ratio
+      let width = img.width;
+      let height = img.height;
+      const maxDimension = 1200; // Max width or height
+      
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round(height * (maxDimension / width));
+          width = maxDimension;
+        } else {
+          width = Math.round(width * (maxDimension / height));
+          height = maxDimension;
+        }
+      }
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Convert to blob with reduced quality
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Could not create blob'));
+            return;
+          }
+          
+          // Create a new file from the blob
+          const newFile = new File([blob], file.name, {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          
+          resolve(newFile);
+        },
+        'image/jpeg',
+        0.7 // Quality (0.7 = 70%)
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      reject(new Error('Failed to load image'));
+    };
+  });
+};
 
 // List of common timezones
 const timezoneOptions = [
@@ -28,10 +106,26 @@ interface RestaurantSettingsProps {
   restaurantId?: string;
 }
 
-export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
+export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): JSX.Element {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [spinnerFile, setSpinnerFile] = useState<File | null>(null);
+  const [heroPreview, setHeroPreview] = useState<string | null>(null);
+  const [spinnerPreview, setSpinnerPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { updateRestaurant, fetchRestaurant } = useRestaurantStore();
+  const { fetchRestaurant } = useRestaurantStore();
+
+  // Clean up object URLs when component unmounts or when previews change
+  useEffect(() => {
+    return () => {
+      if (heroPreview && heroPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(heroPreview);
+      }
+      if (spinnerPreview && spinnerPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(spinnerPreview);
+      }
+    };
+  }, [heroPreview, spinnerPreview]);
 
   useEffect(() => {
     fetchRestaurantData();
@@ -94,13 +188,88 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
     }
   }
 
+  // Function to handle image file selection - compress the image and show a preview
+  async function handleImageFileChange(file: File, imageType: 'hero' | 'spinner') {
+    if (!file) return;
+    
+    try {
+      // Create a preview URL (faster than base64)
+      const previewUrl = createImagePreview(file);
+      
+      // Compress the image in the background
+      const compressedFile = await compressImage(file);
+      
+      // Store the file and preview in the component state
+      if (imageType === 'hero') {
+        setHeroFile(compressedFile);
+        setHeroPreview(previewUrl);
+      } else {
+        setSpinnerFile(compressedFile);
+        setSpinnerPreview(previewUrl);
+      }
+    } catch (error) {
+      console.error(`Error processing ${imageType} image preview:`, error);
+      toast.error(`Failed to generate preview for ${imageType} image`);
+    }
+  }
+
   async function handleRestaurantUpdate(e: React.FormEvent) {
     e.preventDefault();
     if (!restaurant) return;
 
+    // If no new files, just update the text fields
+    if (!heroFile && !spinnerFile) {
+      setLoading(true);
+      try {
+        await apiUpdateRestaurant(restaurant.id, {
+          name: restaurant.name,
+          address: restaurant.address,
+          phone_number: restaurant.phone_number,
+          time_zone: restaurant.time_zone,
+          time_slot_interval: restaurant.time_slot_interval,
+          default_reservation_length: restaurant.default_reservation_length,
+          admin_settings: restaurant.admin_settings
+        });
+        
+        // Fetch the updated restaurant data to ensure all components have the latest data
+        await fetchRestaurant();
+        
+        toast.success('Restaurant settings updated!');
+      } catch (err: any) {
+        console.error('Failed to update restaurant settings:', err);
+        toast.error('Failed to update restaurant settings');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
+    
     try {
-      await updateRestaurant({
+      // Create a loading overlay element
+      const loadingOverlay = document.createElement('div');
+      loadingOverlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      
+      // Create a div to hold the LoadingSpinner component
+      const spinnerContainer = document.createElement('div');
+      spinnerContainer.id = 'loading-spinner-container';
+      loadingOverlay.appendChild(spinnerContainer);
+      
+      // Add to the document
+      document.body.appendChild(loadingOverlay);
+      
+      // Create a root and render the LoadingSpinner
+      const root = ReactDOM.createRoot(
+        document.getElementById('loading-spinner-container')!
+      );
+      root.render(<LoadingSpinner showText={true} />);
+      
+      // Run text update and image upload in parallel for better performance
+      const updatePromises = [];
+      
+      // Update restaurant text fields
+      const textUpdatePromise = apiUpdateRestaurant(restaurant.id, {
         name: restaurant.name,
         address: restaurant.address,
         phone_number: restaurant.phone_number,
@@ -109,20 +278,66 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
         default_reservation_length: restaurant.default_reservation_length,
         admin_settings: restaurant.admin_settings
       });
+      updatePromises.push(textUpdatePromise);
+      
+      // Upload the images using FormData
+      if (heroFile || spinnerFile) {
+        const formData = new FormData();
+        if (heroFile) formData.append('hero_image', heroFile);
+        if (spinnerFile) formData.append('spinner_image', spinnerFile);
+        
+        // Include an empty restaurant parameter to satisfy the backend
+        formData.append('restaurant[name]', restaurant.name);
+        
+        // Upload the images
+        const imageUploadPromise = uploadRestaurantImages(restaurant.id, formData)
+          .then((updatedRestaurant) => {
+            // Update the restaurant state with the new data
+            setRestaurant(updatedRestaurant as Restaurant);
+          });
+        updatePromises.push(imageUploadPromise);
+      }
+      
+      // Wait for all updates to complete
+      await Promise.all(updatePromises);
+      
+      // Clear the file inputs
+      setHeroFile(null);
+      setSpinnerFile(null);
+      
+      // Clean up object URLs
+      if (heroPreview && heroPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(heroPreview);
+      }
+      if (spinnerPreview && spinnerPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(spinnerPreview);
+      }
+      
+      setHeroPreview(null);
+      setSpinnerPreview(null);
       
       // Fetch the updated restaurant data to ensure all components have the latest data
       await fetchRestaurant();
+      
+      // Remove the loading overlay
+      document.body.removeChild(loadingOverlay);
       
       toast.success('Restaurant settings updated!');
     } catch (err: any) {
       console.error('Failed to update restaurant settings:', err);
       toast.error('Failed to update restaurant settings');
+      
+      // Remove the loading overlay in case of error
+      const errorOverlay = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50.flex.items-center.justify-center.z-50');
+      if (errorOverlay && errorOverlay.parentNode) {
+        errorOverlay.parentNode.removeChild(errorOverlay);
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  // If we're still loading for the very first time:
+  // Initial loading state (no restaurant data yet)
   if (loading && !restaurant) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -132,7 +347,14 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
   }
 
   return (
-    <div className="mt-4">
+    <div className="mt-4 relative">
+      {/* Loading overlay - styled to match the image provided */}
+      {loading && restaurant && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+          <LoadingSpinner showText={true} />
+        </div>
+      )}
+      
       {restaurant && (
         <div>
           <p className="text-sm text-gray-600 mb-6">
@@ -244,6 +466,121 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps) {
                   <p className="mt-1 text-sm text-gray-500">
                     This color is used for the header background in email notifications.
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Brand Images Section */}
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium text-gray-900 pb-2 border-b border-gray-200">Brand Images</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* HERO IMAGE CARD */}
+                <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 flex flex-col">
+                  <h4 className="text-base font-semibold mb-4 text-gray-800">
+                    Hero Image
+                  </h4>
+
+                  {/* Show preview if available, otherwise show the saved image */}
+                  {heroPreview ? (
+                    <div className="relative">
+                      <img
+                        src={heroPreview}
+                        alt="Hero Preview"
+                        className="mb-3 w-full max-h-48 object-contain border rounded-md"
+                      />
+                      <div className="absolute top-0 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-bl-md">
+                        Preview
+                      </div>
+                    </div>
+                  ) : restaurant.admin_settings?.hero_image_url ? (
+                    <img
+                      src={restaurant.admin_settings.hero_image_url}
+                      alt="Current Hero"
+                      className="mb-3 w-full max-h-48 object-contain border rounded-md"
+                    />
+                  ) : (
+                    <div className="mb-3 w-full h-32 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded-md">
+                      <p className="text-sm text-gray-500">No hero image set yet</p>
+                    </div>
+                  )}
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700">
+                      Choose a new file:
+                    </span>
+                    <input
+                      type="file"
+                      name="hero_image"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleImageFileChange(file, 'hero');
+                        }
+                      }}
+                      className="mt-1 block w-full cursor-pointer text-sm
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded file:border-0
+                                file:text-sm file:font-semibold
+                                file:bg-[#c1902f] file:text-white
+                                hover:file:bg-[#d4a43f]"
+                    />
+                  </label>
+                </div>
+
+                {/* SPINNER IMAGE CARD */}
+                <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 flex flex-col">
+                  <h4 className="text-base font-semibold mb-4 text-gray-800">
+                    Spinner Image
+                  </h4>
+
+                  {/* Show preview if available, otherwise show the saved image */}
+                  {spinnerPreview ? (
+                    <div className="relative">
+                      <img
+                        src={spinnerPreview}
+                        alt="Spinner Preview"
+                        className="mb-3 w-full max-h-48 object-contain border rounded-md"
+                      />
+                      <div className="absolute top-0 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-bl-md">
+                        Preview
+                      </div>
+                    </div>
+                  ) : restaurant.admin_settings?.spinner_image_url ? (
+                    <img
+                      src={restaurant.admin_settings.spinner_image_url}
+                      alt="Current Spinner"
+                      className="mb-3 w-full max-h-48 object-contain border rounded-md"
+                    />
+                  ) : (
+                    <div className="mb-3 w-full h-32 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded-md">
+                      <p className="text-sm text-gray-500">No spinner image set yet</p>
+                    </div>
+                  )}
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700">
+                      Choose a new file:
+                    </span>
+                    <input
+                      type="file"
+                      name="spinner_image"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleImageFileChange(file, 'spinner');
+                        }
+                      }}
+                      className="mt-1 block w-full cursor-pointer text-sm
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded file:border-0
+                                file:text-sm file:font-semibold
+                                file:bg-[#c1902f] file:text-white
+                                hover:file:bg-[#d4a43f]"
+                    />
+                  </label>
                 </div>
               </div>
             </div>

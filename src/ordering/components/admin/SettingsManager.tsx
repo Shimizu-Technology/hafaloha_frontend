@@ -1,25 +1,23 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense } from 'react';
-import { Palette, Store, List, Users } from 'lucide-react';
+import { Store, List, Users } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
-const GeneralSettings = lazy(() => import('./settings/GeneralSettings').then(module => ({ default: module.GeneralSettings })));
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
 const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').then(module => ({ default: module.CategoriesSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
 
-type SettingsTab = 'branding' | 'restaurant' | 'categories' | 'users';
+type SettingsTab = 'restaurant' | 'categories' | 'users';
 
 interface SettingsManagerProps {
   restaurantId?: string;
 }
 
 export function SettingsManager({ restaurantId }: SettingsManagerProps) {
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('branding');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('restaurant');
 
   const tabs = [
-    { id: 'branding', label: 'Branding', icon: Palette },
     { id: 'restaurant', label: 'Restaurant', icon: Store },
     { id: 'categories', label: 'Categories', icon: List },
     { id: 'users', label: 'Users', icon: Users },
@@ -35,8 +33,6 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   // Render the active tab content
   const renderTabContent = () => {
     switch (activeSettingsTab) {
-      case 'branding':
-        return <GeneralSettings restaurantId={restaurantId} />;
       case 'restaurant':
         return <RestaurantSettings restaurantId={restaurantId} />;
       case 'categories':

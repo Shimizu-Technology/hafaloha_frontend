@@ -24,6 +24,13 @@ export const updateRestaurant = async (id: number, data: any) => {
 };
 
 /**
+ * Upload restaurant images
+ */
+export const uploadRestaurantImages = async (id: number, formData: FormData) => {
+  return api.upload(`/restaurants/${id}`, formData, 'PATCH');
+};
+
+/**
  * Fetch restaurant settings
  */
 export const fetchRestaurantSettings = async (id: number) => {
