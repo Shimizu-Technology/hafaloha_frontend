@@ -20,6 +20,15 @@ export default {
         // The gold you use in ordering:
         'hafaloha-gold': '#c1902f',
       },
+      animation: {
+        'fadeIn': 'fadeIn 0.2s ease-in-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+      },
     },
   },
   plugins: [],
