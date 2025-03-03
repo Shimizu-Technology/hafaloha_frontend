@@ -32,8 +32,9 @@ export default function RootApp() {
                 maxWidth: '100%',
                 width: 'auto'
               },
-              // Ensure mobile devices can dismiss with swipe
-              duration: Infinity
+              // Default duration of 5 seconds for regular toasts
+              // Order notifications in AdminDashboard will override this with their own duration: Infinity
+              duration: 5000
             }}
           />
 

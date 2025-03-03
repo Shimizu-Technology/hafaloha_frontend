@@ -120,9 +120,19 @@ export function AdminDashboard() {
         {/* Close button */}
         <button
           onClick={() => {
-            toast.dismiss(t.id);
+            // Try multiple approaches to remove the toast
+            toast.remove();
+            toast.remove(`new_order_${order.id}`);
+            toast.dismiss(`new_order_${order.id}`);
+            
             // Acknowledge the order when dismissed
             acknowledgeOrder(Number(order.id));
+            
+            // Try removing toasts again after a delay
+            setTimeout(() => {
+              toast.remove();
+              toast.remove(`new_order_${order.id}`);
+            }, 200);
           }}
           className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 transition-colors"
         >
@@ -178,21 +188,34 @@ export function AdminDashboard() {
         <div className="flex space-x-2">
           <button
             onClick={() => {
-              toast.dismiss(t.id);
+              // Try multiple approaches to remove the toast
+              toast.remove();
+              toast.remove(`new_order_${order.id}`);
+              toast.dismiss(`new_order_${order.id}`);
+              
               // Acknowledge the order when viewing it
               acknowledgeOrder(Number(order.id));
               
-              // If we're on Orders, force a re-render so the modal opens
-              if (activeTab === 'orders') {
-                setSelectedOrderId(null);
-                setTimeout(() => {
-                  setSelectedOrderId(Number(order.id));
-                }, 50);
-              } else {
-                // Switch tab first
-                setActiveTab('orders');
-                setSelectedOrderId(Number(order.id));
-              }
+              // Add a longer delay to ensure toast is removed before proceeding
+              setTimeout(() => {
+                // Try removing toasts again after a delay
+                toast.remove();
+                toast.remove(`new_order_${order.id}`);
+                
+                // If we're on Orders, force a re-render so the modal opens
+                if (activeTab === 'orders') {
+                  setSelectedOrderId(null);
+                  setTimeout(() => {
+                    setSelectedOrderId(Number(order.id));
+                  }, 50);
+                } else {
+                  // Switch tab first
+                  setActiveTab('orders');
+                  setTimeout(() => {
+                    setSelectedOrderId(Number(order.id));
+                  }, 50);
+                }
+              }, 200); // Increase delay to 200ms before proceeding
             }}
             className="flex-1 bg-[#c1902f] text-white px-3 py-2 rounded-lg font-medium text-sm hover:bg-[#d4a43f] transition-colors shadow-sm"
           >
@@ -200,9 +223,19 @@ export function AdminDashboard() {
           </button>
           <button
             onClick={() => {
-              toast.dismiss(t.id);
+              // Try multiple approaches to remove the toast
+              toast.remove();
+              toast.remove(`new_order_${order.id}`);
+              toast.dismiss(`new_order_${order.id}`);
+              
               // Acknowledge the order when dismissed
               acknowledgeOrder(Number(order.id));
+              
+              // Try removing toasts again after a delay
+              setTimeout(() => {
+                toast.remove();
+                toast.remove(`new_order_${order.id}`);
+              }, 200);
             }}
             className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-200 transition-colors"
           >
