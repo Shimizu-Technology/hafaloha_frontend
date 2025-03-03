@@ -11,11 +11,15 @@ import {
   getRevenueTrend, 
   getTopItems, 
   getIncomeStatement,
+  getUserSignups,
+  getUserActivityHeatmap,
   CustomerOrderItem,
   CustomerOrderReport,
   RevenueTrendItem,
   TopItem,
-  IncomeStatementRow
+  IncomeStatementRow,
+  UserSignupItem,
+  HeatmapDataPoint
 } from '../../../shared/api';
 
 // ------------------- Types -------------------
@@ -117,6 +121,9 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   const [topItems, setTopItems] = useState<TopItem[]>([]);
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatementRow[]>([]);
+  const [userSignups, setUserSignups] = useState<UserSignupItem[]>([]);
+  const [activityHeatmap, setActivityHeatmap] = useState<HeatmapDataPoint[]>([]);
+  const [dayNames, setDayNames] = useState<string[]>([]);
 
   // ----- 3) Derived: Guest vs Registered -----
   const guestRows = useMemo(() => {
@@ -147,6 +154,15 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       // 4) Income Statement => by year
       const incRes = await getIncomeStatement(year);
       setIncomeStatement(incRes.income_statement || []);
+
+      // 5) User Signups => by day
+      const signupsRes = await getUserSignups(startDate, endDate);
+      setUserSignups(signupsRes.signups || []);
+
+      // 6) User Activity Heatmap
+      const heatmapRes = await getUserActivityHeatmap(startDate, endDate);
+      setActivityHeatmap(heatmapRes.heatmap || []);
+      setDayNames(heatmapRes.day_names || []);
 
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -554,7 +570,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         (E) Income Statement => Year
         ============================================
       */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white rounded-lg shadow p-4 mb-4">
         <h3 className="text-xl font-bold mb-4">Income Statement (Yearly)</h3>
         <div className="flex items-center gap-2 mb-4">
           <label className="text-sm font-medium">Year:</label>
@@ -590,6 +606,144 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           </div>
         ) : (
           <p className="text-gray-500">No data for year {year}.</p>
+        )}
+      </div>
+
+      {/* 
+        ============================================
+        (F) User Signups => Daily
+        ============================================
+      */}
+      <div className="bg-white rounded-lg shadow p-4 mb-4">
+        <h3 className="text-xl font-bold mb-4">User Signups</h3>
+        {userSignups.length > 0 ? (
+          <div className="h-64 sm:h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={userSignups} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" fontSize={12} />
+                <YAxis fontSize={12} />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#4CAF50"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                  name="New Users"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="text-gray-500">No user signup data in this range.</p>
+        )}
+      </div>
+
+      {/* 
+        ============================================
+        (G) User Activity Heatmap
+        ============================================
+      */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-xl font-bold mb-4">User Activity Heatmap</h3>
+        {activityHeatmap.length > 0 ? (
+          <div>
+            <p className="text-sm text-gray-600 mb-4">
+              This heatmap shows when users are most active, based on order data. 
+              Darker colors indicate higher activity.
+            </p>
+            
+            {/* Custom Heatmap Implementation */}
+            <div className="overflow-x-auto">
+              <div className="min-w-[700px] rounded-lg border border-gray-200">
+                {/* Hour labels (top) */}
+                <div className="flex border-b border-gray-200 pl-24 bg-gray-50 rounded-t-lg">
+                  {Array.from({ length: 24 }).map((_, hour) => {
+                    // Convert to 12-hour format with AM/PM
+                    const hour12 = hour === 0 ? '12 AM' : 
+                                  hour < 12 ? `${hour} AM` : 
+                                  hour === 12 ? '12 PM' : 
+                                  `${hour - 12} PM`;
+                    
+                    return (
+                      <div key={hour} className="w-12 text-center text-xs py-2 font-medium text-gray-600">
+                        {hour12}
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Day rows with cells */}
+                {dayNames.map((dayName, dayIndex) => {
+                  // Filter heatmap data for this day
+                  const dayData = activityHeatmap.filter(item => item.day === dayIndex);
+                  
+                  return (
+                    <div key={dayIndex} className={`flex border-b border-gray-200 ${dayIndex % 2 === 0 ? 'bg-gray-50/30' : ''}`}>
+                      {/* Day label (left) */}
+                      <div className="w-24 py-3 px-4 text-sm font-medium flex-shrink-0 text-gray-700">
+                        {dayName}
+                      </div>
+                      
+                      {/* Hour cells */}
+                      <div className="flex flex-grow">
+                        {dayData.sort((a, b) => a.hour - b.hour).map((cell) => {
+                          // Calculate color intensity based on value
+                          // Find the max value in the entire dataset for scaling
+                          const maxValue = Math.max(...activityHeatmap.map(d => d.value), 1);
+                          const intensity = maxValue > 0 ? (cell.value / maxValue) : 0;
+                          
+                          // Generate a gold/amber color with varying opacity based on intensity
+                          // Using the app's accent color (#c1902f)
+                          const bgColor = cell.value > 0 
+                            ? `rgba(193, 144, 47, ${Math.max(0.15, intensity)})`
+                            : 'transparent';
+                          
+                          // Convert to 12-hour format for tooltip
+                          const hour12 = cell.hour === 0 ? '12 AM' : 
+                                        cell.hour < 12 ? `${cell.hour} AM` : 
+                                        cell.hour === 12 ? '12 PM' : 
+                                        `${cell.hour - 12} PM`;
+                          
+                          return (
+                            <div
+                              key={cell.hour}
+                              className="w-12 h-12 flex items-center justify-center text-sm border-r border-gray-100 transition-colors duration-200 hover:bg-gray-100"
+                              style={{ backgroundColor: bgColor }}
+                              title={`${dayName} ${hour12} - ${cell.value} orders`}
+                            >
+                              {cell.value > 0 ? cell.value : ''}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Legend */}
+            <div className="mt-4 flex items-center justify-end">
+              <div className="text-sm text-gray-700 mr-3">Activity Level:</div>
+              <div className="flex rounded-md overflow-hidden">
+                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.15)' }}></div>
+                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.3)' }}></div>
+                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.5)' }}></div>
+                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.7)' }}></div>
+                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.9)' }}></div>
+              </div>
+              <div className="flex text-sm text-gray-700 ml-2">
+                <span>Low</span>
+                <span className="ml-24">High</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-gray-500">No activity data in this range.</p>
         )}
       </div>
     </div>

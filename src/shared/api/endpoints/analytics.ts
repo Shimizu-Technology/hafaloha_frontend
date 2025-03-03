@@ -48,6 +48,26 @@ export interface IncomeStatementResponse {
   income_statement: IncomeStatementRow[];
 }
 
+export interface UserSignupItem {
+  date: string;
+  count: number;
+}
+
+export interface UserSignupsResponse {
+  signups: UserSignupItem[];
+}
+
+export interface HeatmapDataPoint {
+  day: number;
+  hour: number;
+  value: number;
+}
+
+export interface UserActivityHeatmapResponse {
+  day_names: string[];
+  heatmap: HeatmapDataPoint[];
+}
+
 /**
  * Get customer orders report
  */
@@ -74,4 +94,18 @@ export const getTopItems = async (limit: number, startDate: string, endDate: str
  */
 export const getIncomeStatement = async (year: number): Promise<IncomeStatementResponse> => {
   return api.get<IncomeStatementResponse>('/admin/analytics/income_statement', { year });
+};
+
+/**
+ * Get user signups per day
+ */
+export const getUserSignups = async (startDate: string, endDate: string): Promise<UserSignupsResponse> => {
+  return api.get<UserSignupsResponse>('/admin/analytics/user_signups', { start: startDate, end: endDate });
+};
+
+/**
+ * Get user activity heatmap data (by day of week and hour)
+ */
+export const getUserActivityHeatmap = async (startDate: string, endDate: string): Promise<UserActivityHeatmapResponse> => {
+  return api.get<UserActivityHeatmapResponse>('/admin/analytics/user_activity_heatmap', { start: startDate, end: endDate });
 };
