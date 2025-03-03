@@ -16,6 +16,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     orders,
     fetchOrders,
     updateOrderStatus,
+    updateOrderStatusQuietly,
     updateOrderData,
     loading,
     error
@@ -100,9 +101,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     };
   }, [fetchOrders]);
 
+  // Track if the status update is in progress to prevent opening edit modal
+  const [isStatusUpdateInProgress, setIsStatusUpdateInProgress] = useState(false);
+
   // if the parent sets a selectedOrderId => open the edit modal instead of details
+  // but only if it's not from a status update
   useEffect(() => {
-    if (selectedOrderId) {
+    if (selectedOrderId && !isStatusUpdateInProgress) {
       const found = orders.find(o => Number(o.id) === selectedOrderId);
       if (found) {
         // Open the edit modal instead of the details modal
@@ -111,7 +116,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     } else {
       setEditingOrder(null);
     }
-  }, [selectedOrderId, orders]);
+  }, [selectedOrderId, orders, isStatusUpdateInProgress]);
 
   // Sort orders by creation date
   const sortedOrders = [...orders].sort((a, b) => {
@@ -145,7 +150,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }
     const pickupTime = new Date(Date.now() + etaMinutes * 60_000).toISOString();
 
-    await updateOrderStatus(orderToPrep.id, 'preparing', pickupTime);
+    setIsStatusUpdateInProgress(true);
+    // Use the quiet version for smoother UI
+    await updateOrderStatusQuietly(orderToPrep.id, 'preparing', pickupTime);
+    setIsStatusUpdateInProgress(false);
 
     setShowEtaModal(false);
     setEtaMinutes(5);
@@ -381,7 +389,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                updateOrderStatus(order.id, 'ready');
+                                setIsStatusUpdateInProgress(true);
+                                updateOrderStatusQuietly(order.id, 'ready')
+                                  .finally(() => setIsStatusUpdateInProgress(false));
                                 setShowOrderActions(null);
                               }}
                             >
@@ -394,7 +404,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                updateOrderStatus(order.id, 'completed');
+                                setIsStatusUpdateInProgress(true);
+                                updateOrderStatusQuietly(order.id, 'completed')
+                                  .finally(() => setIsStatusUpdateInProgress(false));
                                 setShowOrderActions(null);
                               }}
                             >
@@ -407,7 +419,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                               className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                updateOrderStatus(order.id, 'cancelled');
+                                setIsStatusUpdateInProgress(true);
+                                updateOrderStatusQuietly(order.id, 'cancelled')
+                                  .finally(() => setIsStatusUpdateInProgress(false));
                                 setShowOrderActions(null);
                               }}
                             >
@@ -487,7 +501,11 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     {order.status === 'preparing' && (
                       <button
                         className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"
-                        onClick={() => updateOrderStatus(order.id, 'ready')}
+                        onClick={() => {
+                          setIsStatusUpdateInProgress(true);
+                          updateOrderStatusQuietly(order.id, 'ready')
+                            .finally(() => setIsStatusUpdateInProgress(false));
+                        }}
                       >
                         Mark as Ready
                       </button>
@@ -495,7 +513,11 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     {order.status === 'ready' && (
                       <button
                         className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600"
-                        onClick={() => updateOrderStatus(order.id, 'completed')}
+                        onClick={() => {
+                          setIsStatusUpdateInProgress(true);
+                          updateOrderStatusQuietly(order.id, 'completed')
+                            .finally(() => setIsStatusUpdateInProgress(false));
+                        }}
                       >
                         Complete
                       </button>

@@ -36,6 +36,9 @@ interface OrderStore {
 
   /** Update just status + optional pickupTime. */
   updateOrderStatus: (orderId: string, status: string, pickupTime?: string) => Promise<void>;
+  
+  /** Update status without showing loading state (for smoother UI) */
+  updateOrderStatusQuietly: (orderId: string, status: string, pickupTime?: string) => Promise<void>;
 
   /** For admin editing an entire order's data (items, total, instructions, etc.). */
   updateOrderData: (orderId: string, updatedOrder: any) => Promise<void>;
@@ -151,6 +154,67 @@ export const useOrderStore = create<OrderStore>()(
           set({ orders: updatedOrders, loading: false });
         } catch (err: any) {
           set({ error: err.message, loading: false });
+        }
+      },
+
+      /**
+       * PATCH /orders/:id without showing loading state
+       * For smoother UI transitions when changing order status
+       */
+      updateOrderStatusQuietly: async (orderId, status, pickupTime) => {
+        // Don't set loading state
+        set({ error: null });
+        
+        // Optimistically update the UI
+        const orderToUpdate = get().orders.find(o => o.id === orderId);
+        if (orderToUpdate) {
+          // Cast status to the correct type for Order
+          const typedStatus = status as Order['status'];
+          const optimisticOrder = { ...orderToUpdate, status: typedStatus };
+          
+          if (pickupTime) {
+            (optimisticOrder as any).estimated_pickup_time = pickupTime;
+            (optimisticOrder as any).estimatedPickupTime = pickupTime;
+          }
+          
+          const optimisticOrders = get().orders.map((o) =>
+            o.id === orderId ? optimisticOrder : o
+          );
+          
+          set({ orders: optimisticOrders });
+        }
+        
+        try {
+          const orderPayload: any = { status };
+          if (pickupTime) {
+            orderPayload.estimated_pickup_time = pickupTime;
+          }
+          
+          // Make the API call
+          const updatedOrder = await api.patch<Order>(`/orders/${orderId}`, {
+            order: orderPayload,
+          });
+          
+          // Update with the actual server response
+          const updatedOrders = get().orders.map((o) =>
+            o.id === updatedOrder.id ? updatedOrder : o
+          );
+          
+          set({ orders: updatedOrders });
+          // Don't return the updatedOrder, just return void to match the interface
+        } catch (err: any) {
+          // If there's an error, revert the optimistic update
+          set({ error: err.message });
+          
+          // Refresh orders to ensure UI is in sync with server
+          try {
+            const orders = await api.get<Order[]>('/orders');
+            set({ orders });
+          } catch (refreshErr: any) {
+            console.error('Error refreshing orders after failed update:', refreshErr);
+          }
+          
+          throw err;
         }
       },
 
