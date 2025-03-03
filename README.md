@@ -317,7 +317,69 @@ For a true multi-tenant setup, you can deploy restaurant-specific frontends:
 
 Hafaloha implements intelligent polling mechanisms to provide real-time updates without requiring manual page refreshes:
 
-### 1. Order Notifications and Acknowledgment
+### 1. Scrollable Order Notifications with Responsive Design
+
+The AdminDashboard implements a scrollable toast notification system that allows users to view all order notifications, even when there are too many to fit on the screen at once:
+
+```typescript
+// In RootApp.tsx - Global toast configuration
+<Toaster 
+  position="top-right" 
+  reverseOrder={false}
+  containerStyle={{
+    maxHeight: '100vh',
+    overflow: 'auto',
+    paddingRight: '10px',
+    scrollBehavior: 'smooth'
+  }}
+  containerClassName="scrollable-toast-container"
+  gutter={8}
+  toastOptions={{
+    // Customize for different screen sizes
+    className: '',
+    style: {
+      maxWidth: '100%',
+      width: 'auto'
+    },
+    // Ensure mobile devices can dismiss with swipe
+    duration: Infinity
+  }}
+/>
+```
+
+The implementation includes responsive design considerations for different device sizes:
+
+```css
+/* Mobile optimization */
+@media (max-width: 480px) {
+  /* Mobile phones */
+  .scrollable-toast-container > div > div {
+    width: 95% !important;
+    max-width: 95vw !important;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  /* Tablets and iPad mini */
+  .scrollable-toast-container > div > div {
+    width: 90% !important;
+    max-width: 400px !important;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+```
+
+Key features of this implementation:
+- **Full-height Scrolling**: Uses the entire viewport height for notifications
+- **Responsive Design**: Optimized for mobile, tablet, and desktop views
+- **Touch-friendly**: Enhanced scrolling behavior for touch devices
+- **Consistent UI**: Maintains the same look and feel across all device sizes
+- **Improved Accessibility**: Ensures all notifications are accessible via scrolling
+
+### 2. Order Notifications and Acknowledgment
 
 The AdminDashboard implements a server-side order acknowledgment system that ensures important notifications persist across page refreshes:
 
@@ -354,6 +416,7 @@ Key features of this implementation:
 - **User-specific Acknowledgments**: Each admin user has their own acknowledgment status for orders
 - **Automatic Recovery**: Unacknowledged notifications reappear after page refresh
 - **Time-based Filtering**: Only shows unacknowledged orders from the last 24 hours by default
+- **Scrollable Interface**: When multiple notifications appear, users can scroll through them all
 
 ### 2. Order Management Auto-refresh
 
