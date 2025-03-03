@@ -115,6 +115,31 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
   const [loading, setLoading] = useState(false);
   const { fetchRestaurant } = useRestaurantStore();
 
+  // Helper function to update notification channel settings
+  function updateNotificationChannel(
+    notificationType: 'orders' | 'reservations',
+    channel: 'email' | 'sms',
+    enabled: boolean
+  ) {
+    const currentSettings = restaurant?.admin_settings || {};
+    const notificationChannels = currentSettings.notification_channels || {};
+    const typeSettings = notificationChannels[notificationType] || {};
+    
+    setRestaurant({
+      ...restaurant!,
+      admin_settings: {
+        ...currentSettings,
+        notification_channels: {
+          ...notificationChannels,
+          [notificationType]: {
+            ...typeSettings,
+            [channel]: enabled
+          }
+        }
+      }
+    });
+  }
+
   // Clean up object URLs when component unmounts or when previews change
   useEffect(() => {
     return () => {
@@ -495,6 +520,81 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
                       </svg>
                       This color is used for the header background in email notifications.
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+                    <h4 className="text-base font-semibold mb-3 text-gray-800">Notification Channels</h4>
+                    
+                    {/* Order Notifications */}
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium mb-2">Order Notifications</h5>
+                      <div className="space-y-2">
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="order-email"
+                            checked={restaurant.admin_settings?.notification_channels?.orders?.email ?? true}
+                            onChange={(e) => updateNotificationChannel('orders', 'email', e.target.checked)}
+                            className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                          />
+                          <label htmlFor="order-email" className="ml-2 block text-sm text-gray-700">
+                            Send email notifications
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="order-sms"
+                            checked={restaurant.admin_settings?.notification_channels?.orders?.sms ?? true}
+                            onChange={(e) => updateNotificationChannel('orders', 'sms', e.target.checked)}
+                            className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                          />
+                          <label htmlFor="order-sms" className="ml-2 block text-sm text-gray-700">
+                            Send SMS notifications
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Reservation Notifications */}
+                    <div>
+                      <h5 className="text-sm font-medium mb-2">Reservation Notifications</h5>
+                      <div className="space-y-2">
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="reservation-email"
+                            checked={restaurant.admin_settings?.notification_channels?.reservations?.email ?? true}
+                            onChange={(e) => updateNotificationChannel('reservations', 'email', e.target.checked)}
+                            className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                          />
+                          <label htmlFor="reservation-email" className="ml-2 block text-sm text-gray-700">
+                            Send email notifications
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="reservation-sms"
+                            checked={restaurant.admin_settings?.notification_channels?.reservations?.sms ?? true}
+                            onChange={(e) => updateNotificationChannel('reservations', 'sms', e.target.checked)}
+                            className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                          />
+                          <label htmlFor="reservation-sms" className="ml-2 block text-sm text-gray-700">
+                            Send SMS notifications
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <p className="mt-3 text-sm text-gray-500 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      Configure which notification channels are used for different types of customer communications.
                     </p>
                   </div>
                 </div>

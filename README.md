@@ -207,6 +207,7 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **OrderManager** - View and process orders with real-time auto-refresh functionality
 - **AnalyticsManager** - View business metrics
 - **RestaurantSettings** - Configure restaurant information with real-time updates
+  - **Notification Channels** - Configure email and SMS preferences for customer communications
 - **GeneralSettings** - Manage site-wide settings like hero and spinner images
 - **RestaurantSelector** - Switch between restaurants (for super admins)
 - **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
