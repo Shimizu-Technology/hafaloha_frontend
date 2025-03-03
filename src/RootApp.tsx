@@ -14,7 +14,28 @@ export default function RootApp() {
       <RestaurantProvider>
         <BrowserRouter>
           <ScrollToTop />
-          <Toaster position="top-right" reverseOrder={false} />
+          <Toaster 
+            position="top-right" 
+            reverseOrder={false}
+            containerStyle={{
+              maxHeight: '100vh',
+              overflow: 'auto',
+              paddingRight: '10px',
+              scrollBehavior: 'smooth'
+            }}
+            containerClassName="scrollable-toast-container"
+            gutter={8}
+            toastOptions={{
+              // Customize for different screen sizes
+              className: '',
+              style: {
+                maxWidth: '100%',
+                width: 'auto'
+              },
+              // Ensure mobile devices can dismiss with swipe
+              duration: Infinity
+            }}
+          />
 
           <Routes>
             <Route element={<GlobalLayout />}>
