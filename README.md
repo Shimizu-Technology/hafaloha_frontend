@@ -202,7 +202,7 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 
 ### 4. Admin Dashboard
 
-- **AdminDashboard** - Main admin interface
+- **AdminDashboard** - Main admin interface with persistent order notifications
 - **MenuManager** - Manage menu items and categories
 - **OrderManager** - View and process orders with real-time auto-refresh functionality
 - **AnalyticsManager** - View business metrics
@@ -317,7 +317,45 @@ For a true multi-tenant setup, you can deploy restaurant-specific frontends:
 
 Hafaloha implements intelligent polling mechanisms to provide real-time updates without requiring manual page refreshes:
 
-### 1. Order Management Auto-refresh
+### 1. Order Notifications and Acknowledgment
+
+The AdminDashboard implements a server-side order acknowledgment system that ensures important notifications persist across page refreshes:
+
+```typescript
+// Function to acknowledge an order via the API
+const acknowledgeOrder = async (orderId: number) => {
+  try {
+    await api.post(`/orders/${orderId}/acknowledge`);
+    console.log(`[AdminDashboard] Order ${orderId} acknowledged`);
+  } catch (err) {
+    console.error(`[AdminDashboard] Failed to acknowledge order ${orderId}:`, err);
+  }
+};
+
+// Check for unacknowledged orders on component mount
+const checkForUnacknowledgedOrders = async () => {
+  try {
+    // Get unacknowledged orders from the last 24 hours
+    const url = `/orders/unacknowledged?hours=24`;
+    const unacknowledgedOrders: Order[] = await api.get(url);
+    
+    // Display notifications for unacknowledged orders
+    unacknowledgedOrders.forEach(order => {
+      displayOrderNotification(order);
+    });
+  } catch (err) {
+    console.error('[AdminDashboard] Failed to check for unacknowledged orders:', err);
+  }
+};
+```
+
+Key features of this implementation:
+- **Server-side Persistence**: Order acknowledgments are stored in the database, ensuring they persist across sessions
+- **User-specific Acknowledgments**: Each admin user has their own acknowledgment status for orders
+- **Automatic Recovery**: Unacknowledged notifications reappear after page refresh
+- **Time-based Filtering**: Only shows unacknowledged orders from the last 24 hours by default
+
+### 2. Order Management Auto-refresh
 
 The OrderManager component automatically refreshes order data every 30 seconds using an optimized approach:
 
