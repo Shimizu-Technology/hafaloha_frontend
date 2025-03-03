@@ -318,9 +318,9 @@ For a true multi-tenant setup, you can deploy restaurant-specific frontends:
 
 Hafaloha implements intelligent polling mechanisms to provide real-time updates without requiring manual page refreshes:
 
-### 1. Scrollable Order Notifications with Responsive Design
+### 1. Intelligent Toast Notification System
 
-The AdminDashboard implements a scrollable toast notification system that allows users to view all order notifications, even when there are too many to fit on the screen at once:
+The application implements a sophisticated toast notification system with different behaviors for different types of notifications:
 
 ```typescript
 // In RootApp.tsx - Global toast configuration
@@ -336,17 +336,22 @@ The AdminDashboard implements a scrollable toast notification system that allows
   containerClassName="scrollable-toast-container"
   gutter={8}
   toastOptions={{
+    // Default duration of 5 seconds for regular toasts
+    duration: 5000,
     // Customize for different screen sizes
     className: '',
     style: {
       maxWidth: '100%',
       width: 'auto'
-    },
-    // Ensure mobile devices can dismiss with swipe
-    duration: Infinity
+    }
   }}
 />
 ```
+
+Key features of this implementation:
+- **Differentiated Notification Types**: Regular success/error messages auto-dismiss after 5 seconds, while important order notifications persist until acknowledged
+- **Robust Dismissal Mechanism**: Uses multiple toast removal methods with delayed attempts to ensure notifications are properly removed
+- **Scrollable Interface**: When multiple notifications appear, users can scroll through them all
 
 The implementation includes responsive design considerations for different device sizes:
 
