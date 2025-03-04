@@ -63,23 +63,67 @@ export const useOrderStore = create<OrderStore>()(
       loading: false,
       error: null,
 
-      // GET /orders
-      fetchOrders: async () => {
-        set({ loading: true, error: null });
-        try {
-          const orders = await api.get<Order[]>('/orders');
-          set({ orders, loading: false });
-        } catch (err: any) {
-          set({ error: err.message, loading: false });
-        }
-      },
+  // GET /orders - fetch all pages for user's order history
+  fetchOrders: async () => {
+    set({ loading: true, error: null });
+    try {
+      // Start with page 1
+      let currentPage = 1;
+      let allOrders: Order[] = [];
+      let hasMorePages = true;
+      
+      // Fetch all pages
+      while (hasMorePages) {
+        // Handle the paginated response format
+        const response = await api.get<{orders: Order[], total_count: number, page: number, per_page: number}>(`/orders?page=${currentPage}&per_page=10`);
+        
+        // Extract the orders array from the response
+        const pageOrders = response.orders || [];
+        allOrders = [...allOrders, ...pageOrders];
+        
+        // Calculate if there are more pages
+        const totalPages = Math.ceil(response.total_count / response.per_page);
+        hasMorePages = currentPage < totalPages;
+        currentPage++;
+        
+        // Safety check to prevent infinite loops
+        if (currentPage > 10) break;
+      }
+      
+      set({ orders: allOrders, loading: false });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
 
-      // GET /orders without showing loading state
+      // GET /orders without showing loading state - fetch all pages
       fetchOrdersQuietly: async () => {
         try {
-          const orders = await api.get<Order[]>('/orders');
+          // Start with page 1
+          let currentPage = 1;
+          let allOrders: Order[] = [];
+          let hasMorePages = true;
+          
+          // Fetch all pages
+          while (hasMorePages) {
+            // Handle the paginated response format
+            const response = await api.get<{orders: Order[], total_count: number, page: number, per_page: number}>(`/orders?page=${currentPage}&per_page=10`);
+            
+            // Extract the orders array from the response
+            const pageOrders = response.orders || [];
+            allOrders = [...allOrders, ...pageOrders];
+            
+            // Calculate if there are more pages
+            const totalPages = Math.ceil(response.total_count / response.per_page);
+            hasMorePages = currentPage < totalPages;
+            currentPage++;
+            
+            // Safety check to prevent infinite loops
+            if (currentPage > 10) break;
+          }
+          
           // Only update orders, don't change loading state
-          set({ orders });
+          set({ orders: allOrders });
         } catch (err: any) {
           // Only update error, don't change loading state
           set({ error: err.message });
@@ -208,8 +252,30 @@ export const useOrderStore = create<OrderStore>()(
           
           // Refresh orders to ensure UI is in sync with server
           try {
-            const orders = await api.get<Order[]>('/orders');
-            set({ orders });
+            // Start with page 1
+            let currentPage = 1;
+            let allOrders: Order[] = [];
+            let hasMorePages = true;
+            
+            // Fetch all pages
+            while (hasMorePages) {
+              // Handle the paginated response format
+              const response = await api.get<{orders: Order[], total_count: number, page: number, per_page: number}>(`/orders?page=${currentPage}&per_page=10`);
+              
+              // Extract the orders array from the response
+              const pageOrders = response.orders || [];
+              allOrders = [...allOrders, ...pageOrders];
+              
+              // Calculate if there are more pages
+              const totalPages = Math.ceil(response.total_count / response.per_page);
+              hasMorePages = currentPage < totalPages;
+              currentPage++;
+              
+              // Safety check to prevent infinite loops
+              if (currentPage > 10) break;
+            }
+            
+            set({ orders: allOrders });
           } catch (refreshErr: any) {
             console.error('Error refreshing orders after failed update:', refreshErr);
           }
@@ -235,7 +301,10 @@ export const useOrderStore = create<OrderStore>()(
 
       getOrderHistory: (userId) => {
         // Filter orders by user ID if available
-        return get().orders.filter((o) => (o as any).userId === userId);
+        // Check both user_id (from API) and userId (camelCase version) for compatibility
+        return get().orders.filter((o) => 
+          (o as any).user_id === userId || (o as any).userId === userId
+        );
       },
 
       // CART -------------

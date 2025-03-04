@@ -44,6 +44,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // for mobile menu
   const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ordersPerPage = 10;
 
   // Constants for configuration - auto-refresh interval
   const POLLING_INTERVAL = 30000; // 30 seconds - could be moved to a config file or environment variable
@@ -137,6 +141,20 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     selectedStatus === 'all'
       ? sortedOrders
       : sortedOrders.filter(order => order.status === selectedStatus);
+      
+  // Calculate pagination
+  const totalOrders = filteredOrders.length;
+  const totalPages = Math.ceil(totalOrders / ordersPerPage);
+  
+  // Get current page of orders
+  const indexOfLastOrder = currentPage * ordersPerPage;
+  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+  
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedStatus, sortNewestFirst]);
 
   function closeModal() {
     setSelectedOrder(null);
@@ -287,291 +305,346 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       </div>
 
       {/* Orders list - further mobile optimized */}
-      <div className="space-y-4 pb-16">
+      <div className="pb-16">
         {loading ? (
           // Skeleton loading state
-          Array.from({ length: 3 }).map((_, index) => (
-            <div key={`skeleton-${index}`} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse">
-              {/* Skeleton header */}
-              <div className="flex justify-between items-center p-3 border-b border-gray-100">
-                <div>
-                  <div className="h-5 w-32 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-3 w-24 bg-gray-200 rounded"></div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
-                  <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
-                </div>
-              </div>
-              
-              {/* Skeleton content */}
-              <div className="p-3">
-                <div className="mb-4">
-                  <div className="h-4 w-24 bg-gray-200 rounded mb-2"></div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <div className="h-4 w-40 bg-gray-200 rounded"></div>
-                      <div className="h-4 w-16 bg-gray-200 rounded"></div>
-                    </div>
-                    <div className="flex justify-between">
-                      <div className="h-4 w-36 bg-gray-200 rounded"></div>
-                      <div className="h-4 w-16 bg-gray-200 rounded"></div>
-                    </div>
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={`skeleton-${index}`} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse">
+                {/* Skeleton header */}
+                <div className="flex justify-between items-center p-3 border-b border-gray-100">
+                  <div>
+                    <div className="h-5 w-32 bg-gray-200 rounded mb-2"></div>
+                    <div className="h-3 w-24 bg-gray-200 rounded"></div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
+                    <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
                   </div>
                 </div>
                 
-                <div className="space-y-2 mb-3">
-                  <div className="h-3 w-48 bg-gray-200 rounded"></div>
-                  <div className="h-3 w-40 bg-gray-200 rounded"></div>
-                </div>
-                
-                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-                  <div className="h-4 w-24 bg-gray-200 rounded"></div>
-                  <div className="h-8 w-24 bg-gray-200 rounded"></div>
+                {/* Skeleton content */}
+                <div className="p-3">
+                  <div className="mb-4">
+                    <div className="h-4 w-24 bg-gray-200 rounded mb-2"></div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                        <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                      </div>
+                      <div className="flex justify-between">
+                        <div className="h-4 w-36 bg-gray-200 rounded"></div>
+                        <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 mb-3">
+                    <div className="h-3 w-48 bg-gray-200 rounded"></div>
+                    <div className="h-3 w-40 bg-gray-200 rounded"></div>
+                  </div>
+                  
+                  <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+                    <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                    <div className="h-8 w-24 bg-gray-200 rounded"></div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         ) : filteredOrders.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-4 text-center">
             <p className="text-gray-500">No orders found matching your filters</p>
           </div>
         ) : (
-          filteredOrders.map(order => (
-            <div key={order.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              {/* Order header - more compact for mobile */}
-              <div className="flex justify-between items-center p-3 border-b border-gray-100">
-                <div>
-                  <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
-                  {order.createdAt && (
-                    <p className="text-xs text-gray-500">
-                      {new Date(order.createdAt).toLocaleString()}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center space-x-1">
-                    {requiresAdvanceNotice(order) && (
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div>
+            <div className="space-y-4 mb-6">
+              {currentOrders.map(order => (
+                <div key={order.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  {/* Order header - more compact for mobile */}
+                  <div className="flex justify-between items-center p-3 border-b border-gray-100">
+                    <div>
+                      <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
+                      {order.createdAt && (
+                        <p className="text-xs text-gray-500">
+                          {new Date(order.createdAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center space-x-1">
+                        {requiresAdvanceNotice(order) && (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            24h
+                          </span>
+                        )}
+                        <span
+                          className={`
+                            px-2 py-1 rounded-full text-xs font-medium
+                            ${getStatusBadgeColor(order.status)}
+                          `}
+                        >
+                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                        </span>
+                      </div>
+                      <div 
+                        className="text-gray-400 hover:text-gray-600 relative cursor-pointer p-1"
+                        onClick={() => toggleOrderActions(Number(order.id))}
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Order actions"
+                        aria-haspopup="true"
+                        aria-expanded={showOrderActions === Number(order.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleOrderActions(Number(order.id));
+                          }
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="1"></circle>
+                          <circle cx="19" cy="12" r="1"></circle>
+                          <circle cx="5" cy="12" r="1"></circle>
                         </svg>
-                        24h
-                      </span>
-                    )}
-                    <span
-                      className={`
-                        px-2 py-1 rounded-full text-xs font-medium
-                        ${getStatusBadgeColor(order.status)}
-                      `}
-                    >
-                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                    </span>
+                        
+                        {/* Dropdown menu for mobile */}
+                        {showOrderActions === Number(order.id) && (
+                          <div className="absolute right-0 top-full mt-1 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                            <div className="py-1" role="menu" aria-orientation="vertical">
+                              <button
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingOrder(order);
+                                  setShowOrderActions(null);
+                                }}
+                              >
+                                Edit Order
+                              </button>
+
+                              {order.status === 'pending' && (
+                                <button
+                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOrderToPrep(order);
+                                    // Set default ETA based on order type
+                                    if (requiresAdvanceNotice(order)) {
+                                      setEtaMinutes(10.0); // Default to 10 AM next day
+                                    } else {
+                                      setEtaMinutes(5); // Default to 5 minutes
+                                    }
+                                    setShowEtaModal(true);
+                                    setShowOrderActions(null);
+                                  }}
+                                >
+                                  Start Preparing
+                                </button>
+                              )}
+                              
+                              {order.status === 'preparing' && (
+                                <button
+                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsStatusUpdateInProgress(true);
+                                    updateOrderStatusQuietly(order.id, 'ready')
+                                      .finally(() => setIsStatusUpdateInProgress(false));
+                                    setShowOrderActions(null);
+                                  }}
+                                >
+                                  Mark as Ready
+                                </button>
+                              )}
+                              
+                              {order.status === 'ready' && (
+                                <button
+                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsStatusUpdateInProgress(true);
+                                    updateOrderStatusQuietly(order.id, 'completed')
+                                      .finally(() => setIsStatusUpdateInProgress(false));
+                                    setShowOrderActions(null);
+                                  }}
+                                >
+                                  Complete Order
+                                </button>
+                              )}
+                              
+                              {(order.status === 'pending' || order.status === 'preparing') && (
+                                <button
+                                  className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsStatusUpdateInProgress(true);
+                                    updateOrderStatusQuietly(order.id, 'cancelled')
+                                      .finally(() => setIsStatusUpdateInProgress(false));
+                                    setShowOrderActions(null);
+                                  }}
+                                >
+                                  Cancel Order
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div 
-                    className="text-gray-400 hover:text-gray-600 relative cursor-pointer p-1"
-                    onClick={() => toggleOrderActions(Number(order.id))}
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Order actions"
-                    aria-haspopup="true"
-                    aria-expanded={showOrderActions === Number(order.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        toggleOrderActions(Number(order.id));
-                      }
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="1"></circle>
-                      <circle cx="19" cy="12" r="1"></circle>
-                      <circle cx="5" cy="12" r="1"></circle>
-                    </svg>
-                    
-                    {/* Dropdown menu for mobile */}
-                    {showOrderActions === Number(order.id) && (
-                      <div className="absolute right-0 top-full mt-1 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
-                        <div className="py-1" role="menu" aria-orientation="vertical">
+
+                  {/* Order content - simplified for mobile */}
+                  <div className="p-3">
+                    {/* Items with prices aligned to right */}
+                    <div className="mb-4">
+                      <h4 className="font-medium text-sm text-gray-700 mb-2">Order Items:</h4>
+                      <div className="space-y-1">
+                        {order.items && order.items.length > 0 ? (
+                          order.items.map((item: any, index: number) => (
+                            <div key={index} className="flex justify-between text-sm">
+                              <div>
+                                <span className="font-medium">
+                                  {item.name} × {item.quantity}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                ${Number(item.price * item.quantity).toFixed(2)}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-sm text-gray-500">No items found</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Customer info - more compact */}
+                    <div className="text-xs space-y-2 mb-3">
+                      {order.contact_name && (
+                        <div>
+                          <span className="font-medium text-gray-700">Customer: </span>
+                          <span>{order.contact_name}</span>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <span className="font-medium text-gray-700">Pickup: </span>
+                        <span>{formatDate((order as any).estimatedPickupTime || (order as any).estimated_pickup_time)}</span>
+                      </div>
+                      
+                      {((order as any).special_instructions || (order as any).specialInstructions) && (
+                        <div>
+                          <span className="font-medium text-gray-700">Instructions: </span>
+                          <span>{(order as any).special_instructions || (order as any).specialInstructions}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Total */}
+                    <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+                      <p className="font-medium text-sm">
+                        Total: ${Number(order.total || 0).toFixed(2)}
+                      </p>
+                      
+                      {/* Status-specific action button for larger screens */}
+                      <div className="hidden sm:block">
+                        {order.status === 'pending' && (
                           <button
-                            className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingOrder(order);
-                              setShowOrderActions(null);
+                            className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
+                            onClick={() => {
+                              setOrderToPrep(order);
+                              // Set default ETA based on order type
+                              if (requiresAdvanceNotice(order)) {
+                                setEtaMinutes(10.0); // Default to 10 AM next day
+                              } else {
+                                setEtaMinutes(5); // Default to 5 minutes
+                              }
+                              setShowEtaModal(true);
                             }}
                           >
-                            Edit Order
+                            Start Preparing
                           </button>
-
-                          {order.status === 'pending' && (
-                            <button
-                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOrderToPrep(order);
-                                // Set default ETA based on order type
-                                if (requiresAdvanceNotice(order)) {
-                                  setEtaMinutes(10.0); // Default to 10 AM next day
-                                } else {
-                                  setEtaMinutes(5); // Default to 5 minutes
-                                }
-                                setShowEtaModal(true);
-                                setShowOrderActions(null);
-                              }}
-                            >
-                              Start Preparing
-                            </button>
-                          )}
-                          
-                          {order.status === 'preparing' && (
-                            <button
-                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setIsStatusUpdateInProgress(true);
-                                updateOrderStatusQuietly(order.id, 'ready')
-                                  .finally(() => setIsStatusUpdateInProgress(false));
-                                setShowOrderActions(null);
-                              }}
-                            >
-                              Mark as Ready
-                            </button>
-                          )}
-                          
-                          {order.status === 'ready' && (
-                            <button
-                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setIsStatusUpdateInProgress(true);
-                                updateOrderStatusQuietly(order.id, 'completed')
-                                  .finally(() => setIsStatusUpdateInProgress(false));
-                                setShowOrderActions(null);
-                              }}
-                            >
-                              Complete Order
-                            </button>
-                          )}
-                          
-                          {(order.status === 'pending' || order.status === 'preparing') && (
-                            <button
-                              className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setIsStatusUpdateInProgress(true);
-                                updateOrderStatusQuietly(order.id, 'cancelled')
-                                  .finally(() => setIsStatusUpdateInProgress(false));
-                                setShowOrderActions(null);
-                              }}
-                            >
-                              Cancel Order
-                            </button>
-                          )}
-                        </div>
+                        )}
+                        {order.status === 'preparing' && (
+                          <button
+                            className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"
+                            onClick={() => {
+                              setIsStatusUpdateInProgress(true);
+                              updateOrderStatusQuietly(order.id, 'ready')
+                                .finally(() => setIsStatusUpdateInProgress(false));
+                            }}
+                          >
+                            Mark as Ready
+                          </button>
+                        )}
+                        {order.status === 'ready' && (
+                          <button
+                            className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600"
+                            onClick={() => {
+                              setIsStatusUpdateInProgress(true);
+                              updateOrderStatusQuietly(order.id, 'completed')
+                                .finally(() => setIsStatusUpdateInProgress(false));
+                            }}
+                          >
+                            Complete
+                          </button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Order content - simplified for mobile */}
-              <div className="p-3">
-                {/* Items with prices aligned to right */}
-                <div className="mb-4">
-                  <h4 className="font-medium text-sm text-gray-700 mb-2">Order Items:</h4>
-                  <div className="space-y-1">
-                    {order.items.map((item: any, index: number) => (
-                      <div key={index} className="flex justify-between text-sm">
-                        <div>
-                          <span className="font-medium">
-                            {item.name} × {item.quantity}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          ${Number(item.price * item.quantity).toFixed(2)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Customer info - more compact */}
-                <div className="text-xs space-y-2 mb-3">
-                  {order.contact_name && (
-                    <div>
-                      <span className="font-medium text-gray-700">Customer: </span>
-                      <span>{order.contact_name}</span>
                     </div>
-                  )}
-                  
-                  <div>
-                    <span className="font-medium text-gray-700">Pickup: </span>
-                    <span>{formatDate((order as any).estimatedPickupTime || (order as any).estimated_pickup_time)}</span>
-                  </div>
-                  
-                  {((order as any).special_instructions || (order as any).specialInstructions) && (
-                    <div>
-                      <span className="font-medium text-gray-700">Instructions: </span>
-                      <span>{(order as any).special_instructions || (order as any).specialInstructions}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Total */}
-                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-                  <p className="font-medium text-sm">
-                    Total: ${Number(order.total || 0).toFixed(2)}
-                  </p>
-                  
-                  {/* Status-specific action button for larger screens */}
-                  <div className="hidden sm:block">
-                    {order.status === 'pending' && (
-                      <button
-                        className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
-                        onClick={() => {
-                          setOrderToPrep(order);
-                          // Set default ETA based on order type
-                          if (requiresAdvanceNotice(order)) {
-                            setEtaMinutes(10.0); // Default to 10 AM next day
-                          } else {
-                            setEtaMinutes(5); // Default to 5 minutes
-                          }
-                          setShowEtaModal(true);
-                        }}
-                      >
-                        Start Preparing
-                      </button>
-                    )}
-                    {order.status === 'preparing' && (
-                      <button
-                        className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"
-                        onClick={() => {
-                          setIsStatusUpdateInProgress(true);
-                          updateOrderStatusQuietly(order.id, 'ready')
-                            .finally(() => setIsStatusUpdateInProgress(false));
-                        }}
-                      >
-                        Mark as Ready
-                      </button>
-                    )}
-                    {order.status === 'ready' && (
-                      <button
-                        className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600"
-                        onClick={() => {
-                          setIsStatusUpdateInProgress(true);
-                          updateOrderStatusQuietly(order.id, 'completed')
-                            .finally(() => setIsStatusUpdateInProgress(false));
-                        }}
-                      >
-                        Complete
-                      </button>
-                    )}
                   </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))
+            
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center space-x-2 mt-6 pb-4">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className={`px-3 py-1 rounded-md text-sm ${
+                    currentPage === 1
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Previous
+                </button>
+                
+                <div className="flex space-x-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-md text-sm ${
+                        currentPage === page
+                          ? 'bg-[#c1902f] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+                
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className={`px-3 py-1 rounded-md text-sm ${
+                    currentPage === totalPages
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

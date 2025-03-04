@@ -37,11 +37,20 @@ export function OrderHistory() {
   const [sortOption, setSortOption] = useState<SortOption>('newest');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ordersPerPage = 5;
 
   useEffect(() => {
     // Load orders from the backend on mount
     fetchOrders();
   }, [fetchOrders]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, sortOption]);
 
   if (!user) return null;
 
@@ -67,6 +76,15 @@ export function OrderHistory() {
   const filteredOrders = statusFilter === 'all' 
     ? sortedOrders 
     : sortedOrders.filter(order => order.status === statusFilter);
+    
+  // Calculate pagination
+  const totalOrders = filteredOrders.length;
+  const totalPages = Math.ceil(totalOrders / ordersPerPage);
+  
+  // Get current page of orders
+  const indexOfLastOrder = currentPage * ordersPerPage;
+  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
 
   // Get status badge color
   const getStatusBadgeColor = (status: string) => {
@@ -225,69 +243,116 @@ export function OrderHistory() {
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredOrders.map(order => (
-            <div key={order.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-              {/* Order header */}
-              <div className="flex justify-between items-start p-4 border-b border-gray-100">
-                <div>
-                  <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
-                  <div className="flex items-center text-xs text-gray-500 mt-1">
-                    <Calendar className="h-3 w-3 mr-1" />
-                    {formatDate(order.createdAt)}
+        <div>
+          <div className="space-y-4 mb-6">
+            {currentOrders.map(order => (
+              <div key={order.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                {/* Order header */}
+                <div className="flex justify-between items-start p-4 border-b border-gray-100">
+                  <div>
+                    <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
+                    <div className="flex items-center text-xs text-gray-500 mt-1">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {formatDate(order.createdAt)}
+                    </div>
                   </div>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </span>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
-                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                </span>
-              </div>
 
-              {/* Order items */}
-              <div className="p-4 border-b border-gray-100">
-                <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Items</h4>
-                <div className="space-y-3">
-                  {order.items.map((item, index) => {
-                    const extendedItem = item as ExtendedOrderItem;
-                    return (
-                      <div key={index} className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-sm">{item.name} × {item.quantity}</p>
-                          {extendedItem.customizations &&
-                            Object.entries(extendedItem.customizations).map(([key, values]) => (
-                              <p key={key} className="text-xs text-gray-600">
-                                {key}: {values.join(', ')}
-                              </p>
-                            ))}
-                          {item.notes && (
-                            <p className="text-xs text-gray-600">Note: {item.notes}</p>
-                          )}
+                {/* Order items */}
+                <div className="p-4 border-b border-gray-100">
+                  <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Items</h4>
+                  <div className="space-y-3">
+                    {order.items.map((item, index) => {
+                      const extendedItem = item as ExtendedOrderItem;
+                      return (
+                        <div key={index} className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-sm">{item.name} × {item.quantity}</p>
+                            {extendedItem.customizations &&
+                              Object.entries(extendedItem.customizations).map(([key, values]) => (
+                                <p key={key} className="text-xs text-gray-600">
+                                  {key}: {values.join(', ')}
+                                </p>
+                              ))}
+                            {item.notes && (
+                              <p className="text-xs text-gray-600">Note: {item.notes}</p>
+                            )}
+                          </div>
+                          <span className="text-sm font-medium">${(item.price * item.quantity).toFixed(2)}</span>
                         </div>
-                        <span className="text-sm font-medium">${(item.price * item.quantity).toFixed(2)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Order footer */}
-              <div className="p-4">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                  <div className="flex items-center text-xs text-gray-600">
-                    <Clock className="h-3.5 w-3.5 mr-1.5" />
-                    Pickup: {new Date(order.estimatedPickupTime || order.pickup_time || '').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      );
+                    })}
                   </div>
-                  <p className="text-base font-medium">Total: ${order.total.toFixed(2)}</p>
                 </div>
 
-                {(order.specialInstructions || order.special_instructions) && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-xs text-gray-700 font-medium">Special Instructions:</p>
-                    <p className="mt-1 text-sm text-gray-600">{order.specialInstructions || order.special_instructions}</p>
+                {/* Order footer */}
+                <div className="p-4">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                    <div className="flex items-center text-xs text-gray-600">
+                      <Clock className="h-3.5 w-3.5 mr-1.5" />
+                      Pickup: {new Date(order.estimatedPickupTime || order.pickup_time || '').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </div>
+                    <p className="text-base font-medium">Total: ${order.total.toFixed(2)}</p>
                   </div>
-                )}
+
+                  {(order.specialInstructions || order.special_instructions) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <p className="text-xs text-gray-700 font-medium">Special Instructions:</p>
+                      <p className="mt-1 text-sm text-gray-600">{order.specialInstructions || order.special_instructions}</p>
+                    </div>
+                  )}
+                </div>
               </div>
+            ))}
+          </div>
+          
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center space-x-2 mt-6 pb-4">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className={`px-3 py-1 rounded-md text-sm ${
+                  currentPage === 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Previous
+              </button>
+              
+              <div className="flex space-x-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-8 h-8 flex items-center justify-center rounded-md text-sm ${
+                      currentPage === page
+                        ? 'bg-[#c1902f] text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className={`px-3 py-1 rounded-md text-sm ${
+                  currentPage === totalPages
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Next
+              </button>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

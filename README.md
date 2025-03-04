@@ -206,6 +206,7 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **MenuManager** - Manage menu items and categories
 - **OrderManager** - View and process orders with real-time auto-refresh functionality
   - **SetEtaModal** - Specialized modal for setting pickup times, with different interfaces for regular orders (5-60 minute ETA) and advance notice orders (next-day time slots)
+  - **Pagination** - Efficient pagination controls for handling large order volumes
 - **AnalyticsManager** - View business metrics
 - **RestaurantSettings** - Configure restaurant information with real-time updates
   - **Notification Channels** - Configure email and SMS preferences for customer communications
@@ -314,6 +315,137 @@ For a true multi-tenant setup, you can deploy restaurant-specific frontends:
 4. **Configure allowed origins in the restaurant settings in the admin dashboard**
 
 ---
+
+## **Performance Optimizations**
+
+Hafaloha includes several performance optimizations to ensure it can handle high traffic loads:
+
+### 1. Image Optimization
+
+The CachedImage component provides efficient image loading and caching:
+
+```typescript
+// src/shared/components/ui/CachedImage.tsx
+export function CachedImage({ 
+  src, 
+  alt, 
+  className, 
+  width, 
+  height, 
+  loading = 'lazy',
+  onLoad,
+  onError
+}: CachedImageProps) {
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  
+  useEffect(() => {
+    // Check localStorage cache first
+    const cachedImage = localStorage.getItem(`image_cache:${src}`);
+    if (cachedImage) {
+      setImageSrc(cachedImage);
+      setIsLoading(false);
+      return;
+    }
+    
+    // Fetch and cache the image
+    const fetchImage = async () => {
+      try {
+        const response = await fetch(src);
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        
+        // Cache in localStorage (with size limits)
+        try {
+          localStorage.setItem(`image_cache:${src}`, objectUrl);
+        } catch (e) {
+          // Handle storage quota exceeded
+          console.warn('LocalStorage quota exceeded, clearing image cache');
+          clearOldImageCache();
+        }
+        
+        setImageSrc(objectUrl);
+        setIsLoading(false);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        setIsLoading(false);
+      }
+    };
+    
+    fetchImage();
+  }, [src]);
+  
+  // Render optimized image with placeholder
+  return (
+    <>
+      {isLoading && <div className="animate-pulse bg-gray-200" style={{ width, height }} />}
+      {error && <div className="bg-red-100 text-red-500 text-xs p-2">Failed to load image</div>}
+      {imageSrc && (
+        <img
+          src={imageSrc}
+          alt={alt}
+          className={className}
+          width={width}
+          height={height}
+          loading={loading}
+          onLoad={onLoad}
+          onError={(e) => {
+            setError(new Error('Failed to load image'));
+            onError?.(e);
+          }}
+        />
+      )}
+    </>
+  );
+}
+```
+
+Key features:
+- Client-side caching using localStorage
+- Lazy loading support
+- Loading placeholders and error states
+- Responsive image support
+
+### 2. Pagination
+
+The application implements efficient pagination for handling large datasets:
+
+```typescript
+// In OrderManager.tsx
+// Pagination state
+const [currentPage, setCurrentPage] = useState(1);
+const ordersPerPage = 10;
+
+// Calculate pagination
+const totalOrders = filteredOrders.length;
+const totalPages = Math.ceil(totalOrders / ordersPerPage);
+
+// Get current page of orders
+const indexOfLastOrder = currentPage * ordersPerPage;
+const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+
+// Reset to first page when filters change
+useEffect(() => {
+  setCurrentPage(1);
+}, [selectedStatus, sortNewestFirst]);
+```
+
+The pagination UI includes:
+- Previous/Next buttons
+- Page number indicators
+- Visual feedback for current page
+- Disabled states for navigation limits
+
+### 3. Mobile Optimization
+
+The application is fully optimized for mobile devices:
+
+- Responsive design patterns throughout the application
+- Mobile-specific components like MobileSelect
+- Touch-friendly UI elements
+- Optimized image loading for mobile bandwidth
 
 ## **Real-time Updates and Polling**
 
