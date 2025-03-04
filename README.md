@@ -6,9 +6,9 @@ A React-based frontend for the Hafaloha multi-tenant restaurant management SaaS 
 
 Hafaloha frontend provides user interfaces for:
 
-1. **Online Ordering** - Browse menus, customize items, and place orders
+1. **Online Ordering** - Browse menus, customize items, place orders, and process payments
 2. **Reservations** - Book tables, view availability, and manage reservations
-3. **Admin Dashboard** - Manage menus, track orders, configure restaurant settings, and view analytics
+3. **Admin Dashboard** - Manage menus, track orders, configure restaurant settings, process payments, and view analytics
 
 The frontend is built with **React.js** with **TypeScript**, styled with **Tailwind CSS**, and uses **Zustand** for state management. It communicates with the Hafaloha API backend through a RESTful interface.
 
@@ -210,6 +210,9 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **AnalyticsManager** - View business metrics
 - **RestaurantSettings** - Configure restaurant information with real-time updates
   - **Notification Channels** - Configure email and SMS preferences for customer communications
+- **PaymentSettings** - Configure payment gateway settings (Braintree/PayPal)
+  - **Test Mode** - Toggle between test and production environments
+  - **Credentials Management** - Securely store and manage payment gateway credentials
 - **GeneralSettings** - Manage site-wide settings like hero and spinner images
 - **RestaurantSelector** - Switch between restaurants (for super admins)
 - **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
