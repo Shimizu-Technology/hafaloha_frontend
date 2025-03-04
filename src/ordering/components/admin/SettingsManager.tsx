@@ -1,14 +1,15 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense } from 'react';
-import { Store, List, Users } from 'lucide-react';
+import { Store, List, Users, CreditCard } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
 const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').then(module => ({ default: module.CategoriesSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
+const PaymentSettings = lazy(() => import('./settings/PaymentSettings').then(module => ({ default: module.PaymentSettings })));
 
-type SettingsTab = 'restaurant' | 'categories' | 'users';
+type SettingsTab = 'restaurant' | 'categories' | 'users' | 'payments';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -21,6 +22,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'restaurant', label: 'Restaurant', icon: Store },
     { id: 'categories', label: 'Categories', icon: List },
     { id: 'users', label: 'Users', icon: Users },
+    { id: 'payments', label: 'Payments', icon: CreditCard },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -47,6 +49,13 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
           <div>
             <h3 className="text-lg font-semibold mb-4">User Management</h3>
             <UsersSettings restaurantId={restaurantId} />
+          </div>
+        );
+      case 'payments':
+        return (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Payment Gateway</h3>
+            <PaymentSettings />
           </div>
         );
       default:

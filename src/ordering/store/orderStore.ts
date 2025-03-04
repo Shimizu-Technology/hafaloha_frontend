@@ -31,7 +31,9 @@ interface OrderStore {
     specialInstructions: string,
     contactName?: string,
     contactPhone?: string,
-    contactEmail?: string
+    contactEmail?: string,
+    transactionId?: string,
+    paymentMethod?: string
   ) => Promise<Order>;
 
   /** Update just status + optional pickupTime. */
@@ -138,7 +140,9 @@ export const useOrderStore = create<OrderStore>()(
         specialInstructions,
         contactName,
         contactPhone,
-        contactEmail
+        contactEmail,
+        transactionId,
+        paymentMethod = 'credit_card'
       ) => {
         set({ loading: true, error: null });
         try {
@@ -157,6 +161,8 @@ export const useOrderStore = create<OrderStore>()(
               contact_name: contactName,
               contact_phone: contactPhone,
               contact_email: contactEmail,
+              transaction_id: transactionId,
+              payment_method: paymentMethod,
             },
           };
 
