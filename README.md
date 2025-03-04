@@ -205,6 +205,7 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **AdminDashboard** - Main admin interface with persistent order notifications
 - **MenuManager** - Manage menu items and categories
 - **OrderManager** - View and process orders with real-time auto-refresh functionality
+  - **SetEtaModal** - Specialized modal for setting pickup times, with different interfaces for regular orders (5-60 minute ETA) and advance notice orders (next-day time slots)
 - **AnalyticsManager** - View business metrics
 - **RestaurantSettings** - Configure restaurant information with real-time updates
   - **Notification Channels** - Configure email and SMS preferences for customer communications
