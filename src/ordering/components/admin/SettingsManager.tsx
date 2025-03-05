@@ -42,14 +42,12 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
       case 'categories':
         return (
           <div>
-            <h3 className="text-lg font-semibold mb-4">Categories</h3>
             <CategoriesSettings restaurantId={restaurantId} />
           </div>
         );
       case 'menus':
         return (
           <div>
-            <h3 className="text-lg font-semibold mb-4">Menu Management</h3>
             <MenusSettings restaurantId={restaurantId} />
           </div>
         );
@@ -63,7 +61,6 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
       case 'payments':
         return (
           <div>
-            <h3 className="text-lg font-semibold mb-4">Payment Gateway</h3>
             <PaymentSettings />
           </div>
         );
