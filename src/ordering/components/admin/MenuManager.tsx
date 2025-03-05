@@ -1,7 +1,7 @@
-// src/components/admin/MenuManager.tsx
+// src/ordering/components/admin/MenuManager.tsx
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, BookOpen } from 'lucide-react';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
@@ -70,17 +70,28 @@ interface MenuManagerProps {
 
 export function MenuManager({ restaurantId }: MenuManagerProps) {
   const {
+    menus,
     menuItems,
+    currentMenuId,
+    loading,
+    fetchMenus,
     fetchAllMenuItemsForAdmin,
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
+    setActiveMenu
   } = useMenuStore();
 
   const { categories, fetchCategories } = useCategoryStore();
 
-  // The currently selected category ID (for filtering)
+  // The currently selected menu ID for filtering
+  const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null);
+  
+  // The currently selected category ID for filtering
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+
+  // Menu selector toggle state - open by default if no menu is selected yet
+  const [menuSelectorOpen, setMenuSelectorOpen] = useState(!selectedMenuId);
 
   // Additional filter checkboxes
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
@@ -94,15 +105,30 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
-  // On mount => fetch all items (admin) + categories
+  // On mount => fetch all items (admin) + categories + menus
   useEffect(() => {
     fetchAllMenuItemsForAdmin();
     fetchCategories();
-  }, [fetchAllMenuItemsForAdmin, fetchCategories]);
+    fetchMenus();
+  }, [fetchAllMenuItemsForAdmin, fetchCategories, fetchMenus]);
+
+  // Set the current menu as the default selected menu
+  useEffect(() => {
+    if (currentMenuId && !selectedMenuId) {
+      setSelectedMenuId(currentMenuId);
+      // Close the menu selector once we have a selected menu
+      setMenuSelectorOpen(false);
+    }
+  }, [currentMenuId, selectedMenuId]);
 
   // Filter the items in memory
   const filteredItems = useMemo(() => {
     let list = menuItems;
+
+    // Filter by menu if selected
+    if (selectedMenuId) {
+      list = list.filter(item => Number(item.menu_id) === selectedMenuId);
+    }
 
     // If a category is selected, only show items that have that category_id
     if (selectedCategory) {
@@ -117,7 +143,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       list = list.filter((item) => item.seasonal);
     }
     return list;
-  }, [menuItems, selectedCategory, showFeaturedOnly, showSeasonalOnly]);
+  }, [menuItems, selectedMenuId, selectedCategory, showFeaturedOnly, showSeasonalOnly]);
 
   // Default form data for a new item
   const initialFormData: MenuItemFormData = {
@@ -127,7 +153,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     category_ids: [],
     image: '',
     imageFile: null,
-    menu_id: 1,
+    menu_id: selectedMenuId || 1,
     advance_notice_hours: 0,
     seasonal: false,
     available_from: null,
@@ -169,7 +195,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       category_ids: item.category_ids || [],
       image: item.image || '',
       imageFile: null,
-      menu_id: (item as any).menu_id || 1,
+      menu_id: (item as any).menu_id || selectedMenuId || 1,
       advance_notice_hours: item.advance_notice_hours ?? 0,
       seasonal: !!item.seasonal,
       available_from: item.available_from || null,
@@ -189,7 +215,10 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
    * Handle adding a new item => blank form
    */
   const handleAdd = () => {
-    setEditingItem(initialFormData);
+    setEditingItem({
+      ...initialFormData,
+      menu_id: selectedMenuId || 1
+    });
     setIsEditing(true);
   };
 
@@ -216,6 +245,23 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
 
   // Use our loading overlay hook
   const { withLoading, LoadingOverlayComponent } = useLoadingOverlay();
+
+  /**
+   * Toggles for featured + seasonal filters
+   */
+  function handleToggleFeatured(checked: boolean) {
+    if (checked) setShowSeasonalOnly(false);
+    setShowFeaturedOnly(checked);
+  }
+  function handleToggleSeasonal(checked: boolean) {
+    if (checked) setShowFeaturedOnly(false);
+    setShowSeasonalOnly(checked);
+  }
+
+  // Handle setting a menu as active
+  const handleSetActiveMenu = async (id: number) => {
+    await setActiveMenu(id);
+  };
 
   /**
    * Submit the form => create or update item in the store
@@ -270,7 +316,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                 category_ids: updatedItem.category_ids || [],
                 image: updatedItem.image_url || updatedItem.image || '',
                 imageFile: null,
-                menu_id: (updatedItem as any).menu_id || 1,
+                menu_id: (updatedItem as any).menu_id || selectedMenuId || 1,
                 advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
                 seasonal: !!updatedItem.seasonal,
                 available_from: updatedItem.available_from || null,
@@ -315,7 +361,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
               category_ids: updatedItem.category_ids || [],
               image: updatedItem.image_url || updatedItem.image || '',
               imageFile: null,
-              menu_id: (updatedItem as any).menu_id || 1,
+              menu_id: (updatedItem as any).menu_id || selectedMenuId || 1,
               advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
               seasonal: !!updatedItem.seasonal,
               available_from: updatedItem.available_from || null,
@@ -341,18 +387,6 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       console.error('Failed to save menu item:', err);
     }
   };
-
-  /**
-   * Toggles for featured + seasonal filters
-   */
-  function handleToggleFeatured(checked: boolean) {
-    if (checked) setShowSeasonalOnly(false);
-    setShowFeaturedOnly(checked);
-  }
-  function handleToggleSeasonal(checked: boolean) {
-    if (checked) setShowFeaturedOnly(false);
-    setShowSeasonalOnly(checked);
-  }
 
   /**
    * Helper badge component for small labels.
@@ -385,15 +419,108 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
         <p className="text-gray-600 text-sm">Manage menu items, categories, and options</p>
       </div>
 
-      {/* Action button */}
-      <div className="flex justify-end mb-6">
-        <button
-          onClick={handleAdd}
-          className="inline-flex items-center justify-center w-fit min-w-[120px] px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Add Item
-        </button>
+      {/* Menu Selection and Add Item - Responsive Layout */}
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          {/* Menu Selection - Compact Dropdown */}
+          <div className="flex flex-col sm:flex-row sm:items-center mb-4 sm:mb-0">
+            <div className="relative inline-block w-full sm:w-64 z-10">
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Current Menu</h3>
+              
+              <button 
+                onClick={() => setMenuSelectorOpen(!menuSelectorOpen)}
+                className="w-full flex items-center justify-between bg-white text-gray-800 hover:bg-gray-50 
+                          px-3 py-2 rounded-md border border-gray-200 shadow-sm transition-all duration-150
+                          focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50"
+                aria-expanded={menuSelectorOpen}
+                aria-controls="menu-selector-dropdown"
+              >
+                <div className="flex items-center">
+                  <BookOpen className="h-4 w-4 mr-2 text-[#c1902f]" />
+                  <span className="text-sm font-medium truncate max-w-[120px]">
+                    {selectedMenuId 
+                      ? menus.find(m => m.id === selectedMenuId)?.name || 'Select Menu'
+                      : 'Select Menu'}
+                  </span>
+                  {selectedMenuId && selectedMenuId === currentMenuId && (
+                    <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-green-100 text-green-800">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <svg 
+                  className={`h-4 w-4 text-gray-500 transition-transform duration-200 ease-in-out ${menuSelectorOpen ? 'transform rotate-180' : ''}`} 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {/* Dropdown with animation */}
+              <div 
+                id="menu-selector-dropdown"
+                className={`absolute w-full mt-1 bg-white rounded-md shadow-lg border border-gray-200 overflow-hidden transition-all duration-200 ease-in-out
+                           ${menuSelectorOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}
+                style={{ transformOrigin: 'top' }}
+              >
+                <div className="py-1 max-h-60 overflow-y-auto">
+                  {menus.map(menu => (
+                    <button
+                      key={menu.id}
+                      onClick={() => {
+                        setSelectedMenuId(menu.id);
+                        setMenuSelectorOpen(false);
+                      }}
+                      className={`
+                        w-full text-left px-3 py-2 text-sm flex items-center justify-between
+                        transition-colors duration-150
+                        ${selectedMenuId === menu.id 
+                          ? 'bg-[#c1902f] bg-opacity-10 text-[#c1902f]' 
+                          : 'text-gray-700 hover:bg-gray-50'}
+                      `}
+                    >
+                      <div className="flex items-center">
+                        <BookOpen className={`h-4 w-4 mr-2 flex-shrink-0 ${selectedMenuId === menu.id ? 'text-[#c1902f]' : 'text-gray-400'}`} />
+                        <span className="truncate">{menu.name}</span>
+                      </div>
+                      {menu.id === currentMenuId && (
+                        <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-green-100 text-green-800 flex-shrink-0">
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            {/* Set active menu button - shown next to dropdown on desktop, below on mobile */}
+            {selectedMenuId && selectedMenuId !== currentMenuId && (
+              <button
+                onClick={() => handleSetActiveMenu(selectedMenuId)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center mt-2 sm:mt-6 sm:ml-4"
+              >
+                <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Set as active
+              </button>
+            )}
+          </div>
+          
+          {/* Add Item Button */}
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+            disabled={!selectedMenuId}
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Add Item
+          </button>
+        </div>
       </div>
 
       {/* Category Filter */}
@@ -449,124 +576,139 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
         </label>
       </div>
 
-      {/* Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredItems.map((item) => {
-          const fromDate = formatDate(item.available_from);
-          const untilDate = formatDate(item.available_until);
+      {/* Items Grid or Empty State */}
+      {!selectedMenuId ? (
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-lg shadow-md">
+          <div className="bg-gray-100 rounded-full p-4 mb-4">
+            <BookOpen className="h-12 w-12 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Select a Menu</h3>
+          <p className="text-gray-500 max-w-md">
+            Please select a menu from the options above to view and manage its items.
+          </p>
+        </div>
+      ) : filteredItems.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredItems.map((item) => {
+            const fromDate = formatDate(item.available_from);
+            const untilDate = formatDate(item.available_until);
 
-          // If seasonal, show a small date info line
-          let dateInfo: React.ReactNode = null;
-          if (item.seasonal && (fromDate || untilDate)) {
-            dateInfo = (
-              <p className="text-xs text-gray-600 mt-2">
-                <span className="font-semibold">Starts:</span> {fromDate || '—'}
-                <span className="mx-1 text-gray-400">•</span>
-                <span className="font-semibold">Ends:</span> {untilDate || '—'}
-              </p>
-            );
-          }
+            // If seasonal, show a small date info line
+            let dateInfo: React.ReactNode = null;
+            if (item.seasonal && (fromDate || untilDate)) {
+              dateInfo = (
+                <p className="text-xs text-gray-600 mt-2">
+                  <span className="font-semibold">Starts:</span> {fromDate || '—'}
+                  <span className="mx-1 text-gray-400">•</span>
+                  <span className="font-semibold">Ends:</span> {untilDate || '—'}
+                </p>
+              );
+            }
 
-          return (
-            <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
-              <img
-                src={item.image}
-                alt={item.name}
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4 flex flex-col flex-1">
-                <div>
-                  <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
-                  <p className="text-sm text-gray-600">{item.description}</p>
+            return (
+              <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  className="w-full h-48 object-cover"
+                />
+                <div className="p-4 flex flex-col flex-1">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-semibold">{item.name}</h3>
+                    <p className="text-sm text-gray-600">{item.description}</p>
 
-                  <div className="mt-2 flex flex-wrap">
-                    {/* Stock/featured badges */}
-                    {item.stock_status === 'out_of_stock' && (
-                      <Badge bgColor="bg-gray-600">Out of Stock</Badge>
+                    <div className="mt-2 flex flex-wrap">
+                      {/* Stock/featured badges */}
+                      {item.stock_status === 'out_of_stock' && (
+                        <Badge bgColor="bg-gray-600">Out of Stock</Badge>
+                      )}
+                      {item.stock_status === 'low_stock' && (
+                        <Badge bgColor="bg-orange-500">Low Stock</Badge>
+                      )}
+                      {(item.advance_notice_hours ?? 0) >= 24 && (
+                        <Badge bgColor="bg-red-600">24hr Notice</Badge>
+                      )}
+                      {item.seasonal && (
+                        <Badge bgColor="bg-red-500">
+                          {item.promo_label?.trim() || 'Limited Time'}
+                        </Badge>
+                      )}
+                      {item.featured && (
+                        <Badge bgColor="bg-yellow-500">Featured</Badge>
+                      )}
+                    </div>
+
+                    {/* Optional note */}
+                    {item.status_note?.trim() && (
+                      <p className="text-xs text-gray-500 mt-1 italic">
+                        {item.status_note}
+                      </p>
                     )}
-                    {item.stock_status === 'low_stock' && (
-                      <Badge bgColor="bg-orange-500">Low Stock</Badge>
-                    )}
-                    {(item.advance_notice_hours ?? 0) >= 24 && (
-                      <Badge bgColor="bg-red-600">24hr Notice</Badge>
-                    )}
-                    {item.seasonal && (
-                      <Badge bgColor="bg-red-500">
-                        {item.promo_label?.trim() || 'Limited Time'}
-                      </Badge>
-                    )}
-                    {item.featured && (
-                      <Badge bgColor="bg-yellow-500">Featured</Badge>
-                    )}
+
+                    {/* Show date range info if seasonal */}
+                    {dateInfo}
                   </div>
 
-                  {/* Optional note */}
-                  {item.status_note?.trim() && (
-                    <p className="text-xs text-gray-500 mt-1 italic">
-                      {item.status_note}
-                    </p>
-                  )}
-
-                  {/* If you want to hide category badges or positions entirely, remove this block: */}
-                  {/* 
-                  {item.category_ids?.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {item.category_ids.map((catId) => {
-                        const catObj = categories.find((c) => c.id === catId);
-                        if (!catObj) return null;
-                        return (
-                          <Badge key={catId} bgColor="bg-blue-500">
-                            {catObj.name}
-                          </Badge>
-                        );
-                      })}
+                  <div className="mt-auto flex justify-between items-center pt-4">
+                    <div className="flex items-center space-x-4">
+                      <span className="text-base sm:text-lg font-semibold">
+                        ${Number(item.price).toFixed(2)}
+                      </span>
+                      {/* Edit Item */}
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="p-2 text-gray-600 hover:text-[#c1902f]"
+                      >
+                        <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                      </button>
+                      {/* Delete Item */}
+                      <button
+                        onClick={() => {
+                          if (typeof item.id === 'string') {
+                            const numId = parseInt(item.id, 10);
+                            if (!Number.isNaN(numId)) handleDelete(numId);
+                          } else {
+                            handleDelete(item.id as number);
+                          }
+                        }}
+                        className="p-2 text-gray-600 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                      </button>
                     </div>
-                  )}
-                  */}
-
-                  {/* Show date range info if seasonal */}
-                  {dateInfo}
-                </div>
-
-                <div className="mt-auto flex justify-between items-center pt-4">
-                  {/* Example: show first category ID if present. 
-                      If you want to hide it completely, remove these lines: */}
-                  {/* <span className="text-sm text-gray-500 capitalize">
-                    {item.category_ids?.[0] || '—'}
-                  </span> */}
-
-                  <div className="flex items-center space-x-4">
-                    <span className="text-base sm:text-lg font-semibold">
-                      ${Number(item.price).toFixed(2)}
-                    </span>
-                    {/* Edit Item */}
-                    <button
-                      onClick={() => handleEdit(item)}
-                      className="p-2 text-gray-600 hover:text-[#c1902f]"
-                    >
-                      <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                    </button>
-                    {/* Delete Item */}
-                    <button
-                      onClick={() => {
-                        if (typeof item.id === 'string') {
-                          const numId = parseInt(item.id, 10);
-                          if (!Number.isNaN(numId)) handleDelete(numId);
-                        } else {
-                          handleDelete(item.id as number);
-                        }
-                      }}
-                      className="p-2 text-gray-600 hover:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                    </button>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-lg shadow-md">
+          <div className="bg-gray-100 rounded-full p-4 mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No menu items found</h3>
+          <p className="text-gray-500 max-w-md">
+            {selectedCategory 
+              ? "There are no items in this category for the current menu." 
+              : "The current menu doesn't have any items yet."}
+          </p>
+          {(showFeaturedOnly || showSeasonalOnly) && (
+            <p className="text-gray-500 mt-2">
+              Try removing the filters to see more items.
+            </p>
+          )}
+          <button
+            onClick={handleAdd}
+            className="mt-6 inline-flex items-center justify-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Add Your First Item
+          </button>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {isEditing && editingItem && (

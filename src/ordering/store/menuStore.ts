@@ -1,144 +1,289 @@
 // src/ordering/store/menuStore.ts
-
 import { create } from 'zustand';
-import { api, saveMenuItemWithImage } from '../../shared/api';
-import type { MenuItem, MenuItemFormData } from '../types/menu';
+import { menusApi, Menu } from '../../shared/api/endpoints/menus';
+import { handleApiError } from '../../shared/utils/errorHandler';
+import { MenuItem } from '../types/menu';
+import { apiClient } from '../../shared/api/apiClient';
 
-interface MenuStore {
+interface MenuState {
+  menus: Menu[];
+  currentMenuId: number | null;
   menuItems: MenuItem[];
   loading: boolean;
   error: string | null;
-
+  
+  // Actions
+  fetchMenus: () => Promise<void>;
   fetchMenuItems: () => Promise<void>;
   fetchAllMenuItemsForAdmin: () => Promise<void>;
-  addMenuItem: (item: Partial<MenuItemFormData>) => Promise<MenuItem | null>;
-  updateMenuItem: (id: string | number, updates: Partial<MenuItemFormData>) => Promise<MenuItem | null>;
-  deleteMenuItem: (id: string | number) => Promise<void>;
-
-  refreshItemInState: (updatedItem: MenuItem) => void;
+  createMenu: (name: string, restaurantId: number) => Promise<Menu | null>;
+  updateMenu: (id: number, data: Partial<Menu>) => Promise<Menu | null>;
+  deleteMenu: (id: number) => Promise<boolean>;
+  setActiveMenu: (id: number) => Promise<boolean>;
+  cloneMenu: (id: number) => Promise<Menu | null>;
+  addMenuItem: (data: any) => Promise<MenuItem | null>;
+  updateMenuItem: (id: number | string, data: any) => Promise<MenuItem | null>;
+  deleteMenuItem: (id: number | string) => Promise<boolean>;
 }
 
-export const useMenuStore = create<MenuStore>((set, get) => ({
+export const useMenuStore = create<MenuState>((set, get) => ({
+  menus: [],
+  currentMenuId: null,
   menuItems: [],
   loading: false,
   error: null,
 
-  // Public items => no ?show_all => excludes expired
+  fetchMenus: async () => {
+    set({ loading: true, error: null });
+    try {
+      const menus = await menusApi.getAll();
+      
+      // Find the current menu (if any)
+      const currentMenu = menus.find(menu => menu.active);
+      const currentMenuId = currentMenu ? currentMenu.id : null;
+      
+      set({ menus, currentMenuId, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+    }
+  },
+
+  createMenu: async (name: string, restaurantId: number) => {
+    set({ loading: true, error: null });
+    try {
+      const newMenu = await menusApi.create({
+        name,
+        active: false,
+        restaurant_id: restaurantId
+      });
+      
+      set(state => ({
+        menus: [...state.menus, newMenu],
+        loading: false
+      }));
+      
+      return newMenu;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+
+  updateMenu: async (id: number, data: Partial<Menu>) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedMenu = await menusApi.update(id, data);
+      
+      set(state => ({
+        menus: state.menus.map(menu => 
+          menu.id === id ? updatedMenu : menu
+        ),
+        loading: false
+      }));
+      
+      return updatedMenu;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+
+  deleteMenu: async (id: number) => {
+    set({ loading: true, error: null });
+    try {
+      await menusApi.delete(id);
+      
+      set(state => ({
+        menus: state.menus.filter(menu => menu.id !== id),
+        loading: false
+      }));
+      
+      return true;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return false;
+    }
+  },
+
+  setActiveMenu: async (id: number) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await menusApi.setActive(id);
+      
+      set(state => ({
+        menus: state.menus.map(menu => ({
+          ...menu,
+          active: menu.id === id
+        })),
+        currentMenuId: result.current_menu_id,
+        loading: false
+      }));
+      
+      return true;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return false;
+    }
+  },
+
+  cloneMenu: async (id: number) => {
+    set({ loading: true, error: null });
+    try {
+      const clonedMenu = await menusApi.clone(id);
+      
+      set(state => ({
+        menus: [...state.menus, clonedMenu],
+        loading: false
+      }));
+      
+      return clonedMenu;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+
   fetchMenuItems: async () => {
     set({ loading: true, error: null });
     try {
-      const itemsFromApi = await api.get<any[]>('/menu_items');
-      const finalItems = itemsFromApi.map((itm) => ({
-        ...itm,
-        image: itm.image_url || '', // Ensure image is always a string
-      })) as MenuItem[];
+      const response = await apiClient.get('/menu_items');
+      const menuItems = response.data.map((item: any) => ({
+        ...item,
+        // Ensure the image property is set for compatibility
+        image: item.image_url || '/placeholder-food.jpg'
+      }));
       
-      set({ menuItems: finalItems, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+      set({ menuItems, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
     }
   },
 
-  // Admin => show_all=1
   fetchAllMenuItemsForAdmin: async () => {
     set({ loading: true, error: null });
     try {
-      const itemsFromApi = await api.get<any[]>('/menu_items?show_all=1');
-      const finalItems = itemsFromApi.map((itm) => ({
-        ...itm,
-        image: itm.image_url || '', // Ensure image is always a string
-      })) as MenuItem[];
+      const response = await apiClient.get('/menu_items?admin=true');
+      const menuItems = response.data.map((item: any) => ({
+        ...item,
+        // Ensure the image property is set for compatibility
+        image: item.image_url || '/placeholder-food.jpg'
+      }));
       
-      set({ menuItems: finalItems, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+      set({ menuItems, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
     }
   },
 
-  // POST /menu_items - using the simplified approach
-  addMenuItem: async (item) => {
+  addMenuItem: async (data: any) => {
     set({ loading: true, error: null });
     try {
-      const { imageFile, ...rest } = item;
-      if (!rest.menu_id) rest.menu_id = 1;
+      const formData = new FormData();
       
-      const response: any = await saveMenuItemWithImage(rest, imageFile);
-
-      // Ensure we have a valid MenuItem with required fields
-      const finalItem: MenuItem = { 
-        ...response, 
-        image: response.image_url || '', // Fallback for image
-        id: String(response.id),
-        name: response.name || '',
-        description: response.description || '',
-        price: response.price || 0
+      // Handle file upload if present
+      if (data.imageFile) {
+        formData.append('menu_item[image]', data.imageFile);
+        delete data.imageFile;
+      }
+      
+      // Add all other fields
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(`menu_item[${key}]`, String(value));
+        }
+      });
+      
+      const response = await apiClient.post('/menu_items', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      const newItem = {
+        ...response.data,
+        image: response.data.image_url || '/placeholder-food.jpg'
       };
       
-      set({ menuItems: [...get().menuItems, finalItem], loading: false });
-      return finalItem;
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+      set(state => ({
+        menuItems: [...state.menuItems, newItem],
+        loading: false
+      }));
+      
+      return newItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
       return null;
     }
   },
 
-  // PATCH /menu_items/:id - using the simplified approach
-  updateMenuItem: async (id, updates) => {
+  updateMenuItem: async (id: number | string, data: any) => {
     set({ loading: true, error: null });
     try {
-      const { imageFile, ...rest } = updates;
+      const formData = new FormData();
       
-      const response: any = await saveMenuItemWithImage(rest, imageFile, id);
-
-      // Ensure we have a valid MenuItem with required fields
-      const finalItem: MenuItem = { 
-        ...response, 
-        image: response.image_url || '', // Fallback for image
-        id: String(response.id),
-        name: response.name || '',
-        description: response.description || '',
-        price: response.price || 0
+      // Handle file upload if present
+      if (data.imageFile) {
+        formData.append('menu_item[image]', data.imageFile);
+        delete data.imageFile;
+      }
+      
+      // Add all other fields
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(`menu_item[${key}]`, String(value));
+        }
+      });
+      
+      const response = await apiClient.patch(`/menu_items/${id}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      const updatedItem = {
+        ...response.data,
+        image: response.data.image_url || '/placeholder-food.jpg'
       };
       
-      const newList = get().menuItems.map((m) => (m.id === finalItem.id ? finalItem : m));
-      set({ menuItems: newList, loading: false });
-      return finalItem;
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+      set(state => ({
+        menuItems: state.menuItems.map(item => 
+          String(item.id) === String(id) ? updatedItem : item
+        ),
+        loading: false
+      }));
+      
+      return updatedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
       return null;
     }
   },
 
-  // DELETE
-  deleteMenuItem: async (id) => {
+  deleteMenuItem: async (id: number | string) => {
     set({ loading: true, error: null });
     try {
-      await api.delete(`/menu_items/${id}`);
-      const filtered = get().menuItems.filter((mi) => mi.id !== id);
-      set({ menuItems: filtered, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+      await apiClient.delete(`/menu_items/${id}`);
+      
+      set(state => ({
+        menuItems: state.menuItems.filter(item => String(item.id) !== String(id)),
+        loading: false
+      }));
+      
+      return true;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return false;
     }
-  },
-
-  // Refresh local item
-  refreshItemInState: (updatedItem) => {
-    set((state) => {
-      // Ensure we have a valid MenuItem with required fields
-      const finalItem: MenuItem = { 
-        ...updatedItem, 
-        image: updatedItem.image_url || '', // Fallback for image
-        id: String(updatedItem.id),
-        name: updatedItem.name || '',
-        description: updatedItem.description || '',
-        price: updatedItem.price || 0
-      };
-      
-      const newList = state.menuItems.map((m) =>
-        m.id === finalItem.id ? finalItem : m
-      );
-      
-      return { menuItems: newList };
-    });
-  },
+  }
 }));

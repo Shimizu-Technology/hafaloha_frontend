@@ -1,15 +1,16 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense } from 'react';
-import { Store, List, Users, CreditCard } from 'lucide-react';
+import { Store, List, Users, CreditCard, Book } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
 const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').then(module => ({ default: module.CategoriesSettings })));
+const MenusSettings = lazy(() => import('./settings/MenusSettings').then(module => ({ default: module.MenusSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
 const PaymentSettings = lazy(() => import('./settings/PaymentSettings').then(module => ({ default: module.PaymentSettings })));
 
-type SettingsTab = 'restaurant' | 'categories' | 'users' | 'payments';
+type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -21,6 +22,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const tabs = [
     { id: 'restaurant', label: 'Restaurant', icon: Store },
     { id: 'categories', label: 'Categories', icon: List },
+    { id: 'menus', label: 'Menus', icon: Book },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
   ];
@@ -42,6 +44,13 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
           <div>
             <h3 className="text-lg font-semibold mb-4">Categories</h3>
             <CategoriesSettings restaurantId={restaurantId} />
+          </div>
+        );
+      case 'menus':
+        return (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Menu Management</h3>
+            <MenusSettings restaurantId={restaurantId} />
           </div>
         );
       case 'users':
