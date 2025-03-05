@@ -90,8 +90,8 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
   // The currently selected category ID for filtering
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
-  // Menu selector toggle state - open by default if no menu is selected yet
-  const [menuSelectorOpen, setMenuSelectorOpen] = useState(!selectedMenuId);
+  // Menu selector toggle state - closed by default
+  const [menuSelectorOpen, setMenuSelectorOpen] = useState(false);
 
   // Additional filter checkboxes
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
@@ -268,6 +268,8 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
   // Handle setting a menu as active
   const handleSetActiveMenu = async (id: number) => {
     await setActiveMenu(id);
+    // Refresh menu items after setting a menu as active
+    await fetchAllMenuItemsForAdmin();
   };
 
   /**
@@ -480,9 +482,11 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                   {menus.map(menu => (
                     <button
                       key={menu.id}
-                      onClick={() => {
+                      onClick={async () => {
                         setSelectedMenuId(menu.id);
                         setMenuSelectorOpen(false);
+                        // Explicitly fetch menu items when menu changes
+                        await fetchAllMenuItemsForAdmin();
                       }}
                       className={`
                         w-full text-left px-3 py-2 text-sm flex items-center justify-between
