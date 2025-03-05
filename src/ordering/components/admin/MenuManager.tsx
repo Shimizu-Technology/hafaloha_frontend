@@ -121,6 +121,13 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     }
   }, [currentMenuId, selectedMenuId]);
 
+  // Refresh menu items when selected menu changes
+  useEffect(() => {
+    if (selectedMenuId) {
+      fetchAllMenuItemsForAdmin();
+    }
+  }, [selectedMenuId, fetchAllMenuItemsForAdmin]);
+
   // Filter the items in memory
   const filteredItems = useMemo(() => {
     let list = menuItems;
@@ -375,12 +382,15 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
             });
           }
           
-          // For new items, we might want to keep the modal open for adding options
-          // The user can close it manually when they're ready
+          // Close the form after adding a new item so the user can see it in the list
+          // They can always click edit if they want to add options or make further changes
+          setIsEditing(false);
+          setEditingItem(null);
         }
       });
       
-      // Don't close the form automatically - let the user close it when they're ready
+      // For updates, don't close the form automatically - let the user close it when they're ready
+      // This only applies to updates, not new items (which are handled above)
       // setIsEditing(false);
       // setEditingItem(null);
     } catch (err) {
