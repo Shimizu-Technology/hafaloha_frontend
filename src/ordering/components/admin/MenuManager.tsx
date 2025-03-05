@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, X, Save, BookOpen } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
@@ -184,7 +185,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
 
     const currentlyFeaturedCount = menuItems.filter((m) => m.featured).length;
     if (currentlyFeaturedCount >= 4) {
-      alert('You can only have 4 featured items at a time.');
+      toast.error('You can only have 4 featured items at a time.');
       return false;
     }
     return true;
@@ -281,6 +282,12 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
 
     // Enforce up to 4 featured
     if (!canFeatureThisItem(editingItem)) return;
+    
+    // Validate that at least one category is selected
+    if (editingItem.category_ids.length === 0) {
+      toast.error('Please select at least one category for this menu item.');
+      return;
+    }
 
     // If seasonal but no label => default "Limited Time"
     let finalLabel = editingItem.promo_label?.trim() || '';
