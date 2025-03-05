@@ -83,9 +83,30 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
     }
   };
 
-  // Handle setting a menu as active
+  // Local state for optimistic UI updates
+  const [optimisticActiveMenuId, setOptimisticActiveMenuId] = useState<number | null>(null);
+  
+  // Use optimistic ID if available, otherwise use the one from the store
+  const effectiveCurrentMenuId = optimisticActiveMenuId !== null ? optimisticActiveMenuId : currentMenuId;
+  
+  // Update optimistic state when store changes
+  useEffect(() => {
+    setOptimisticActiveMenuId(currentMenuId);
+  }, [currentMenuId]);
+
+  // Handle setting a menu as active with optimistic UI update
   const handleSetActiveMenu = async (id: number) => {
-    await setActiveMenu(id);
+    // Immediately update local state for optimistic UI
+    setOptimisticActiveMenuId(id);
+    
+    try {
+      // Update the store in the background
+      await setActiveMenu(id);
+    } catch (error) {
+      console.error("Failed to set active menu:", error);
+      // Revert to previous state if there's an error
+      setOptimisticActiveMenuId(currentMenuId);
+    }
   };
 
   // Handle cloning a menu
@@ -153,20 +174,28 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {menus.map(menu => (
-                  <tr key={menu.id} className={menu.id === currentMenuId ? 'bg-yellow-50' : ''}>
+                  <tr 
+                    key={menu.id} 
+                    className="h-16 transition-colors duration-300 ease-in-out"
+                    style={{ 
+                      backgroundColor: menu.id === effectiveCurrentMenuId ? 'rgba(254, 240, 138, 0.5)' : 'white'
+                    }}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       {menu.name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {menu.id === currentMenuId ? (
-                        <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
-                          Inactive
-                        </span>
-                      )}
+                      <div className="h-6 flex items-center">
+                        {menu.id === effectiveCurrentMenuId ? (
+                          <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
@@ -175,22 +204,24 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex space-x-2">
-                        {menu.id !== currentMenuId && (
-                          <Tooltip content="Set as Active Menu">
-                            <button 
-                              onClick={() => handleSetActiveMenu(menu.id)}
-                              className="text-blue-600 hover:text-blue-900"
-                              disabled={loading}
-                            >
-                              <Check className="h-5 w-5" />
-                            </button>
-                          </Tooltip>
-                        )}
+                        <div className="w-5 h-5 flex items-center justify-center">
+                          {menu.id !== effectiveCurrentMenuId ? (
+                            <Tooltip content="Set as Active Menu">
+                              <button 
+                                onClick={() => handleSetActiveMenu(menu.id)}
+                                className="text-blue-600 hover:text-blue-900 transition-colors duration-200"
+                                disabled={loading}
+                              >
+                                <Check className="h-5 w-5" />
+                              </button>
+                            </Tooltip>
+                          ) : null}
+                        </div>
                         
                         <Tooltip content="Edit Menu">
                           <button 
                             onClick={() => handleOpenEditModal(menu)}
-                            className="text-indigo-600 hover:text-indigo-900"
+                            className="text-indigo-600 hover:text-indigo-900 transition-colors duration-200"
                             disabled={loading}
                           >
                             <Edit2 className="h-5 w-5" />
@@ -200,7 +231,7 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
                         <Tooltip content="Clone Menu">
                           <button 
                             onClick={() => handleCloneMenu(menu.id)}
-                            className="text-orange-600 hover:text-orange-900"
+                            className="text-orange-600 hover:text-orange-900 transition-colors duration-200"
                             disabled={loading}
                           >
                             <Copy className="h-5 w-5" />
@@ -210,7 +241,7 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
                         <Tooltip content={menu.id === currentMenuId ? "Cannot delete active menu" : "Delete Menu"}>
                           <button 
                             onClick={() => handleDeleteMenu(menu.id)}
-                            className={`${menu.id === currentMenuId ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
+                            className={`transition-colors duration-200 ${menu.id === currentMenuId ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
                             disabled={loading || menu.id === currentMenuId}
                           >
                             <Trash2 className="h-5 w-5" />
@@ -229,19 +260,24 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
             {menus.map(menu => (
               <div 
                 key={menu.id} 
-                className={`bg-white rounded-lg shadow p-4 ${menu.id === currentMenuId ? 'border-l-4 border-green-500' : ''}`}
+                className="bg-white rounded-lg shadow p-4 transition-all duration-300 ease-in-out"
+                style={{
+                  borderLeft: menu.id === effectiveCurrentMenuId ? '4px solid #10b981' : '4px solid transparent'
+                }}
               >
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-medium text-gray-900">{menu.name}</h4>
-                  {menu.id === currentMenuId ? (
-                    <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                      Active
-                    </span>
-                  ) : (
-                    <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
-                      Inactive
-                    </span>
-                  )}
+                  <div className="h-6 flex items-center">
+                    {menu.id === effectiveCurrentMenuId ? (
+                      <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex items-center text-sm text-gray-500 mb-3">
@@ -251,23 +287,23 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
                 </div>
                 
                 <div className="flex justify-between border-t pt-3">
-                  {menu.id !== currentMenuId ? (
-                    <button 
-                      onClick={() => handleSetActiveMenu(menu.id)}
-                      className="flex items-center text-blue-600 text-sm"
-                      disabled={loading}
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      Set Active
-                    </button>
-                  ) : (
-                    <div className="w-20"></div>
-                  )}
+                  <div className="w-20 h-8 flex items-center">
+                    {menu.id !== effectiveCurrentMenuId ? (
+                      <button 
+                        onClick={() => handleSetActiveMenu(menu.id)}
+                        className="flex items-center text-blue-600 text-sm transition-colors duration-200"
+                        disabled={loading}
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Set Active
+                      </button>
+                    ) : null}
+                  </div>
                   
                   <div className="flex space-x-4">
                     <button 
                       onClick={() => handleOpenEditModal(menu)}
-                      className="text-indigo-600"
+                      className="text-indigo-600 transition-colors duration-200"
                       disabled={loading}
                       aria-label="Edit Menu"
                     >
@@ -276,7 +312,7 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
                     
                     <button 
                       onClick={() => handleCloneMenu(menu.id)}
-                      className="text-orange-600"
+                      className="text-orange-600 transition-colors duration-200"
                       disabled={loading}
                       aria-label="Clone Menu"
                     >
@@ -285,7 +321,7 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
                     
                     <button 
                       onClick={() => handleDeleteMenu(menu.id)}
-                      className={`${menu.id === currentMenuId ? 'text-gray-400 cursor-not-allowed' : 'text-red-600'}`}
+                      className={`transition-colors duration-200 ${menu.id === currentMenuId ? 'text-gray-400 cursor-not-allowed' : 'text-red-600'}`}
                       disabled={loading || menu.id === currentMenuId}
                       aria-label={menu.id === currentMenuId ? "Cannot delete active menu" : "Delete Menu"}
                     >
@@ -309,7 +345,7 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 transition-colors duration-200"
               >
                 <X className="h-6 w-6" />
               </button>
@@ -333,14 +369,14 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border rounded-md hover:bg-gray-50"
+                className="px-4 py-2 border rounded-md hover:bg-gray-50 transition-colors duration-200"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveMenu}
-                className="inline-flex items-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+                className="inline-flex items-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f] transition-colors duration-200"
                 disabled={loading}
               >
                 <Save className="h-5 w-5 mr-2" />

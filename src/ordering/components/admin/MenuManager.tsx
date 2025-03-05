@@ -312,9 +312,6 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
               updatedItem = await api.get(`/menu_items/${id}`);
             }
             
-            // Refresh the menu items list to show the updated item immediately
-            await fetchAllMenuItemsForAdmin();
-            
             // Update the editing item with the latest data
             if (updatedItem) {
               setEditingItem({
@@ -357,33 +354,6 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
             updatedItem = await api.get(`/menu_items/${updatedItem.id}`);
           }
           
-          // Refresh the menu items list to show the new item immediately
-          await fetchAllMenuItemsForAdmin();
-          
-          // Update the editing item with the latest data
-          if (updatedItem) {
-            setEditingItem({
-              id: Number(updatedItem.id),
-              name: updatedItem.name,
-              description: updatedItem.description,
-              price: updatedItem.price,
-              category_ids: updatedItem.category_ids || [],
-              image: updatedItem.image_url || updatedItem.image || '',
-              imageFile: null,
-              menu_id: (updatedItem as any).menu_id || selectedMenuId || 1,
-              advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
-              seasonal: !!updatedItem.seasonal,
-              available_from: updatedItem.available_from || null,
-              available_until: updatedItem.available_until || null,
-              promo_label: updatedItem.promo_label?.trim() || 'Limited Time',
-              featured: !!updatedItem.featured,
-              stock_status: updatedItem.stock_status === 'limited'
-                ? 'low_stock'
-                : (updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
-              status_note: updatedItem.status_note || '',
-            });
-          }
-          
           // Close the form after adding a new item so the user can see it in the list
           // They can always click edit if they want to add options or make further changes
           setIsEditing(false);
@@ -397,6 +367,9 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       // setEditingItem(null);
     } catch (err) {
       console.error('Failed to save menu item:', err);
+    } finally {
+      // Always refresh the menu items list after any changes
+      fetchAllMenuItemsForAdmin();
     }
   };
 
