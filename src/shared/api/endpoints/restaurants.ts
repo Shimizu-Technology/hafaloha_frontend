@@ -43,3 +43,24 @@ export const fetchRestaurantSettings = async (id: number) => {
 export const updateRestaurantSettings = async (id: number, data: any) => {
   return api.patch(`/restaurants/${id}/settings`, data);
 };
+
+/**
+ * Toggle VIP mode for a restaurant
+ */
+export const toggleVipMode = async (id: number, enabled: boolean) => {
+  return api.patch(`/restaurants/${id}/toggle_vip_mode`, { vip_enabled: enabled });
+};
+
+/**
+ * Set current event for a restaurant
+ */
+export const setCurrentEvent = async (id: number, eventId: number | null) => {
+  return api.patch(`/restaurants/${id}/set_current_event`, { event_id: eventId });
+};
+
+/**
+ * Validate a VIP code for a restaurant
+ */
+export const validateVipCode = async (restaurantId: number, code: string) => {
+  return api.post(`/restaurants/${restaurantId}/vip_access/validate_code`, { code });
+};

@@ -1,7 +1,12 @@
 // src/shared/store/restaurantStore.ts
 
 import { create } from 'zustand';
-import { fetchRestaurant, updateRestaurant as apiUpdateRestaurant } from '../api/endpoints/restaurants';
+import { 
+  fetchRestaurant, 
+  updateRestaurant as apiUpdateRestaurant,
+  toggleVipMode as apiToggleVipMode,
+  setCurrentEvent as apiSetCurrentEvent 
+} from '../api/endpoints/restaurants';
 
 export interface Restaurant {
   id: number;
@@ -13,6 +18,13 @@ export interface Restaurant {
   default_reservation_length: number;
   admin_settings: Record<string, any>;
   allowed_origins: string[];
+  // VIP-related fields
+  vip_only_checkout?: boolean;
+  vip_enabled?: boolean;
+  code_prefix?: string;
+  current_event_id?: number;
+  current_layout_id?: number;
+  current_seat_count?: number;
 }
 
 interface RestaurantStore {
@@ -21,6 +33,8 @@ interface RestaurantStore {
   error: string | null;
   fetchRestaurant: () => Promise<void>;
   updateRestaurant: (data: Partial<Restaurant>) => Promise<void>;
+  toggleVipMode: (enabled: boolean) => Promise<any>;
+  setCurrentEvent: (eventId: number | null) => Promise<any>;
 }
 
 export const useRestaurantStore = create<RestaurantStore>((set, get) => ({
@@ -64,4 +78,49 @@ export const useRestaurantStore = create<RestaurantStore>((set, get) => ({
       throw err; // Re-throw to allow the component to handle the error
     }
   },
+  toggleVipMode: async (enabled: boolean) => {
+    const { restaurant } = get();
+    if (!restaurant) return;
+
+    set({ loading: true, error: null });
+    try {
+      const result = await apiToggleVipMode(restaurant.id, enabled);
+      set({ 
+        restaurant: { 
+          ...restaurant, 
+          vip_enabled: enabled 
+        },
+        loading: false 
+      });
+      return result;
+    } catch (err: any) {
+      console.error('Failed to toggle VIP mode:', err);
+      set({ 
+        error: err.message || 'Failed to toggle VIP mode', 
+        loading: false 
+      });
+      throw err;
+    }
+  },
+  setCurrentEvent: async (eventId: number | null) => {
+    const { restaurant } = get();
+    if (!restaurant) return;
+
+    set({ loading: true, error: null });
+    try {
+      const result = await apiSetCurrentEvent(restaurant.id, eventId);
+      set({ 
+        restaurant: result as Restaurant, 
+        loading: false 
+      });
+      return result;
+    } catch (err: any) {
+      console.error('Failed to set current event:', err);
+      set({ 
+        error: err.message || 'Failed to set current event', 
+        loading: false 
+      });
+      throw err;
+    }
+  }
 }));

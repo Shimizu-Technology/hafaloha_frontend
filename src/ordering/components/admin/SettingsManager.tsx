@@ -1,7 +1,7 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense } from 'react';
-import { Store, List, Users, CreditCard, Book } from 'lucide-react';
+import { Store, List, Users, CreditCard, Book, Lock } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
@@ -9,8 +9,10 @@ const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').th
 const MenusSettings = lazy(() => import('./settings/MenusSettings').then(module => ({ default: module.MenusSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
 const PaymentSettings = lazy(() => import('./settings/PaymentSettings').then(module => ({ default: module.PaymentSettings })));
+const VipModeToggle = lazy(() => import('./settings/VipModeToggle').then(module => ({ default: module.VipModeToggle })));
+const VipCodesManager = lazy(() => import('./settings/VipCodesManager').then(module => ({ default: module.VipCodesManager })));
 
-type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments';
+type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments' | 'vip-access';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -25,6 +27,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'menus', label: 'Menus', icon: Book },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
+    { id: 'vip-access', label: 'VIP Access', icon: Lock },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -62,6 +65,16 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         return (
           <div>
             <PaymentSettings />
+          </div>
+        );
+      case 'vip-access':
+        return (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">VIP Access Settings</h3>
+            <div className="space-y-6">
+              <VipModeToggle className="mb-6" />
+              <VipCodesManager />
+            </div>
           </div>
         );
       default:

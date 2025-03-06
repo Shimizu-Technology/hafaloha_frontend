@@ -7,7 +7,9 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { usePromoStore } from '../store/promoStore';
 import { useOrderStore } from '../store/orderStore';
+import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { PickupInfo } from './location/PickupInfo';
+import { VipCodeInput } from './VipCodeInput';
 
 interface CheckoutFormData {
   name: string;
@@ -18,6 +20,7 @@ interface CheckoutFormData {
   cvv: string;
   specialInstructions: string;
   promoCode: string;
+  vipCode: string;
 }
 
 /**
@@ -47,11 +50,14 @@ export function CheckoutPage() {
     cvv: '',
     specialInstructions: '',
     promoCode: '',
+    vipCode: '',
   };
 
+  const restaurant = useRestaurantStore((state) => state.restaurant);
   const [formData, setFormData] = useState<CheckoutFormData>(initialFormData);
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
+  const [vipCodeValid, setVipCodeValid] = useState(false);
 
   // If phone is blank => prefill +1671
   useEffect(() => {
@@ -102,6 +108,11 @@ export function CheckoutPage() {
     }
   }
 
+  const handleVipCodeChange = (code: string, valid: boolean) => {
+    setFormData((prev) => ({ ...prev, vipCode: code }));
+    setVipCodeValid(valid);
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -118,6 +129,12 @@ export function CheckoutPage() {
       return;
     }
 
+    // Check for VIP-only mode
+    if (restaurant?.vip_only_checkout && !vipCodeValid) {
+      toast.error('Please enter a valid VIP code to continue');
+      return;
+    }
+
     try {
       const newOrder = await addOrder(
         cartItems,
@@ -125,7 +142,10 @@ export function CheckoutPage() {
         formData.specialInstructions,
         formData.name,
         finalPhone,
-        formData.email
+        formData.email,
+        undefined,
+        'credit_card',
+        formData.vipCode
       );
 
       toast.success('Order placed successfully!');
@@ -289,6 +309,11 @@ export function CheckoutPage() {
                 </div>
               </div>
             </div>
+
+            {/* VIP Code Input (only appears when restaurant is in VIP-only mode) */}
+            {restaurant?.vip_only_checkout && (
+              <VipCodeInput onChange={handleVipCodeChange} />
+            )}
 
             {/* Special Instructions */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">

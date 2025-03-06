@@ -1,0 +1,287 @@
+// src/ordering/components/admin/settings/VipEventSettings.tsx
+
+import React, { useState, useEffect } from 'react';
+import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
+import { 
+  getSpecialEvents, 
+  getVipCodes, 
+  generateVipCodes 
+} from '../../../../shared/api/endpoints/specialEvents';
+import { LoadingSpinner } from '../../../../shared/components/ui/LoadingSpinner';
+import { toast } from 'react-hot-toast';
+
+interface SpecialEvent {
+  id: number;
+  description: string;
+  event_date: string;
+  vip_only_checkout?: boolean;
+  code_prefix?: string;
+}
+
+interface VipAccessCode {
+  id: number;
+  code: string;
+  name: string;
+  max_uses?: number;
+  current_uses: number;
+  expires_at?: string;
+  is_active: boolean;
+  group_id?: string;
+}
+
+export const VipEventSettings: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [specialEvents, setSpecialEvents] = useState<SpecialEvent[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<SpecialEvent | null>(null);
+  const [vipCodes, setVipCodes] = useState<VipAccessCode[]>([]);
+  const [codeGenParams, setCodeGenParams] = useState({
+    batch: true,
+    count: 10,
+    name: '',
+    maxUses: '',
+  });
+  
+  const { restaurant, setCurrentEvent } = useRestaurantStore();
+  
+  // Fetch special events and VIP codes
+  useEffect(() => {
+    if (!restaurant?.id) return;
+    
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const events = await getSpecialEvents(restaurant.id);
+        setSpecialEvents(events);
+        
+        if (restaurant.current_event_id) {
+          const currentEvent = events.find(e => e.id === restaurant.current_event_id);
+          if (currentEvent) {
+            setSelectedEvent(currentEvent);
+            const codes = await getVipCodes(currentEvent.id);
+            setVipCodes(codes);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load events');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [restaurant?.id, restaurant?.current_event_id]);
+  
+  const handleEventChange = async (eventId: string) => {
+    const id = parseInt(eventId);
+    const event = specialEvents.find(e => e.id === id);
+    setSelectedEvent(event || null);
+    
+    if (id) {
+      try {
+        setLoading(true);
+        await setCurrentEvent(id);
+        const codes = await getVipCodes(id);
+        setVipCodes(codes);
+        toast.success('Event set as current event');
+      } catch (error) {
+        console.error('Error setting current event:', error);
+        toast.error('Failed to set current event');
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      try {
+        setLoading(true);
+        await setCurrentEvent(null);
+        setVipCodes([]);
+        toast.success('Current event cleared');
+      } catch (error) {
+        console.error('Error clearing current event:', error);
+        toast.error('Failed to clear current event');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+  
+  const handleGenerateCodes = async () => {
+    if (!selectedEvent) return;
+    
+    try {
+      setLoading(true);
+      const params = {
+        batch: codeGenParams.batch,
+        count: parseInt(codeGenParams.count.toString()),
+        name: codeGenParams.name,
+        max_uses: codeGenParams.maxUses ? parseInt(codeGenParams.maxUses) : undefined,
+      };
+      
+      await generateVipCodes(selectedEvent.id, params);
+      toast.success(`Generated ${codeGenParams.batch ? params.count : 1} VIP code(s)`);
+      
+      // Refresh VIP codes list
+      const updatedCodes = await getVipCodes(selectedEvent.id);
+      setVipCodes(updatedCodes);
+    } catch (error) {
+      console.error('Error generating VIP codes:', error);
+      toast.error('Failed to generate VIP codes');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+  
+  if (loading && !specialEvents.length) return <LoadingSpinner />;
+  
+  return (
+    <div className="space-y-8">
+      <h2 className="text-xl font-bold">VIP Event Settings</h2>
+      
+      {/* Event selection */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h3 className="font-semibold mb-4">Select Special Event</h3>
+        <select
+          value={selectedEvent?.id || ''}
+          onChange={(e) => handleEventChange(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+        >
+          <option value="">-- Select an event --</option>
+          {specialEvents.map(event => (
+            <option key={event.id} value={event.id}>
+              {event.description} ({formatDate(event.event_date)})
+            </option>
+          ))}
+        </select>
+      </div>
+      
+      {/* VIP code generation - only show if an event is selected */}
+      {selectedEvent && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h3 className="font-semibold mb-4">Generate VIP Codes</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Generation Type
+              </label>
+              <div className="flex space-x-4">
+                <label className="inline-flex items-center">
+                  <input
+                    type="radio"
+                    className="form-radio text-amber-600"
+                    checked={codeGenParams.batch}
+                    onChange={() => setCodeGenParams({...codeGenParams, batch: true})}
+                  />
+                  <span className="ml-2">Batch (Multiple Codes)</span>
+                </label>
+                <label className="inline-flex items-center">
+                  <input
+                    type="radio"
+                    className="form-radio text-amber-600"
+                    checked={!codeGenParams.batch}
+                    onChange={() => setCodeGenParams({...codeGenParams, batch: false})}
+                  />
+                  <span className="ml-2">Single Group Code</span>
+                </label>
+              </div>
+            </div>
+            
+            <div className="grid md:grid-cols-2 gap-4">
+              {codeGenParams.batch && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Number of Codes
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={codeGenParams.count}
+                    onChange={(e) => setCodeGenParams({...codeGenParams, count: parseInt(e.target.value) || 1})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Code Name/Label
+                </label>
+                <input
+                  type="text"
+                  value={codeGenParams.name}
+                  onChange={(e) => setCodeGenParams({...codeGenParams, name: e.target.value})}
+                  placeholder={codeGenParams.batch ? "Individual VIP" : "Group VIP"}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              
+              {!codeGenParams.batch && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Uses (blank for unlimited)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={codeGenParams.maxUses}
+                    onChange={(e) => setCodeGenParams({...codeGenParams, maxUses: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              )}
+            </div>
+            
+            <button
+              onClick={handleGenerateCodes}
+              disabled={loading}
+              className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Generating...' : 'Generate VIP Codes'}
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* VIP codes list - only show if codes exist */}
+      {selectedEvent && vipCodes.length > 0 && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h3 className="font-semibold mb-4">VIP Codes</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uses</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {vipCodes.map(code => (
+                  <tr key={code.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{code.code}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{code.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {code.current_uses} / {code.max_uses || '∞'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        code.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {code.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

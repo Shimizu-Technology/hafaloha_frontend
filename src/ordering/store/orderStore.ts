@@ -33,7 +33,8 @@ interface OrderStore {
     contactPhone?: string,
     contactEmail?: string,
     transactionId?: string,
-    paymentMethod?: string
+    paymentMethod?: string,
+    vipCode?: string
   ) => Promise<Order>;
 
   /** Update just status + optional pickupTime. */
@@ -142,7 +143,8 @@ export const useOrderStore = create<OrderStore>()(
         contactPhone,
         contactEmail,
         transactionId,
-        paymentMethod = 'credit_card'
+        paymentMethod = 'credit_card',
+        vipCode
       ) => {
         set({ loading: true, error: null });
         try {
@@ -163,6 +165,7 @@ export const useOrderStore = create<OrderStore>()(
               contact_email: contactEmail,
               transaction_id: transactionId,
               payment_method: paymentMethod,
+              vip_code: vipCode,
             },
           };
 
