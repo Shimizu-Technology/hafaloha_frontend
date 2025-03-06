@@ -1,7 +1,11 @@
 // src/shared/store/restaurantStore.ts
 
 import { create } from 'zustand';
-import { fetchRestaurant, updateRestaurant as apiUpdateRestaurant } from '../api/endpoints/restaurants';
+import { 
+  fetchRestaurant, 
+  updateRestaurant as apiUpdateRestaurant,
+  toggleVipMode as apiToggleVipMode
+} from '../api/endpoints/restaurants';
 
 export interface Restaurant {
   id: number;
@@ -13,6 +17,12 @@ export interface Restaurant {
   default_reservation_length: number;
   admin_settings: Record<string, any>;
   allowed_origins: string[];
+  current_event_id?: number;
+  current_menu_id?: number;
+  vip_only_checkout?: boolean;
+  vip_only_mode?: boolean; // Deprecated: Use vip_enabled instead
+  vip_enabled?: boolean;
+  code_prefix?: string;
 }
 
 interface RestaurantStore {
@@ -21,6 +31,7 @@ interface RestaurantStore {
   error: string | null;
   fetchRestaurant: () => Promise<void>;
   updateRestaurant: (data: Partial<Restaurant>) => Promise<void>;
+  toggleVipMode: (enabled: boolean) => Promise<void>;
 }
 
 export const useRestaurantStore = create<RestaurantStore>((set, get) => ({
@@ -59,6 +70,33 @@ export const useRestaurantStore = create<RestaurantStore>((set, get) => ({
       console.error('Failed to update restaurant:', err);
       set({ 
         error: err.message || 'Failed to update restaurant', 
+        loading: false 
+      });
+      throw err; // Re-throw to allow the component to handle the error
+    }
+  },
+  toggleVipMode: async (enabled: boolean) => {
+    const { restaurant } = get();
+    if (!restaurant) return;
+
+    set({ loading: true, error: null });
+    try {
+      // Toggle VIP mode on the server
+      await apiToggleVipMode(restaurant.id, enabled);
+      
+      // Update in the store
+      set({ 
+        restaurant: { 
+          ...restaurant, 
+          vip_only_mode: enabled, // For backward compatibility
+          vip_enabled: enabled 
+        },
+        loading: false 
+      });
+    } catch (err: any) {
+      console.error('Failed to toggle VIP mode:', err);
+      set({ 
+        error: err.message || 'Failed to toggle VIP mode', 
         loading: false 
       });
       throw err; // Re-throw to allow the component to handle the error

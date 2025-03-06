@@ -16,7 +16,10 @@ const ORDERING_RESTAURANT_CONTEXT_ENDPOINTS = [
   'menu_items',
   'option_groups',
   'options',
-  'promo_codes'
+  'promo_codes',
+  'special_events',
+  'vip_access_codes',
+  'vip_access'
 ];
 
 // Endpoints that require restaurant_id parameter for reservations
@@ -78,14 +81,18 @@ axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   
   // Add restaurant_id to params for endpoints that need it, regardless of authentication
   if (config.url && needsRestaurantContext(config.url)) {
-    // Get restaurant ID from token if available, otherwise use default
-    const restaurantId = token ? getRestaurantId(token) : null;
-    const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
-    const finalRestaurantId = restaurantId || defaultId;
+    // Check if restaurant_id is already in the URL or params
+    const urlHasRestaurantId = config.url.includes('restaurant_id=');
+    const paramsHasRestaurantId = config.params && config.params.restaurant_id;
     
-    if (finalRestaurantId) {
-      config.params = config.params || {};
-      if (!config.params.restaurant_id) {
+    if (!urlHasRestaurantId && !paramsHasRestaurantId) {
+      // Get restaurant ID from token if available, otherwise use default
+      const restaurantId = token ? getRestaurantId(token) : null;
+      const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
+      const finalRestaurantId = restaurantId || defaultId;
+      
+      if (finalRestaurantId) {
+        config.params = config.params || {};
         config.params.restaurant_id = finalRestaurantId;
       }
     }

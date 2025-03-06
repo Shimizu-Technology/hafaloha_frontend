@@ -1,7 +1,7 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense } from 'react';
-import { Store, List, Users, CreditCard, Book } from 'lucide-react';
+import { Store, List, Users, CreditCard, Book, Lock } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
@@ -9,8 +9,9 @@ const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').th
 const MenusSettings = lazy(() => import('./settings/MenusSettings').then(module => ({ default: module.MenusSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
 const PaymentSettings = lazy(() => import('./settings/PaymentSettings').then(module => ({ default: module.PaymentSettings })));
+const VipEventSettings = lazy(() => import('./settings/VipEventSettings').then(module => ({ default: module.VipEventSettings })));
 
-type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments';
+type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments' | 'vip-events';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -25,6 +26,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'menus', label: 'Menus', icon: Book },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
+    { id: 'vip-events', label: 'VIP Events', icon: Lock },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -62,6 +64,12 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         return (
           <div>
             <PaymentSettings />
+          </div>
+        );
+      case 'vip-events':
+        return (
+          <div>
+            <VipEventSettings />
           </div>
         );
       default:

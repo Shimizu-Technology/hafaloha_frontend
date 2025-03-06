@@ -32,6 +32,7 @@ interface OrderStore {
     contactName?: string,
     contactPhone?: string,
     contactEmail?: string,
+    vipCode?: string,
     transactionId?: string,
     paymentMethod?: string
   ) => Promise<Order>;
@@ -141,6 +142,7 @@ export const useOrderStore = create<OrderStore>()(
         contactName,
         contactPhone,
         contactEmail,
+        vipCode,
         transactionId,
         paymentMethod = 'credit_card'
       ) => {
@@ -163,7 +165,8 @@ export const useOrderStore = create<OrderStore>()(
               contact_email: contactEmail,
               transaction_id: transactionId,
               payment_method: paymentMethod,
-            },
+              vip_code: vipCode
+            }
           };
 
           const newOrder = await api.post<Order>('/orders', payload);

@@ -43,3 +43,11 @@ export const fetchRestaurantSettings = async (id: number) => {
 export const updateRestaurantSettings = async (id: number, data: any) => {
   return api.patch(`/restaurants/${id}/settings`, data);
 };
+
+/**
+ * Toggle VIP-only mode for a restaurant
+ */
+export const toggleVipMode = async (id: number, enabled: boolean) => {
+  return api.patch(`/restaurants/${id}/toggle_vip_mode`, { vip_only_mode: enabled });
+  // Note: The backend expects vip_only_mode parameter but internally maps it to vip_enabled
+};

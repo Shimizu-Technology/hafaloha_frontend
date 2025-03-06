@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { usePromoStore } from '../store/promoStore';
 import { useOrderStore } from '../store/orderStore';
 import { PickupInfo } from './location/PickupInfo';
+import { VipCodeInput } from './VipCodeInput';
 
 interface CheckoutFormData {
   name: string;
@@ -18,6 +19,7 @@ interface CheckoutFormData {
   cvv: string;
   specialInstructions: string;
   promoCode: string;
+  vipCode: string;
 }
 
 /**
@@ -47,11 +49,13 @@ export function CheckoutPage() {
     cvv: '',
     specialInstructions: '',
     promoCode: '',
+    vipCode: '',
   };
 
   const [formData, setFormData] = useState<CheckoutFormData>(initialFormData);
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
+  const [validVipCode, setValidVipCode] = useState<string | null>(null);
 
   // If phone is blank => prefill +1671
   useEffect(() => {
@@ -102,6 +106,12 @@ export function CheckoutPage() {
     }
   }
 
+  // Handle valid VIP code from the VipCodeInput component
+  const handleValidVipCode = (code: string) => {
+    setValidVipCode(code);
+    setFormData(prev => ({ ...prev, vipCode: code }));
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -125,7 +135,10 @@ export function CheckoutPage() {
         formData.specialInstructions,
         formData.name,
         finalPhone,
-        formData.email
+        formData.email,
+        validVipCode || undefined,
+        undefined, // transactionId
+        'credit_card' // paymentMethod
       );
 
       toast.success('Order placed successfully!');
@@ -301,6 +314,21 @@ export function CheckoutPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-md
                   focus:ring-[#c1902f] focus:border-[#c1902f]"
                 rows={3}
+              />
+            </div>
+
+            {/* VIP Code */}
+            <div className="mb-6">
+              <VipCodeInput 
+                value={formData.vipCode}
+                onChange={(value) => setFormData(prev => ({ ...prev, vipCode: value }))}
+                onValidation={(isValid) => {
+                  if (isValid) {
+                    handleValidVipCode(formData.vipCode);
+                  } else {
+                    setValidVipCode(null);
+                  }
+                }}
               />
             </div>
 
