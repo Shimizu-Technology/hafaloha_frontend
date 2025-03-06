@@ -45,6 +45,7 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
       // If phone isn't blank => validate it
       if (finalPhone && !isValidPhone(finalPhone)) {
         toast.error('Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567');
+        setLoading(false);
         return;
       }
 
@@ -121,10 +122,10 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
     <div
       className="
         fixed inset-0 z-[9999] flex items-center justify-center
-        bg-black bg-opacity-50
+        bg-black bg-opacity-50 backdrop-blur-sm animate-fadeIn transition-all duration-300
       "
     >
-      <div className="bg-white w-full max-w-md rounded shadow-lg p-6 relative mx-2">
+      <div className="bg-white w-full max-w-md rounded shadow-lg p-6 relative mx-2 animate-slideUp transform-gpu will-change-transform">
         <h2 className="text-xl font-semibold mb-4">
           {isCreateMode ? 'Create User' : 'Edit User'}
         </h2>
@@ -141,7 +142,8 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
               onChange={(e) => setEmail(e.target.value)}
               required
               className="mt-1 block w-full border border-gray-300 rounded-md
-                         focus:ring-[#c1902f] focus:border-[#c1902f] p-2"
+                         focus:ring-[#c1902f] focus:border-[#c1902f] p-2
+                         transition-colors duration-200"
             />
           </div>
 
@@ -156,7 +158,8 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 className="mt-1 w-full border border-gray-300 rounded-md
-                           focus:ring-[#c1902f] focus:border-[#c1902f] p-2"
+                           focus:ring-[#c1902f] focus:border-[#c1902f] p-2
+                           transition-colors duration-200"
               />
             </div>
             <div className="flex-1">
@@ -168,7 +171,8 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 className="mt-1 w-full border border-gray-300 rounded-md
-                           focus:ring-[#c1902f] focus:border-[#c1902f] p-2"
+                           focus:ring-[#c1902f] focus:border-[#c1902f] p-2
+                           transition-colors duration-200"
               />
             </div>
           </div>
@@ -186,7 +190,8 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
               placeholder="+1671"
               required
               className="mt-1 w-full border border-gray-300 rounded-md
-                         focus:ring-[#c1902f] focus:border-[#c1902f] p-2"
+                         focus:ring-[#c1902f] focus:border-[#c1902f] p-2
+                         transition-colors duration-200"
             />
             {phone && (
               <p className="mt-1 text-sm text-gray-500">
@@ -206,7 +211,7 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
               required
               className="mt-1 block w-full border border-gray-300 rounded-md
                          focus:ring-[#c1902f] focus:border-[#c1902f] 
-                         p-2 text-base"
+                         p-2 text-base transition-colors duration-200"
             >
               <option value="customer">Customer</option>
               <option value="admin">Admin</option>
@@ -223,9 +228,18 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
               onClick={handleResendInvite}
               disabled={loading}
               className="px-3 py-2 text-sm bg-blue-600 text-white rounded 
-                         hover:bg-blue-700"
+                         hover:bg-blue-700 transition-colors duration-200
+                         disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Send Invite/Reset Link
+              {loading ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Sending...
+                </span>
+              ) : 'Send Invite/Reset Link'}
             </button>
           )}
 
@@ -236,9 +250,10 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
               onClick={handleDelete}
               disabled={loading}
               className="px-3 py-2 text-sm text-white bg-red-600 
-                         rounded hover:bg-red-700"
+                         rounded hover:bg-red-700 transition-colors duration-200
+                         disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Delete
+              {loading ? 'Deleting...' : 'Delete'}
             </button>
           )}
 
@@ -246,7 +261,7 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
             type="button"
             onClick={() => onClose(false)}
             className="px-3 py-2 text-sm text-gray-600 border border-gray-300
-                       rounded hover:bg-gray-50"
+                       rounded hover:bg-gray-50 transition-colors duration-200"
           >
             Cancel
           </button>
@@ -256,9 +271,19 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
             disabled={loading}
             onClick={handleSave}
             className="px-3 py-2 text-sm text-white bg-[#c1902f]
-                       rounded hover:bg-[#d4a43f]"
+                       rounded hover:bg-[#d4a43f] transition-all duration-200
+                       transform hover:scale-[1.02] active:scale-[0.98]
+                       disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Saving...' : isCreateMode ? 'Create' : 'Save'}
+            {loading ? (
+              <span className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {isCreateMode ? 'Creating...' : 'Saving...'}
+              </span>
+            ) : (isCreateMode ? 'Create' : 'Save')}
           </button>
         </div>
       </div>

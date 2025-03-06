@@ -310,7 +310,11 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           // Skeleton loading state
           <div className="space-y-4">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={`skeleton-${index}`} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse">
+              <div 
+                key={`skeleton-${index}`} 
+                className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse animate-fadeIn"
+                style={{ animationDelay: `${index * 150}ms` }}
+              >
                 {/* Skeleton header */}
                 <div className="flex justify-between items-center p-3 border-b border-gray-100">
                   <div>
@@ -359,8 +363,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         ) : (
           <div>
             <div className="space-y-4 mb-6">
-              {currentOrders.map(order => (
-                <div key={order.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {currentOrders.map((order, index) => (
+                <div 
+                  key={order.id} 
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-slideUp"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
                   {/* Order header - more compact for mobile */}
                   <div className="flex justify-between items-center p-3 border-b border-gray-100">
                     <div>

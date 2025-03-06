@@ -56,8 +56,8 @@ export function SetEtaModal({
   const etaOptions = requiresAdvanceNotice ? advanceNoticeOptions : regularEtaOptions;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-md w-full max-w-sm p-5 relative">
+    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-white rounded-lg shadow-md w-full max-w-sm p-5 relative animate-slideUp">
         <button
           onClick={onClose}
           className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"

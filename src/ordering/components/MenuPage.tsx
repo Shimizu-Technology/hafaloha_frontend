@@ -124,14 +124,14 @@ export function MenuPage() {
       {/* Menu Items Grid with min-height to prevent layout shift */}
       <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
         {loading ? (
-          <div className="animate-fadeIn transition-opacity duration-300">
+          <div className="transition-opacity duration-300">
             <MenuItemSkeletonGrid count={6} />
           </div>
         ) : (
           <div className="animate-fadeIn transition-opacity duration-300">
             {filteredItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-                {filteredItems.map((item) => (
+                {filteredItems.map((item, index) => (
                   <MenuItem key={item.id} item={item} />
                 ))}
               </div>

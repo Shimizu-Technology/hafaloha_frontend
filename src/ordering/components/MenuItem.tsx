@@ -8,9 +8,10 @@ import type { MenuItem as MenuItemType } from '../types/menu';
 
 interface MenuItemProps {
   item: MenuItemType;
+  index?: number;
 }
 
-export function MenuItem({ item }: MenuItemProps) {
+export function MenuItem({ item, index }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
 
   const [showCustomization, setShowCustomization] = useState(false);
@@ -30,10 +31,8 @@ export function MenuItem({ item }: MenuItemProps) {
       {
         id: item.id,
         name: item.name,
-        description: item.description,
         price: item.price,
-        image: item.image,
-        customizations: {},
+        customizations: [],
       },
       1
     );
@@ -54,7 +53,7 @@ export function MenuItem({ item }: MenuItemProps) {
     ? (item as any).promo_label?.trim() || 'Limited Time'
     : null;
 
-  // Format available_until as “February 17, 2025,” etc.
+  // Format available_until as "February 17, 2025," etc.
   let formattedUntil = '';
   if (item.seasonal && item.available_until) {
     try {
@@ -74,7 +73,7 @@ export function MenuItem({ item }: MenuItemProps) {
   return (
     <>
       <div
-        className={`bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[380px]
+        className={`bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-[380px] animate-fadeIn
           ${isOutOfStock ? 'opacity-70' : ''}
         `}
       >
@@ -170,7 +169,7 @@ export function MenuItem({ item }: MenuItemProps) {
         </div>
       </div>
 
-      {/* If user chooses “Customize,” show the modal */}
+      {/* If user chooses "Customize," show the modal */}
       {showCustomization && (
         <CustomizationModal
           item={item}

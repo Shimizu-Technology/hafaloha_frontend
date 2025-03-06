@@ -572,7 +572,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
 
       {/* Items Grid or Empty State */}
       {!selectedMenuId ? (
-        <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-lg shadow-md">
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-lg shadow-md animate-fadeIn">
           <div className="bg-gray-100 rounded-full p-4 mb-4">
             <BookOpen className="h-12 w-12 text-gray-400" />
           </div>
@@ -583,7 +583,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
         </div>
       ) : filteredItems.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredItems.map((item) => {
+          {filteredItems.map((item, index) => {
             const fromDate = formatDate(item.available_from);
             const untilDate = formatDate(item.available_until);
 
@@ -600,7 +600,10 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
             }
 
             return (
-              <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+              <div 
+                key={item.id} 
+                className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col animate-fadeIn"
+              >
                 <img
                   src={item.image}
                   alt={item.name}
@@ -706,8 +709,8 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
 
       {/* Add/Edit Modal */}
       {isEditing && editingItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-lg max-w-md sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 animate-slideUp">
             {/* Modal Header */}
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold">
@@ -1456,8 +1459,8 @@ function OptionGroupsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn transition-all duration-300">
+      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 animate-slideUp transform-gpu will-change-transform">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">
             Manage Option Groups for: {item.name}
@@ -1468,7 +1471,46 @@ function OptionGroupsModal({
         </div>
 
         {loading ? (
-          <p>Loading...</p>
+          <div className="space-y-6 animate-pulse">
+            {/* Skeleton for "Add Option Group" section */}
+            <div className="border-b pb-4 mb-4">
+              <div className="h-6 w-48 bg-gray-200 rounded mb-4"></div>
+              <div className="flex flex-wrap gap-2">
+                <div className="h-9 w-40 bg-gray-200 rounded"></div>
+                <div className="h-9 w-20 bg-gray-200 rounded"></div>
+                <div className="h-9 w-20 bg-gray-200 rounded"></div>
+                <div className="h-9 w-24 bg-gray-200 rounded"></div>
+                <div className="h-9 w-32 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+            
+            {/* Skeleton for option groups */}
+            {[1, 2].map((i) => (
+              <div key={i} className="border rounded-md p-4 mb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="w-full">
+                    <div className="h-7 w-48 bg-gray-200 rounded mb-2"></div>
+                    <div className="flex space-x-4">
+                      <div className="h-5 w-24 bg-gray-200 rounded"></div>
+                      <div className="h-5 w-24 bg-gray-200 rounded"></div>
+                      <div className="h-5 w-32 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 ml-2">
+                  <div className="h-8 w-28 bg-gray-200 rounded mb-4"></div>
+                  {[1, 2, 3].map((j) => (
+                    <div key={j} className="flex items-center justify-between mt-2">
+                      <div className="h-6 w-48 bg-gray-200 rounded"></div>
+                      <div className="h-6 w-24 bg-gray-200 rounded"></div>
+                      <div className="h-6 w-8 bg-gray-200 rounded"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <>
             {/* Create Group */}
@@ -1650,13 +1692,13 @@ function OptionGroupsModal({
         <div className="mt-4 flex justify-end space-x-2">
           <button
             onClick={handleClose}
-            className="px-4 py-2 border rounded-md hover:bg-gray-50"
+            className="px-4 py-2 border rounded-md hover:bg-gray-50 transition-colors duration-200"
           >
             Close (Discard)
           </button>
           <button
             onClick={handleSaveAllChanges}
-            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f] transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
           >
             <Save className="h-5 w-5 mr-2 inline" />
             Save Changes

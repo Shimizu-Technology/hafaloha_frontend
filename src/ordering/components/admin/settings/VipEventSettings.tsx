@@ -135,19 +135,48 @@ export const VipEventSettings: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
   
-  if (loading && !specialEvents.length) return <LoadingSpinner />;
+  if (loading && !specialEvents.length) {
+    return (
+      <div className="space-y-8 animate-fadeIn">
+        <h2 className="text-xl font-bold">VIP Event Settings</h2>
+        
+        {/* Skeleton for event selection */}
+        <div className="bg-white p-6 rounded-lg shadow animate-pulse">
+          <div className="h-6 w-48 bg-gray-200 rounded mb-4"></div>
+          <div className="h-10 w-full bg-gray-200 rounded"></div>
+        </div>
+        
+        {/* Skeleton for VIP code generation */}
+        <div className="bg-white p-6 rounded-lg shadow animate-pulse">
+          <div className="h-6 w-48 bg-gray-200 rounded mb-4"></div>
+          <div className="space-y-4">
+            <div className="h-6 w-36 bg-gray-200 rounded"></div>
+            <div className="flex space-x-4">
+              <div className="h-5 w-32 bg-gray-200 rounded"></div>
+              <div className="h-5 w-32 bg-gray-200 rounded"></div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="h-10 w-full bg-gray-200 rounded"></div>
+              <div className="h-10 w-full bg-gray-200 rounded"></div>
+            </div>
+            <div className="h-10 w-40 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-8">
       <h2 className="text-xl font-bold">VIP Event Settings</h2>
       
       {/* Event selection */}
-      <div className="bg-white p-6 rounded-lg shadow">
+      <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
         <h3 className="font-semibold mb-4">Select Special Event</h3>
         <select
           value={selectedEvent?.id || ''}
           onChange={(e) => handleEventChange(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors duration-200"
         >
           <option value="">-- Select an event --</option>
           {specialEvents.map(event => (
@@ -160,7 +189,7 @@ export const VipEventSettings: React.FC = () => {
       
       {/* VIP code generation - only show if an event is selected */}
       {selectedEvent && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
           <h3 className="font-semibold mb-4">Generate VIP Codes</h3>
           <div className="space-y-4">
             <div>
@@ -238,9 +267,17 @@ export const VipEventSettings: React.FC = () => {
             <button
               onClick={handleGenerateCodes}
               disabled={loading}
-              className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
             >
-              {loading ? 'Generating...' : 'Generate VIP Codes'}
+              {loading ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Generating...
+                </span>
+              ) : 'Generate VIP Codes'}
             </button>
           </div>
         </div>
@@ -248,7 +285,7 @@ export const VipEventSettings: React.FC = () => {
       
       {/* VIP codes list - only show if codes exist */}
       {selectedEvent && vipCodes.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
           <h3 className="font-semibold mb-4">VIP Codes</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white divide-y divide-gray-200">
@@ -269,7 +306,7 @@ export const VipEventSettings: React.FC = () => {
                       {code.current_uses} / {code.max_uses || '∞'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full transition-colors duration-300 ${
                         code.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
                         {code.is_active ? 'Active' : 'Inactive'}

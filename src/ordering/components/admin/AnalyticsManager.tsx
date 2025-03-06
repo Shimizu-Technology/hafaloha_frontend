@@ -260,7 +260,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         (A) Date Range + Preset Buttons + Load 
         ============================================
       */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white rounded-lg shadow p-4 animate-fadeIn">
         <h3 className="text-lg font-semibold mb-3">Analytics Date Range</h3>
 
         <div className="flex flex-wrap items-end gap-4 mb-4">

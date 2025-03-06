@@ -114,7 +114,7 @@ export function AdminDashboard() {
     
     toast.custom((t) => (
       <div
-        className="relative bg-white rounded-xl shadow-lg p-4 max-w-sm border border-gray-100"
+        className={`relative bg-white rounded-xl shadow-lg p-4 max-w-sm border border-gray-100 animate-slideUp transition-all duration-300 ${t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
         style={{ minWidth: '280px', maxWidth: '95vw' }}
       >
         {/* Close button */}
@@ -385,18 +385,32 @@ export function AdminDashboard() {
           </div>
 
           {/* Tab content */}
-          <div className="p-4">
-            {activeTab === 'analytics' && <AnalyticsManager restaurantId={currentRestaurantId} />}
-            {activeTab === 'orders' && (
-              <OrderManager
-                selectedOrderId={selectedOrderId}
-                setSelectedOrderId={setSelectedOrderId}
-                restaurantId={currentRestaurantId}
-              />
-            )}
-            {activeTab === 'menu' && <MenuManager restaurantId={currentRestaurantId} />}
-            {activeTab === 'promos' && <PromoManager restaurantId={currentRestaurantId} />}
-            {activeTab === 'settings' && <SettingsManager restaurantId={currentRestaurantId} />}
+          <div className="p-4 relative overflow-hidden">
+            <div className={`transition-opacity duration-300 ${activeTab === 'analytics' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'analytics' && <AnalyticsManager restaurantId={currentRestaurantId} />}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'orders' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'orders' && (
+                <OrderManager
+                  selectedOrderId={selectedOrderId}
+                  setSelectedOrderId={setSelectedOrderId}
+                  restaurantId={currentRestaurantId}
+                />
+              )}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'menu' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'menu' && <MenuManager restaurantId={currentRestaurantId} />}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'promos' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'promos' && <PromoManager restaurantId={currentRestaurantId} />}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'settings' && <SettingsManager restaurantId={currentRestaurantId} />}
+            </div>
           </div>
         </div>
       </div>

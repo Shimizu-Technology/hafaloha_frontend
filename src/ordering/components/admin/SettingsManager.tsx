@@ -125,9 +125,13 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         </nav>
       </div>
 
-      <Suspense fallback={<TabLoadingPlaceholder />}>
-        {renderTabContent()}
-      </Suspense>
+      <div className="relative overflow-hidden">
+        <Suspense fallback={<TabLoadingPlaceholder />}>
+          <div className="animate-fadeIn">
+            {renderTabContent()}
+          </div>
+        </Suspense>
+      </div>
     </div>
   );
 }
