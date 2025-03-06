@@ -1,6 +1,6 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, lazy, Suspense, useEffect } from 'react';
 import { Store, List, Users, CreditCard, Book, Lock } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
@@ -19,7 +19,18 @@ interface SettingsManagerProps {
 }
 
 export function SettingsManager({ restaurantId }: SettingsManagerProps) {
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('restaurant');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => {
+    const stored = localStorage.getItem('adminSettingsTab');
+    if (stored && ['restaurant', 'categories', 'menus', 'users', 'payments', 'vip-access'].includes(stored)) {
+      return stored as SettingsTab;
+    }
+    return 'restaurant';
+  });
+
+  // Save the active tab to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('adminSettingsTab', activeSettingsTab);
+  }, [activeSettingsTab]);
 
   const tabs = [
     { id: 'restaurant', label: 'Restaurant', icon: Store },
