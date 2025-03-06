@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { usePromoStore } from '../store/promoStore';
 import { useOrderStore } from '../store/orderStore';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
+import { validateVipCode } from '../../shared/api/endpoints/vipAccess';
 import { PickupInfo } from './location/PickupInfo';
 import { VipCodeInput } from './VipCodeInput';
 
@@ -58,6 +59,7 @@ export function CheckoutPage() {
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
   const [vipCodeValid, setVipCodeValid] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // If phone is blank => prefill +1671
   useEffect(() => {
@@ -115,27 +117,54 @@ export function CheckoutPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    // Check if any item needs 24-hr notice
-    const hasAny24hrItem = cartItems.some(
-      (it) => (it.advance_notice_hours ?? 0) >= 24
-    );
-
-    const finalPhone = formData.phone.trim();
-    if (!isValidPhone(finalPhone)) {
-      toast.error(
-        'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
-      );
-      return;
-    }
-
-    // Check for VIP-only mode
-    if (restaurant?.vip_only_checkout && !vipCodeValid) {
-      toast.error('Please enter a valid VIP code to continue');
-      return;
-    }
+    
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     try {
+      // Check if any item needs 24-hr notice
+      const hasAny24hrItem = cartItems.some(
+        (it) => (it.advance_notice_hours ?? 0) >= 24
+      );
+
+      const finalPhone = formData.phone.trim();
+      if (!isValidPhone(finalPhone)) {
+        toast.error(
+          'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Check for VIP-only mode and attempt to validate code if not already validated
+      if (restaurant?.vip_only_checkout && !vipCodeValid && formData.vipCode.trim()) {
+        try {
+          toast.loading('Validating VIP code...');
+          const validationResult = await validateVipCode(restaurant.id, formData.vipCode);
+          toast.dismiss();
+          
+          if (!validationResult.valid) {
+            toast.error(validationResult.message || 'Invalid VIP code');
+            setIsSubmitting(false);
+            return;
+          }
+          
+          // Code is valid, update state and continue
+          setVipCodeValid(true);
+          toast.success('VIP code validated successfully!');
+        } catch (error) {
+          toast.dismiss();
+          toast.error('Failed to validate VIP code');
+          setIsSubmitting(false);
+          return;
+        }
+      } else if (restaurant?.vip_only_checkout && !vipCodeValid) {
+        // No VIP code entered
+        toast.error('Please enter a valid VIP code to continue');
+        setIsSubmitting(false);
+        return;
+      }
+
       const newOrder = await addOrder(
         cartItems,
         finalTotal,
@@ -162,6 +191,7 @@ export function CheckoutPage() {
     } catch (err: any) {
       console.error('Failed to create order:', err);
       toast.error('Failed to place order. Please try again.');
+      setIsSubmitting(false);
     }
   }
 
@@ -377,10 +407,12 @@ export function CheckoutPage() {
               <button
                 type="submit"
                 onClick={handleSubmit}
-                className="w-full bg-[#c1902f] text-white py-3 px-4
-                  rounded-md hover:bg-[#d4a43f] transition-colors duration-200"
+                disabled={isSubmitting}
+                className={`w-full bg-[#c1902f] text-white py-3 px-4
+                  rounded-md hover:bg-[#d4a43f] transition-colors duration-200
+                  ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                Place Order
+                {isSubmitting ? 'Processing...' : 'Place Order'}
               </button>
             </div>
           </form>
