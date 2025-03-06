@@ -1,6 +1,6 @@
 // src/ordering/components/admin/settings/VipCodesManager.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { 
@@ -25,11 +25,13 @@ interface VipAccessCode {
   is_active: boolean;
   group_id?: string;
   archived?: boolean;
+  created_at?: string;
 }
 
 export const VipCodesManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [vipCodes, setVipCodes] = useState<VipAccessCode[]>([]);
+  const [fetchingCodes, setFetchingCodes] = useState(false);
+  const [allVipCodes, setAllVipCodes] = useState<VipAccessCode[]>([]);
   const [codeType, setCodeType] = useState<'individual' | 'group'>('individual');
   const [formData, setFormData] = useState({
     count: 10,
@@ -48,28 +50,73 @@ export const VipCodesManager: React.FC = () => {
   });
   const [showArchived, setShowArchived] = useState(false);
   const [viewingUsageForCode, setViewingUsageForCode] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState<'created_at' | 'name' | 'code' | 'current_uses'>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   
   const { restaurant } = useRestaurantStore();
   
-  // Fetch VIP codes
+  // Fetch all VIP codes (including archived) on initial load
   useEffect(() => {
     if (!restaurant?.id) return;
     
     const fetchVipCodes = async () => {
-      setLoading(true);
+      setFetchingCodes(true);
       try {
-        const codes = await getVipCodes(undefined, { include_archived: showArchived });
-        setVipCodes(codes as VipAccessCode[]);
+        const codes = await getVipCodes(undefined, { include_archived: true });
+        setAllVipCodes(codes as VipAccessCode[]);
       } catch (error) {
         console.error('Error fetching VIP codes:', error);
         toast.error('Failed to load VIP codes');
       } finally {
-        setLoading(false);
+        setFetchingCodes(false);
       }
     };
     
     fetchVipCodes();
-  }, [restaurant?.id, showArchived]);
+  }, [restaurant?.id]);
+  
+  // Filter by archived status, search term, and sort
+  const filteredAndSortedCodes = useMemo(() => {
+    // First filter by archived status
+    let filtered = allVipCodes;
+    if (!showArchived) {
+      filtered = filtered.filter(code => !code.archived);
+    }
+    
+    // Then filter by search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(code => 
+        code.name.toLowerCase().includes(term) || 
+        code.code.toLowerCase().includes(term)
+      );
+    }
+    
+    // Then sort
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'code':
+          comparison = a.code.localeCompare(b.code);
+          break;
+        case 'current_uses':
+          comparison = a.current_uses - b.current_uses;
+          break;
+        case 'created_at':
+        default:
+          // Assuming created_at is a string in ISO format
+          comparison = new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+          break;
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [allVipCodes, showArchived, searchTerm, sortField, sortDirection]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -108,7 +155,7 @@ export const VipCodesManager: React.FC = () => {
       toast.success(`Generated ${codeType === 'individual' ? formData.count : 1} VIP code(s)`);
       
       // Update the codes list
-      setVipCodes(prev => [...newCodes, ...prev]);
+      setAllVipCodes(prev => [...newCodes, ...prev]);
     } catch (error) {
       console.error('Error generating VIP codes:', error);
       toast.error('Failed to generate VIP codes');
@@ -125,7 +172,7 @@ export const VipCodesManager: React.FC = () => {
       await deactivateVipCode(id);
       
       // Update the local state
-      setVipCodes(prev => 
+      setAllVipCodes(prev => 
         prev.map(code => 
           code.id === id ? { ...code, is_active: false } : code
         )
@@ -148,16 +195,11 @@ export const VipCodesManager: React.FC = () => {
       await archiveVipCode(id);
       
       // Update the local state
-      if (showArchived) {
-        setVipCodes(prev => 
-          prev.map(code => 
-            code.id === id ? { ...code, archived: true, is_active: false } : code
-          )
-        );
-      } else {
-        // If not showing archived, remove it from the list
-        setVipCodes(prev => prev.filter(code => code.id !== id));
-      }
+      setAllVipCodes(prev => 
+        prev.map(code => 
+          code.id === id ? { ...code, archived: true, is_active: false } : code
+        )
+      );
       
       toast.success('VIP code archived');
     } catch (error) {
@@ -206,7 +248,7 @@ export const VipCodesManager: React.FC = () => {
       await updateVipCode(editingCode.id, updateData);
       
       // Update the local state
-      setVipCodes(prev => 
+      setAllVipCodes(prev => 
         prev.map(code => 
           code.id === editingCode.id ? { 
             ...code, 
@@ -247,7 +289,7 @@ export const VipCodesManager: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
   
-  if (loading && !vipCodes.length) return <LoadingSpinner />;
+  if (fetchingCodes && !allVipCodes.length) return <LoadingSpinner />;
   
   return (
     <div className="space-y-8">
@@ -261,7 +303,7 @@ export const VipCodesManager: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Code Type
             </label>
-            <div className="flex space-x-4">
+            <div className="flex flex-wrap gap-4 items-center">
               <label className="inline-flex items-center">
                 <input
                   type="radio"
@@ -280,6 +322,18 @@ export const VipCodesManager: React.FC = () => {
                 />
                 <span className="ml-2">Group Code</span>
               </label>
+              <div className="ml-auto flex items-center">
+                <input
+                  type="checkbox"
+                  id="limitedUses"
+                  checked={formData.limitedUses}
+                  onChange={() => setFormData(prev => ({ ...prev, limitedUses: !prev.limitedUses }))}
+                  className="mr-2 h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+                />
+                <label htmlFor="limitedUses" className="text-sm font-medium text-gray-700">
+                  Limited Uses
+                </label>
+              </div>
             </div>
           </div>
           
@@ -329,37 +383,22 @@ export const VipCodesManager: React.FC = () => {
               />
             </div>
             
-            <div>
-              <div className="flex items-center mb-2">
-                <input
-                  type="checkbox"
-                  id="limitedUses"
-                  checked={formData.limitedUses}
-                  onChange={() => setFormData(prev => ({ ...prev, limitedUses: !prev.limitedUses }))}
-                  className="mr-2 h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
-                />
-                <label htmlFor="limitedUses" className="text-sm font-medium text-gray-700">
-                  Limited Uses
+            {formData.limitedUses && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {codeType === 'individual' ? 'Uses Per Code' : 'Total Uses'}
                 </label>
+                <input
+                  type="number"
+                  name="maxUses"
+                  min="1"
+                  value={formData.maxUses}
+                  onChange={handleInputChange}
+                  placeholder="Enter number of uses"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
               </div>
-              
-              {formData.limitedUses && (
-                <>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {codeType === 'individual' ? 'Uses Per Code' : 'Total Uses'}
-                  </label>
-                  <input
-                    type="number"
-                    name="maxUses"
-                    min="1"
-                    value={formData.maxUses}
-                    onChange={handleInputChange}
-                    placeholder="Enter number of uses"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </>
-              )}
-            </div>
+            )}
           </div>
           
           <button
@@ -373,13 +412,18 @@ export const VipCodesManager: React.FC = () => {
       </div>
       
       {/* VIP codes list */}
-      {vipCodes.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow overflow-hidden">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold">VIP Codes List</h3>
+      <div className="bg-white p-6 rounded-lg shadow overflow-hidden relative">
+        {fetchingCodes && (
+          <div className="absolute inset-0 bg-white bg-opacity-70 flex items-center justify-center z-10">
+            <LoadingSpinner />
+          </div>
+        )}
+        <div className="flex flex-wrap justify-between items-center mb-4">
+          <h3 className="font-semibold">VIP Codes List</h3>
+          <div className="flex items-center space-x-2">
             <button
               onClick={() => setShowArchived(!showArchived)}
-              className="flex items-center text-sm text-gray-600 hover:text-gray-900"
+              className="flex items-center text-sm text-gray-600 hover:text-gray-900 mt-2 sm:mt-0"
             >
               {showArchived ? (
                 <>
@@ -394,41 +438,92 @@ export const VipCodesManager: React.FC = () => {
               )}
             </button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uses</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {vipCodes.map(code => (
-                  <tr key={code.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+        </div>
+        
+        <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          {/* Search input */}
+          <div className="relative w-full md:w-64">
+            <input
+              type="text"
+              placeholder="Search by name or code..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 pl-10"
+            />
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          {/* Sort controls */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600">Sort by:</span>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as any)}
+              className="px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="created_at">Date Created</option>
+              <option value="name">Name</option>
+              <option value="code">Code</option>
+              <option value="current_uses">Uses</option>
+            </select>
+            <button
+              onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+              className="p-1 rounded-md border border-gray-300 hover:bg-gray-100"
+              title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            >
+              {sortDirection === 'asc' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+        <div className="overflow-x-auto -mx-6 px-6">
+          <table className="min-w-full bg-white divide-y divide-gray-200 border border-gray-200 rounded-lg transition-all duration-300 ease-in-out">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uses</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200 transition-all duration-300 ease-in-out">
+              {filteredAndSortedCodes.length > 0 ? (
+                filteredAndSortedCodes.map((code: VipAccessCode) => (
+                  <tr key={code.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       <div className="flex items-center">
-                        <span className="mr-2">{code.code}</span>
+                        <span className="mr-2 truncate max-w-[100px] md:max-w-full">{code.code}</span>
                         <button 
                           onClick={() => copyToClipboard(code.code, code.id)}
-                          className="text-gray-400 hover:text-gray-600"
+                          className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                          aria-label="Copy code"
                         >
                           {copiedCode === code.id ? <Check size={16} /> : <Clipboard size={16} />}
                         </button>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{code.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-gray-500 truncate max-w-[120px] md:max-w-full">{code.name}</td>
+                    <td className="hidden md:table-cell px-4 py-3 text-sm text-gray-500">
                       {code.group_id ? 'Group' : 'Individual'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-gray-500">
                       {code.current_uses} / {code.max_uses || '∞'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         code.archived 
                           ? 'bg-gray-100 text-gray-800' 
                           : code.is_active 
@@ -438,12 +533,13 @@ export const VipCodesManager: React.FC = () => {
                         {code.archived ? 'Archived' : code.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex space-x-2">
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      <div className="flex flex-wrap justify-center gap-2">
                         <button
                           onClick={() => setViewingUsageForCode(code.id)}
-                          className="text-amber-500 hover:text-amber-700"
+                          className="p-1.5 rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 hover:text-amber-700 transition-colors"
                           title="View Usage"
+                          aria-label="View Usage"
                         >
                           <BarChart size={16} />
                         </button>
@@ -452,24 +548,27 @@ export const VipCodesManager: React.FC = () => {
                           <>
                             <button
                               onClick={() => handleEditCode(code)}
-                              className="text-blue-500 hover:text-blue-700"
+                              className="p-1.5 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
                               title="Edit"
+                              aria-label="Edit"
                             >
                               <Edit size={16} />
                             </button>
                             {code.is_active && (
                               <button
                                 onClick={() => handleDeactivateCode(code.id)}
-                                className="text-red-500 hover:text-red-700"
+                                className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors"
                                 title="Deactivate"
+                                aria-label="Deactivate"
                               >
                                 <X size={16} />
                               </button>
                             )}
                             <button
                               onClick={() => handleArchiveCode(code.id)}
-                              className="text-gray-500 hover:text-gray-700"
+                              className="p-1.5 rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
                               title="Archive"
+                              aria-label="Archive"
                             >
                               <Archive size={16} />
                             </button>
@@ -478,30 +577,54 @@ export const VipCodesManager: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                    {searchTerm ? 'No matching VIP codes found' : 'No VIP codes found'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
       
       {/* Edit VIP Code Modal */}
       {editingCode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Edit VIP Code</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Edit VIP Code</h3>
+              <button 
+                onClick={handleCancelEdit}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Code
                 </label>
-                <input
-                  type="text"
-                  value={editingCode.code}
-                  disabled
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md bg-gray-100"
-                />
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={editingCode.code}
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-300 rounded-l-md bg-gray-100"
+                  />
+                  <button 
+                    onClick={() => copyToClipboard(editingCode.code, editingCode.id)}
+                    className="px-3 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md text-gray-500 hover:text-gray-700"
+                    title="Copy code"
+                  >
+                    {copiedCode === editingCode.id ? <Check size={16} /> : <Clipboard size={16} />}
+                  </button>
+                </div>
               </div>
               
               <div>
@@ -517,40 +640,38 @@ export const VipCodesManager: React.FC = () => {
                 />
               </div>
               
-              <div>
-                <div className="flex items-center mb-2">
-                  <input
-                    type="checkbox"
-                    id="editLimitedUses"
-                    name="limitedUses"
-                    checked={editFormData.limitedUses}
-                    onChange={handleEditInputChange}
-                    className="mr-2 h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="editLimitedUses" className="text-sm font-medium text-gray-700">
-                    Limited Uses
-                  </label>
-                </div>
-                
-                {editFormData.limitedUses && (
-                  <>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Maximum Uses
-                    </label>
-                    <input
-                      type="number"
-                      name="maxUses"
-                      min="1"
-                      value={editFormData.maxUses}
-                      onChange={handleEditInputChange}
-                      placeholder="Enter number of uses"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </>
-                )}
+              <div className="flex items-center mb-4">
+                <input
+                  type="checkbox"
+                  id="editLimitedUses"
+                  name="limitedUses"
+                  checked={editFormData.limitedUses}
+                  onChange={handleEditInputChange}
+                  className="mr-2 h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+                />
+                <label htmlFor="editLimitedUses" className="text-sm font-medium text-gray-700">
+                  Limited Uses
+                </label>
               </div>
               
-              <div>
+              {editFormData.limitedUses && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Maximum Uses
+                  </label>
+                  <input
+                    type="number"
+                    name="maxUses"
+                    min="1"
+                    value={editFormData.maxUses}
+                    onChange={handleEditInputChange}
+                    placeholder="Enter number of uses"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              )}
+              
+              <div className="bg-gray-50 p-3 rounded-md">
                 <div className="flex items-center">
                   <input
                     type="checkbox"
