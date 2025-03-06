@@ -52,6 +52,13 @@ export const deactivateVipCode = async (id: number) => {
 };
 
 /**
+ * Reactivate a VIP code
+ */
+export const reactivateVipCode = async (id: number) => {
+  return api.patch(`/vip_access/codes/${id}`, { is_active: true });
+};
+
+/**
  * Update a VIP code
  */
 export const updateVipCode = async (id: number, data: any) => {
@@ -63,6 +70,13 @@ export const updateVipCode = async (id: number, data: any) => {
  */
 export const archiveVipCode = async (id: number) => {
   return api.post(`/vip_access/codes/${id}/archive`);
+};
+
+/**
+ * Unarchive a VIP code
+ */
+export const unarchiveVipCode = async (id: number) => {
+  return api.patch(`/vip_access/codes/${id}`, { archived: false });
 };
 
 /**

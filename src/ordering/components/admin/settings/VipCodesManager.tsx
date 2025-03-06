@@ -8,8 +8,10 @@ import {
   generateIndividualCodes, 
   generateGroupCode,
   deactivateVipCode,
+  reactivateVipCode,
   updateVipCode,
-  archiveVipCode
+  archiveVipCode,
+  unarchiveVipCode
 } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner } from '../../../../shared/components/ui/LoadingSpinner';
 import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart } from 'lucide-react';
@@ -53,6 +55,8 @@ export const VipCodesManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<'created_at' | 'name' | 'code' | 'current_uses'>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [selectedCodes, setSelectedCodes] = useState<number[]>([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   
   const { restaurant } = useRestaurantStore();
   
@@ -164,6 +168,31 @@ export const VipCodesManager: React.FC = () => {
     }
   };
   
+  // Handle selecting/deselecting a single code
+  const handleSelectCode = (id: number) => {
+    setSelectedCodes(prev => 
+      prev.includes(id) 
+        ? prev.filter(codeId => codeId !== id) 
+        : [...prev, id]
+    );
+  };
+  
+  // Handle selecting/deselecting all visible codes
+  const handleSelectAll = () => {
+    if (selectedCodes.length === filteredAndSortedCodes.length) {
+      // If all are selected, deselect all
+      setSelectedCodes([]);
+    } else {
+      // Otherwise, select all visible codes
+      setSelectedCodes(filteredAndSortedCodes.map(code => code.id));
+    }
+  };
+  
+  // Clear selections when filter changes
+  useEffect(() => {
+    setSelectedCodes([]);
+  }, [showArchived, searchTerm]);
+  
   const handleDeactivateCode = async (id: number) => {
     if (!confirm('Are you sure you want to deactivate this VIP code?')) return;
     
@@ -187,6 +216,136 @@ export const VipCodesManager: React.FC = () => {
     }
   };
   
+  const handleReactivateCode = async (id: number) => {
+    if (!confirm('Are you sure you want to reactivate this VIP code?')) return;
+    
+    setLoading(true);
+    try {
+      await reactivateVipCode(id);
+      
+      // Update the local state
+      setAllVipCodes(prev => 
+        prev.map(code => 
+          code.id === id ? { ...code, is_active: true } : code
+        )
+      );
+      
+      toast.success('VIP code reactivated');
+    } catch (error) {
+      console.error('Error reactivating VIP code:', error);
+      toast.error('Failed to reactivate VIP code');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleBulkDeactivate = async () => {
+    if (!selectedCodes.length) return;
+    if (!confirm(`Are you sure you want to deactivate ${selectedCodes.length} VIP code(s)?`)) return;
+    
+    setBulkActionLoading(true);
+    try {
+      // Process codes in sequence to avoid overwhelming the server
+      for (const id of selectedCodes) {
+        await deactivateVipCode(id);
+      }
+      
+      // Update the local state
+      setAllVipCodes(prev => 
+        prev.map(code => 
+          selectedCodes.includes(code.id) ? { ...code, is_active: false } : code
+        )
+      );
+      
+      toast.success(`${selectedCodes.length} VIP code(s) deactivated`);
+      setSelectedCodes([]); // Clear selection after bulk action
+    } catch (error) {
+      console.error('Error deactivating VIP codes:', error);
+      toast.error('Failed to deactivate some VIP codes');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+  
+  const handleUnarchiveCode = async (id: number) => {
+    if (!confirm('Are you sure you want to unarchive this VIP code?')) return;
+    
+    setLoading(true);
+    try {
+      await unarchiveVipCode(id);
+      
+      // Update the local state
+      setAllVipCodes(prev => 
+        prev.map(code => 
+          code.id === id ? { ...code, archived: false } : code
+        )
+      );
+      
+      toast.success('VIP code unarchived');
+    } catch (error) {
+      console.error('Error unarchiving VIP code:', error);
+      toast.error('Failed to unarchive VIP code');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleBulkReactivate = async () => {
+    if (!selectedCodes.length) return;
+    if (!confirm(`Are you sure you want to reactivate ${selectedCodes.length} VIP code(s)?`)) return;
+    
+    setBulkActionLoading(true);
+    try {
+      // Process codes in sequence to avoid overwhelming the server
+      for (const id of selectedCodes) {
+        await reactivateVipCode(id);
+      }
+      
+      // Update the local state
+      setAllVipCodes(prev => 
+        prev.map(code => 
+          selectedCodes.includes(code.id) ? { ...code, is_active: true } : code
+        )
+      );
+      
+      toast.success(`${selectedCodes.length} VIP code(s) reactivated`);
+      setSelectedCodes([]); // Clear selection after bulk action
+    } catch (error) {
+      console.error('Error reactivating VIP codes:', error);
+      toast.error('Failed to reactivate some VIP codes');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+  
+  const handleBulkUnarchive = async () => {
+    if (!selectedCodes.length) return;
+    if (!confirm(`Are you sure you want to unarchive ${selectedCodes.length} VIP code(s)?`)) return;
+    
+    setBulkActionLoading(true);
+    try {
+      // Process codes in sequence to avoid overwhelming the server
+      for (const id of selectedCodes) {
+        await unarchiveVipCode(id);
+      }
+      
+      // Update the local state
+      setAllVipCodes(prev => 
+        prev.map(code => 
+          selectedCodes.includes(code.id) ? { ...code, archived: false } : code
+        )
+      );
+      
+      toast.success(`${selectedCodes.length} VIP code(s) unarchived`);
+      setSelectedCodes([]); // Clear selection after bulk action
+    } catch (error) {
+      console.error('Error unarchiving VIP codes:', error);
+      toast.error('Failed to unarchive some VIP codes');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+  
   const handleArchiveCode = async (id: number) => {
     if (!confirm('Are you sure you want to archive this VIP code? It will be deactivated and hidden from the default view.')) return;
     
@@ -207,6 +366,36 @@ export const VipCodesManager: React.FC = () => {
       toast.error('Failed to archive VIP code');
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const handleBulkArchive = async () => {
+    if (!selectedCodes.length) return;
+    if (!confirm(`Are you sure you want to archive ${selectedCodes.length} VIP code(s)? They will be deactivated and hidden from the default view.`)) return;
+    
+    setBulkActionLoading(true);
+    try {
+      // Process codes in sequence to avoid overwhelming the server
+      for (const id of selectedCodes) {
+        await archiveVipCode(id);
+      }
+      
+      // Update the local state
+      setAllVipCodes(prev => 
+        prev.map(code => 
+          selectedCodes.includes(code.id) 
+            ? { ...code, archived: true, is_active: false } 
+            : code
+        )
+      );
+      
+      toast.success(`${selectedCodes.length} VIP code(s) archived`);
+      setSelectedCodes([]); // Clear selection after bulk action
+    } catch (error) {
+      console.error('Error archiving VIP codes:', error);
+      toast.error('Failed to archive some VIP codes');
+    } finally {
+      setBulkActionLoading(false);
     }
   };
   
@@ -441,6 +630,50 @@ export const VipCodesManager: React.FC = () => {
         </div>
         
         <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          {/* Bulk actions */}
+          {selectedCodes.length > 0 && (
+            <div className="flex items-center gap-2 bg-amber-50 p-2 rounded-md">
+              <span className="text-sm font-medium text-amber-800">
+                {selectedCodes.length} code(s) selected
+              </span>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={handleBulkDeactivate}
+                  disabled={bulkActionLoading || selectedCodes.every(id => !filteredAndSortedCodes.find(code => code.id === id)?.is_active)}
+                  className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Deactivate All
+                </button>
+                <button
+                  onClick={handleBulkReactivate}
+                  disabled={bulkActionLoading || selectedCodes.every(id => filteredAndSortedCodes.find(code => code.id === id)?.is_active)}
+                  className="px-3 py-1 bg-green-100 text-green-700 rounded-md hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Reactivate All
+                </button>
+                <button
+                  onClick={handleBulkArchive}
+                  disabled={bulkActionLoading || selectedCodes.every(id => filteredAndSortedCodes.find(code => code.id === id)?.archived)}
+                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Archive All
+                </button>
+                <button
+                  onClick={handleBulkUnarchive}
+                  disabled={bulkActionLoading || selectedCodes.every(id => !filteredAndSortedCodes.find(code => code.id === id)?.archived)}
+                  className="px-3 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Unarchive All
+                </button>
+                <button
+                  onClick={() => setSelectedCodes([])}
+                  className="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           {/* Search input */}
           <div className="relative w-full md:w-64">
             <input
@@ -491,6 +724,16 @@ export const VipCodesManager: React.FC = () => {
           <table className="min-w-full bg-white divide-y divide-gray-200 border border-gray-200 rounded-lg transition-all duration-300 ease-in-out">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-2 py-3 text-left">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedCodes.length === filteredAndSortedCodes.length && filteredAndSortedCodes.length > 0}
+                      onChange={handleSelectAll}
+                      className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+                    />
+                  </div>
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                 <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
@@ -502,7 +745,17 @@ export const VipCodesManager: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200 transition-all duration-300 ease-in-out">
               {filteredAndSortedCodes.length > 0 ? (
                 filteredAndSortedCodes.map((code: VipAccessCode) => (
-                  <tr key={code.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={code.id} className={`hover:bg-gray-50 transition-colors ${selectedCodes.includes(code.id) ? 'bg-amber-50' : ''}`}>
+                    <td className="px-2 py-3">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedCodes.includes(code.id)}
+                          onChange={() => handleSelectCode(code.id)}
+                          className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+                        />
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       <div className="flex items-center">
                         <span className="mr-2 truncate max-w-[100px] md:max-w-full">{code.code}</span>
@@ -544,7 +797,19 @@ export const VipCodesManager: React.FC = () => {
                           <BarChart size={16} />
                         </button>
                         
-                        {!code.archived && (
+                        {code.archived ? (
+                          <button
+                            onClick={() => handleUnarchiveCode(code.id)}
+                            className="p-1.5 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                            title="Unarchive"
+                            aria-label="Unarchive"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="7 11 12 6 17 11"></polyline>
+                              <path d="M12 18V6"></path>
+                            </svg>
+                          </button>
+                        ) : (
                           <>
                             <button
                               onClick={() => handleEditCode(code)}
@@ -554,7 +819,7 @@ export const VipCodesManager: React.FC = () => {
                             >
                               <Edit size={16} />
                             </button>
-                            {code.is_active && (
+                            {code.is_active ? (
                               <button
                                 onClick={() => handleDeactivateCode(code.id)}
                                 className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors"
@@ -562,6 +827,15 @@ export const VipCodesManager: React.FC = () => {
                                 aria-label="Deactivate"
                               >
                                 <X size={16} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleReactivateCode(code.id)}
+                                className="p-1.5 rounded-full bg-green-50 text-green-500 hover:bg-green-100 hover:text-green-700 transition-colors"
+                                title="Reactivate"
+                                aria-label="Reactivate"
+                              >
+                                <Check size={16} />
                               </button>
                             )}
                             <button
