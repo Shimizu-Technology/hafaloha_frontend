@@ -215,6 +215,10 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **PaymentSettings** - Configure payment gateway settings (Braintree/PayPal)
   - **Test Mode** - Toggle between test and production environments
   - **Credentials Management** - Securely store and manage payment gateway credentials
+- **VIP Access Management** - Control exclusive access to ordering system
+  - **VIP-Only Mode** - Toggle to restrict ordering to VIP customers only
+  - **VIP Code Management** - Create, edit, and track usage of VIP access codes
+  - **Usage Limits** - Set maximum usage counts for individual or group VIP codes
 - **GeneralSettings** - Manage site-wide settings like hero and spinner images
 - **RestaurantSelector** - Switch between restaurants (for super admins)
 - **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
