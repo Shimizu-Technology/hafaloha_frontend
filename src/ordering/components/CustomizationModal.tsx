@@ -54,8 +54,8 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
         // find the Option
         const opt = group.options.find((o) => o.id === optId);
         if (opt) {
-          // Use "additional_price_float" from the server, default to 0 if missing
-          const extra = opt.additional_price_float ?? 0;
+          // Use "additional_price" from the server, default to 0 if missing
+          const extra = opt.additional_price ?? 0;
           sum += extra;
         }
       }
@@ -67,7 +67,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
   const addlPrice = getAdditionalPrice();
   const totalItemPrice = (basePrice + addlPrice) * quantity;
 
-  // On "Add to Cart": build a customizations object => groupName => [optionName, ...]
+    // On "Add to Cart": build a customizations object => groupName => [optionName, ...]
   function handleAddToCart() {
     const finalCustomizations: Record<string, string[]> = {};
 
@@ -87,11 +87,9 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
       {
         id: item.id,
         name: item.name,
-        description: item.description,
         price: basePrice + addlPrice,
-        image: item.image,
-        customizations: finalCustomizations,
-      },
+        customizations: finalCustomizations as any,
+      } as any,
       quantity
     );
 
@@ -99,15 +97,15 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2 sm:p-4 animate-fadeIn">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black bg-opacity-50"
+        className="absolute inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
         onClick={onClose}
       />
 
       {/* Modal Content */}
-      <div className="relative bg-white rounded-lg shadow-lg w-full max-w-lg p-6">
+      <div className="relative bg-white rounded-lg shadow-lg w-full max-w-lg p-6 animate-slideUp">
         <button
           className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
           onClick={onClose}
@@ -137,7 +135,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                   {group.options.map((opt) => {
                     const selected = selections[groupId]?.includes(opt.id);
                     // Coerce to number
-                    const extraPrice = Number(opt.additional_price_float ?? 0);
+                    const extraPrice = Number(opt.additional_price ?? 0);
                     return (
                       <button
                         key={opt.id}

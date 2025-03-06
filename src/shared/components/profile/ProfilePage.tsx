@@ -7,7 +7,7 @@ import { useAuth } from '../../auth';
 import { User } from '../../types/auth';
 import { useAuthStore } from '../../auth/authStore';
 import { Input } from '../ui/Input';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { ProfileSkeleton } from '../ui/SkeletonLoader';
 
 export function ProfilePage() {
   const { user } = useAuth(); // Read the user from shared auth
@@ -100,8 +100,8 @@ export function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner />
+      <div className="animate-fadeIn transition-opacity duration-300">
+        <ProfileSkeleton />
       </div>
     );
   }

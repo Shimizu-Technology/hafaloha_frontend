@@ -4,6 +4,7 @@ import { useOrderStore } from '../../store/orderStore';
 import { useAuthStore } from '../../store/authStore';
 import { Clock, ShoppingBag, Filter, Calendar } from 'lucide-react';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
+import { OrderHistorySkeletonList } from '../../../shared/components/ui/SkeletonLoader';
 import { Order } from '../../types/order';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';
@@ -194,33 +195,8 @@ export function OrderHistory() {
 
       {/* Orders list */}
       {loading ? (
-        // Loading skeleton
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 animate-pulse">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <div className="h-5 w-24 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-4 w-32 bg-gray-200 rounded"></div>
-                </div>
-                <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
-              </div>
-              <div className="border-t border-b py-4 mb-4 space-y-3">
-                <div className="flex justify-between">
-                  <div className="h-4 w-40 bg-gray-200 rounded"></div>
-                  <div className="h-4 w-16 bg-gray-200 rounded"></div>
-                </div>
-                <div className="flex justify-between">
-                  <div className="h-4 w-36 bg-gray-200 rounded"></div>
-                  <div className="h-4 w-16 bg-gray-200 rounded"></div>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="h-4 w-32 bg-gray-200 rounded"></div>
-                <div className="h-4 w-24 bg-gray-200 rounded"></div>
-              </div>
-            </div>
-          ))}
+        <div className="animate-fadeIn transition-opacity duration-300">
+          <OrderHistorySkeletonList count={3} />
         </div>
       ) : orders.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">

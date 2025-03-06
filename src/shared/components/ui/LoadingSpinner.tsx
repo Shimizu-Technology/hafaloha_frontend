@@ -21,7 +21,7 @@ export function LoadingSpinner({ className = '', showText = true }: LoadingSpinn
   const finalSpinner = restaurantSpinnerUrl || siteSpinnerUrl || fallbackSpinner;
 
   return (
-    <div className={`bg-gray-800 p-4 rounded flex flex-col items-center justify-center ${className}`}>
+    <div className={`bg-gray-800 p-4 rounded flex flex-col items-center justify-center animate-fadeIn transition-all duration-300 ease-in-out ${className}`}>
       <div className="bg-white p-2 rounded mb-2">
         <img
           src={finalSpinner}

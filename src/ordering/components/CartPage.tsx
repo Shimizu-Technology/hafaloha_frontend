@@ -2,8 +2,8 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, Minus, Plus } from 'lucide-react';
-import { useOrderStore } from '../store/orderStore';
-import type { CartItem } from '../types/menu';
+import { useOrderStore, CartItem } from '../store/orderStore';
+import { CartSkeletonList } from '../../shared/components/ui/SkeletonLoader';
 
 export function CartPage() {
   const navigate = useNavigate();
@@ -13,7 +13,8 @@ export function CartPage() {
     cartItems,
     setCartQuantity,
     removeFromCart,
-    setCartItemNotes
+    setCartItemNotes,
+    loading
   } = useOrderStore();
 
   // Sum up the total
@@ -50,7 +51,12 @@ export function CartPage() {
       <div className="lg:grid lg:grid-cols-12 lg:gap-8">
         {/* Cart items list */}
         <div className="lg:col-span-7">
-          {cartItems.map((item: CartItem) => (
+          {loading ? (
+            <div className="animate-fadeIn transition-opacity duration-300">
+              <CartSkeletonList count={cartItems.length || 3} />
+            </div>
+          ) : (
+            cartItems.map((item: CartItem) => (
             <div
               key={item.id}
               className="flex flex-col sm:flex-row sm:items-start
@@ -58,7 +64,7 @@ export function CartPage() {
             >
               {/* Image */}
               <img
-                src={item.image}
+                src={(item as any).image || '/placeholder-food.jpg'}
                 alt={item.name}
                 className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
               />
@@ -66,8 +72,8 @@ export function CartPage() {
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg font-medium text-gray-900">{item.name}</h3>
 
-                {item.description && (
-                  <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+                {(item as any).description && (
+                  <p className="mt-1 text-sm text-gray-500">{(item as any).description}</p>
                 )}
 
                 {/* If the item requires 24 hours, show it */}
@@ -132,7 +138,8 @@ export function CartPage() {
                 </span>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
 
         {/* Order summary */}

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { usePromoStore } from '../store/promoStore';
 import { useOrderStore } from '../store/orderStore';
+import { FormSkeleton } from '../../shared/components/ui/SkeletonLoader';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { validateVipCode } from '../../shared/api/endpoints/vipAccess';
 import { PickupInfo } from './location/PickupInfo';
@@ -38,6 +39,7 @@ export function CheckoutPage() {
 
   const cartItems = useOrderStore((state) => state.cartItems);
   const addOrder = useOrderStore((state) => state.addOrder);
+  const loading = useOrderStore((state) => state.loading);
 
   const { validatePromoCode, applyDiscount } = usePromoStore();
   const rawTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -201,7 +203,12 @@ export function CheckoutPage() {
       <div className="lg:grid lg:grid-cols-12 lg:gap-8">
         {/* LEFT: The form */}
         <div className="lg:col-span-7">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {loading ? (
+            <div className="animate-fadeIn transition-opacity duration-300">
+              <FormSkeleton fields={6} />
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
             {/* Contact Info */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Contact Information</h2>
@@ -416,6 +423,7 @@ export function CheckoutPage() {
               </button>
             </div>
           </form>
+          )}
         </div>
 
         {/* RIGHT COLUMN => Pickup Info */}

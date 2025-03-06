@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
-import { LoadingSpinner } from '../../shared/components/ui/LoadingSpinner';
+import { MenuItemSkeletonGrid } from '../../shared/components/ui/SkeletonLoader';
 
 export function MenuPage() {
   const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
@@ -124,11 +124,11 @@ export function MenuPage() {
       {/* Menu Items Grid with min-height to prevent layout shift */}
       <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
         {loading ? (
-          <div className="flex justify-center items-center h-[300px]">
-            <LoadingSpinner className="bg-transparent" />
+          <div className="animate-fadeIn transition-opacity duration-300">
+            <MenuItemSkeletonGrid count={6} />
           </div>
         ) : (
-          <div>
+          <div className="animate-fadeIn transition-opacity duration-300">
             {filteredItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                 {filteredItems.map((item) => (
