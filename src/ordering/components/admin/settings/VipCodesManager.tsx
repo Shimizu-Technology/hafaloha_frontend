@@ -14,7 +14,7 @@ import {
   unarchiveVipCode
 } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
-import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart, Key } from 'lucide-react';
+import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart, Key, Calendar, Clock } from 'lucide-react';
 import { VipCodeUsageModal } from './VipCodeUsageModal';
 
 interface VipAccessCode {
@@ -28,6 +28,7 @@ interface VipAccessCode {
   group_id?: string;
   archived?: boolean;
   created_at?: string;
+  updated_at?: string;
 }
 
 export const VipCodesManager: React.FC = () => {
@@ -51,6 +52,7 @@ export const VipCodesManager: React.FC = () => {
     isActive: true
   });
   const [showArchived, setShowArchived] = useState(false);
+  const [viewingDetailsForCode, setViewingDetailsForCode] = useState<VipAccessCode | null>(null);
   const [viewingUsageForCode, setViewingUsageForCode] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<'created_at' | 'name' | 'code' | 'current_uses'>('created_at');
@@ -478,6 +480,15 @@ export const VipCodesManager: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
   
+  const formatDateTime = (dateString?: string) => {
+    if (!dateString) return 'Never';
+    return new Date(dateString).toLocaleString();
+  };
+  
+  const handleViewDetails = (code: VipAccessCode) => {
+    setViewingDetailsForCode(code);
+  };
+  
   if (fetchingCodes && !allVipCodes.length) return <LoadingSpinner />;
   
   return (
@@ -742,6 +753,7 @@ export const VipCodesManager: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                 <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uses</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -778,6 +790,9 @@ export const VipCodesManager: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
                       {code.current_uses} / {code.max_uses || '∞'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500" title={code.created_at ? formatDateTime(code.created_at) : ''}>
+                      {code.created_at ? formatDate(code.created_at) : 'Unknown'}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -858,7 +873,7 @@ export const VipCodesManager: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     {searchTerm ? 'No matching VIP codes found' : 'No VIP codes found'}
                   </td>
                 </tr>
