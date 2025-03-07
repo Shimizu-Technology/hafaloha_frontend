@@ -91,10 +91,42 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
   };
 
   if (loading) return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl h-3/4 flex flex-col">
-        <div className="flex-grow flex items-center justify-center">
-          <LoadingSpinner />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl h-3/4 flex flex-col transition-all duration-300">
+        <div className="flex justify-between items-center mb-4">
+          <div className="h-7 w-48 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-6 w-6 bg-gray-200 rounded-full animate-pulse"></div>
+        </div>
+
+        <div className="bg-gray-100 p-4 rounded-lg mb-4 animate-pulse">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index}>
+                <div className="h-4 w-16 bg-gray-200 rounded mb-2"></div>
+                <div className="h-5 w-24 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-grow space-y-4">
+          <div className="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+          
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div 
+              key={`skeleton-order-${index}`} 
+              className="border border-gray-200 rounded-lg overflow-hidden"
+            >
+              <div className="bg-gray-50 p-4 flex justify-between items-center">
+                <div className="flex items-center space-x-4">
+                  <div className="h-5 w-24 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-5 w-16 bg-gray-200 rounded-full animate-pulse"></div>
+                </div>
+                <div className="h-5 w-20 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -103,8 +135,8 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
   if (!usageData) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl h-3/4 flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl h-3/4 flex flex-col transition-all duration-300">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">VIP Code Usage Details</h2>
           <button 
@@ -115,7 +147,7 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
           </button>
         </div>
 
-        <div className="bg-amber-50 p-4 rounded-lg mb-4">
+        <div className="bg-amber-50 p-4 rounded-lg mb-4 transition-all duration-300 animate-fadeIn">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-sm text-gray-500">Code</p>

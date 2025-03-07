@@ -489,7 +489,110 @@ export const VipCodesManager: React.FC = () => {
     setViewingDetailsForCode(code);
   };
   
-  if (fetchingCodes && !allVipCodes.length) return <LoadingSpinner />;
+  if (fetchingCodes && !allVipCodes.length) {
+    return (
+      <div className="space-y-8 animate-fadeIn">
+        <div className="animate-pulse">
+          <div className="h-8 w-48 bg-gray-200 rounded mb-2"></div>
+          <div className="h-4 w-64 bg-gray-200 rounded"></div>
+        </div>
+        
+        {/* Code generation form skeleton */}
+        <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
+          <div className="h-5 w-40 bg-gray-200 rounded mb-4 animate-pulse"></div>
+          <div className="space-y-4">
+            <div className="animate-pulse">
+              <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
+              <div className="flex space-x-4">
+                <div className="h-6 w-40 bg-gray-200 rounded"></div>
+                <div className="h-6 w-40 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+            
+            <div className="grid md:grid-cols-2 gap-4 animate-pulse">
+              <div>
+                <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 w-full bg-gray-200 rounded"></div>
+              </div>
+              <div>
+                <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 w-full bg-gray-200 rounded"></div>
+              </div>
+            </div>
+            
+            <div className="h-10 w-40 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+        </div>
+        
+        {/* VIP codes list skeleton */}
+        <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
+          <div className="flex justify-between items-center mb-4">
+            <div className="h-5 w-32 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-5 w-32 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+          
+          <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="relative w-full md:w-64">
+              <div className="h-10 w-full bg-gray-200 rounded animate-pulse"></div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white divide-y divide-gray-200 border border-gray-200 rounded-lg">
+              <thead className="bg-gray-50">
+                <tr>
+                  {Array.from({ length: 8 }).map((_, index) => (
+                    <th key={index} className="px-4 py-3 text-left">
+                      <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <tr key={`skeleton-${index}`}>
+                    <td className="px-2 py-3">
+                      <div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-6 w-16 bg-gray-200 rounded-full animate-pulse"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center gap-2">
+                        {Array.from({ length: 3 }).map((_, btnIndex) => (
+                          <div key={btnIndex} className="h-8 w-8 bg-gray-200 rounded-full animate-pulse"></div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-8">
@@ -500,7 +603,7 @@ export const VipCodesManager: React.FC = () => {
       />
       
       {/* Code generation form */}
-      <div className="bg-white p-6 rounded-lg shadow">
+      <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
         <h3 className="font-semibold mb-4">Generate VIP Codes</h3>
         <div className="space-y-4">
           <div>
@@ -616,10 +719,14 @@ export const VipCodesManager: React.FC = () => {
       </div>
       
       {/* VIP codes list */}
-      <div className="bg-white p-6 rounded-lg shadow overflow-hidden relative">
+      <div className="bg-white p-6 rounded-lg shadow overflow-hidden relative transition-all duration-300 animate-fadeIn">
         {fetchingCodes && (
-          <div className="absolute inset-0 bg-white bg-opacity-70 flex items-center justify-center z-10">
-            <LoadingSpinner />
+          <div className="absolute inset-0 bg-white bg-opacity-70 z-10">
+            <div className="h-full w-full p-6 space-y-4">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={`overlay-skeleton-${index}`} className="h-16 bg-gray-200 rounded animate-pulse"></div>
+              ))}
+            </div>
           </div>
         )}
         <div className="flex flex-wrap justify-between items-center mb-4">
@@ -885,8 +992,8 @@ export const VipCodesManager: React.FC = () => {
       
       {/* Edit VIP Code Modal */}
       {editingCode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md transition-all duration-300">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Edit VIP Code</h3>
               <button 

@@ -31,7 +31,7 @@ export const VipModeToggle: React.FC<VipModeToggleProps> = ({ className = '' }) 
   };
   
   return (
-    <div className={`bg-white rounded-lg shadow ${className}`}>
+    <div className={`bg-white rounded-lg shadow transition-all duration-300 animate-fadeIn ${className}`}>
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center">

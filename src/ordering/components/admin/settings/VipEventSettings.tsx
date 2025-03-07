@@ -138,14 +138,95 @@ export const VipEventSettings: React.FC = () => {
   
   if (loading && !specialEvents.length) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner />
+      <div className="space-y-8 animate-fadeIn">
+        <div className="flex justify-between items-center">
+          <div className="animate-pulse">
+            <div className="h-8 w-48 bg-gray-200 rounded mb-2"></div>
+            <div className="h-4 w-64 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+        
+        {/* Event selection skeleton */}
+        <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
+          <div className="h-5 w-40 bg-gray-200 rounded mb-4 animate-pulse"></div>
+          <div className="h-10 w-full bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        
+        {/* VIP code generation skeleton */}
+        <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
+          <div className="h-5 w-48 bg-gray-200 rounded mb-4 animate-pulse"></div>
+          <div className="space-y-4">
+            <div className="animate-pulse">
+              <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
+              <div className="flex space-x-4">
+                <div className="h-6 w-40 bg-gray-200 rounded"></div>
+                <div className="h-6 w-40 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+            
+            <div className="grid md:grid-cols-2 gap-4 animate-pulse">
+              <div>
+                <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 w-full bg-gray-200 rounded"></div>
+              </div>
+              <div>
+                <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 w-full bg-gray-200 rounded"></div>
+              </div>
+            </div>
+            
+            <div className="h-10 w-40 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+        </div>
+        
+        {/* VIP codes list skeleton */}
+        <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
+          <div className="h-5 w-24 bg-gray-200 rounded mb-4 animate-pulse"></div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left">
+                    <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                  </th>
+                  <th className="px-6 py-3 text-left">
+                    <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                  </th>
+                  <th className="px-6 py-3 text-left">
+                    <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                  </th>
+                  <th className="px-6 py-3 text-left">
+                    <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <tr key={`skeleton-${index}`}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="h-6 w-16 bg-gray-200 rounded-full animate-pulse"></div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }
   
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fadeIn">
       <div className="flex justify-between items-center">
         <SettingsHeader 
           title="VIP Event Settings"

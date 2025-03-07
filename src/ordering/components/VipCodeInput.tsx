@@ -54,7 +54,7 @@ export const VipCodeInput: React.FC<VipCodeInputProps> = ({ onChange }) => {
   };
   
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div className="bg-white rounded-lg shadow-md p-6 mb-6 transition-all duration-300 animate-fadeIn">
       <h2 className="text-xl font-semibold mb-4">VIP Access Required</h2>
       <p className="text-gray-600 mb-4">
         This restaurant is currently accepting orders from VIP guests only.
