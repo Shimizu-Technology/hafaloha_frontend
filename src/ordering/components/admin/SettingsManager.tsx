@@ -68,7 +68,6 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
       case 'users':
         return (
           <div>
-            <h3 className="text-lg font-semibold mb-4">User Management</h3>
             <UsersSettings restaurantId={restaurantId} />
           </div>
         );
@@ -80,12 +79,9 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         );
       case 'vip-access':
         return (
-          <div>
-            <h3 className="text-lg font-semibold mb-4">VIP Access Settings</h3>
-            <div className="space-y-6">
-              <VipModeToggle className="mb-6" />
-              <VipCodesManager />
-            </div>
+          <div className="space-y-6">
+            <VipModeToggle className="mb-6" />
+            <VipCodesManager />
           </div>
         );
       default:

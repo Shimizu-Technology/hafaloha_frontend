@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../../lib/api';
+import { SettingsHeader } from '../../../../shared/components/ui';
+import { List } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -94,7 +96,11 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
 
   return (
     <div>
-      <h4 className="text-lg font-semibold mb-3">Manage Categories</h4>
+      <SettingsHeader 
+        title="Manage Categories"
+        description="Create and organize menu categories for your restaurant."
+        icon={<List className="h-6 w-6" />}
+      />
 
       {error && <p className="text-red-600 mb-3">{error}</p>}
       {loading && <p className="text-gray-500 mb-3">Loading...</p>}

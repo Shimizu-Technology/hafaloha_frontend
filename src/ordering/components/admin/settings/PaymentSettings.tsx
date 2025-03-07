@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../../../../shared/api/apiClient';
-import { LoadingSpinner } from '../../../../shared/components/ui/LoadingSpinner';
+import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
+import { CreditCard } from 'lucide-react';
 
 // Simple Switch component since @headlessui/react might not be available
 const Switch: React.FC<{
@@ -135,11 +136,32 @@ export function PaymentSettings() {
   }
 
   return (
-    <div className="space-y-6 bg-white p-6 rounded-lg shadow">
-      <h2 className="text-xl font-semibold">Payment Gateway Settings</h2>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center mb-4">
+        <SettingsHeader 
+          title="Payment Gateway Settings"
+          description="Configure your payment processing settings."
+          icon={<CreditCard className="h-6 w-6" />}
+        />
+        
+        <Switch 
+          checked={settings.test_mode}
+          onChange={handleTestModeToggle}
+          className={`${
+            settings.test_mode ? 'bg-blue-600' : 'bg-gray-200'
+          } relative inline-flex h-6 w-11 items-center rounded-full`}
+        >
+          <span className="sr-only">Enable test mode</span>
+          <span
+            className={`${
+              settings.test_mode ? 'translate-x-6' : 'translate-x-1'
+            } inline-block h-4 w-4 transform rounded-full bg-white transition`}
+          />
+        </Switch>
+      </div>
       
-      {/* Test Mode Toggle */}
-      <div className="flex items-center justify-between">
+      <div className="bg-white p-6 rounded-lg shadow">
+        {/* Test Mode Description */}
         <div>
           <h3 className="text-lg font-medium">Test Mode</h3>
           <p className="text-sm text-gray-500">

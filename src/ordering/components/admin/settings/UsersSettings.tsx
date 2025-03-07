@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { toast } from 'react-hot-toast';
 import { UserModal } from './UserModal';
+import { SettingsHeader } from '../../../../shared/components/ui';
+import { Users } from 'lucide-react';
 
 interface User {
   id: number;
@@ -128,6 +130,12 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      <SettingsHeader 
+        title="User Management"
+        description="Manage users and their access to the system."
+        icon={<Users className="h-6 w-6" />}
+      />
+      
       {/* Controls section - mobile optimized */}
       <div className="space-y-4 mb-4">
         {/* Search input - full width on mobile */}

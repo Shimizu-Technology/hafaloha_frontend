@@ -7,8 +7,9 @@ import {
   getVipCodes, 
   generateVipCodes 
 } from '../../../../shared/api/endpoints/specialEvents';
-import { LoadingSpinner } from '../../../../shared/components/ui/LoadingSpinner';
+import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { toast } from 'react-hot-toast';
+import { Calendar } from 'lucide-react';
 
 interface SpecialEvent {
   id: number;
@@ -137,38 +138,21 @@ export const VipEventSettings: React.FC = () => {
   
   if (loading && !specialEvents.length) {
     return (
-      <div className="space-y-8 animate-fadeIn">
-        <h2 className="text-xl font-bold">VIP Event Settings</h2>
-        
-        {/* Skeleton for event selection */}
-        <div className="bg-white p-6 rounded-lg shadow animate-pulse">
-          <div className="h-6 w-48 bg-gray-200 rounded mb-4"></div>
-          <div className="h-10 w-full bg-gray-200 rounded"></div>
-        </div>
-        
-        {/* Skeleton for VIP code generation */}
-        <div className="bg-white p-6 rounded-lg shadow animate-pulse">
-          <div className="h-6 w-48 bg-gray-200 rounded mb-4"></div>
-          <div className="space-y-4">
-            <div className="h-6 w-36 bg-gray-200 rounded"></div>
-            <div className="flex space-x-4">
-              <div className="h-5 w-32 bg-gray-200 rounded"></div>
-              <div className="h-5 w-32 bg-gray-200 rounded"></div>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="h-10 w-full bg-gray-200 rounded"></div>
-              <div className="h-10 w-full bg-gray-200 rounded"></div>
-            </div>
-            <div className="h-10 w-40 bg-gray-200 rounded"></div>
-          </div>
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner />
       </div>
     );
   }
   
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-bold">VIP Event Settings</h2>
+      <div className="flex justify-between items-center">
+        <SettingsHeader 
+          title="VIP Event Settings"
+          description="Configure special events and VIP access codes."
+          icon={<Calendar className="h-6 w-6" />}
+        />
+      </div>
       
       {/* Event selection */}
       <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">

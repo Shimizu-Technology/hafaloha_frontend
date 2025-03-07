@@ -13,8 +13,8 @@ import {
   archiveVipCode,
   unarchiveVipCode
 } from '../../../../shared/api/endpoints/vipCodes';
-import { LoadingSpinner } from '../../../../shared/components/ui/LoadingSpinner';
-import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart } from 'lucide-react';
+import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
+import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart, Key } from 'lucide-react';
 import { VipCodeUsageModal } from './VipCodeUsageModal';
 
 interface VipAccessCode {
@@ -482,7 +482,11 @@ export const VipCodesManager: React.FC = () => {
   
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-bold">VIP Codes</h2>
+      <SettingsHeader 
+        title="VIP Codes"
+        description="Manage VIP access codes for exclusive customer access."
+        icon={<Key className="h-6 w-6" />}
+      />
       
       {/* Code generation form */}
       <div className="bg-white p-6 rounded-lg shadow">

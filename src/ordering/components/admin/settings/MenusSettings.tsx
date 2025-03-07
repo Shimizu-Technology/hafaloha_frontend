@@ -1,11 +1,11 @@
 // src/ordering/components/admin/settings/MenusSettings.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Check, Copy, X, Save, ExternalLink } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, Copy, X, Save, ExternalLink, Book } from 'lucide-react';
 import { useMenuStore } from '../../../store/menuStore';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { Menu } from '../../../../shared/api/endpoints/menus';
-import { Tooltip } from '../../../../shared/components/ui';
+import { Tooltip, SettingsHeader } from '../../../../shared/components/ui';
 import { Link } from 'react-router-dom';
 
 interface MenusSettingsProps {
@@ -123,18 +123,21 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-        <h3 className="text-lg font-semibold mb-2 sm:mb-0">Menu Management</h3>
-        <div>
-          <button 
-            onClick={handleOpenCreateModal}
-            className="inline-flex items-center px-3 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f] w-full sm:w-auto"
-            disabled={loading}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Create New Menu
-          </button>
-        </div>
+      <div className="flex justify-between items-center mb-4">
+        <SettingsHeader 
+          title="Menu Management"
+          description="Create and manage menus for your restaurant."
+          icon={<Book className="h-6 w-6" />}
+        />
+        
+        <button 
+          onClick={handleOpenCreateModal}
+          className="inline-flex items-center px-3 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f] w-auto"
+          disabled={loading}
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          Create New Menu
+        </button>
       </div>
 
       {error && (

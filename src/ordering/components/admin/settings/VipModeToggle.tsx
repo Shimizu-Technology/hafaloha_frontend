@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { toast } from 'react-hot-toast';
+import { SettingsHeader } from '../../../../shared/components/ui';
+import { Lock } from 'lucide-react';
 
 interface VipModeToggleProps {
   className?: string;
@@ -30,17 +32,16 @@ export const VipModeToggle: React.FC<VipModeToggleProps> = ({ className = '' }) 
   };
   
   return (
-    <div className={`flex items-center justify-between p-4 bg-white rounded-lg shadow ${className}`}>
-      <div>
-        <h3 className="font-semibold text-lg">VIP-Only Mode</h3>
-        <p className="text-gray-600 text-sm">
-          {isVipModeEnabled 
-            ? 'Only customers with valid VIP codes can place orders' 
-            : 'All customers can place orders'}
-        </p>
-      </div>
+    <div className={`bg-white rounded-lg shadow ${className}`}>
+      <SettingsHeader 
+        title="VIP-Only Mode"
+        description={isVipModeEnabled 
+          ? 'Only customers with valid VIP codes can place orders' 
+          : 'All customers can place orders'}
+        icon={<Lock className="h-6 w-6" />}
+      />
       
-      <div className="flex items-center">
+      <div className="flex items-center justify-end p-4">
         <button
           onClick={handleToggle}
           disabled={loading}
