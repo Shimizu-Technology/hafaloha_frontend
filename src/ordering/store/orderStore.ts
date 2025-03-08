@@ -14,6 +14,7 @@ export interface CartItem extends Omit<OrderItem, 'id'> {
   notes?: string;
   customizations?: any[];
   advance_notice_hours?: number;
+  image?: string; // Add image property
 }
 
 interface OrderStore {

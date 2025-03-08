@@ -426,8 +426,41 @@ export function CheckoutPage() {
           )}
         </div>
 
-        {/* RIGHT COLUMN => Pickup Info */}
+        {/* RIGHT COLUMN => Order Summary and Pickup Info */}
         <div className="lg:col-span-5 mt-8 lg:mt-0">
+          {/* Cart Items Summary */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
+            {cartItems.length === 0 ? (
+              <p className="text-gray-500">Your cart is empty</p>
+            ) : (
+              <div className="space-y-4">
+                {cartItems.map((item) => (
+                  <div key={item.id} className="flex items-center space-x-3">
+                    <img
+                      src={item.image || '/placeholder-food.jpg'}
+                      alt={item.name}
+                      className="w-16 h-16 object-cover rounded-md"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                      {item.customizations && Object.keys(item.customizations).length > 0 && (
+                        <p className="text-xs text-gray-500">
+                          {Object.entries(item.customizations)
+                            .map(([group, options]) => `${options.join(', ')}`)
+                            .join('; ')}
+                        </p>
+                      )}
+                    </div>
+                    <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Pickup Info */}
           <PickupInfo />
         </div>
       </div>

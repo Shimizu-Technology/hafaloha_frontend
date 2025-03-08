@@ -33,6 +33,7 @@ export function MenuItem({ item, index }: MenuItemProps) {
         name: item.name,
         price: item.price,
         customizations: [],
+        image: item.image, // Include the image property
       },
       1
     );

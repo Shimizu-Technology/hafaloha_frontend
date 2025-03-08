@@ -89,6 +89,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
         name: item.name,
         price: basePrice + addlPrice,
         customizations: finalCustomizations as any,
+        image: item.image, // Include the image property
       } as any,
       quantity
     );
