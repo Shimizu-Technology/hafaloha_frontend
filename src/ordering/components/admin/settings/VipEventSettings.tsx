@@ -1,12 +1,13 @@
 // src/ordering/components/admin/settings/VipEventSettings.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { 
   getSpecialEvents, 
   getVipCodes, 
   generateVipCodes 
 } from '../../../../shared/api/endpoints/specialEvents';
+import { getCodeUsage } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { toast } from 'react-hot-toast';
 import { Calendar, Mail } from 'lucide-react';
@@ -31,6 +32,15 @@ interface VipAccessCode {
   group_id?: string;
 }
 
+interface Recipient {
+  email: string;
+  sent_at: string;
+}
+
+interface CodeUsageData {
+  recipients: Recipient[];
+}
+
 export const VipEventSettings: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [specialEvents, setSpecialEvents] = useState<SpecialEvent[]>([]);
@@ -43,9 +53,30 @@ export const VipEventSettings: React.FC = () => {
     maxUses: '',
   });
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [codeRecipients, setCodeRecipients] = useState<{[key: number]: Recipient[]}>({});
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   
   const { restaurant, setCurrentEvent } = useRestaurantStore();
   
+  // Function to fetch recipients for a code
+  const fetchCodeRecipients = useCallback(async (codeId: number) => {
+    try {
+      const data = await getCodeUsage(codeId);
+      return (data as CodeUsageData).recipients || [];
+    } catch (error) {
+      console.error(`Error fetching recipients for code ${codeId}:`, error);
+      throw error;
+    }
+  }, []);
+  
+  // No need for debouncing since we're preloading all data
+  useEffect(() => {
+    setDebouncedSearchTerm(searchTerm);
+  }, [searchTerm]);
+
   // Fetch special events and VIP codes
   useEffect(() => {
     if (!restaurant?.id) return;
@@ -74,6 +105,105 @@ export const VipEventSettings: React.FC = () => {
     
     fetchData();
   }, [restaurant?.id, restaurant?.current_event_id]);
+
+  // Preload recipient data when event changes or codes are loaded
+  useEffect(() => {
+    if (!selectedEvent || vipCodes.length === 0) {
+      setCodeRecipients({});
+      setSearchTerm('');
+      setDebouncedSearchTerm('');
+      setSearchError(null);
+      return;
+    }
+    
+    // Preload recipient data for all codes
+    const preloadRecipients = async () => {
+      setLoadingRecipients(true);
+      setSearchError(null);
+      
+      try {
+        // Create batches of 10 codes to reduce API load but load more data at once
+        const batchSize = 10;
+        const batches = [];
+        for (let i = 0; i < vipCodes.length; i += batchSize) {
+          batches.push(vipCodes.slice(i, i + batchSize));
+        }
+        
+        const recipientsMap: {[key: number]: Recipient[]} = {...codeRecipients};
+        
+        // Process all batches in parallel for maximum speed
+        await Promise.all(
+          batches.map(async (batch) => {
+            await Promise.all(
+              batch.map(async (code) => {
+                if (!recipientsMap[code.id]) {
+                  try {
+                    const recipients = await fetchCodeRecipients(code.id);
+                    recipientsMap[code.id] = recipients;
+                  } catch (error) {
+                    console.error(`Error fetching recipients for code ${code.id}:`, error);
+                    // Continue with other codes even if one fails
+                  }
+                }
+              })
+            );
+          })
+        );
+        
+        setCodeRecipients(recipientsMap);
+      } catch (error) {
+        console.error('Error preloading recipients:', error);
+        setSearchError('Failed to preload some recipient data. Search results may be incomplete.');
+      } finally {
+        setLoadingRecipients(false);
+      }
+    };
+    
+    preloadRecipients();
+  }, [selectedEvent, vipCodes, fetchCodeRecipients]);
+  
+  // No need for the email search effect since we're preloading all recipient data
+  
+  // Create a lookup map for email searches to make filtering faster
+  const emailLookupMap = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    
+    // For each code, add its ID to the set for each email
+    Object.entries(codeRecipients).forEach(([codeId, recipients]) => {
+      recipients.forEach(recipient => {
+        const email = recipient.email.toLowerCase();
+        // Add entries for the full email and each part of it
+        for (let i = 1; i <= email.length; i++) {
+          const substring = email.substring(0, i);
+          if (!map.has(substring)) {
+            map.set(substring, new Set());
+          }
+          map.get(substring)?.add(parseInt(codeId));
+        }
+      });
+    });
+    
+    return map;
+  }, [codeRecipients]);
+  
+  // Filter VIP codes based on search term - optimized for speed
+  const filteredVipCodes = useMemo(() => {
+    if (!searchTerm) return vipCodes;
+    
+    const term = searchTerm.toLowerCase();
+    
+    // Fast path for email searches using the lookup map
+    if (term.includes('@')) {
+      const matchingCodeIds = emailLookupMap.get(term) || new Set<number>();
+      return vipCodes.filter(code => matchingCodeIds.has(code.id));
+    }
+    
+    // Standard search for code and name
+    return vipCodes.filter(code => {
+      return code.code.toLowerCase().includes(term) || 
+             code.name.toLowerCase().includes(term);
+    });
+  }, [vipCodes, searchTerm, emailLookupMap]);
   
   const handleEventChange = async (eventId: string) => {
     const id = parseInt(eventId);
@@ -108,6 +238,93 @@ export const VipEventSettings: React.FC = () => {
     }
   };
   
+  // Function to refresh VIP codes and their recipient data
+  const refreshVipCodes = useCallback(async (withDelay = false) => {
+    if (!selectedEvent) return;
+    
+    // Add a longer delay to ensure server has processed changes
+    if (withDelay) {
+      toast.loading('Waiting for server to process changes...', { id: 'refreshing-vip-codes' });
+      await new Promise(resolve => setTimeout(resolve, 3000)); // 3 second delay
+    }
+    
+    try {
+      setLoading(true);
+      toast.loading('Refreshing VIP codes...', { id: 'refreshing-vip-codes' });
+      
+      console.log('Refreshing VIP codes for event:', selectedEvent.id);
+      
+      // Implement polling to ensure we get the latest data
+      let attempts = 0;
+      let updatedCodes: VipAccessCode[] = [];
+      
+      while (attempts < 3) { // Try up to 3 times
+        attempts++;
+        console.log(`Attempt ${attempts} to fetch updated codes`);
+        
+        try {
+          // Refresh VIP codes list
+          const fetchedCodes = await getVipCodes(selectedEvent.id);
+          console.log('Fetched updated codes:', fetchedCodes.length);
+          
+          // If we got codes, save them and break out of the loop
+          if (fetchedCodes.length > 0) {
+            updatedCodes = fetchedCodes;
+            break;
+          }
+        } catch (error) {
+          console.error('Error fetching codes on attempt', attempts, error);
+        }
+        
+        // Wait a bit before trying again
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Update the state with the new codes
+      setVipCodes(updatedCodes);
+      
+      // Clear recipient data to force a refresh
+      setCodeRecipients({});
+      
+      // Preload recipient data for the updated codes
+      const recipientsMap: {[key: number]: Recipient[]} = {};
+      const batchSize = 10;
+      const batches = [];
+      
+      for (let i = 0; i < updatedCodes.length; i += batchSize) {
+        batches.push(updatedCodes.slice(i, i + batchSize));
+      }
+      
+      console.log('Processing batches:', batches.length);
+      
+      // Process all batches in parallel
+      await Promise.all(
+        batches.map(async (batch) => {
+          await Promise.all(
+            batch.map(async (code) => {
+              try {
+                const recipients = await fetchCodeRecipients(code.id);
+                recipientsMap[code.id] = recipients;
+              } catch (error) {
+                console.error(`Error fetching recipients for code ${code.id}:`, error);
+              }
+            })
+          );
+        })
+      );
+      
+      console.log('Recipient data loaded for', Object.keys(recipientsMap).length, 'codes');
+      setCodeRecipients(recipientsMap);
+      
+      toast.success('VIP codes refreshed successfully', { id: 'refreshing-vip-codes' });
+    } catch (error) {
+      console.error('Error refreshing VIP codes:', error);
+      toast.error('Failed to refresh VIP codes', { id: 'refreshing-vip-codes' });
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedEvent, fetchCodeRecipients]);
+  
   const handleGenerateCodes = async () => {
     if (!selectedEvent) return;
     
@@ -123,9 +340,9 @@ export const VipEventSettings: React.FC = () => {
       await generateVipCodes(selectedEvent.id, params);
       toast.success(`Generated ${codeGenParams.batch ? params.count : 1} VIP code(s)`);
       
-      // Refresh VIP codes list
-      const updatedCodes = await getVipCodes(selectedEvent.id);
-      setVipCodes(updatedCodes);
+      // Refresh VIP codes and their recipient data with a delay
+      await refreshVipCodes(true);
+      
     } catch (error) {
       console.error('Error generating VIP codes:', error);
       toast.error('Failed to generate VIP codes');
@@ -353,15 +570,68 @@ export const VipEventSettings: React.FC = () => {
       {/* VIP codes list - only show if codes exist */}
       {selectedEvent && vipCodes.length > 0 && (
         <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold">VIP Codes</h3>
-            <button
-              onClick={() => setShowEmailModal(true)}
-              className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200"
-            >
-              <Mail size={16} className="mr-2" />
-              Send VIP Codes via Email
-            </button>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold">VIP Codes</h3>
+              <button
+                onClick={() => refreshVipCodes(true)}
+                disabled={loading}
+                className="p-1 text-gray-500 hover:text-gray-700 focus:outline-none"
+                title="Refresh VIP Codes"
+              >
+                <svg className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+              <div className="flex flex-col w-full md:w-64">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search by name, code, or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 pl-10 ${
+                      searchError ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
+                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  {loadingRecipients && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-500">
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                {searchError && (
+                  <p className="text-xs text-red-500 mt-1">{searchError}</p>
+                )}
+                {loadingRecipients && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Loading recipient data for {vipCodes.length} codes...
+                  </p>
+                )}
+                {!loadingRecipients && Object.keys(codeRecipients).length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Recipient data loaded for {Object.keys(codeRecipients).length} codes
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowEmailModal(true)}
+                className="flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200"
+              >
+                <Mail size={16} className="mr-2" />
+                Send VIP Codes via Email
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white divide-y divide-gray-200">
@@ -374,7 +644,8 @@ export const VipEventSettings: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {vipCodes.map(code => (
+                {filteredVipCodes.length > 0 ? (
+                  filteredVipCodes.map((code: VipAccessCode) => (
                   <tr key={code.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{code.code}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{code.name}</td>
@@ -389,7 +660,14 @@ export const VipEventSettings: React.FC = () => {
                       </span>
                     </td>
                   </tr>
-                ))}
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                      {searchTerm ? 'No matching VIP codes found' : 'No VIP codes found'}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -400,6 +678,7 @@ export const VipEventSettings: React.FC = () => {
       {showEmailModal && (
         <VipCodeEmailModal
           onClose={() => setShowEmailModal(false)}
+          onCodesUpdated={() => refreshVipCodes(true)}
         />
       )}
     </div>

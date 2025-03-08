@@ -131,6 +131,7 @@ Modal component for sending VIP codes via email (`src/ordering/components/admin/
 - Batch processing for large email lists
 - Custom email subject and message
 - Preview of email content
+- Tracking of recipient information for each code
 
 **Props Interface:**
 ```typescript
@@ -208,6 +209,7 @@ Modal component for viewing VIP code usage analytics (`src/ordering/components/a
 
 **Key Features:**
 - Detailed usage statistics for a specific VIP code
+- List of recipients who received the code
 - Usage history with timestamps
 - Associated order information
 - Usage trends visualization
@@ -217,6 +219,31 @@ Modal component for viewing VIP code usage analytics (`src/ordering/components/a
 interface VipCodeUsageModalProps {
   codeId: number;
   onClose: () => void;
+}
+```
+
+**Data Structure:**
+```typescript
+interface Recipient {
+  email: string;
+  sent_at: string;
+}
+
+interface CodeUsageData {
+  code: {
+    id: number;
+    code: string;
+    name: string;
+    max_uses: number | null;
+    current_uses: number;
+    expires_at: string | null;
+    is_active: boolean;
+    group_id?: string;
+    archived?: boolean;
+  };
+  usage_count: number;
+  recipients: Recipient[];
+  orders: Order[];
 }
 ```
 
@@ -409,6 +436,11 @@ export const archiveVipCode = async (id: number) => {
 export const unarchiveVipCode = async (id: number) => {
   return api.post(`/vip/codes/${id}/unarchive`);
 };
+
+// Get code usage data including recipient information
+export const getCodeUsage = async (id: number) => {
+  return api.get(`/vip/codes/${id}/usage`);
+};
 ```
 
 ### 3. Email Functionality
@@ -455,6 +487,56 @@ export const useVipCode = async (code: string, orderId?: number) => {
   }
   return api.post('/vip/use', params);
 };
+```
+
+## Recipient Tracking
+
+The VIP Code System now includes recipient tracking functionality, which allows administrators to see which email addresses received which VIP codes. This is implemented through:
+
+1. A new `vip_code_recipients` table in the database that stores the relationship between VIP codes and recipient email addresses
+2. Updated email sending functionality that records recipient information when sending codes
+3. Enhanced VIP code usage modal that displays recipient information
+
+### Recipient Data Structure
+
+```typescript
+interface Recipient {
+  email: string;
+  sent_at: string;
+}
+```
+
+### Recipient Display in VipCodeUsageModal
+
+```tsx
+{/* Recipients Section */}
+<div className="mb-6">
+  <h3 className="font-semibold text-lg mb-2">Recipients ({usageData.recipients?.length || 0})</h3>
+  {!usageData.recipients || usageData.recipients.length === 0 ? (
+    <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
+      <p>No recipient information available for this VIP code.</p>
+    </div>
+  ) : (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sent Date</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {usageData.recipients.map((recipient, index) => (
+            <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-4 py-3 whitespace-nowrap">{recipient.email}</td>
+              <td className="px-4 py-3 whitespace-nowrap">{formatDate(recipient.sent_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
 ```
 
 ## Performance Optimizations
@@ -672,6 +754,6 @@ const handleVipCodeValidated = (code: VipCode | null) => {
 
 ## Conclusion
 
-The VIP Code System frontend provides a comprehensive and user-friendly interface for managing VIP access codes. It integrates seamlessly with the backend API and provides a smooth user experience for both administrators and customers.
+The VIP Code System frontend provides a comprehensive and user-friendly interface for managing VIP access codes. It integrates seamlessly with the backend API and provides a smooth user experience for both administrators and customers. The new recipient tracking functionality enhances the system by allowing administrators to see which email addresses received which VIP codes, making it easier to manage and track VIP code distribution.
 
 For more information about the backend implementation, see the [VIP Code System Backend Documentation](../hafaloha_api/docs/vip_code_system.md).

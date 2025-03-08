@@ -11,7 +11,8 @@ import {
   reactivateVipCode,
   updateVipCode,
   archiveVipCode,
-  unarchiveVipCode
+  unarchiveVipCode,
+  getCodeUsage
 } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart, Key, Calendar, Clock, Mail } from 'lucide-react';
@@ -30,6 +31,15 @@ interface VipAccessCode {
   archived?: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+interface Recipient {
+  email: string;
+  sent_at: string;
+}
+
+interface CodeUsageData {
+  recipients: Recipient[];
 }
 
 export const VipCodesManager: React.FC = () => {
@@ -56,12 +66,15 @@ export const VipCodesManager: React.FC = () => {
   const [viewingDetailsForCode, setViewingDetailsForCode] = useState<VipAccessCode | null>(null);
   const [viewingUsageForCode, setViewingUsageForCode] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchType, setSearchType] = useState<'all' | 'code' | 'name' | 'email'>('all');
   const [sortField, setSortField] = useState<'created_at' | 'name' | 'code' | 'current_uses'>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedCodes, setSelectedCodes] = useState<number[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [emailingCode, setEmailingCode] = useState<VipAccessCode | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [codeRecipients, setCodeRecipients] = useState<{[key: number]: Recipient[]}>({});
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
   
   const { restaurant } = useRestaurantStore();
   
@@ -86,9 +99,39 @@ export const VipCodesManager: React.FC = () => {
     }
   };
   
+  // Function to fetch recipients for a code
+  const fetchCodeRecipients = async (codeId: number) => {
+    try {
+      const data = await getCodeUsage(codeId);
+      return (data as CodeUsageData).recipients || [];
+    } catch (error) {
+      console.error(`Error fetching recipients for code ${codeId}:`, error);
+      return [];
+    }
+  };
+  
   // Function to silently refresh VIP codes without showing loading indicators
   const refreshVipCodesSilently = async () => {
     await fetchVipCodes(false);
+  };
+  
+  // Function to poll for VIP code updates
+  const pollForVipCodeUpdates = () => {
+    // Poll every 3 seconds for 30 seconds (10 times)
+    let pollCount = 0;
+    const maxPolls = 10;
+    
+    const pollInterval = setInterval(async () => {
+      await refreshVipCodesSilently();
+      pollCount++;
+      
+      if (pollCount >= maxPolls) {
+        clearInterval(pollInterval);
+      }
+    }, 3000);
+    
+    // Clear the interval when the component unmounts
+    return () => clearInterval(pollInterval);
   };
   
   // Fetch all VIP codes (including archived) on initial load
@@ -109,10 +152,41 @@ export const VipCodesManager: React.FC = () => {
     // Then filter by search term
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(code => 
-        code.name.toLowerCase().includes(term) || 
-        code.code.toLowerCase().includes(term)
-      );
+      
+      if (searchType === 'email') {
+        // Filter by recipient email
+        filtered = filtered.filter(code => {
+          const recipients = codeRecipients[code.id] || [];
+          return recipients.some(recipient => 
+            recipient.email.toLowerCase().includes(term)
+          );
+        });
+      } else if (searchType === 'code') {
+        // Filter by code only
+        filtered = filtered.filter(code => 
+          code.code.toLowerCase().includes(term)
+        );
+      } else if (searchType === 'name') {
+        // Filter by name only
+        filtered = filtered.filter(code => 
+          code.name.toLowerCase().includes(term)
+        );
+      } else {
+        // Filter by all fields (default)
+        filtered = filtered.filter(code => {
+          // Check if code or name matches
+          const codeMatches = code.code.toLowerCase().includes(term);
+          const nameMatches = code.name.toLowerCase().includes(term);
+          
+          // Check if any recipient email matches
+          const recipients = codeRecipients[code.id] || [];
+          const emailMatches = recipients.some(recipient => 
+            recipient.email.toLowerCase().includes(term)
+          );
+          
+          return codeMatches || nameMatches || emailMatches;
+        });
+      }
     }
     
     // Then sort
@@ -138,7 +212,31 @@ export const VipCodesManager: React.FC = () => {
       
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [allVipCodes, showArchived, searchTerm, sortField, sortDirection]);
+  }, [allVipCodes, showArchived, searchTerm, searchType, sortField, sortDirection, codeRecipients]);
+  
+  // Fetch recipients for all codes when searching by email
+  useEffect(() => {
+    const fetchAllRecipients = async () => {
+      if (searchTerm && (searchType === 'email' || searchType === 'all')) {
+        setLoadingRecipients(true);
+        
+        const recipientsMap: {[key: number]: Recipient[]} = {};
+        
+        // Fetch recipients for each code
+        for (const code of allVipCodes) {
+          if (!codeRecipients[code.id]) {
+            const recipients = await fetchCodeRecipients(code.id);
+            recipientsMap[code.id] = recipients;
+          }
+        }
+        
+        setCodeRecipients(prev => ({...prev, ...recipientsMap}));
+        setLoadingRecipients(false);
+      }
+    };
+    
+    fetchAllRecipients();
+  }, [searchTerm, searchType, allVipCodes]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -178,6 +276,9 @@ export const VipCodesManager: React.FC = () => {
       
       // Refresh the codes list silently to ensure we have the latest data without showing loading indicators
       await refreshVipCodesSilently();
+      
+      // Start polling for updates
+      pollForVipCodeUpdates();
     } catch (error) {
       console.error('Error generating VIP codes:', error);
       toast.error('Failed to generate VIP codes');

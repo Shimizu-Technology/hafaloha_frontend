@@ -33,6 +33,11 @@ interface Order {
   items: OrderItem[];
 }
 
+interface Recipient {
+  email: string;
+  sent_at: string;
+}
+
 interface CodeUsageData {
   code: {
     id: number;
@@ -46,6 +51,7 @@ interface CodeUsageData {
     archived?: boolean;
   };
   usage_count: number;
+  recipients: Recipient[];
   orders: Order[];
 }
 
@@ -169,6 +175,36 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
         </div>
 
         <div className="flex-grow overflow-auto">
+          {/* Recipients Section */}
+          <div className="mb-6">
+            <h3 className="font-semibold text-lg mb-2">Recipients ({usageData.recipients?.length || 0})</h3>
+            {!usageData.recipients || usageData.recipients.length === 0 ? (
+              <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
+                <p>No recipient information available for this VIP code.</p>
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sent Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {usageData.recipients.map((recipient, index) => (
+                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="px-4 py-3 whitespace-nowrap">{recipient.email}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{formatDate(recipient.sent_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Orders Section */}
           {usageData.orders.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <ShoppingBag size={48} className="mx-auto mb-2 opacity-30" />

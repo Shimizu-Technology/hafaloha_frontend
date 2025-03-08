@@ -4,9 +4,11 @@ import { toast } from 'react-hot-toast';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { 
   bulkSendVipCodes, 
-  sendExistingVipCodes, 
-  getVipCodes 
+  sendExistingVipCodes
 } from '../../../../shared/api/endpoints/vipCodes';
+import {
+  getVipCodes
+} from '../../../../shared/api/endpoints/specialEvents';
 
 interface VipAccessCode {
   id: number;
@@ -46,7 +48,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
   
   // Fetch available VIP codes when the modal opens
   useEffect(() => {
-    if (restaurant?.id) {
+    if (restaurant?.id && restaurant?.current_event_id) {
       fetchVipCodes();
     }
     
@@ -55,7 +57,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
       setMode('existing');
       setSelectedCodes([selectedCode.id]);
     }
-  }, [restaurant?.id, selectedCode]);
+  }, [restaurant?.id, restaurant?.current_event_id, selectedCode]);
   
   // Filter codes based on search term
   const filteredCodes = availableCodes.filter(code => {
@@ -68,11 +70,19 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
   });
   
   const fetchVipCodes = async () => {
+    if (!restaurant?.current_event_id) {
+      toast.error('No current event selected');
+      return;
+    }
+    
     setFetchingCodes(true);
     try {
-      const codes = await getVipCodes(undefined, { include_archived: false });
+      console.log('Fetching VIP codes for event:', restaurant.current_event_id);
+      const codes = await getVipCodes(restaurant.current_event_id);
+      console.log('Fetched codes:', codes.length);
+      
       // Only show active codes
-      setAvailableCodes((codes as VipAccessCode[]).filter(code => code.is_active));
+      setAvailableCodes(codes.filter(code => code.is_active));
     } catch (error) {
       console.error('Error fetching VIP codes:', error);
       toast.error('Failed to load VIP codes');
@@ -139,14 +149,20 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
         message: string;
       }
       const responseData = response as BulkSendResponse;
+      // Close the modal immediately
+      onClose();
+      
+      // Show success message
       toast.success(`Queued ${responseData.total_recipients} emails in ${responseData.batch_count} batches`);
       
-      // Notify parent component that codes were updated
-      if (onCodesUpdated) {
-        onCodesUpdated();
-      }
-      
-      onClose();
+      // Add a delay before notifying parent component that codes were updated
+      // This gives the server time to process the changes, but doesn't block the UI
+      setTimeout(() => {
+        console.log('Notifying parent that codes were updated');
+        if (onCodesUpdated) {
+          onCodesUpdated();
+        }
+      }, 2000); // 2 second delay
     } catch (error) {
       console.error('Error sending VIP code emails:', error);
       toast.error('Failed to send VIP code emails');
