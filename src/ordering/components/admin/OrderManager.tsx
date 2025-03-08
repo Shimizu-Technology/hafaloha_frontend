@@ -1,10 +1,14 @@
 // src/ordering/components/admin/OrderManager.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 import { AdminEditOrderModal } from './AdminEditOrderModal';
 import { SetEtaModal } from './SetEtaModal';
 import { OrderDetailsModal } from './OrderDetailsModal';
+import { SearchInput } from './SearchInput';
+import { DateFilter, DateFilterOption } from './DateFilter';
+import { CollapsibleOrderCard } from './CollapsibleOrderCard';
+import { MultiSelectActionBar } from './MultiSelectActionBar';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed';
 
@@ -29,10 +33,27 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
   // which "tab" we are viewing
-  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('pending');
 
   // sort direction (true = newest first, false = oldest first)
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
+  
+  // search query
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // date filter
+  const [dateFilter, setDateFilter] = useState<DateFilterOption>('today');
+  const [customStartDate, setCustomStartDate] = useState<Date>(new Date());
+  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
+  
+  // expanded order cards
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  
+  // selected orders for batch actions
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  
+  // new orders highlighting
+  const [newOrders, setNewOrders] = useState<Set<string>>(new Set());
 
   // for the "Set ETA" modal
   const [showEtaModal, setShowEtaModal] = useState(false);
@@ -60,6 +81,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Initial fetch - this one can show loading state
     fetchOrders();
     
+    // Store the current orders to detect new ones
+    const currentOrderIds = new Set(orders.map(o => o.id));
+    
     // Set up polling with visibility detection
     let pollingInterval: number | null = null;
     
@@ -72,7 +96,34 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       pollingInterval = window.setInterval(() => {
         // Use the fetchOrdersQuietly function from the store
         // This won't update the loading state, preventing UI "shake"
-        useOrderStore.getState().fetchOrdersQuietly();
+        const store = useOrderStore.getState();
+        store.fetchOrdersQuietly().then(() => {
+          // Check for new orders by comparing with previous set
+          const newOrderIds = store.orders
+            .filter(o => !currentOrderIds.has(o.id))
+            .map(o => o.id);
+          
+          if (newOrderIds.length > 0) {
+            // Add to new orders set
+            setNewOrders(prev => {
+              const updated = new Set(prev);
+              newOrderIds.forEach(id => updated.add(id));
+              return updated;
+            });
+            
+            // Update current orders
+            newOrderIds.forEach(id => currentOrderIds.add(id));
+            
+            // Clear new order highlight after 30 seconds
+            setTimeout(() => {
+              setNewOrders(prev => {
+                const updated = new Set(prev);
+                newOrderIds.forEach(id => updated.delete(id));
+                return updated;
+              });
+            }, 30000);
+          }
+        });
       }, POLLING_INTERVAL);
     };
     
@@ -101,12 +152,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Add visibility change listener
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    // Clean up on component unmount
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchOrders]);
+  // Clean up on component unmount
+  return () => {
+    stopPolling();
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, [fetchOrders]);
 
   // Track if the status update is in progress to prevent opening edit modal
   const [isStatusUpdateInProgress, setIsStatusUpdateInProgress] = useState(false);
@@ -125,22 +176,185 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }
   }, [selectedOrderId, orders, isStatusUpdateInProgress]);
 
-  // Sort orders by creation date
-  const sortedOrders = [...orders].sort((a, b) => {
-    // Convert strings to Date objects for comparison
-    const dateA = new Date(a.createdAt || 0);
-    const dateB = new Date(b.createdAt || 0);
-    // Sort based on sortNewestFirst flag
-    return sortNewestFirst 
-      ? dateB.getTime() - dateA.getTime() // newest first
-      : dateA.getTime() - dateB.getTime(); // oldest first
-  });
-
-  // filter the orders by selectedStatus
-  const filteredOrders =
-    selectedStatus === 'all'
-      ? sortedOrders
-      : sortedOrders.filter(order => order.status === selectedStatus);
+  // Toggle order expansion
+  const toggleOrderExpand = useCallback((orderId: string) => {
+    setExpandedOrders(prev => {
+      const updated = new Set(prev);
+      if (updated.has(orderId)) {
+        updated.delete(orderId);
+      } else {
+        updated.add(orderId);
+      }
+      return updated;
+    });
+  }, []);
+  
+  // Toggle order selection
+  const toggleOrderSelection = useCallback((orderId: string, selected: boolean) => {
+    setSelectedOrders(prev => {
+      const updated = new Set(prev);
+      if (selected) {
+        updated.add(orderId);
+      } else {
+        updated.delete(orderId);
+      }
+      return updated;
+    });
+  }, []);
+  
+  // Clear all selections
+  const clearSelections = useCallback(() => {
+    setSelectedOrders(new Set());
+  }, []);
+  
+  // Batch actions for selected orders
+  const handleBatchMarkAsReady = useCallback(async () => {
+    setIsStatusUpdateInProgress(true);
+    
+    try {
+      // Process orders sequentially to avoid race conditions
+      for (const orderId of selectedOrders) {
+        await updateOrderStatusQuietly(orderId, 'ready');
+      }
+      
+      // Clear selections after successful update
+      clearSelections();
+    } finally {
+      setIsStatusUpdateInProgress(false);
+    }
+  }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
+  
+  const handleBatchMarkAsCompleted = useCallback(async () => {
+    setIsStatusUpdateInProgress(true);
+    
+    try {
+      for (const orderId of selectedOrders) {
+        await updateOrderStatusQuietly(orderId, 'completed');
+      }
+      
+      clearSelections();
+    } finally {
+      setIsStatusUpdateInProgress(false);
+    }
+  }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
+  
+  const handleBatchMarkAsCancelled = useCallback(async () => {
+    setIsStatusUpdateInProgress(true);
+    
+    try {
+      for (const orderId of selectedOrders) {
+        await updateOrderStatusQuietly(orderId, 'cancelled');
+      }
+      
+      clearSelections();
+    } finally {
+      setIsStatusUpdateInProgress(false);
+    }
+  }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
+  
+  // Date filter functions
+  const getDateRange = useCallback(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    
+    const lastWeekStart = new Date(weekStart);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+    
+    const lastWeekEnd = new Date(weekStart);
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+    
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    switch (dateFilter) {
+      case 'today':
+        return { start: today, end: tomorrow };
+      case 'yesterday':
+        return { start: yesterday, end: today };
+      case 'thisWeek':
+        return { start: weekStart, end: tomorrow };
+      case 'lastWeek':
+        return { start: lastWeekStart, end: lastWeekEnd };
+      case 'thisMonth':
+        return { start: monthStart, end: tomorrow };
+      case 'custom':
+        return { start: customStartDate, end: customEndDate };
+      default:
+        return { start: today, end: tomorrow };
+    }
+  }, [dateFilter, customStartDate, customEndDate]);
+  
+  // Search function
+  const searchOrders = useCallback((order: any, query: string) => {
+    if (!query) return true;
+    
+    const searchLower = query.toLowerCase();
+    
+    // Search in order ID
+    if (order.id.toString().includes(searchLower)) return true;
+    
+    // Search in customer name
+    if (order.contact_name && order.contact_name.toLowerCase().includes(searchLower)) return true;
+    
+    // Search in customer email
+    if (order.contact_email && order.contact_email.toLowerCase().includes(searchLower)) return true;
+    
+    // Search in customer phone
+    if (order.contact_phone && order.contact_phone.toLowerCase().includes(searchLower)) return true;
+    
+    // Search in special instructions
+    const instructions = (order.special_instructions || order.specialInstructions || '').toLowerCase();
+    if (instructions.includes(searchLower)) return true;
+    
+    // Search in order items
+    if (order.items && order.items.length > 0) {
+      return order.items.some((item: any) => 
+        item.name.toLowerCase().includes(searchLower) ||
+        (item.notes && item.notes.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    return false;
+  }, []);
+  
+  // Apply all filters
+  const filteredOrders = useMemo(() => {
+    // First sort orders by creation date
+    const sortedOrders = [...orders].sort((a, b) => {
+      // Convert strings to Date objects for comparison
+      const dateA = new Date(a.createdAt || 0);
+      const dateB = new Date(b.createdAt || 0);
+      // Sort based on sortNewestFirst flag
+      return sortNewestFirst 
+        ? dateB.getTime() - dateA.getTime() // newest first
+        : dateA.getTime() - dateB.getTime(); // oldest first
+    });
+    
+    // Apply date filter
+    const { start, end } = getDateRange();
+    const dateFiltered = sortedOrders.filter(order => {
+      const orderDate = new Date(order.createdAt);
+      return orderDate >= start && orderDate < end;
+    });
+    
+    // Apply status filter
+    const statusFiltered = selectedStatus === 'all'
+      ? dateFiltered
+      : dateFiltered.filter(order => order.status === selectedStatus);
+    
+    // Apply search filter
+    return searchQuery
+      ? statusFiltered.filter(order => searchOrders(order, searchQuery))
+      : statusFiltered;
+  }, [orders, sortNewestFirst, selectedStatus, searchQuery, getDateRange, searchOrders]);
       
   // Calculate pagination
   const totalOrders = filteredOrders.length;
@@ -154,7 +368,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedStatus, sortNewestFirst]);
+  }, [selectedStatus, sortNewestFirst, searchQuery, dateFilter]);
 
   function closeModal() {
     setSelectedOrder(null);
@@ -199,8 +413,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   }
 
   // color badges
-  const getStatusBadgeColor = (status: OrderStatus) => {
-    const colors = {
+  const getStatusBadgeColor = (status: string) => {
+    const colors: Record<string, string> = {
       pending: 'bg-yellow-100 text-yellow-800',
       preparing: 'bg-blue-100 text-blue-800',
       ready: 'bg-green-100 text-green-800',
@@ -208,7 +422,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       cancelled: 'bg-red-100 text-red-800',
       confirmed: 'bg-purple-100 text-purple-800', // Added confirmed status
     };
-    return colors[status];
+    return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
   // Check if an order requires 24-hour advance notice
@@ -239,6 +453,91 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setShowOrderActions(showOrderActions === orderId ? null : orderId);
   };
 
+  // Render order actions for CollapsibleOrderCard - optimized for touch
+  const renderOrderActions = (order: any) => {
+    return (
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <p className="font-medium text-sm">
+          Total: ${Number(order.total || 0).toFixed(2)}
+        </p>
+        
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+          {order.status === 'pending' && (
+            <button
+              className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 min-w-[120px] flex-grow sm:flex-grow-0"
+              onClick={() => {
+                setOrderToPrep(order);
+                // Set default ETA based on order type
+                if (requiresAdvanceNotice(order)) {
+                  setEtaMinutes(10.0); // Default to 10 AM next day
+                } else {
+                  setEtaMinutes(5); // Default to 5 minutes
+                }
+                setShowEtaModal(true);
+              }}
+            >
+              Start Preparing
+            </button>
+          )}
+          {order.status === 'preparing' && (
+            <button
+              className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium hover:bg-green-600 min-w-[120px] flex-grow sm:flex-grow-0"
+              onClick={() => {
+                setIsStatusUpdateInProgress(true);
+                updateOrderStatusQuietly(order.id, 'ready')
+                  .finally(() => setIsStatusUpdateInProgress(false));
+              }}
+            >
+              Mark as Ready
+            </button>
+          )}
+          {order.status === 'ready' && (
+            <button
+              className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-medium hover:bg-gray-600 min-w-[120px] flex-grow sm:flex-grow-0"
+              onClick={() => {
+                setIsStatusUpdateInProgress(true);
+                updateOrderStatusQuietly(order.id, 'completed')
+                  .finally(() => setIsStatusUpdateInProgress(false));
+              }}
+            >
+              Complete
+            </button>
+          )}
+          
+          <button
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-md"
+            onClick={() => {
+              setEditingOrder(order);
+            }}
+            aria-label="Edit order"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          
+          {(order.status === 'pending' || order.status === 'preparing') && (
+            <button
+              className="p-2 text-red-400 hover:text-red-600 rounded-md"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to cancel this order?')) {
+                  setIsStatusUpdateInProgress(true);
+                  updateOrderStatusQuietly(order.id, 'cancelled')
+                    .finally(() => setIsStatusUpdateInProgress(false));
+                }
+              }}
+              aria-label="Cancel order"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4">
       {error && <p className="text-red-600 mb-4">{error}</p>}
@@ -249,11 +548,33 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         <p className="text-gray-600 text-sm">Manage and track customer orders</p>
       </div>
 
-      {/* Filters and controls - mobile optimized */}
-      <div className="mb-6 space-y-5">
-        {/* Sort and count area */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-          <div className="w-full sm:w-auto">
+      {/* Filters and controls - optimized for mobile, tablet, and desktop */}
+      <div className="mb-6 space-y-4">
+        {/* Date, search and sort area */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="w-full">
+            <DateFilter
+              selectedOption={dateFilter}
+              onOptionChange={setDateFilter}
+              startDate={customStartDate}
+              endDate={customEndDate}
+              onDateRangeChange={(start, end) => {
+                setCustomStartDate(start);
+                setCustomEndDate(end);
+              }}
+            />
+          </div>
+          
+          <div className="w-full">
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search orders..."
+              className="w-full"
+            />
+          </div>
+          
+          <div className="w-full flex items-center justify-between">
             <MobileSelect
               options={[
                 { value: 'newest', label: 'Sort: Newest First' },
@@ -262,21 +583,21 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               value={sortNewestFirst ? 'newest' : 'oldest'}
               onChange={(value) => setSortNewestFirst(value === 'newest')}
             />
-          </div>
-          
-          <div className="text-sm text-gray-500 font-medium">
-            {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+            
+            <div className="text-sm text-gray-500 font-medium ml-3 whitespace-nowrap">
+              {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+            </div>
           </div>
         </div>
 
         {/* Status filter buttons - horizontal scrolling with improved mobile styling */}
-        <div className="relative">
-          {/* Scrollable container */}
-          <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1">
+        <div className="relative mt-2">
+          {/* Scrollable container with improved touch scrolling for mobile */}
+          <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1 pb-2 -mb-1 snap-x touch-pan-x">
             <button
               onClick={() => setSelectedStatus('all')}
               className={`
-                whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0
+                whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start
                 ${selectedStatus === 'all'
                   ? 'bg-[#c1902f] text-white shadow-sm'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -290,7 +611,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 key={status}
                 onClick={() => setSelectedStatus(status)}
                 className={`
-                  whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0
+                  whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start
                   ${selectedStatus === status
                     ? 'bg-[#c1902f] text-white shadow-sm'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -304,7 +625,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         </div>
       </div>
 
-      {/* Orders list - further mobile optimized */}
+      {/* Orders list - with collapsible cards */}
       <div className="pb-16">
         {loading ? (
           // Skeleton loading state
@@ -363,290 +684,73 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         ) : (
           <div>
             <div className="space-y-4 mb-6">
-              {currentOrders.map((order, index) => (
-                <div 
-                  key={order.id} 
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-slideUp"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  {/* Order header - more compact for mobile */}
-                  <div className="flex justify-between items-center p-3 border-b border-gray-100">
-                    <div>
-                      <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
-                      {order.createdAt && (
-                        <p className="text-xs text-gray-500">
-                          {new Date(order.createdAt).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center space-x-1">
-                        {requiresAdvanceNotice(order) && (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            24h
-                          </span>
-                        )}
-                        <span
-                          className={`
-                            px-2 py-1 rounded-full text-xs font-medium
-                            ${getStatusBadgeColor(order.status)}
-                          `}
-                        >
-                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                        </span>
-                      </div>
-                      <div 
-                        className="text-gray-400 hover:text-gray-600 relative cursor-pointer p-1"
-                        onClick={() => toggleOrderActions(Number(order.id))}
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Order actions"
-                        aria-haspopup="true"
-                        aria-expanded={showOrderActions === Number(order.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            toggleOrderActions(Number(order.id));
-                          }
-                        }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="1"></circle>
-                          <circle cx="19" cy="12" r="1"></circle>
-                          <circle cx="5" cy="12" r="1"></circle>
-                        </svg>
-                        
-                        {/* Dropdown menu for mobile */}
-                        {showOrderActions === Number(order.id) && (
-                          <div className="absolute right-0 top-full mt-1 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
-                            <div className="py-1" role="menu" aria-orientation="vertical">
-                              <button
-                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingOrder(order);
-                                  setShowOrderActions(null);
-                                }}
-                              >
-                                Edit Order
-                              </button>
-
-                              {order.status === 'pending' && (
-                                <button
-                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOrderToPrep(order);
-                                    // Set default ETA based on order type
-                                    if (requiresAdvanceNotice(order)) {
-                                      setEtaMinutes(10.0); // Default to 10 AM next day
-                                    } else {
-                                      setEtaMinutes(5); // Default to 5 minutes
-                                    }
-                                    setShowEtaModal(true);
-                                    setShowOrderActions(null);
-                                  }}
-                                >
-                                  Start Preparing
-                                </button>
-                              )}
-                              
-                              {order.status === 'preparing' && (
-                                <button
-                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIsStatusUpdateInProgress(true);
-                                    updateOrderStatusQuietly(order.id, 'ready')
-                                      .finally(() => setIsStatusUpdateInProgress(false));
-                                    setShowOrderActions(null);
-                                  }}
-                                >
-                                  Mark as Ready
-                                </button>
-                              )}
-                              
-                              {order.status === 'ready' && (
-                                <button
-                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIsStatusUpdateInProgress(true);
-                                    updateOrderStatusQuietly(order.id, 'completed')
-                                      .finally(() => setIsStatusUpdateInProgress(false));
-                                    setShowOrderActions(null);
-                                  }}
-                                >
-                                  Complete Order
-                                </button>
-                              )}
-                              
-                              {(order.status === 'pending' || order.status === 'preparing') && (
-                                <button
-                                  className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIsStatusUpdateInProgress(true);
-                                    updateOrderStatusQuietly(order.id, 'cancelled')
-                                      .finally(() => setIsStatusUpdateInProgress(false));
-                                    setShowOrderActions(null);
-                                  }}
-                                >
-                                  Cancel Order
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Order content - simplified for mobile */}
-                  <div className="p-3">
-                    {/* Items with prices aligned to right */}
-                    <div className="mb-4">
-                      <h4 className="font-medium text-sm text-gray-700 mb-2">Order Items:</h4>
-                      <div className="space-y-1">
-                        {order.items && order.items.length > 0 ? (
-                          order.items.map((item: any, index: number) => (
-                            <div key={index} className="flex justify-between text-sm">
-                              <div>
-                                <span className="font-medium">
-                                  {item.name} × {item.quantity}
-                                </span>
-                              </div>
-                              <div className="text-right">
-                                ${Number(item.price * item.quantity).toFixed(2)}
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-sm text-gray-500">No items found</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Customer info - more compact */}
-                    <div className="text-xs space-y-2 mb-3">
-                      {order.contact_name && (
-                        <div>
-                          <span className="font-medium text-gray-700">Customer: </span>
-                          <span>{order.contact_name}</span>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <span className="font-medium text-gray-700">Pickup: </span>
-                        <span>{formatDate((order as any).estimatedPickupTime || (order as any).estimated_pickup_time)}</span>
-                      </div>
-                      
-                      {((order as any).special_instructions || (order as any).specialInstructions) && (
-                        <div>
-                          <span className="font-medium text-gray-700">Instructions: </span>
-                          <span>{(order as any).special_instructions || (order as any).specialInstructions}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Total */}
-                    <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-                      <p className="font-medium text-sm">
-                        Total: ${Number(order.total || 0).toFixed(2)}
-                      </p>
-                      
-                      {/* Status-specific action button for larger screens */}
-                      <div className="hidden sm:block">
-                        {order.status === 'pending' && (
-                          <button
-                            className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
-                            onClick={() => {
-                              setOrderToPrep(order);
-                              // Set default ETA based on order type
-                              if (requiresAdvanceNotice(order)) {
-                                setEtaMinutes(10.0); // Default to 10 AM next day
-                              } else {
-                                setEtaMinutes(5); // Default to 5 minutes
-                              }
-                              setShowEtaModal(true);
-                            }}
-                          >
-                            Start Preparing
-                          </button>
-                        )}
-                        {order.status === 'preparing' && (
-                          <button
-                            className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"
-                            onClick={() => {
-                              setIsStatusUpdateInProgress(true);
-                              updateOrderStatusQuietly(order.id, 'ready')
-                                .finally(() => setIsStatusUpdateInProgress(false));
-                            }}
-                          >
-                            Mark as Ready
-                          </button>
-                        )}
-                        {order.status === 'ready' && (
-                          <button
-                            className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600"
-                            onClick={() => {
-                              setIsStatusUpdateInProgress(true);
-                              updateOrderStatusQuietly(order.id, 'completed')
-                                .finally(() => setIsStatusUpdateInProgress(false));
-                            }}
-                          >
-                            Complete
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              {currentOrders.map((order) => (
+                <CollapsibleOrderCard
+                  key={order.id}
+                  order={order}
+                  isExpanded={expandedOrders.has(order.id)}
+                  onToggleExpand={() => toggleOrderExpand(order.id)}
+                  isNew={newOrders.has(order.id)}
+                  isSelected={selectedOrders.has(order.id)}
+                  onSelectChange={(selected) => toggleOrderSelection(order.id, selected)}
+                  renderActions={() => renderOrderActions(order)}
+                  getStatusBadgeColor={getStatusBadgeColor}
+                  formatDate={formatDate}
+                  requiresAdvanceNotice={requiresAdvanceNotice}
+                />
               ))}
             </div>
             
-            {/* Pagination controls */}
+            {/* Pagination controls - optimized for mobile */}
             {totalPages > 1 && (
               <div className="flex justify-center items-center space-x-2 mt-6 pb-4">
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
-                  className={`px-3 py-1 rounded-md text-sm ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium ${
                     currentPage === 1
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
+                  aria-label="Previous page"
                 >
                   Previous
                 </button>
                 
-                <div className="flex space-x-1">
+                <div className="hidden sm:flex space-x-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                     <button
                       key={page}
                       onClick={() => setCurrentPage(page)}
-                      className={`w-8 h-8 flex items-center justify-center rounded-md text-sm ${
+                      className={`w-10 h-10 flex items-center justify-center rounded-md text-sm font-medium ${
                         currentPage === page
                           ? 'bg-[#c1902f] text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
+                      aria-label={`Page ${page}`}
+                      aria-current={currentPage === page ? 'page' : undefined}
                     >
                       {page}
                     </button>
                   ))}
                 </div>
                 
+                {/* Mobile page indicator */}
+                <div className="sm:hidden flex items-center px-3">
+                  <span className="text-sm font-medium">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                </div>
+                
                 <button
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
-                  className={`px-3 py-1 rounded-md text-sm ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium ${
                     currentPage === totalPages
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
+                  aria-label="Next page"
                 >
                   Next
                 </button>
@@ -655,6 +759,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           </div>
         )}
       </div>
+
+      {/* Multi-select action bar */}
+      <MultiSelectActionBar
+        selectedCount={selectedOrders.size}
+        onClearSelection={clearSelections}
+        onMarkAsReady={handleBatchMarkAsReady}
+        onMarkAsCompleted={handleBatchMarkAsCompleted}
+        onMarkAsCancelled={handleBatchMarkAsCancelled}
+        isProcessing={isStatusUpdateInProgress}
+      />
 
       {/* Click outside handler for order actions dropdown */}
       {showOrderActions !== null && (

@@ -207,8 +207,15 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
   - **Multiple Menus** - Create, edit, clone, and switch between multiple menus for different occasions
   - **Menu Activation** - Set a specific menu as active to display to customers
 - **OrderManager** - View and process orders with real-time auto-refresh functionality
+  - **Search Functionality** - Search across order details including name, email, order contents
+  - **Date Filtering** - Default to today's orders with options to view other time periods
+  - **Visual Time Indicators** - Show how long orders have been in their current status
+  - **Collapsible Details** - Expand/collapse order details for better space usage
+  - **New Order Highlighting** - Visual cues for newly arrived orders
+  - **Multi-select Orders** - Select multiple orders to perform batch actions
   - **SetEtaModal** - Specialized modal for setting pickup times, with different interfaces for regular orders (5-60 minute ETA) and advance notice orders (next-day time slots)
   - **Pagination** - Efficient pagination controls for handling large order volumes
+  - **Mobile Optimization** - Fully responsive design with touch-friendly controls
 - **AnalyticsManager** - View business metrics
 - **RestaurantSettings** - Configure restaurant information with real-time updates
   - **Notification Channels** - Configure email and SMS preferences for customer communications
