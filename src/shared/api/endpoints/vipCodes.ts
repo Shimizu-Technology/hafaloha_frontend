@@ -92,3 +92,39 @@ export const getCodeUsage = async (id: number) => {
 export const validateVipCode = async (code: string, restaurantId: number) => {
   return api.post(`/restaurants/${restaurantId}/vip_access/validate_code`, { code });
 };
+
+/**
+ * Send a VIP code to multiple email addresses
+ */
+export const sendVipCodeEmail = async (codeId: number, emails: string[]) => {
+  return api.post(`/vip_access/send_code_email`, {
+    code_id: codeId,
+    emails: emails
+  });
+};
+
+/**
+ * Bulk send VIP codes to multiple email addresses
+ * Generates a unique code for each email
+ */
+export const bulkSendVipCodes = async (options: {
+  email_list: string[];
+  batch_size?: number;
+  prefix?: string;
+  max_uses?: number;
+  name?: string;
+}) => {
+  return api.post(`/vip_access/bulk_send_vip_codes`, options);
+};
+
+/**
+ * Send existing VIP codes to multiple email addresses
+ * Uses the provided code IDs instead of generating new ones
+ */
+export const sendExistingVipCodes = async (options: {
+  email_list: string[];
+  code_ids: number[];
+  batch_size?: number;
+}) => {
+  return api.post(`/vip_access/send_existing_vip_codes`, options);
+};

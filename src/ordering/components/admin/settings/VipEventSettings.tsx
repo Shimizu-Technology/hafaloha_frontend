@@ -9,7 +9,8 @@ import {
 } from '../../../../shared/api/endpoints/specialEvents';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { toast } from 'react-hot-toast';
-import { Calendar } from 'lucide-react';
+import { Calendar, Mail } from 'lucide-react';
+import { VipCodeEmailModal } from './VipCodeEmailModal';
 
 interface SpecialEvent {
   id: number;
@@ -41,6 +42,7 @@ export const VipEventSettings: React.FC = () => {
     name: '',
     maxUses: '',
   });
+  const [showEmailModal, setShowEmailModal] = useState(false);
   
   const { restaurant, setCurrentEvent } = useRestaurantStore();
   
@@ -351,7 +353,16 @@ export const VipEventSettings: React.FC = () => {
       {/* VIP codes list - only show if codes exist */}
       {selectedEvent && vipCodes.length > 0 && (
         <div className="bg-white p-6 rounded-lg shadow transition-all duration-300 animate-fadeIn">
-          <h3 className="font-semibold mb-4">VIP Codes</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-semibold">VIP Codes</h3>
+            <button
+              onClick={() => setShowEmailModal(true)}
+              className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200"
+            >
+              <Mail size={16} className="mr-2" />
+              Send VIP Codes via Email
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -383,6 +394,13 @@ export const VipEventSettings: React.FC = () => {
             </table>
           </div>
         </div>
+      )}
+      
+      {/* VIP Code Email Modal */}
+      {showEmailModal && (
+        <VipCodeEmailModal
+          onClose={() => setShowEmailModal(false)}
+        />
       )}
     </div>
   );

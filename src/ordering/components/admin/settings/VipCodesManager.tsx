@@ -14,8 +14,9 @@ import {
   unarchiveVipCode
 } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
-import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart, Key, Calendar, Clock } from 'lucide-react';
+import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart, Key, Calendar, Clock, Mail } from 'lucide-react';
 import { VipCodeUsageModal } from './VipCodeUsageModal';
+import { VipCodeEmailModal } from './VipCodeEmailModal';
 
 interface VipAccessCode {
   id: number;
@@ -39,7 +40,7 @@ export const VipCodesManager: React.FC = () => {
   const [formData, setFormData] = useState({
     count: 10,
     name: '',
-    prefix: '',
+    prefix: 'VIP',
     maxUses: '',
     limitedUses: false,
   });
@@ -59,27 +60,42 @@ export const VipCodesManager: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedCodes, setSelectedCodes] = useState<number[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [emailingCode, setEmailingCode] = useState<VipAccessCode | null>(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   
   const { restaurant } = useRestaurantStore();
   
-  // Fetch all VIP codes (including archived) on initial load
-  useEffect(() => {
+  // Function to fetch all VIP codes
+  const fetchVipCodes = async (showLoadingIndicator = true) => {
     if (!restaurant?.id) return;
     
-    const fetchVipCodes = async () => {
+    if (showLoadingIndicator) {
       setFetchingCodes(true);
-      try {
-        const codes = await getVipCodes(undefined, { include_archived: true });
-        setAllVipCodes(codes as VipAccessCode[]);
-      } catch (error) {
-        console.error('Error fetching VIP codes:', error);
-        toast.error('Failed to load VIP codes');
-      } finally {
+    }
+    
+    try {
+      const codes = await getVipCodes(undefined, { include_archived: true });
+      setAllVipCodes(codes as VipAccessCode[]);
+    } catch (error) {
+      console.error('Error fetching VIP codes:', error);
+      toast.error('Failed to load VIP codes');
+    } finally {
+      if (showLoadingIndicator) {
         setFetchingCodes(false);
       }
-    };
-    
-    fetchVipCodes();
+    }
+  };
+  
+  // Function to silently refresh VIP codes without showing loading indicators
+  const refreshVipCodesSilently = async () => {
+    await fetchVipCodes(false);
+  };
+  
+  // Fetch all VIP codes (including archived) on initial load
+  useEffect(() => {
+    if (restaurant?.id) {
+      fetchVipCodes();
+    }
   }, [restaurant?.id]);
   
   // Filter by archived status, search term, and sort
@@ -160,8 +176,8 @@ export const VipCodesManager: React.FC = () => {
       
       toast.success(`Generated ${codeType === 'individual' ? formData.count : 1} VIP code(s)`);
       
-      // Update the codes list
-      setAllVipCodes(prev => [...newCodes, ...prev]);
+      // Refresh the codes list silently to ensure we have the latest data without showing loading indicators
+      await refreshVipCodesSilently();
     } catch (error) {
       console.error('Error generating VIP codes:', error);
       toast.error('Failed to generate VIP codes');
@@ -708,13 +724,23 @@ export const VipCodesManager: React.FC = () => {
             )}
           </div>
           
-          <button
-            onClick={handleGenerateCodes}
-            disabled={loading}
-            className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Generating...' : `Generate ${codeType === 'individual' ? 'Codes' : 'Code'}`}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleGenerateCodes}
+              disabled={loading}
+              className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Generating...' : `Generate ${codeType === 'individual' ? 'Codes' : 'Code'}`}
+            </button>
+            
+            <button
+              onClick={() => setShowEmailModal(true)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 flex items-center"
+            >
+              <Mail size={16} className="mr-2" />
+              Send VIP Codes
+            </button>
+          </div>
         </div>
       </div>
       
@@ -923,6 +949,18 @@ export const VipCodesManager: React.FC = () => {
                           <BarChart size={16} />
                         </button>
                         
+                        <button
+                          onClick={() => {
+                            setEmailingCode(code);
+                            setShowEmailModal(true);
+                          }}
+                          className="p-1.5 rounded-full bg-purple-50 text-purple-500 hover:bg-purple-100 hover:text-purple-700 transition-colors"
+                          title="Send via Email"
+                          aria-label="Send via Email"
+                        >
+                          <Mail size={16} />
+                        </button>
+                        
                         {code.archived ? (
                           <button
                             onClick={() => handleUnarchiveCode(code.id)}
@@ -1113,6 +1151,18 @@ export const VipCodesManager: React.FC = () => {
         <VipCodeUsageModal
           codeId={viewingUsageForCode}
           onClose={() => setViewingUsageForCode(null)}
+        />
+      )}
+      
+      {/* VIP Code Email Modal */}
+      {showEmailModal && (
+        <VipCodeEmailModal
+          selectedCode={emailingCode}
+          onClose={() => {
+            setShowEmailModal(false);
+            setEmailingCode(null);
+          }}
+          onCodesUpdated={refreshVipCodesSilently}
         />
       )}
     </div>

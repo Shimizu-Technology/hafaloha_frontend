@@ -219,6 +219,8 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
   - **VIP-Only Mode** - Toggle to restrict ordering to VIP customers only
   - **VIP Code Management** - Create, edit, and track usage of VIP access codes
   - **Usage Limits** - Set maximum usage counts for individual or group VIP codes
+  - **Email Distribution** - Send VIP codes to customers via email
+  - **Detailed documentation** - See [VIP Code System Documentation](docs/vip_code_system.md)
 - **GeneralSettings** - Manage site-wide settings like hero and spinner images
 - **RestaurantSelector** - Switch between restaurants (for super admins)
 - **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
