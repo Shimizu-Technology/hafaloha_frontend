@@ -41,22 +41,31 @@ export function MultiSelectActionBar({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4 z-20 animate-slideUp safe-bottom">
-      <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center mb-2 sm:mb-0 w-full sm:w-auto justify-between">
+      <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+        {/* Selection info - improved for iPad */}
+        <div className="flex items-center mb-2 md:mb-0 w-full md:w-auto justify-between">
           <span className="font-medium text-gray-700 mr-3">
-            {selectedCount} {selectedCount === 1 ? 'order' : 'orders'} selected
+            {selectedCount} {selectedCount === 1 ? 'code' : 'codes'} selected
           </span>
           <button
             onClick={onClearSelection}
-            className="text-gray-500 hover:text-gray-700 text-sm underline py-1 px-2"
+            className="text-gray-500 hover:text-gray-700 text-sm underline py-1 px-2 md:hidden"
+            aria-label="Clear selection"
+          >
+            Clear selection
+          </button>
+          <button
+            onClick={onClearSelection}
+            className="hidden md:block text-gray-500 hover:text-gray-700 text-sm underline py-1 px-2"
             aria-label="Clear selection"
           >
             Clear selection
           </button>
         </div>
         
-        <div className="flex w-full sm:w-auto">
-          <div className="w-full sm:w-auto" style={{ minWidth: '180px' }}>
+        {/* Action dropdown - improved for iPad */}
+        <div className="flex w-full md:w-auto">
+          <div className="w-full md:w-auto md:min-w-[220px]">
             <MobileSelect
               options={batchActionOptions}
               value={selectedAction}

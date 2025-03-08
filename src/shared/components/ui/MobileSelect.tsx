@@ -38,9 +38,13 @@ export function MobileSelect({
       },
       padding: '4px 8px',
       fontSize: '16px', // Prevent iOS zoom
-      minHeight: '44px', // Better touch target
+      minHeight: '44px', // Better touch target for mobile
+      '@media (min-width: 768px)': {
+        minHeight: '48px', // Slightly larger touch target for iPad
+      },
       borderRadius: '6px',
       transition: 'all 0.2s ease',
+      width: '100%', // Ensure full width
     }),
     menu: (provided) => ({
       ...provided,
@@ -50,6 +54,10 @@ export function MobileSelect({
       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
       zIndex: 50,
       border: '1px solid #e5e7eb',
+      '@media (min-width: 768px)': {
+        width: 'auto',
+        minWidth: '220px', // Match the width from MultiSelectActionBar
+      },
     }),
     menuList: (provided) => ({
       ...provided,
@@ -71,6 +79,9 @@ export function MobileSelect({
       borderBottom: '1px solid #f3f4f6',
       '&:last-child': {
         borderBottom: 'none',
+      },
+      '@media (min-width: 768px)': {
+        padding: '14px 16px', // Slightly larger padding for iPad
       },
     }),
     singleValue: (provided) => ({
