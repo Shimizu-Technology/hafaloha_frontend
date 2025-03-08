@@ -97,8 +97,8 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
   };
 
   if (loading) return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl h-3/4 flex flex-col transition-all duration-300">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn p-4">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] flex flex-col transition-all duration-300">
         <div className="flex justify-between items-center mb-4">
           <div className="h-7 w-48 bg-gray-200 rounded animate-pulse"></div>
           <div className="h-6 w-6 bg-gray-200 rounded-full animate-pulse"></div>
@@ -141,8 +141,8 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
   if (!usageData) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl h-3/4 flex flex-col transition-all duration-300">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn p-4">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] flex flex-col transition-all duration-300">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">VIP Code Usage Details</h2>
           <button 
@@ -183,24 +183,40 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
                 <p>No recipient information available for this VIP code.</p>
               </div>
             ) : (
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sent Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {usageData.recipients.map((recipient, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-4 py-3 whitespace-nowrap">{recipient.email}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{formatDate(recipient.sent_at)}</td>
+              <>
+                {/* Mobile card view for small screens */}
+                <div className="md:hidden space-y-2">
+                  {usageData.recipients.map((recipient, index) => (
+                    <div 
+                      key={index} 
+                      className={`p-3 rounded-lg border ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                    >
+                      <div className="font-medium break-all">{recipient.email}</div>
+                      <div className="text-sm text-gray-500 mt-1">Sent: {formatDate(recipient.sent_at)}</div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Table view for larger screens */}
+                <div className="hidden md:block bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sent Date</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {usageData.recipients.map((recipient, index) => (
+                        <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-4 py-3">{recipient.email}</td>
+                          <td className="px-4 py-3">{formatDate(recipient.sent_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
 
@@ -220,51 +236,129 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
                   className="border border-gray-200 rounded-lg overflow-hidden"
                 >
                   <div 
-                    className="bg-gray-50 p-4 flex justify-between items-center cursor-pointer"
+                    className="bg-gray-50 p-4 cursor-pointer"
                     onClick={() => toggleOrderExpand(order.id)}
                   >
-                    <div className="flex items-center space-x-4">
-                      <span className="font-medium">Order #{order.id}</span>
-                      <span className="text-sm text-gray-500">{formatDate(order.created_at)}</span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {order.status}
-                      </span>
+                    {/* Mobile layout */}
+                    <div className="md:hidden">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Order #{order.id}</span>
+                        <div className="font-semibold">{formatCurrency(order.total)}</div>
+                      </div>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-sm text-gray-500">{formatDate(order.created_at)}</span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {order.status}
+                        </span>
+                      </div>
                     </div>
-                    <div className="font-semibold">{formatCurrency(order.total)}</div>
+                    
+                    {/* Desktop layout */}
+                    <div className="hidden md:flex md:justify-between md:items-center">
+                      <div className="flex items-center space-x-4">
+                        <span className="font-medium">Order #{order.id}</span>
+                        <span className="text-sm text-gray-500">{formatDate(order.created_at)}</span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {order.status}
+                        </span>
+                      </div>
+                      <div className="font-semibold">{formatCurrency(order.total)}</div>
+                    </div>
                   </div>
                   
                   {expandedOrders.includes(order.id) && (
                     <div className="p-4 border-t border-gray-200">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
+                        {/* Customer Information - Mobile optimized */}
+                        <div className="bg-gray-50 p-3 rounded-lg">
                           <h4 className="font-medium flex items-center mb-2">
                             <User size={16} className="mr-2" /> Customer Information
                           </h4>
-                          <p><span className="text-gray-500">Name:</span> {order.customer_name}</p>
-                          <p><span className="text-gray-500">Email:</span> {order.customer_email}</p>
-                          <p><span className="text-gray-500">Phone:</span> {order.customer_phone}</p>
-                          {order.user && (
-                            <p><span className="text-gray-500">User Account:</span> {order.user.name} (ID: {order.user.id})</p>
-                          )}
+                          <div className="space-y-1">
+                            <div className="flex flex-col sm:flex-row sm:justify-between">
+                              <span className="text-gray-500 sm:w-24">Name:</span> 
+                              <span className="font-medium break-all">{order.customer_name}</span>
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:justify-between">
+                              <span className="text-gray-500 sm:w-24">Email:</span> 
+                              <span className="font-medium break-all">{order.customer_email}</span>
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:justify-between">
+                              <span className="text-gray-500 sm:w-24">Phone:</span> 
+                              <span className="font-medium">{order.customer_phone}</span>
+                            </div>
+                            {order.user && (
+                              <div className="flex flex-col sm:flex-row sm:justify-between">
+                                <span className="text-gray-500 sm:w-24">Account:</span> 
+                                <span className="font-medium">{order.user.name} (ID: {order.user.id})</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div>
+                        
+                        {/* Order Details - Mobile optimized */}
+                        <div className="bg-gray-50 p-3 rounded-lg">
                           <h4 className="font-medium flex items-center mb-2">
                             <Calendar size={16} className="mr-2" /> Order Details
                           </h4>
-                          <p><span className="text-gray-500">Date:</span> {formatDate(order.created_at)}</p>
-                          <p><span className="text-gray-500">Status:</span> {order.status}</p>
-                          <p><span className="text-gray-500">Total:</span> {formatCurrency(order.total)}</p>
+                          <div className="space-y-1">
+                            <div className="flex flex-col sm:flex-row sm:justify-between">
+                              <span className="text-gray-500 sm:w-24">Date:</span> 
+                              <span className="font-medium">{formatDate(order.created_at)}</span>
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:justify-between">
+                              <span className="text-gray-500 sm:w-24">Status:</span> 
+                              <span className="font-medium">{order.status}</span>
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:justify-between">
+                              <span className="text-gray-500 sm:w-24">Total:</span> 
+                              <span className="font-medium">{formatCurrency(order.total)}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                       
                       <h4 className="font-medium flex items-center mb-2">
                         <ShoppingBag size={16} className="mr-2" /> Items
                       </h4>
-                      <div className="overflow-x-auto">
+                      
+                      {/* Mobile card view for small screens */}
+                      <div className="md:hidden space-y-3">
+                        {order.items.map((item, index) => (
+                          <div 
+                            key={index} 
+                            className="border rounded-lg p-3"
+                          >
+                            <div className="font-medium">{item.name}</div>
+                            <div className="grid grid-cols-3 gap-2 mt-2 text-sm">
+                              <div>
+                                <span className="text-gray-500">Qty:</span> {item.quantity}
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Price:</span> {formatCurrency(item.price)}
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Total:</span> {formatCurrency(item.total)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="bg-gray-50 p-3 rounded-lg flex justify-between items-center mt-2">
+                          <span className="font-medium">Order Total:</span>
+                          <span className="font-bold">{formatCurrency(order.total)}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Table view for larger screens */}
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                           <thead>
                             <tr>
@@ -277,10 +371,10 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
                           <tbody className="divide-y divide-gray-200">
                             {order.items.map((item, index) => (
                               <tr key={index}>
-                                <td className="px-4 py-2 whitespace-nowrap">{item.name}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">{item.quantity}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">{formatCurrency(item.price)}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">{formatCurrency(item.total)}</td>
+                                <td className="px-4 py-2">{item.name}</td>
+                                <td className="px-4 py-2">{item.quantity}</td>
+                                <td className="px-4 py-2">{formatCurrency(item.price)}</td>
+                                <td className="px-4 py-2">{formatCurrency(item.total)}</td>
                               </tr>
                             ))}
                           </tbody>

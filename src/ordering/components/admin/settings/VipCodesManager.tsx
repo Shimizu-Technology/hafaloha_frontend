@@ -12,7 +12,8 @@ import {
   updateVipCode,
   archiveVipCode,
   unarchiveVipCode,
-  getCodeUsage
+  getCodeUsage,
+  searchVipCodesByEmail
 } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { Clipboard, Check, X, Edit, Save, Archive, Eye, EyeOff, BarChart, Key, Calendar, Clock, Mail } from 'lucide-react';
@@ -214,29 +215,61 @@ export const VipCodesManager: React.FC = () => {
     });
   }, [allVipCodes, showArchived, searchTerm, searchType, sortField, sortDirection, codeRecipients]);
   
-  // Fetch recipients for all codes when searching by email
+  // Use optimized backend search when searching by email
   useEffect(() => {
-    const fetchAllRecipients = async () => {
-      if (searchTerm && (searchType === 'email' || searchType === 'all')) {
+    const performSearch = async () => {
+      if (searchTerm && searchType === 'email') {
         setLoadingRecipients(true);
         
-        const recipientsMap: {[key: number]: Recipient[]} = {};
-        
-        // Fetch recipients for each code
-        for (const code of allVipCodes) {
-          if (!codeRecipients[code.id]) {
-            const recipients = await fetchCodeRecipients(code.id);
-            recipientsMap[code.id] = recipients;
-          }
+        try {
+          // Use the optimized backend endpoint for email search
+          const searchResults = await searchVipCodesByEmail(searchTerm, { include_archived: showArchived });
+          setAllVipCodes(searchResults as VipAccessCode[]);
+          
+          // Extract recipient information from the search results
+          const recipientsMap: {[key: number]: Recipient[]} = {};
+          (searchResults as any[]).forEach(code => {
+            if (code.recipients) {
+              recipientsMap[code.id] = code.recipients;
+            }
+          });
+          
+          setCodeRecipients(prev => ({...prev, ...recipientsMap}));
+        } catch (error) {
+          console.error('Error searching VIP codes by email:', error);
+          toast.error('Failed to search VIP codes by email');
+        } finally {
+          setLoadingRecipients(false);
         }
+      } else if (searchTerm && searchType === 'all') {
+        // For 'all' search type, we need to check both code/name (already handled by filteredAndSortedCodes)
+        // and also fetch recipients for email search
+        setLoadingRecipients(true);
         
-        setCodeRecipients(prev => ({...prev, ...recipientsMap}));
-        setLoadingRecipients(false);
+        try {
+          // Use the optimized backend endpoint for email search
+          const emailSearchResults = await searchVipCodesByEmail(searchTerm, { include_archived: showArchived });
+          
+          // Extract recipient information from the search results
+          const recipientsMap: {[key: number]: Recipient[]} = {};
+          (emailSearchResults as any[]).forEach(code => {
+            if (code.recipients) {
+              recipientsMap[code.id] = code.recipients;
+            }
+          });
+          
+          setCodeRecipients(prev => ({...prev, ...recipientsMap}));
+        } catch (error) {
+          console.error('Error searching VIP codes by email:', error);
+          // Don't show error toast here as we're still doing the regular search
+        } finally {
+          setLoadingRecipients(false);
+        }
       }
     };
     
-    fetchAllRecipients();
-  }, [searchTerm, searchType, allVipCodes]);
+    performSearch();
+  }, [searchTerm, searchType, showArchived]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -969,7 +1002,144 @@ export const VipCodesManager: React.FC = () => {
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto -mx-6 px-6">
+        {/* Mobile card view for small screens */}
+        <div className="md:hidden space-y-4">
+          {filteredAndSortedCodes.length > 0 ? (
+            filteredAndSortedCodes.map((code: VipAccessCode) => (
+              <div 
+                key={code.id} 
+                className={`bg-white border rounded-lg p-4 shadow-sm ${selectedCodes.includes(code.id) ? 'border-amber-500' : 'border-gray-200'}`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedCodes.includes(code.id)}
+                        onChange={() => handleSelectCode(code.id)}
+                        className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded mr-2"
+                      />
+                      <h3 className="font-medium text-gray-900 truncate">{code.name}</h3>
+                    </div>
+                    <div className="flex items-center mt-1">
+                      <span className="text-sm text-gray-600 font-mono mr-2">{code.code}</span>
+                      <button 
+                        onClick={() => copyToClipboard(code.code, code.id)}
+                        className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                        aria-label="Copy code"
+                      >
+                        {copiedCode === code.id ? <Check size={14} /> : <Clipboard size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    code.archived 
+                      ? 'bg-gray-100 text-gray-800' 
+                      : code.is_active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                  }`}>
+                    {code.archived ? 'Archived' : code.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-sm text-gray-500 mb-3">
+                  <div>
+                    <span className="font-medium text-gray-600">Type:</span> {code.group_id ? 'Group' : 'Individual'}
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-600">Uses:</span> {code.current_uses} / {code.max_uses || '∞'}
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-600">Created:</span> {code.created_at ? formatDate(code.created_at) : 'Unknown'}
+                  </div>
+                </div>
+                
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setViewingUsageForCode(code.id)}
+                    className="p-2 rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                    title="View Usage"
+                    aria-label="View Usage"
+                  >
+                    <BarChart size={16} />
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setEmailingCode(code);
+                      setShowEmailModal(true);
+                    }}
+                    className="p-2 rounded-full bg-purple-50 text-purple-500 hover:bg-purple-100 hover:text-purple-700 transition-colors"
+                    title="Send via Email"
+                    aria-label="Send via Email"
+                  >
+                    <Mail size={16} />
+                  </button>
+                  
+                  {code.archived ? (
+                    <button
+                      onClick={() => handleUnarchiveCode(code.id)}
+                      className="p-2 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                      title="Unarchive"
+                      aria-label="Unarchive"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="7 11 12 6 17 11"></polyline>
+                        <path d="M12 18V6"></path>
+                      </svg>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleEditCode(code)}
+                        className="p-2 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                        title="Edit"
+                        aria-label="Edit"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      {code.is_active ? (
+                        <button
+                          onClick={() => handleDeactivateCode(code.id)}
+                          className="p-2 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors"
+                          title="Deactivate"
+                          aria-label="Deactivate"
+                        >
+                          <X size={16} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleReactivateCode(code.id)}
+                          className="p-2 rounded-full bg-green-50 text-green-500 hover:bg-green-100 hover:text-green-700 transition-colors"
+                          title="Reactivate"
+                          aria-label="Reactivate"
+                        >
+                          <Check size={16} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleArchiveCode(code.id)}
+                        className="p-2 rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                        title="Archive"
+                        aria-label="Archive"
+                      >
+                        <Archive size={16} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              {searchTerm ? 'No matching VIP codes found' : 'No VIP codes found'}
+            </div>
+          )}
+        </div>
+        
+        {/* Table view for larger screens */}
+        <div className="hidden md:block overflow-x-auto -mx-6 px-6">
           <table className="min-w-full bg-white divide-y divide-gray-200 border border-gray-200 rounded-lg transition-all duration-300 ease-in-out">
             <thead className="bg-gray-50">
               <tr>
@@ -1040,79 +1210,163 @@ export const VipCodesManager: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      <div className="flex flex-wrap justify-center gap-2">
-                        <button
-                          onClick={() => setViewingUsageForCode(code.id)}
-                          className="p-1.5 rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 hover:text-amber-700 transition-colors"
-                          title="View Usage"
-                          aria-label="View Usage"
-                        >
-                          <BarChart size={16} />
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            setEmailingCode(code);
-                            setShowEmailModal(true);
-                          }}
-                          className="p-1.5 rounded-full bg-purple-50 text-purple-500 hover:bg-purple-100 hover:text-purple-700 transition-colors"
-                          title="Send via Email"
-                          aria-label="Send via Email"
-                        >
-                          <Mail size={16} />
-                        </button>
-                        
-                        {code.archived ? (
+                      <div className="flex flex-wrap justify-center gap-2 md:gap-1 lg:gap-2">
+                        {/* Mobile dropdown for small screens */}
+                        <div className="sm:hidden relative">
                           <button
-                            onClick={() => handleUnarchiveCode(code.id)}
-                            className="p-1.5 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
-                            title="Unarchive"
-                            aria-label="Unarchive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const dropdown = document.getElementById(`dropdown-${code.id}`);
+                              if (dropdown) {
+                                dropdown.classList.toggle('hidden');
+                              }
+                            }}
+                            className="p-2 rounded-full bg-amber-50 text-amber-600 hover:bg-amber-100"
+                            title="Actions"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="7 11 12 6 17 11"></polyline>
-                              <path d="M12 18V6"></path>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                             </svg>
                           </button>
-                        ) : (
-                          <>
+                          <div 
+                            id={`dropdown-${code.id}`} 
+                            className="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
-                              onClick={() => handleEditCode(code)}
-                              className="p-1.5 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
-                              title="Edit"
-                              aria-label="Edit"
+                              onClick={() => setViewingUsageForCode(code.id)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                             >
-                              <Edit size={16} />
+                              <BarChart size={16} className="mr-2" /> View Usage
                             </button>
-                            {code.is_active ? (
+                            <button
+                              onClick={() => {
+                                setEmailingCode(code);
+                                setShowEmailModal(true);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                            >
+                              <Mail size={16} className="mr-2" /> Send via Email
+                            </button>
+                            {code.archived ? (
                               <button
-                                onClick={() => handleDeactivateCode(code.id)}
-                                className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors"
-                                title="Deactivate"
-                                aria-label="Deactivate"
+                                onClick={() => handleUnarchiveCode(code.id)}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                               >
-                                <X size={16} />
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                                  <polyline points="7 11 12 6 17 11"></polyline>
+                                  <path d="M12 18V6"></path>
+                                </svg> Unarchive
                               </button>
                             ) : (
-                              <button
-                                onClick={() => handleReactivateCode(code.id)}
-                                className="p-1.5 rounded-full bg-green-50 text-green-500 hover:bg-green-100 hover:text-green-700 transition-colors"
-                                title="Reactivate"
-                                aria-label="Reactivate"
-                              >
-                                <Check size={16} />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleEditCode(code)}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                >
+                                  <Edit size={16} className="mr-2" /> Edit
+                                </button>
+                                {code.is_active ? (
+                                  <button
+                                    onClick={() => handleDeactivateCode(code.id)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <X size={16} className="mr-2" /> Deactivate
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleReactivateCode(code.id)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <Check size={16} className="mr-2" /> Reactivate
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleArchiveCode(code.id)}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                >
+                                  <Archive size={16} className="mr-2" /> Archive
+                                </button>
+                              </>
                             )}
+                          </div>
+                        </div>
+                        
+                        {/* Regular buttons for larger screens */}
+                        <div className="hidden sm:flex sm:flex-row sm:items-center sm:justify-center sm:gap-1 md:gap-2">
+                          <button
+                            onClick={() => setViewingUsageForCode(code.id)}
+                            className="p-1 sm:p-1.5 rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                            title="View Usage"
+                            aria-label="View Usage"
+                          >
+                            <BarChart size={16} />
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              setEmailingCode(code);
+                              setShowEmailModal(true);
+                            }}
+                            className="p-1 sm:p-1.5 rounded-full bg-purple-50 text-purple-500 hover:bg-purple-100 hover:text-purple-700 transition-colors"
+                            title="Send via Email"
+                            aria-label="Send via Email"
+                          >
+                            <Mail size={16} />
+                          </button>
+                          
+                          {code.archived ? (
                             <button
-                              onClick={() => handleArchiveCode(code.id)}
-                              className="p-1.5 rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-                              title="Archive"
-                              aria-label="Archive"
+                              onClick={() => handleUnarchiveCode(code.id)}
+                              className="p-1 sm:p-1.5 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                              title="Unarchive"
+                              aria-label="Unarchive"
                             >
-                              <Archive size={16} />
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="7 11 12 6 17 11"></polyline>
+                                <path d="M12 18V6"></path>
+                              </svg>
                             </button>
-                          </>
-                        )}
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleEditCode(code)}
+                                className="p-1 sm:p-1.5 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                                title="Edit"
+                                aria-label="Edit"
+                              >
+                                <Edit size={16} />
+                              </button>
+                              {code.is_active ? (
+                                <button
+                                  onClick={() => handleDeactivateCode(code.id)}
+                                  className="p-1 sm:p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors"
+                                  title="Deactivate"
+                                  aria-label="Deactivate"
+                                >
+                                  <X size={16} />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleReactivateCode(code.id)}
+                                  className="p-1 sm:p-1.5 rounded-full bg-green-50 text-green-500 hover:bg-green-100 hover:text-green-700 transition-colors"
+                                  title="Reactivate"
+                                  aria-label="Reactivate"
+                                >
+                                  <Check size={16} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleArchiveCode(code.id)}
+                                className="p-1 sm:p-1.5 rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                                title="Archive"
+                                aria-label="Archive"
+                              >
+                                <Archive size={16} />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>

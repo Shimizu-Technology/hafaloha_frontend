@@ -16,6 +16,20 @@ export const getVipCodes = async (eventId?: number, options?: { include_archived
 };
 
 /**
+ * Search VIP codes by email
+ * This is an optimized endpoint that performs the search on the backend
+ */
+export const searchVipCodesByEmail = async (email: string, options?: { include_archived?: boolean }) => {
+  const params: any = { email };
+  
+  if (options?.include_archived) {
+    params.include_archived = options.include_archived;
+  }
+  
+  return api.get(`/vip_access/search_by_email`, params);
+};
+
+/**
  * Generate individual VIP codes
  */
 export const generateIndividualCodes = async (params: {
