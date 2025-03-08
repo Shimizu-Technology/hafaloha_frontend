@@ -1,6 +1,12 @@
 // src/ordering/components/admin/AdminEditOrderModal.tsx
 import React, { useState } from 'react';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
+import { SetEtaModal } from './SetEtaModal';
+import { 
+  handleOrderPreparationStatus, 
+  calculatePickupTime, 
+  requiresAdvanceNotice 
+} from '../../../shared/utils/orderUtils';
 
 interface AdminEditOrderModalProps {
   order: any;
@@ -15,8 +21,36 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
     return order.items ? [...order.items] : [];
   });
   const [localTotal, setLocalTotal] = useState<string>(String(order.total || '0'));
+  const [originalStatus] = useState(order.status); // Store original status to detect changes
   const [localStatus, setLocalStatus] = useState(order.status);
   const [localInstructions, setLocalInstructions] = useState((order as any).special_instructions || (order as any).specialInstructions || '');
+  
+  // State for ETA modal (for status change to preparing)
+  const [showEtaModal, setShowEtaModal] = useState(false);
+  const [etaMinutes, setEtaMinutes] = useState(requiresAdvanceNotice(order) ? 10.0 : 5);
+  
+  // State for ETA update modal (for adjusting existing ETA)
+  const [showEtaUpdateModal, setShowEtaUpdateModal] = useState(false);
+  const [updateEtaMinutes, setUpdateEtaMinutes] = useState(() => {
+    // Initialize with current ETA if available
+    if (order.estimatedPickupTime || order.estimated_pickup_time) {
+      const etaDate = new Date(order.estimatedPickupTime || order.estimated_pickup_time);
+      
+      if (requiresAdvanceNotice(order)) {
+        // For advance notice orders, convert to hour.minute format
+        return etaDate.getHours() + (etaDate.getMinutes() === 30 ? 0.3 : 0);
+      } else {
+        // For regular orders, calculate minutes from now
+        const minutesFromNow = Math.max(5, Math.round((etaDate.getTime() - Date.now()) / 60000));
+        // Round to nearest 5 minutes
+        return Math.ceil(minutesFromNow / 5) * 5;
+      }
+    }
+    
+    // Default values if no ETA is set
+    return requiresAdvanceNotice(order) ? 10.0 : 5;
+  });
+  
   const [activeTab, setActiveTab] = useState<'items' | 'details'>('items');
 
   // Handle changing a single item row
@@ -59,8 +93,51 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
     }, 0).toFixed(2);
   };
 
-  // Called by the "Save" button
+  // Check if we need to show the ETA modal before saving
   function handleSave() {
+    // Check if we're changing to preparing status
+    const { shouldShowEtaModal } = handleOrderPreparationStatus(
+      order,
+      localStatus,
+      originalStatus
+    );
+    
+    if (shouldShowEtaModal) {
+      // Show ETA modal and halt save process
+      setShowEtaModal(true);
+      return; // Don't proceed with save until ETA is confirmed
+    }
+    
+    // Regular save process if we don't need to show ETA modal
+    proceedWithSave();
+  }
+  
+  // Handle ETA confirmation (for status change to preparing)
+  function handleConfirmEta() {
+    // Get pickup time based on selected ETA
+    const pickupTime = calculatePickupTime(order, etaMinutes);
+    
+    // Now we can proceed with save including the pickup time
+    proceedWithSave(pickupTime);
+    
+    // Close the modal
+    setShowEtaModal(false);
+  }
+  
+  // Handle ETA update confirmation (for adjusting existing ETA)
+  function handleConfirmEtaUpdate() {
+    // Get pickup time based on selected ETA
+    const pickupTime = calculatePickupTime(order, updateEtaMinutes);
+    
+    // Update the order with the new ETA
+    proceedWithSave(pickupTime);
+    
+    // Close the modal
+    setShowEtaUpdateModal(false);
+  }
+  
+  // Extracted the actual save logic
+  function proceedWithSave(pickupTime?: string) {
     // Convert total to a float
     const parsedTotal = parseFloat(localTotal) || 0.0;
 
@@ -74,6 +151,12 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
       special_instructions: localInstructions,
       specialInstructions: localInstructions,
     };
+    
+    // Add pickup time if provided
+    if (pickupTime) {
+      updated.estimated_pickup_time = pickupTime;
+      updated.estimatedPickupTime = pickupTime;
+    }
 
     onSave(updated);
   }
@@ -263,102 +346,168 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
           )}
         </div>
       </div>
+      
+      {/* ETA Adjustment Section - only show for orders in preparing status */}
+      {localStatus === 'preparing' && (
+        <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+          <div className="flex items-start mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500 mt-0.5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h4 className="font-medium text-sm text-amber-800">Pickup Time / ETA</h4>
+              {(order.estimatedPickupTime || order.estimated_pickup_time) ? (
+                <p className="text-sm text-amber-700 mt-1">
+                  Current ETA: {new Date(order.estimatedPickupTime || order.estimated_pickup_time).toLocaleString()}
+                </p>
+              ) : (
+                <p className="text-sm text-amber-700 mt-1">No ETA set</p>
+              )}
+            </div>
+          </div>
+          
+          <div className="bg-amber-100 rounded p-3 mb-3 flex items-start">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600 mt-0.5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <p className="text-sm text-amber-800">
+              Changing the ETA will send updated notifications to the customer.
+            </p>
+          </div>
+          
+          <button
+            type="button"
+            onClick={() => setShowEtaUpdateModal(true)}
+            className="w-full flex items-center justify-center px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md text-sm font-medium transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Update ETA
+          </button>
+        </div>
+      )}
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-white rounded-xl shadow-lg w-full sm:max-w-2xl relative max-h-[90vh] overflow-hidden flex flex-col animate-slideUp">
-        {/* Header with close button */}
-        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900">Order #{order.id}</h3>
+    <>
+      <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4 animate-fadeIn">
+        <div className="bg-white rounded-xl shadow-lg w-full sm:max-w-2xl relative max-h-[90vh] overflow-hidden flex flex-col animate-slideUp">
+          {/* Header with close button */}
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Order #{order.id}</h3>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Status selector - always visible regardless of active tab */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+              <div className="flex items-center">
+                <span className="text-sm font-medium text-gray-700 mr-2">Status:</span>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(localStatus)}`}>
+                  {localStatus.charAt(0).toUpperCase() + localStatus.slice(1)}
+                </span>
+              </div>
+              <div className="flex-1">
+                <MobileSelect
+                  options={[
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'preparing', label: 'Preparing' },
+                    { value: 'ready', label: 'Ready' },
+                    { value: 'completed', label: 'Completed' },
+                    { value: 'cancelled', label: 'Cancelled' }
+                  ]}
+                  value={localStatus}
+                  onChange={(value) => setLocalStatus(value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Tab navigation */}
+          <div className="px-4 sm:px-6 pt-3 pb-2 flex border-b border-gray-200 overflow-x-auto">
             <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
-              aria-label="Close"
+              onClick={() => setActiveTab('items')}
+              className={`mr-4 pb-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                activeTab === 'items'
+                  ? 'text-[#c1902f] border-b-2 border-[#c1902f]'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
-              <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              Order Items
+            </button>
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`mr-4 pb-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                activeTab === 'details'
+                  ? 'text-[#c1902f] border-b-2 border-[#c1902f]'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Order Details
             </button>
           </div>
-          
-          {/* Status selector - always visible regardless of active tab */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
-            <div className="flex items-center">
-              <span className="text-sm font-medium text-gray-700 mr-2">Status:</span>
-              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(localStatus)}`}>
-                {localStatus.charAt(0).toUpperCase() + localStatus.slice(1)}
-              </span>
+
+          {/* Scrollable content area */}
+          <div className="flex-1 overflow-y-auto relative">
+            <div className={`transition-opacity duration-300 ${activeTab === 'items' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'items' && renderItemsTab()}
             </div>
-            <div className="flex-1">
-              <MobileSelect
-                options={[
-                  { value: 'pending', label: 'Pending' },
-                  { value: 'preparing', label: 'Preparing' },
-                  { value: 'ready', label: 'Ready' },
-                  { value: 'completed', label: 'Completed' },
-                  { value: 'cancelled', label: 'Cancelled' }
-                ]}
-                value={localStatus}
-                onChange={(value) => setLocalStatus(value)}
-              />
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'details' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'details' && renderDetailsTab()}
             </div>
           </div>
-        </div>
 
-        {/* Tab navigation */}
-        <div className="px-4 sm:px-6 pt-3 pb-2 flex border-b border-gray-200 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('items')}
-            className={`mr-4 pb-2 font-medium text-sm whitespace-nowrap transition-colors ${
-              activeTab === 'items'
-                ? 'text-[#c1902f] border-b-2 border-[#c1902f]'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Order Items
-          </button>
-          <button
-            onClick={() => setActiveTab('details')}
-            className={`mr-4 pb-2 font-medium text-sm whitespace-nowrap transition-colors ${
-              activeTab === 'details'
-                ? 'text-[#c1902f] border-b-2 border-[#c1902f]'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Order Details
-          </button>
-        </div>
-
-        {/* Scrollable content area */}
-        <div className="flex-1 overflow-y-auto relative">
-          <div className={`transition-opacity duration-300 ${activeTab === 'items' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-            {activeTab === 'items' && renderItemsTab()}
+          {/* Action buttons - sticky footer */}
+          <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:justify-end space-y-2 sm:space-y-0 sm:space-x-3 sticky bottom-0 bg-white">
+            <button
+              onClick={onClose}
+              className="w-full sm:w-auto px-4 py-3 sm:py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors order-2 sm:order-1"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="w-full sm:w-auto px-4 py-3 sm:py-2.5 bg-[#c1902f] text-white rounded-lg text-sm font-medium hover:bg-[#d4a43f] transition-colors shadow-sm order-1 sm:order-2"
+            >
+              Save Changes
+            </button>
           </div>
-          
-          <div className={`transition-opacity duration-300 ${activeTab === 'details' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-            {activeTab === 'details' && renderDetailsTab()}
-          </div>
-        </div>
-
-        {/* Action buttons - sticky footer */}
-        <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:justify-end space-y-2 sm:space-y-0 sm:space-x-3 sticky bottom-0 bg-white">
-          <button
-            onClick={onClose}
-            className="w-full sm:w-auto px-4 py-3 sm:py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors order-2 sm:order-1"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="w-full sm:w-auto px-4 py-3 sm:py-2.5 bg-[#c1902f] text-white rounded-lg text-sm font-medium hover:bg-[#d4a43f] transition-colors shadow-sm order-1 sm:order-2"
-          >
-            Save Changes
-          </button>
         </div>
       </div>
-    </div>
+      
+      {/* "Set ETA" modal - for status change to preparing */}
+      {showEtaModal && (
+        <SetEtaModal
+          order={order}
+          etaMinutes={etaMinutes}
+          setEtaMinutes={setEtaMinutes}
+          onClose={() => setShowEtaModal(false)}
+          onConfirm={handleConfirmEta}
+        />
+      )}
+      
+      {/* "Update ETA" modal - for adjusting existing ETA */}
+      {showEtaUpdateModal && (
+        <SetEtaModal
+          order={order}
+          etaMinutes={updateEtaMinutes}
+          setEtaMinutes={setUpdateEtaMinutes}
+          onClose={() => setShowEtaUpdateModal(false)}
+          onConfirm={handleConfirmEtaUpdate}
+          isUpdateMode={true}
+        />
+      )}
+    </>
   );
 }

@@ -8,6 +8,7 @@ interface SetEtaModalProps {
   setEtaMinutes: React.Dispatch<React.SetStateAction<number>>;
   onClose: () => void;
   onConfirm: () => void;
+  isUpdateMode?: boolean; // Flag to indicate if we're updating an existing ETA
 }
 
 /**
@@ -21,6 +22,7 @@ export function SetEtaModal({
   setEtaMinutes,
   onClose,
   onConfirm,
+  isUpdateMode = false,
 }: SetEtaModalProps) {
   const requiresAdvanceNotice = order.requires_advance_notice === true;
   
@@ -70,8 +72,8 @@ export function SetEtaModal({
 
         <h3 className="text-lg font-bold mb-4 pr-6">
           {requiresAdvanceNotice 
-            ? 'Set Next-Day Pickup Time' 
-            : 'Set Preparation Time'}
+            ? isUpdateMode ? 'Update Next-Day Pickup Time' : 'Set Next-Day Pickup Time' 
+            : isUpdateMode ? 'Update Preparation Time' : 'Set Preparation Time'}
         </h3>
 
         {requiresAdvanceNotice && (
@@ -113,8 +115,8 @@ export function SetEtaModal({
             className="w-full sm:w-auto px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] transition-colors"
           >
             {requiresAdvanceNotice 
-              ? 'Confirm Next-Day Pickup' 
-              : 'Start Preparing'}
+              ? isUpdateMode ? 'Update Pickup Time' : 'Confirm Next-Day Pickup' 
+              : isUpdateMode ? 'Update ETA' : 'Start Preparing'}
           </button>
         </div>
       </div>
