@@ -7,6 +7,7 @@ interface CollapsibleOrderCardProps {
   onToggleExpand: () => void;
   isNew?: boolean;
   isSelected?: boolean;
+  isHighlighted?: boolean;
   onSelectChange?: (selected: boolean) => void;
   renderActions: (order: any) => React.ReactNode;
   getStatusBadgeColor: (status: string) => string;
@@ -20,6 +21,7 @@ export function CollapsibleOrderCard({
   onToggleExpand,
   isNew = false,
   isSelected = false,
+  isHighlighted = false,
   onSelectChange,
   renderActions,
   getStatusBadgeColor,
@@ -32,9 +34,15 @@ export function CollapsibleOrderCard({
     ? 'animate-pulse-light border-yellow-300 shadow-yellow-100' 
     : '';
   
+  // Highlight classes for orders selected via notification
+  const highlightClasses = isHighlighted
+    ? 'ring-2 ring-[#c1902f] ring-opacity-70 shadow-md' 
+    : '';
+  
   return (
     <div 
-      className={`bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden ${newOrderClasses} transition-all duration-200`}
+      id={`order-${order.id}`}
+      className={`bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden ${newOrderClasses} ${highlightClasses} transition-all duration-200`}
     >
       {/* Order header - optimized for mobile and tablet */}
       <div className="flex flex-wrap justify-between items-center p-3 border-b border-gray-100">

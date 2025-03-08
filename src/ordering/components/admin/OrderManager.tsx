@@ -162,19 +162,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // Track if the status update is in progress to prevent opening edit modal
   const [isStatusUpdateInProgress, setIsStatusUpdateInProgress] = useState(false);
 
-  // if the parent sets a selectedOrderId => open the edit modal instead of details
-  // but only if it's not from a status update
-  useEffect(() => {
-    if (selectedOrderId && !isStatusUpdateInProgress) {
-      const found = orders.find(o => Number(o.id) === selectedOrderId);
-      if (found) {
-        // Open the edit modal instead of the details modal
-        setEditingOrder(found);
-      }
-    } else {
-      setEditingOrder(null);
-    }
-  }, [selectedOrderId, orders, isStatusUpdateInProgress]);
+  // State to track highlighted orders (for visual feedback)
+  const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
 
   // Toggle order expansion
   const toggleOrderExpand = useCallback((orderId: string) => {
@@ -369,6 +358,50 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedStatus, sortNewestFirst, searchQuery, dateFilter]);
+  
+  // if the parent sets a selectedOrderId => expand the order card and scroll to it
+  // but only if it's not from a status update
+  useEffect(() => {
+    if (selectedOrderId && !isStatusUpdateInProgress) {
+      const found = orders.find(o => Number(o.id) === selectedOrderId);
+      if (found) {
+        // Reset filters to ensure the order is visible
+        setSelectedStatus('all');
+        setSearchQuery('');
+        
+        // Find the order in the filtered list to determine which page it's on
+        const orderIndex = filteredOrders.findIndex(o => Number(o.id) === selectedOrderId);
+        if (orderIndex >= 0) {
+          // Calculate which page the order should be on
+          const targetPage = Math.floor(orderIndex / ordersPerPage) + 1;
+          setCurrentPage(targetPage);
+        }
+        
+        // Add to expanded orders
+        setExpandedOrders(prev => {
+          const updated = new Set(prev);
+          updated.add(found.id);
+          return updated;
+        });
+        
+        // Highlight the order for visual feedback
+        setHighlightedOrderId(found.id);
+        
+        // Clear highlight after 5 seconds
+        setTimeout(() => {
+          setHighlightedOrderId(null);
+        }, 5000);
+        
+        // Schedule scrolling after render
+        setTimeout(() => {
+          const orderElement = document.getElementById(`order-${found.id}`);
+          if (orderElement) {
+            orderElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 100);
+      }
+    }
+  }, [selectedOrderId, orders, isStatusUpdateInProgress, filteredOrders, ordersPerPage]);
 
   function closeModal() {
     setSelectedOrder(null);
@@ -692,6 +725,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   onToggleExpand={() => toggleOrderExpand(order.id)}
                   isNew={newOrders.has(order.id)}
                   isSelected={selectedOrders.has(order.id)}
+                  isHighlighted={highlightedOrderId === order.id}
                   onSelectChange={(selected) => toggleOrderSelection(order.id, selected)}
                   renderActions={() => renderOrderActions(order)}
                   getStatusBadgeColor={getStatusBadgeColor}
