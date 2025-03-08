@@ -653,77 +653,86 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           <div>
             <p className="text-sm text-gray-600 mb-4">
               This heatmap shows when users are most active, based on order data. 
-              Darker colors indicate higher activity.
+              Darker colors indicate higher activity. Times are shown in Guam time (UTC+10).
             </p>
             
-            {/* Custom Heatmap Implementation */}
+            {/* Create a structured grid for the heatmap */}
             <div className="overflow-x-auto">
-              <div className="min-w-[700px] rounded-lg border border-gray-200">
-                {/* Hour labels (top) */}
-                <div className="flex border-b border-gray-200 pl-24 bg-gray-50 rounded-t-lg">
-                  {Array.from({ length: 24 }).map((_, hour) => {
-                    // Convert to 12-hour format with AM/PM
-                    const hour12 = hour === 0 ? '12 AM' : 
-                                  hour < 12 ? `${hour} AM` : 
-                                  hour === 12 ? '12 PM' : 
-                                  `${hour - 12} PM`;
-                    
-                    return (
-                      <div key={hour} className="w-12 text-center text-xs py-2 font-medium text-gray-600">
-                        {hour12}
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {/* Day rows with cells */}
-                {dayNames.map((dayName, dayIndex) => {
-                  // Filter heatmap data for this day
-                  const dayData = activityHeatmap.filter(item => item.day === dayIndex);
-                  
-                  return (
-                    <div key={dayIndex} className={`flex border-b border-gray-200 ${dayIndex % 2 === 0 ? 'bg-gray-50/30' : ''}`}>
-                      {/* Day label (left) */}
-                      <div className="w-24 py-3 px-4 text-sm font-medium flex-shrink-0 text-gray-700">
-                        {dayName}
-                      </div>
+              <table className="w-full min-w-[700px] border-collapse">
+                <thead>
+                  <tr>
+                    <th className="w-24 border border-gray-200 bg-gray-50"></th>
+                    {Array.from({ length: 24 }).map((_, hour) => {
+                      // Convert to 12-hour format with AM/PM
+                      const hour12 = hour === 0 ? '12 AM' : 
+                                    hour < 12 ? `${hour} AM` : 
+                                    hour === 12 ? '12 PM' : 
+                                    `${hour - 12} PM`;
                       
-                      {/* Hour cells */}
-                      <div className="flex flex-grow">
-                        {dayData.sort((a, b) => a.hour - b.hour).map((cell) => {
-                          // Calculate color intensity based on value
-                          // Find the max value in the entire dataset for scaling
+                      return (
+                        <th 
+                          key={hour} 
+                          className="w-12 h-10 text-center text-xs py-2 font-medium text-gray-600 border border-gray-200 bg-gray-50"
+                        >
+                          {hour12}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dayNames.map((dayName, dayIndex) => {
+                    return (
+                      <tr key={dayIndex} className={dayIndex % 2 === 0 ? 'bg-gray-50/30' : ''}>
+                        {/* Day label */}
+                        <td className="w-24 py-3 px-4 text-sm font-medium text-gray-700 border border-gray-200">
+                          {dayName}
+                        </td>
+                        
+                        {/* Hour cells */}
+                        {Array.from({ length: 24 }).map((_, hour) => {
+                          // Convert from Guam time back to UTC for data lookup
+                          const utcHour = (hour - 10 + 24) % 24;
+                          
+                          // Find data for this day and hour
+                          const cellData = activityHeatmap.find(
+                            item => item.day === dayIndex && item.hour === utcHour
+                          );
+                          
+                          // Get the value or default to 0
+                          const value = cellData?.value || 0;
+                          
+                          // Calculate color intensity
                           const maxValue = Math.max(...activityHeatmap.map(d => d.value), 1);
-                          const intensity = maxValue > 0 ? (cell.value / maxValue) : 0;
+                          const intensity = maxValue > 0 ? (value / maxValue) : 0;
                           
-                          // Generate a gold/amber color with varying opacity based on intensity
-                          // Using the app's accent color (#c1902f)
-                          const bgColor = cell.value > 0 
+                          // Generate background color
+                          const bgColor = value > 0 
                             ? `rgba(193, 144, 47, ${Math.max(0.15, intensity)})`
-                            : 'transparent';
+                            : '';
                           
-                          // Convert to 12-hour format for tooltip
-                          const hour12 = cell.hour === 0 ? '12 AM' : 
-                                        cell.hour < 12 ? `${cell.hour} AM` : 
-                                        cell.hour === 12 ? '12 PM' : 
-                                        `${cell.hour - 12} PM`;
+                          // Format for tooltip
+                          const hour12 = hour === 0 ? '12 AM' : 
+                                        hour < 12 ? `${hour} AM` : 
+                                        hour === 12 ? '12 PM' : 
+                                        `${hour - 12} PM`;
                           
                           return (
-                            <div
-                              key={cell.hour}
-                              className="w-12 h-12 flex items-center justify-center text-sm border-r border-gray-100 transition-colors duration-200 hover:bg-gray-100"
+                            <td 
+                              key={hour}
+                              className="w-12 h-12 text-center border border-gray-200"
                               style={{ backgroundColor: bgColor }}
-                              title={`${dayName} ${hour12} - ${cell.value} orders`}
+                              title={`${dayName} ${hour12} - ${value} orders`}
                             >
-                              {cell.value > 0 ? cell.value : ''}
-                            </div>
+                              {value > 0 ? value : ''}
+                            </td>
                           );
                         })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
             
             {/* Legend */}
