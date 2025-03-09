@@ -8,6 +8,7 @@ import { MenuPage } from './components/MenuPage';
 import { CartPage } from './components/CartPage';
 import { CheckoutPage } from './components/CheckoutPage';
 import { OrderConfirmation } from './components/OrderConfirmation';
+import MerchandisePage from './components/MerchandisePage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import { LoadingSpinner } from '../shared/components/ui';
 import { LoyaltyTeaser } from './components/loyalty/LoyaltyTeaser';
@@ -18,6 +19,7 @@ import { ProfilePage } from '../shared/components/profile';
 import { useAuthStore } from '../shared/auth';
 import { useMenuStore } from './store/menuStore';
 import { useLoadingStore } from './store/loadingStore';
+import { useMerchandiseStore } from './store/merchandiseStore';
 import { MenuItem as MenuItemCard } from './components/MenuItem';
 import { useSiteSettingsStore } from './store/siteSettingsStore'; // <-- IMPORTANT
 
@@ -30,7 +32,7 @@ function OrderingLayout() {
 
   React.useEffect(() => {
     if (loadingCount > 0) {
-      // Start a short timer so spinner doesn’t show if loading is very quick
+      // Start a short timer so spinner doesn't show if loading is very quick
       if (!timerId) {
         const id = setTimeout(() => {
           setShowSpinner(true);
@@ -78,11 +80,13 @@ function OrderingLayout() {
 export default function OnlineOrderingApp() {
   const { menuItems, fetchMenuItems } = useMenuStore();
   const { fetchSiteSettings } = useSiteSettingsStore(); // <-- destructure the store method
+  const { fetchCollections } = useMerchandiseStore();
 
   useEffect(() => {
     fetchMenuItems();        // load menu items
     fetchSiteSettings();     // load hero/spinner image URLs
-  }, [fetchMenuItems, fetchSiteSettings]);
+    fetchCollections();      // load merchandise collections
+  }, [fetchMenuItems, fetchSiteSettings, fetchCollections]);
 
   // Filter for featured items
   const featuredItems = menuItems.filter((item) => item.featured);
@@ -120,6 +124,9 @@ export default function OnlineOrderingApp() {
 
         {/* /menu => the MenuPage */}
         <Route path="menu" element={<MenuPage />} />
+        
+        {/* /merchandise => the MerchandisePage */}
+        <Route path="merchandise" element={<MerchandisePage />} />
 
         {/* /cart => Cart */}
         <Route path="cart" element={<CartPage />} />

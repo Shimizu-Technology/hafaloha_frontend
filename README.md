@@ -7,8 +7,9 @@ A React-based frontend for the Hafaloha multi-tenant restaurant management SaaS 
 Hafaloha frontend provides user interfaces for:
 
 1. **Online Ordering** - Browse menus, customize items, place orders, and process payments
-2. **Reservations** - Book tables, view availability, and manage reservations
-3. **Admin Dashboard** - Manage menus, track orders, configure restaurant settings, process payments, and view analytics
+2. **Merchandise Shopping** - Browse merchandise collections, view item details, and add to cart
+3. **Reservations** - Book tables, view availability, and manage reservations
+4. **Admin Dashboard** - Manage menus, merchandise, track orders, configure restaurant settings, process payments, and view analytics
 
 The frontend is built with **React.js** with **TypeScript**, styled with **Tailwind CSS**, and uses **Zustand** for state management. It communicates with the Hafaloha API backend through a RESTful interface.
 
@@ -194,13 +195,28 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **CartPage** - Shopping cart management
 - **CheckoutPage** - Complete order placement
 
-### 3. Reservations
+### 3. Merchandise Management
+
+- **MerchandisePage** - Display merchandise items by collection
+- **MerchandiseManager** - Admin interface for managing merchandise
+  - **Collection Management** - Create, edit, and delete merchandise collections
+  - **Collection Activation** - Set a specific collection as active to display to customers
+  - **All Items View** - View all merchandise items across collections
+  - **Item Management** - Add, edit, and delete merchandise items
+  - **S3 Image Upload** - Direct upload of merchandise images to cloud storage
+  - **Image Preview** - Preview images during item creation and editing
+  - **Stock Status Tracking** - Track items as "In Stock", "Low Stock", or "Out of Stock"
+  - **Tab-based Navigation** - Easy navigation between different merchandise collections
+  - **Visual Indicators** - Clear visual indicators for active collections and item status
+  - **Responsive Design** - Optimized layout for all device sizes
+
+### 4. Reservations
 
 - **ReservationForm** - Book new reservations
 - **SeatLayoutCanvas** - Visual table layout
 - **SeatPreferenceWizard** - Select preferred seating
 
-### 4. Admin Dashboard
+### 5. Admin Dashboard
 
 - **AdminDashboard** - Main admin interface with persistent order notifications
 - **MenuManager** - Manage menu items and categories
@@ -232,7 +248,7 @@ Admins can configure allowed origins for each restaurant through the AllowedOrig
 - **RestaurantSelector** - Switch between restaurants (for super admins)
 - **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
 
-### 5. Shared Components
+### 6. Shared Components
 
 - **Header/Footer** - Navigation components used across all applications
 - **ProfilePage** - User profile management
@@ -645,6 +661,7 @@ The frontend integrates with the Hafaloha API backend through RESTful API calls.
 2. **Restaurant Context** - Automatic filtering of data by restaurant
 3. **Image Storage** - S3 URLs for menu item images and site assets
 4. **Notifications** - Display status from backend notification systems
+5. **Merchandise Management** - Full CRUD operations for merchandise collections and items
 
 The backend README contains more details about the API endpoints and multi-tenant architecture.
 

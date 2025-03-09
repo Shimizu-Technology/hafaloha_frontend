@@ -52,6 +52,7 @@ export function Hero() {
           >
             Order Now
           </Link>
+          {/* Book Your Table button temporarily hidden
           <button
             onClick={() => setShowReservationModal(true)}
             className="inline-flex items-center justify-center px-6 py-3
@@ -61,6 +62,7 @@ export function Hero() {
           >
             Book Your Table
           </button>
+          */}
         </div>
       </div>
 

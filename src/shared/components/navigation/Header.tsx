@@ -191,12 +191,21 @@ export function Header() {
               Menu
             </Link>
             <Link
+              to="/merchandise"
+              className={`px-3 py-2 rounded-md text-gray-700 hover:text-[#c1902f] hover:bg-gray-50
+                        transition-colors duration-200 ${isActiveLink('/merchandise')}`}
+            >
+              Merchandise
+            </Link>
+            {/* Reservations link temporarily hidden
+            <Link
               to="/reservations"
               className={`px-3 py-2 rounded-md text-gray-700 hover:text-[#c1902f] hover:bg-gray-50
                         transition-colors duration-200 ${isActiveLink('/reservations')}`}
             >
               Reservations
             </Link>
+            */}
             
             {/* Info section with subtle divider */}
             <div className="flex items-center space-x-4 pl-2 border-l border-gray-200">
@@ -397,6 +406,16 @@ export function Header() {
               Menu
             </Link>
             <Link
+              to="/merchandise"
+              className={`block px-3 py-2 rounded-md text-base font-medium text-gray-700
+                         hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150
+                         ${isActiveLink('/merchandise')}`}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Merchandise
+            </Link>
+            {/* Reservations link temporarily hidden
+            <Link
               to="/reservations"
               className={`block px-3 py-2 rounded-md text-base font-medium text-gray-700
                          hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150
@@ -405,6 +424,7 @@ export function Header() {
             >
               Reservations
             </Link>
+            */}
           </div>
           
           {/* Restaurant Info */}

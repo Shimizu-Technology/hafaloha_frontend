@@ -15,6 +15,10 @@ export interface CartItem extends Omit<OrderItem, 'id'> {
   customizations?: any[];
   advance_notice_hours?: number;
   image?: string; // Add image property
+  type?: 'food' | 'merchandise'; // Type of item
+  variant_id?: number; // For merchandise items with variants
+  size?: string; // For merchandise items
+  color?: string; // For merchandise items
 }
 
 interface OrderStore {
@@ -149,14 +153,28 @@ export const useOrderStore = create<OrderStore>()(
       ) => {
         set({ loading: true, error: null });
         try {
+          // Separate food items and merchandise items
+          const foodItems = items.filter(item => item.type !== 'merchandise');
+          const merchandiseItems = items.filter(item => item.type === 'merchandise');
+          
           const payload = {
             order: {
-              items: items.map((i) => ({
+              items: foodItems.map((i) => ({
                 id: i.id,
                 name: i.name,
                 quantity: i.quantity,
                 price: i.price,
                 customizations: i.customizations,
+                notes: i.notes,
+              })),
+              merchandise_items: merchandiseItems.map((i) => ({
+                id: i.id,
+                name: i.name,
+                quantity: i.quantity,
+                price: i.price,
+                variant_id: i.variant_id,
+                size: i.size,
+                color: i.color,
                 notes: i.notes,
               })),
               total,

@@ -6,6 +6,7 @@ import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
 import { AnalyticsManager } from './AnalyticsManager';
 import { SettingsManager } from './SettingsManager';
+import MerchandiseManager from './MerchandiseManager';
 import RestaurantSelector from './RestaurantSelector';
 import {
   BarChart2,
@@ -14,14 +15,15 @@ import {
   Tag,
   Sliders,
   X as XIcon,
-  CheckCircle
+  CheckCircle,
+  ShoppingCart
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
 import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
 
-type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings';
+type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise';
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
@@ -34,13 +36,14 @@ export function AdminDashboard() {
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'orders',    label: 'Orders',    icon: ShoppingBag },
     { id: 'menu',      label: 'Menu',      icon: LayoutGrid },
+    { id: 'merchandise', label: 'Merchandise', icon: ShoppingCart },
     { id: 'promos',    label: 'Promos',    icon: Tag },
     { id: 'settings',  label: 'Settings',  icon: Sliders },
   ] as const;
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const stored = localStorage.getItem('adminTab');
-    if (stored && ['analytics','orders','menu','promos','settings'].includes(stored)) {
+    if (stored && ['analytics','orders','menu','merchandise','promos','settings'].includes(stored)) {
       return stored as Tab;
     }
     return 'analytics';
@@ -470,6 +473,10 @@ export function AdminDashboard() {
             
             <div className={`transition-opacity duration-300 ${activeTab === 'promos' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
               {activeTab === 'promos' && <PromoManager restaurantId={currentRestaurantId} />}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'merchandise' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'merchandise' && <MerchandiseManager />}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
