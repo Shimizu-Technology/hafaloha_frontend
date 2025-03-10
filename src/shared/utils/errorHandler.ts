@@ -3,9 +3,10 @@
 /**
  * Handles API errors and returns a user-friendly error message
  * @param error The error object from the API call
+ * @param fallbackMessage Optional fallback message if no specific error could be extracted
  * @returns A string with a user-friendly error message
  */
-export const handleApiError = (error: any): string => {
+export const handleApiError = (error: any, fallbackMessage?: string): string => {
   if (error?.response?.data?.errors) {
     // Rails API typically returns errors in this format
     const errors = error.response.data.errors;
@@ -29,5 +30,5 @@ export const handleApiError = (error: any): string => {
     return error.message;
   }
   
-  return 'An unexpected error occurred';
+  return fallbackMessage || 'An unexpected error occurred';
 };

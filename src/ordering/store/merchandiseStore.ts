@@ -8,8 +8,31 @@ export interface MerchandiseVariant {
   color: string;
   price_adjustment: number;
   stock_quantity: number;
+  sku?: string;
+  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock';
+  low_stock_threshold?: number;
   created_at?: string;
   updated_at?: string;
+  stock_history?: StockHistoryEntry[];
+}
+
+export interface StockHistoryEntry {
+  id: number;
+  merchandise_variant_id: number;
+  previous_quantity: number;
+  new_quantity: number;
+  change_reason: string;
+  user_id: number;
+  user_name: string;
+  change_type: 'manual' | 'order' | 'return' | 'adjustment';
+  created_at: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  description?: string;
+  merchandise_collection_id: number;
 }
 
 export interface MerchandiseItem {
@@ -18,12 +41,17 @@ export interface MerchandiseItem {
   description: string;
   base_price: number;
   image_url: string;
+  second_image_url?: string; // For simplified model - front/back image approach
+  additional_images?: string[]; // Array of additional images (front, back, etc.) - legacy support
   stock_status: 'in_stock' | 'low_stock' | 'out_of_stock';
   merchandise_collection_id: number;
+  category_id?: number; // Added for category filtering
   variants?: MerchandiseVariant[];
   collection_name?: string; // Added for "All Items" view
   created_at?: string;
   updated_at?: string;
+  low_stock_threshold?: number; // Added for stock management
+  quantity?: number; // Used when adding to cart
 }
 
 export interface MerchandiseCollection {
@@ -39,6 +67,8 @@ export interface MerchandiseCollection {
 interface MerchandiseStore {
   collections: MerchandiseCollection[];
   merchandiseItems: MerchandiseItem[];
+  categories: Category[];
+  variants: MerchandiseVariant[];
   loading: boolean;
   error: string | null;
 
@@ -49,6 +79,9 @@ interface MerchandiseStore {
   deleteCollection: (id: number) => Promise<void>;
   setActiveCollection: (id: number) => Promise<void>;
 
+  // Category operations
+  fetchCategories: () => Promise<void>;
+  
   // Merchandise item operations
   fetchMerchandiseItems: (params: { collection_id?: number, include_collection_names?: boolean }) => Promise<void>;
   addMerchandiseItem: (item: Omit<MerchandiseItem, 'id'>) => Promise<MerchandiseItem>;
@@ -56,8 +89,10 @@ interface MerchandiseStore {
   deleteMerchandiseItem: (id: number) => Promise<void>;
 
   // Variant operations
+  fetchVariants: (params: { include_stock_data?: boolean }) => Promise<void>;
+  fetchVariantHistory: (variantId: number) => Promise<void>;
   addMerchandiseVariant: (variant: Omit<MerchandiseVariant, 'id'>) => Promise<MerchandiseVariant>;
-  updateMerchandiseVariant: (id: number, data: Partial<MerchandiseVariant>) => Promise<void>;
+  updateVariant: (id: number, data: { stock_quantity?: number, adjustment_reason?: string, [key: string]: any }) => Promise<void>;
   deleteMerchandiseVariant: (id: number) => Promise<void>;
   batchCreateVariants: (itemId: number, variants: Omit<MerchandiseVariant, 'id' | 'merchandise_item_id'>[]) => Promise<MerchandiseVariant[]>;
 }
@@ -65,6 +100,8 @@ interface MerchandiseStore {
 export const useMerchandiseStore = create<MerchandiseStore>((set, get) => ({
   collections: [],
   merchandiseItems: [],
+  categories: [],
+  variants: [],
   loading: false,
   error: null,
 
@@ -268,7 +305,92 @@ export const useMerchandiseStore = create<MerchandiseStore>((set, get) => ({
     }
   },
 
-  updateMerchandiseVariant: async (id, data) => {
+  // Category operations
+  fetchCategories: async () => {
+    set({ loading: true, error: null });
+    try {
+      const categories = await api.get<Category[]>('/merchandise_categories');
+      set({ categories, loading: false });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+      console.error('Error fetching categories:', err);
+    }
+  },
+
+  // Variant operations with stock management
+  fetchVariants: async (params: { include_stock_data?: boolean }) => {
+    set({ loading: true, error: null });
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.include_stock_data) {
+        queryParams.append('include_stock_data', 'true');
+      }
+      
+      const url = `/merchandise_variants?${queryParams.toString()}`;
+      const variants = await api.get<MerchandiseVariant[]>(url);
+      set({ variants, loading: false });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+      console.error('Error fetching variants:', err);
+    }
+  },
+
+  fetchVariantHistory: async (variantId: number) => {
+    set({ loading: true, error: null });
+    try {
+      const url = `/merchandise_variants/${variantId}/history`;
+      const history = await api.get<StockHistoryEntry[]>(url);
+      
+      // Update the variant with its history
+      set((state) => {
+        const updatedVariants = state.variants.map(variant => {
+          if (variant.id === variantId) {
+            return {
+              ...variant,
+              stock_history: history
+            };
+          }
+          return variant;
+        });
+        
+        return {
+          variants: updatedVariants,
+          loading: false
+        };
+      });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+      console.error('Error fetching variant history:', err);
+    }
+  },
+
+  updateVariant: async (id: number, data: { stock_quantity?: number, adjustment_reason?: string, [key: string]: any }) => {
+    set({ loading: true, error: null });
+    try {
+      const payload = {
+        merchandise_variant: data
+      };
+      const updatedVariant = await api.patch<MerchandiseVariant>(`/merchandise_variants/${id}`, payload);
+      
+      // Update variants list
+      set((state) => {
+        const updatedVariants = state.variants.map(variant => 
+          variant.id === id ? updatedVariant : variant
+        );
+        
+        return {
+          variants: updatedVariants,
+          loading: false
+        };
+      });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+      console.error('Error updating variant:', err);
+      throw err;
+    }
+  },
+
+  updateMerchandiseVariant: async (id: number, data: Partial<MerchandiseVariant>) => {
     set({ loading: true, error: null });
     try {
       const payload = {

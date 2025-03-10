@@ -8,6 +8,7 @@ import { AnalyticsManager } from './AnalyticsManager';
 import { SettingsManager } from './SettingsManager';
 import MerchandiseManager from './MerchandiseManager';
 import RestaurantSelector from './RestaurantSelector';
+import NotificationContainer from '../../../shared/components/notifications/NotificationContainer';
 import {
   BarChart2,
   ShoppingBag,
@@ -16,11 +17,14 @@ import {
   Sliders,
   X as XIcon,
   CheckCircle,
-  ShoppingCart
+  ShoppingCart,
+  AlertCircle,
+  Bell
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
+import useNotificationStore from '../../store/notificationStore';
 import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
 
 type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise';
@@ -73,6 +77,11 @@ export function AdminDashboard() {
 
   // Track unacknowledged orders
   const [unacknowledgedOrders, setUnacknowledgedOrders] = useState<Order[]>([]);
+  
+  // Stock notification states
+  const [showStockNotifications, setShowStockNotifications] = useState(false);
+  const [stockAlertCount, setStockAlertCount] = useState(0);
+  const { getStockAlerts, hasUnacknowledgedNotifications, fetchNotifications } = useNotificationStore();
   
   // Loading state for acknowledge all button
   const [isAcknowledgingAll, setIsAcknowledgingAll] = useState(false);
@@ -270,6 +279,39 @@ export function AdminDashboard() {
     });
   };
 
+  // Add effect for stock notifications
+  useEffect(() => {
+    // Only run for admin users
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return;
+    }
+    
+    // Fetch stock notifications on component mount
+    fetchNotifications(24, 'low_stock');
+    
+    // Set up polling interval for stock notifications
+    const interval = setInterval(() => {
+      fetchNotifications(24, 'low_stock');
+    }, POLLING_INTERVAL * 2); // Poll at a slower rate than orders
+    
+    return () => clearInterval(interval);
+  }, [fetchNotifications, user]);
+  
+  // Update stock alert count when notifications change
+  useEffect(() => {
+    const stockAlerts = getStockAlerts();
+    setStockAlertCount(stockAlerts.length);
+  }, [getStockAlerts]);
+  
+  // Handle stock notification view
+  const handleStockNotificationView = (notification: any) => {
+    // Navigate to the merchandise tab and select the variant
+    setActiveTab('merchandise');
+    
+    // Close notification panel
+    setShowStockNotifications(false);
+  };
+
   useEffect(() => {
     // Only run polling for admin users
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
@@ -413,16 +455,47 @@ export function AdminDashboard() {
               </p>
             </div>
             
-            {/* Only show for super_admin users who can manage multiple restaurants */}
-            {user?.role === 'super_admin' && (
-              <div className="mt-4 md:mt-0 md:ml-4 w-full md:w-64">
-                <RestaurantSelector 
-                  onRestaurantChange={(restaurantId) => {
-                    setCurrentRestaurantId(restaurantId);
-                  }}
-                />
+            <div className="flex items-center space-x-4">
+              {/* Stock notification bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowStockNotifications(!showStockNotifications)}
+                  className="p-2 rounded-full hover:bg-gray-100 transition-colors relative focus:outline-none"
+                >
+                  <Bell className="h-6 w-6 text-gray-500" />
+                  {stockAlertCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {stockAlertCount > 9 ? '9+' : stockAlertCount}
+                    </span>
+                  )}
+                </button>
+                
+                {/* Stock notification panel */}
+                {showStockNotifications && (
+                  <div className="absolute right-0 mt-2 z-50 w-96">
+                    <NotificationContainer 
+                      notificationType="low_stock"
+                      title="Stock Alerts"
+                      maxDisplayed={5}
+                      onClose={() => setShowStockNotifications(false)}
+                      onView={handleStockNotificationView}
+                      className="border-t-4 border-yellow-500"
+                    />
+                  </div>
+                )}
               </div>
-            )}
+              
+              {/* Restaurant selector - only for super admins */}
+              {user?.role === 'super_admin' && (
+                <div className="mt-4 md:mt-0 md:ml-4 w-full md:w-64">
+                  <RestaurantSelector 
+                    onRestaurantChange={(restaurantId) => {
+                      setCurrentRestaurantId(restaurantId);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
