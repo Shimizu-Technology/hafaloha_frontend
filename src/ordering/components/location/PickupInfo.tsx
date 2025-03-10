@@ -11,7 +11,9 @@ export function PickupInfo() {
     fetchRestaurant();
   }, [fetchRestaurant]);
   
-  const address = restaurant?.address || "955 Pale San Vitores Rd, Tamuning, Guam 96913";
+  // Use custom pickup location if available, otherwise use regular address
+  const hasCustomLocation = !!restaurant?.custom_pickup_location;
+  const address = restaurant?.custom_pickup_location || restaurant?.address || "955 Pale San Vitores Rd, Tamuning, Guam 96913";
   const phoneNumber = formatPhoneNumber(restaurant?.phone_number) || "+1 (671) 989-3444";
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
@@ -23,8 +25,13 @@ export function PickupInfo() {
         <div className="flex items-start">
           <MapPin className="h-5 w-5 text-[#c1902f] mt-1 mr-3" />
           <div>
-            <p className="font-medium">Location</p>
+            <p className="font-medium">{hasCustomLocation ? 'Special Pickup Location' : 'Location'}</p>
             <p className="text-gray-600">{address}</p>
+            {hasCustomLocation && (
+              <p className="text-amber-600 text-sm font-medium mt-1">
+                Please note: This is not our usual address
+              </p>
+            )}
             <a
               href={googleMapsUrl}
               target="_blank"

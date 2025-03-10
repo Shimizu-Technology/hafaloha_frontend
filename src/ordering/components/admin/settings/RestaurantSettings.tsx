@@ -250,6 +250,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
         await apiUpdateRestaurant(restaurant.id, {
           name: restaurant.name,
           address: restaurant.address,
+          custom_pickup_location: restaurant.custom_pickup_location,
           phone_number: restaurant.phone_number,
           contact_email: restaurant.contact_email,
           time_zone: restaurant.time_zone,
@@ -295,17 +296,18 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
       // Run text update and image upload in parallel for better performance
       const updatePromises = [];
       
-      // Update restaurant text fields
-      const textUpdatePromise = apiUpdateRestaurant(restaurant.id, {
-        name: restaurant.name,
-        address: restaurant.address,
-        phone_number: restaurant.phone_number,
-        contact_email: restaurant.contact_email,
-        time_zone: restaurant.time_zone,
-        time_slot_interval: restaurant.time_slot_interval,
-        default_reservation_length: restaurant.default_reservation_length,
-        admin_settings: restaurant.admin_settings
-      });
+          // Update restaurant text fields
+          const textUpdatePromise = apiUpdateRestaurant(restaurant.id, {
+            name: restaurant.name,
+            address: restaurant.address,
+            custom_pickup_location: restaurant.custom_pickup_location,
+            phone_number: restaurant.phone_number,
+            contact_email: restaurant.contact_email,
+            time_zone: restaurant.time_zone,
+            time_slot_interval: restaurant.time_slot_interval,
+            default_reservation_length: restaurant.default_reservation_length,
+            admin_settings: restaurant.admin_settings
+          });
       updatePromises.push(textUpdatePromise);
       
       // Upload the images using FormData
@@ -417,6 +419,19 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
                 onChange={(e) => setRestaurant({...restaurant, address: e.target.value})}
                 placeholder="Enter restaurant address"
               />
+              
+              <Input
+                label="Custom Pickup Location"
+                value={restaurant.custom_pickup_location || ''}
+                onChange={(e) => setRestaurant({...restaurant, custom_pickup_location: e.target.value})}
+                placeholder="Enter special pickup location (e.g., Concert Venue, Beach Event)"
+              />
+              <p className="mt-1 text-sm text-gray-500 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Only set this when pickup is not at the usual restaurant address. Leave empty to use regular address.
+              </p>
 
               <Input
                 label="Contact Email"

@@ -19,6 +19,7 @@ export interface Restaurant {
   default_reservation_length: number;
   admin_settings: Record<string, any>;
   allowed_origins: string[];
+  custom_pickup_location?: string;
   // VIP-related fields
   vip_only_checkout?: boolean;
   vip_enabled?: boolean;
