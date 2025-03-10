@@ -66,23 +66,34 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       await acknowledgeNotification(id);
       
       // Update local state
-      set(state => ({
-        notifications: state.notifications.filter(n => n.id !== id),
-        stats: {
-          ...state.stats,
-          totalCount: Math.max(0, state.stats.totalCount - 1),
-          // Decrement the appropriate counter based on notification type
-          orderCount: state.notifications.find(n => n.id === id && n.notification_type === 'order')
-            ? Math.max(0, state.stats.orderCount - 1)
-            : state.stats.orderCount,
-          lowStockCount: state.notifications.find(n => n.id === id && n.notification_type === 'low_stock')
-            ? Math.max(0, state.stats.lowStockCount - 1)
-            : state.stats.lowStockCount,
-          outOfStockCount: state.notifications.find(n => n.id === id && n.notification_type === 'out_of_stock')
-            ? Math.max(0, state.stats.outOfStockCount - 1)
-            : state.stats.outOfStockCount,
+      set(state => {
+        // Safety check to ensure notifications is an array
+        if (!Array.isArray(state.notifications)) {
+          console.warn('Expected notifications to be an array but got:', typeof state.notifications);
+          return {
+            ...state,
+            error: 'Invalid notifications data structure'
+          };
         }
-      }));
+        
+        return {
+          notifications: state.notifications.filter(n => n.id !== id),
+          stats: {
+            ...state.stats,
+            totalCount: Math.max(0, state.stats.totalCount - 1),
+            // Decrement the appropriate counter based on notification type
+            orderCount: state.notifications.find(n => n.id === id && n.notification_type === 'order')
+              ? Math.max(0, state.stats.orderCount - 1)
+              : state.stats.orderCount,
+            lowStockCount: state.notifications.find(n => n.id === id && n.notification_type === 'low_stock')
+              ? Math.max(0, state.stats.lowStockCount - 1)
+              : state.stats.lowStockCount,
+            outOfStockCount: state.notifications.find(n => n.id === id && n.notification_type === 'out_of_stock')
+              ? Math.max(0, state.stats.outOfStockCount - 1)
+              : state.stats.outOfStockCount,
+          }
+        };
+      });
     } catch (error) {
       const errorMessage = handleApiError(error, 'Failed to acknowledge notification');
       set({ error: errorMessage });
@@ -95,6 +106,15 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       
       // Update local state
       set(state => {
+        // Safety check to ensure notifications is an array
+        if (!Array.isArray(state.notifications)) {
+          console.warn('Expected notifications to be an array but got:', typeof state.notifications);
+          return {
+            ...state,
+            error: 'Invalid notifications data structure'
+          };
+        }
+        
         // If type is specified, filter out only notifications of that type
         const updatedNotifications = type
           ? state.notifications.filter(n => n.notification_type !== type)
@@ -146,18 +166,30 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       
       // For restock actions, the notification will be acknowledged automatically
       // So we should remove it from the local state
-      set(state => ({
-        loading: false,
-        notifications: state.notifications.filter(n => n.id !== id),
-        stats: {
-          ...state.stats,
-          totalCount: Math.max(0, state.stats.totalCount - 1),
-          // If this was a low stock notification, reduce that counter
-          lowStockCount: state.notifications.find(n => n.id === id && n.notification_type === 'low_stock')
-            ? Math.max(0, state.stats.lowStockCount - 1)
-            : state.stats.lowStockCount,
+      set(state => {
+        // Safety check to ensure notifications is an array
+        if (!Array.isArray(state.notifications)) {
+          console.warn('Expected notifications to be an array but got:', typeof state.notifications);
+          return {
+            ...state,
+            loading: false,
+            error: 'Invalid notifications data structure'
+          };
         }
-      }));
+        
+        return {
+          loading: false,
+          notifications: state.notifications.filter(n => n.id !== id),
+          stats: {
+            ...state.stats,
+            totalCount: Math.max(0, state.stats.totalCount - 1),
+            // If this was a low stock notification, reduce that counter
+            lowStockCount: state.notifications.find(n => n.id === id && n.notification_type === 'low_stock')
+              ? Math.max(0, state.stats.lowStockCount - 1)
+              : state.stats.lowStockCount,
+          }
+        };
+      });
       
       return response;
     } catch (error) {
@@ -192,6 +224,11 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
   // Get all merchandise stock-related notifications
   getStockAlerts: () => {
     const { notifications } = get();
+    // Add safety check to ensure notifications is an array before filtering
+    if (!Array.isArray(notifications)) {
+      console.warn('Expected notifications to be an array but got:', typeof notifications);
+      return [];
+    }
     return notifications.filter(n => 
       n.notification_type === 'low_stock' || 
       n.notification_type === 'out_of_stock' ||
@@ -202,6 +239,11 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
   // Check if there are any unacknowledged notifications of a given type
   hasUnacknowledgedNotifications: (type?: string) => {
     const { notifications } = get();
+    // Add safety check to ensure notifications is an array before using array methods
+    if (!Array.isArray(notifications)) {
+      console.warn('Expected notifications to be an array but got:', typeof notifications);
+      return false;
+    }
     if (type) {
       return notifications.some(n => n.notification_type === type);
     }
