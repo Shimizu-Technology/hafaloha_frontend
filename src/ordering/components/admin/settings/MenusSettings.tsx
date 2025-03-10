@@ -37,8 +37,14 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
   
   // Fetch menus and menu items on component mount
   useEffect(() => {
-    fetchMenus();
-    fetchAllMenuItemsForAdmin();
+    const initializeData = async () => {
+      // First fetch the menus
+      await fetchMenus();
+      // Then fetch all menu items to ensure we have items for all menus, not just the active one
+      await fetchAllMenuItemsForAdmin();
+    };
+    
+    initializeData();
   }, [fetchMenus, fetchAllMenuItemsForAdmin]);
 
   // Handle opening the create menu modal
@@ -109,10 +115,63 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
     }
   };
 
-  // Handle cloning a menu
+  // Local state for clone operation
+  const [cloningMenuId, setCloningMenuId] = useState<number | null>(null);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+
+  // Force refresh of menu counts after data changes
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      // Fetch data again after a slight delay to ensure backend has processed everything
+      const refreshTimeout = setTimeout(() => {
+        fetchMenus();
+        fetchAllMenuItemsForAdmin();
+      }, 1000);
+      
+      return () => clearTimeout(refreshTimeout);
+    }
+  }, [refreshTrigger, fetchMenus, fetchAllMenuItemsForAdmin]);
+
+  // Handle cloning a menu with better error handling
   const handleCloneMenu = async (id: number) => {
-    if (window.confirm('Are you sure you want to clone this menu? This will create a copy of the menu and all its items.')) {
-      await cloneMenu(id);
+    if (!window.confirm('Are you sure you want to clone this menu? This will create a copy of the menu and all its items.')) {
+      return;
+    }
+    
+    // Set the menu as currently being cloned - for UI feedback
+    setCloningMenuId(id);
+    setCloneError(null);
+    
+    try {
+      const clonedMenu = await cloneMenu(id);
+      
+      if (clonedMenu) {
+        // Trigger an immediate refresh of menus
+        await fetchMenus();
+        
+        // Force a refresh of menu items to ensure we get the cloned items
+        await fetchAllMenuItemsForAdmin();
+        
+        // Set a trigger to check again after a slight delay
+        // This helps in case the backend takes a moment to process all the associations
+        setRefreshTrigger(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error("Error cloning menu:", error);
+      
+      // Only show error message for errors other than 422
+      // Since 422 errors might actually succeed on refresh
+      if (error && typeof error === 'object' && 'status' in error && error.status !== 422) {
+        setCloneError("Failed to clone menu. Please try again.");
+      } else {
+        // For 422 errors, which might actually succeed on refresh, silently refresh the data
+        await fetchMenus();
+        await fetchAllMenuItemsForAdmin();
+        setRefreshTrigger(prev => prev + 1);
+      }
+    } finally {
+      setCloningMenuId(null);
     }
   };
 

@@ -136,8 +136,18 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     try {
       const clonedMenu = await menusApi.clone(id);
       
+      // After cloning a menu, fetch all menu items again to ensure we have
+      // all the items associated with the newly cloned menu
+      // Use the same parameters as fetchAllMenuItemsForAdmin
+      const response = await apiClient.get('/menu_items?admin=true&show_all=true');
+      const menuItems = response.data.map((item: any) => ({
+        ...item,
+        image: item.image_url || '/placeholder-food.jpg'
+      }));
+      
       set(state => ({
         menus: [...state.menus, clonedMenu],
+        menuItems,
         loading: false
       }));
       
@@ -169,7 +179,9 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   fetchAllMenuItemsForAdmin: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get('/menu_items?admin=true');
+      // Important: Don't filter by restaurant's current_menu_id when in admin mode
+      // Explicitly specifying "admin=true" parameter to get ALL menu items regardless of menu
+      const response = await apiClient.get('/menu_items?admin=true&show_all=true');
       const menuItems = response.data.map((item: any) => ({
         ...item,
         // Ensure the image property is set for compatibility
