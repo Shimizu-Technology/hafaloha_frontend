@@ -19,6 +19,7 @@ interface MenuItemFormData {
   name: string;
   description: string;
   price: number;
+  cost_to_make: number;
   category_ids: number[]; // numeric category IDs
 
   menu_id?: number;
@@ -158,6 +159,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     name: '',
     description: '',
     price: 0,
+    cost_to_make: 0,
     category_ids: [],
     image: '',
     imageFile: null,
@@ -200,6 +202,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       name: item.name,
       description: item.description,
       price: item.price,
+      cost_to_make: item.cost_to_make ?? 0,
       category_ids: item.category_ids || [],
       image: item.image || '',
       imageFile: null,
@@ -326,6 +329,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                 name: updatedItem.name,
                 description: updatedItem.description,
                 price: updatedItem.price,
+                cost_to_make: updatedItem.cost_to_make ?? 0,
                 category_ids: updatedItem.category_ids || [],
                 image: updatedItem.image_url || updatedItem.image || '',
                 imageFile: null,
@@ -811,6 +815,33 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                     }
                     className="w-full px-4 py-2 border rounded-md"
                     required
+                  />
+                </div>
+
+                {/* Cost to Make */}
+                <div className="mb-4">
+                  <div className="flex items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Cost to Make
+                    </label>
+                    <Tooltip 
+                      content="The cost to produce this item. Used for profit calculations and reporting."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
+                    />
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingItem.cost_to_make}
+                    onChange={(e) =>
+                      setEditingItem({
+                        ...editingItem,
+                        cost_to_make: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-4 py-2 border rounded-md"
                   />
                 </div>
               </div>

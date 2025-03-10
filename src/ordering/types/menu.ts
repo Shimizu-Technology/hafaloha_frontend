@@ -31,6 +31,7 @@ export interface MenuItem {
   name: string;
   description: string;
   price: number;
+  cost_to_make?: number;
 
   /**
    * Just numeric category IDs from your Rails model
