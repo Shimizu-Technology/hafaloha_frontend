@@ -17,8 +17,14 @@ interface AdminEditOrderModalProps {
 export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderModalProps) {
   // Local state for items, total, etc.
   const [localItems, setLocalItems] = useState(() => {
-    // Make a shallow copy so we don't mutate the original array
-    return order.items ? [...order.items] : [];
+    // Make a deep copy with unique identifiers for each item
+    if (!order.items) return [];
+    
+    return order.items.map((item, index) => ({
+      ...item,
+      // Add a unique editing identifier to distinguish items with same ID but different customizations
+      _editId: `item-${item.id}-${index}-${JSON.stringify(item.customizations || {})}`
+    }));
   });
   const [localTotal, setLocalTotal] = useState<string>(String(order.total || '0'));
   const [originalStatus] = useState(order.status); // Store original status to detect changes
@@ -54,24 +60,28 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
   const [activeTab, setActiveTab] = useState<'items' | 'details'>('items');
 
   // Handle changing a single item row
-  function handleItemChange(index: number, field: string, value: string | number) {
+  function handleItemChange(editId: string, field: string, value: string | number) {
     setLocalItems((prev) => {
-      const newItems = [...prev];
-      newItems[index] = {
-        ...newItems[index],
-        [field]: field === 'price' ? parseFloat(String(value)) : value,
-      };
-      return newItems;
+      return prev.map(item => {
+        if (item._editId === editId) {
+          return {
+            ...item,
+            [field]: field === 'price' ? parseFloat(String(value)) : value,
+          };
+        }
+        return item;
+      });
     });
   }
 
   // Remove one item row
-  function handleRemoveItem(index: number) {
-    setLocalItems((prev) => prev.filter((_, i) => i !== index));
+  function handleRemoveItem(editId: string) {
+    setLocalItems((prev) => prev.filter(item => item._editId !== editId));
   }
 
   // Add a new blank item row
   function handleAddItem() {
+    const newEditId = `new-item-${Date.now()}`;
     setLocalItems((prev) => [
       ...prev,
       {
@@ -80,6 +90,7 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
         quantity: 1,
         price: 0.0,
         notes: '',
+        _editId: newEditId
       },
     ]);
   }
@@ -141,10 +152,13 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
     // Convert total to a float
     const parsedTotal = parseFloat(localTotal) || 0.0;
 
+    // Clean up items by removing the temporary _editId property
+    const cleanedItems = localItems.map(({ _editId, ...item }) => item);
+
     // Build our updated order data
     const updated = {
       ...order,
-      items: localItems,
+      items: cleanedItems,
       total: parsedTotal,
       status: localStatus,
       // Include both property names to ensure compatibility
@@ -181,7 +195,7 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
       <div className="space-y-3">
         {localItems.map((item, idx) => (
           <div 
-            key={idx} 
+            key={item._editId} 
             className="border border-gray-200 rounded-lg p-4 space-y-3 transition-shadow hover:shadow-md animate-fadeIn"
             style={{ animationDelay: `${idx * 50}ms` }}
           >
@@ -189,7 +203,7 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
               <h5 className="font-medium text-gray-900">Item {idx + 1}</h5>
               <button
                 type="button"
-                onClick={() => handleRemoveItem(idx)}
+                onClick={() => handleRemoveItem(item._editId)}
                 className="text-red-600 text-sm font-medium hover:text-red-700 transition-colors flex items-center"
               >
                 <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,7 +222,7 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
                   type="text"
                   className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm focus:ring-[#c1902f] focus:border-[#c1902f] transition-colors"
                   value={item.name}
-                  onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                  onChange={(e) => handleItemChange(item._editId, 'name', e.target.value)}
                   placeholder="Item name"
                 />
               </div>
@@ -224,7 +238,7 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
                     min={1}
                     value={item.quantity}
                     onChange={(e) =>
-                      handleItemChange(idx, 'quantity', parseInt(e.target.value, 10))
+                      handleItemChange(item._editId, 'quantity', parseInt(e.target.value, 10))
                     }
                   />
                 </div>
@@ -241,7 +255,7 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
                       className="border border-gray-300 rounded-md pl-7 pr-3 py-2 w-full text-sm focus:ring-[#c1902f] focus:border-[#c1902f] transition-colors"
                       step="0.01"
                       value={item.price}
-                      onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
+                      onChange={(e) => handleItemChange(item._editId, 'price', e.target.value)}
                     />
                   </div>
                 </div>
@@ -255,14 +269,41 @@ export function AdminEditOrderModal({ order, onClose, onSave }: AdminEditOrderMo
                   type="text"
                   className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm focus:ring-[#c1902f] focus:border-[#c1902f] transition-colors"
                   value={item.notes || ''}
-                  onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
+                  onChange={(e) => handleItemChange(item._editId, 'notes', e.target.value)}
                   placeholder="Special requests or modifications"
                 />
               </div>
 
+            <div className="space-y-3">
+              {/* Show customizations if they exist */}
+              {item.customizations && (
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <h6 className="text-sm font-medium text-gray-700 mb-2">Customizations:</h6>
+                  <div className="text-xs text-gray-600">
+                    {Array.isArray(item.customizations) ? (
+                      // Handle array format customizations
+                      item.customizations.map((custom: any, cidx: number) => (
+                        <div key={`${item._editId}-custom-${cidx}`}>
+                          {custom.option_name}
+                          {custom.price > 0 && ` (+$${custom.price.toFixed(2)})`}
+                        </div>
+                      ))
+                    ) : (
+                      // Handle object format customizations
+                      Object.entries(item.customizations).map(([group, options]: [string, any], cidx: number) => (
+                        <div key={`${item._editId}-custom-${cidx}`}>
+                          <span className="font-medium">{group}:</span> {Array.isArray(options) ? options.join(', ') : options}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+              
               <div className="pt-2 text-right text-sm font-medium text-gray-700">
                 Item Total: ${((parseFloat(String(item.price)) || 0) * (parseInt(String(item.quantity)) || 0)).toFixed(2)}
               </div>
+            </div>
             </div>
           </div>
         ))}

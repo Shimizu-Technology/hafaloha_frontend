@@ -204,25 +204,65 @@ export function StaffOrderModal({ onClose, onOrderCreated, restaurantId }: Staff
     }
   };
   
-  // Find cart item by ID
-  const findCartItem = (id: string) => {
-    return cartItems.find(item => item.id === id);
+  // Get the composite key for an item
+  const getItemKey = (item: any) => {
+    return useOrderStore.getState()._getItemKey(item);
   };
   
-  // Display customizations in cart item if they exist
-  const renderCustomizations = (item: any) => {
-    if (!item.customizations || item.customizations.length === 0) return null;
+  // Find cart item by ID or composite key
+  const findCartItem = (id: string) => {
+    // First try getting the exact item
+    const exactItem = cartItems.find(item => item.id === id);
     
-    return (
-      <div className="text-xs text-gray-500 mt-1">
-        {item.customizations.map((customization: any, index: number) => (
-          <div key={index}>
-            {customization.option_name}
-            {customization.price > 0 && ` (+$${customization.price.toFixed(2)})`}
-          </div>
-        ))}
-      </div>
-    );
+    // If no customizations are involved, just use the direct ID
+    if (exactItem && (!exactItem.customizations || 
+                      (Array.isArray(exactItem.customizations) && exactItem.customizations.length === 0) ||
+                      (typeof exactItem.customizations === 'object' && Object.keys(exactItem.customizations).length === 0))) {
+      return exactItem;
+    }
+    
+    // Otherwise, there might be multiple instances of this item with different customizations
+    // Just return the first one found as a default; the composite keys will be used for operations
+    return exactItem;
+  };
+  
+  // Display customizations in cart item
+  const renderCustomizations = (item: any) => {
+    if (!item.customizations) return null;
+    
+    // Handle array format (from ItemCustomizationModal)
+    if (Array.isArray(item.customizations)) {
+      if (item.customizations.length === 0) return null;
+      
+      return (
+        <div className="text-xs text-gray-500 mt-1">
+          {item.customizations.map((customization: any, index: number) => (
+            <div key={index}>
+              {customization.option_name}
+              {customization.price > 0 && ` (+$${customization.price.toFixed(2)})`}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    // Handle object format (from CustomizationModal)
+    if (typeof item.customizations === 'object') {
+      const customizationEntries = Object.entries(item.customizations);
+      if (customizationEntries.length === 0) return null;
+      
+      return (
+        <div className="text-xs text-gray-500 mt-1">
+          {customizationEntries.map(([groupName, options]: [string, any], index: number) => (
+            <div key={index}>
+              <strong>{groupName}:</strong> {Array.isArray(options) ? options.join(', ') : options}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    return null;
   };
   
   return (
@@ -331,11 +371,11 @@ export function StaffOrderModal({ onClose, onOrderCreated, restaurantId }: Staff
                               <div>
                                 <h4 className="font-medium text-gray-900 mb-1 line-clamp-1">
                                   {item.name}
-                              {hasOptions && (
-                                <span className="ml-1 text-xs text-[#c1902f] font-medium">
-                                  (Customizable ↓)
-                                </span>
-                              )}
+                                  {hasOptions && (
+                                    <span className="ml-1 text-xs text-[#c1902f] font-medium">
+                                      (Customizable ↓)
+                                    </span>
+                                  )}
                                 </h4>
                                 <p className="text-sm text-gray-500 line-clamp-2 mb-1">{item.description}</p>
                                 <p className="text-[#c1902f] font-medium">${item.price.toFixed(2)}</p>
@@ -343,13 +383,15 @@ export function StaffOrderModal({ onClose, onOrderCreated, restaurantId }: Staff
                               
                               {/* Add/remove buttons */}
                               <div className="flex items-center justify-end mt-1">
-                                {isInCart ? (
+                                {isInCart && !hasOptions ? (
                                   <div className="flex items-center">
                                     <button
-                                      onClick={() => cartItem.quantity > 1 
-                                        ? setCartQuantity(item.id, cartItem.quantity - 1)
-                                        : removeFromCart(item.id)
-                                      }
+                                      onClick={() => {
+                                        const key = getItemKey(cartItem);
+                                        cartItem.quantity > 1 
+                                          ? setCartQuantity(key, cartItem.quantity - 1)
+                                          : removeFromCart(key);
+                                      }}
                                       className="text-gray-600 hover:text-[#c1902f] p-1 focus:outline-none"
                                       aria-label="Decrease quantity"
                                     >
@@ -359,7 +401,7 @@ export function StaffOrderModal({ onClose, onOrderCreated, restaurantId }: Staff
                                     </button>
                                     <span className="mx-2 w-6 text-center">{cartItem.quantity}</span>
                                     <button
-                                      onClick={() => setCartQuantity(item.id, cartItem.quantity + 1)}
+                                      onClick={() => setCartQuantity(getItemKey(cartItem), cartItem.quantity + 1)}
                                       className="text-gray-600 hover:text-[#c1902f] p-1 focus:outline-none"
                                       aria-label="Increase quantity"
                                     >
@@ -367,18 +409,6 @@ export function StaffOrderModal({ onClose, onOrderCreated, restaurantId }: Staff
                                         <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                                       </svg>
                                     </button>
-                                    
-                                    {hasOptions && (
-                                      <button
-                                        onClick={() => setCustomizingItem(item)}
-                                        className="ml-1 p-1 text-gray-600 hover:text-[#c1902f] focus:outline-none"
-                                        aria-label="Edit customizations"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
-                                      </button>
-                                    )}
                                   </div>
                                 ) : (
                                   <div className="flex items-center">
@@ -388,7 +418,7 @@ export function StaffOrderModal({ onClose, onOrderCreated, restaurantId }: Staff
                                         className="bg-[#c1902f] text-white px-3 py-1 rounded-md font-medium hover:bg-[#a97c28] text-sm focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50 transition-colors"
                                         aria-label="Customize"
                                       >
-                                        Customize
+                                        {isInCart ? "Add Another" : "Customize"}
                                       </button>
                                     ) : (
                                       <button
@@ -427,50 +457,74 @@ export function StaffOrderModal({ onClose, onOrderCreated, restaurantId }: Staff
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {cartItems.map((item) => (
-                    <div key={item.id} className="flex border-b border-gray-100 pb-3">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800">{item.name}</p>
-                        {renderCustomizations(item)}
-                        <div className="flex justify-between mt-1">
-                          <div className="flex items-center">
-                            <button
-                              onClick={() => item.quantity > 1 
-                                ? setCartQuantity(item.id, item.quantity - 1)
-                                : removeFromCart(item.id)
-                              }
-                              className="text-gray-600 hover:text-[#c1902f] p-1 focus:outline-none"
-                              aria-label="Decrease quantity"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                            <span className="mx-2 w-6 text-center">{item.quantity}</span>
-                            <button
-                              onClick={() => setCartQuantity(item.id, item.quantity + 1)}
-                              className="text-gray-600 hover:text-[#c1902f] p-1 focus:outline-none"
-                              aria-label="Increase quantity"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                              </svg>
-                            </button>
+                  {cartItems.map((item) => {
+                    const itemKey = getItemKey(item);
+                    
+                    return (
+                      <div key={itemKey} className="flex border-b border-gray-100 pb-3">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{item.name}</p>
+                          {renderCustomizations(item)}
+                          <div className="flex justify-between mt-1">
+                                  <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center">
+                                      <button
+                                        onClick={() => {
+                                          const key = getItemKey(item);
+                                          item.quantity > 1 
+                                            ? setCartQuantity(key, item.quantity - 1)
+                                            : removeFromCart(key);
+                                        }}
+                                        className="text-gray-600 hover:text-[#c1902f] p-1 focus:outline-none"
+                                        aria-label="Decrease quantity"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fillRule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                      </button>
+                                      <span className="mx-2 w-6 text-center">{item.quantity}</span>
+                                      <button
+                                        onClick={() => setCartQuantity(getItemKey(item), item.quantity + 1)}
+                                        className="text-gray-600 hover:text-[#c1902f] p-1 focus:outline-none"
+                                        aria-label="Increase quantity"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                    
+                                    {/* Show customize button for items with options - allow adding new versions with different options */}
+                                    {item.customizations && item.id && (
+                                      <button
+                                        onClick={() => {
+                                          // Find the original menu item to customize
+                                          const menuItem = menuItems.find(mi => mi.id === item.id);
+                                          if (menuItem && menuItem.option_groups && menuItem.option_groups.length > 0) {
+                                            setCustomizingItem(menuItem);
+                                          }
+                                        }}
+                                        className="text-[#c1902f] hover:bg-[#c1902f] hover:text-white px-2 py-1 rounded text-xs font-medium"
+                                      >
+                                        Add Another
+                                      </button>
+                                    )}
+                                  </div>
+                            <span className="text-gray-700">${(item.price * item.quantity).toFixed(2)}</span>
                           </div>
-                          <span className="text-gray-700">${(item.price * item.quantity).toFixed(2)}</span>
                         </div>
+                        <button
+                          onClick={() => removeFromCart(itemKey)}
+                          className="ml-2 text-gray-400 hover:text-red-500 p-1 focus:outline-none"
+                          aria-label="Remove item"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
                       </div>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="ml-2 text-gray-400 hover:text-red-500 p-1 focus:outline-none"
-                        aria-label="Remove item"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

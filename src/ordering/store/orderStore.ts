@@ -55,6 +55,10 @@ interface OrderStore {
 
   // CART
   cartItems: CartItem[];
+  
+  /** Utility function to generate a unique key for an item based on id and customizations */
+  _getItemKey: (item: any) => string;
+  
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
   removeFromCart: (itemId: string) => void;
   setCartQuantity: (itemId: string, quantity: number) => void;
@@ -337,18 +341,56 @@ export const useOrderStore = create<OrderStore>()(
 
       // CART -------------
       cartItems: [],
+      // Helper function to generate a unique key for cart items based on ID and customizations
+      // This allows distinguishing between same menu items with different customizations
+      _getItemKey: (item: any): string => {
+        let customizationsKey = '';
+        
+        if (item.customizations) {
+          // Check if customizations is an array (which can be sorted directly)
+          if (Array.isArray(item.customizations)) {
+            // If it's an array of customization objects with option_id and option_group_id
+            customizationsKey = JSON.stringify(item.customizations.sort((a: any, b: any) => 
+              // Sort by option_group_id first, then by option_id
+              a.option_group_id === b.option_group_id 
+                ? (a.option_id - b.option_id)
+                : (a.option_group_id - b.option_group_id)
+            ));
+          } else {
+            // If it's an object where keys are group names and values are arrays of option names
+            // Convert to stable sortable string representation
+            const sortedGroups = Object.keys(item.customizations).sort();
+            const sortedCustomizations = sortedGroups.map(groupName => {
+              const options = item.customizations[groupName];
+              return `${groupName}:${Array.isArray(options) ? [...options].sort().join(',') : options}`;
+            });
+            customizationsKey = JSON.stringify(sortedCustomizations);
+          }
+        }
+        
+        return `${item.id}-${customizationsKey}`;
+      },
+      
       addToCart: (item, quantity = 1) => {
         set((state) => {
-          const existing = state.cartItems.find((ci) => ci.id === item.id);
+          // Get the unique key for this item with its customizations
+          const getItemKey = get()._getItemKey;
+          const itemKey = getItemKey(item);
+          
+          // Find if this exact item (with same customizations) already exists
+          const existing = state.cartItems.find((ci) => getItemKey(ci) === itemKey);
+          
           if (existing) {
+            // Update quantity of existing item with same customizations
             return {
               cartItems: state.cartItems.map((ci) =>
-                ci.id === item.id
+                getItemKey(ci) === itemKey
                   ? { ...ci, quantity: ci.quantity + quantity }
                   : ci
               ),
             };
           } else {
+            // Add as a new item
             return {
               cartItems: [...state.cartItems, { ...item, quantity }],
             };
@@ -356,32 +398,76 @@ export const useOrderStore = create<OrderStore>()(
         });
       },
       removeFromCart: (itemId) => {
-        set((state) => ({
-          cartItems: state.cartItems.filter((ci) => ci.id !== itemId),
-        }));
+        set((state) => {
+          // Generate a key using the composite approach or find by ID if it's already a generated key
+          // This handles both direct IDs and composite keys with customizations
+          const itemToRemove = state.cartItems.find(ci => 
+            ci.id === itemId || get()._getItemKey(ci) === itemId
+          );
+          
+          if (!itemToRemove) return state;
+          
+          // Generate the full key for the item
+          const fullKey = get()._getItemKey(itemToRemove);
+          
+          // Remove the item with the matching key
+          return {
+            cartItems: state.cartItems.filter(ci => get()._getItemKey(ci) !== fullKey)
+          };
+        });
       },
+      
       setCartQuantity: (itemId, quantity) => {
         if (quantity <= 0) {
-          set((state) => ({
-            cartItems: state.cartItems.filter((ci) => ci.id !== itemId),
-          }));
+          // Use removeFromCart to ensure consistency
+          get().removeFromCart(itemId);
         } else {
-          set((state) => ({
-            cartItems: state.cartItems.map((ci) =>
-              ci.id === itemId ? { ...ci, quantity } : ci
-            ),
-          }));
+          set((state) => {
+            // Find the item either by its ID or its complete composite key
+            const itemToUpdate = state.cartItems.find(ci => 
+              ci.id === itemId || get()._getItemKey(ci) === itemId
+            );
+            
+            if (!itemToUpdate) return state;
+            
+            // Generate the full key for the item
+            const fullKey = get()._getItemKey(itemToUpdate);
+            
+            // Update the quantity of the matching item
+            return {
+              cartItems: state.cartItems.map(ci => 
+                get()._getItemKey(ci) === fullKey
+                  ? { ...ci, quantity }
+                  : ci
+              )
+            };
+          });
         }
       },
       clearCart: () => {
         set({ cartItems: [] });
       },
       setCartItemNotes: (itemId, notes) => {
-        set((state) => ({
-          cartItems: state.cartItems.map((ci) =>
-            ci.id === itemId ? { ...ci, notes } : ci
-          ),
-        }));
+        set((state) => {
+          // Find the item either by its ID or its complete composite key
+          const itemToUpdate = state.cartItems.find(ci => 
+            ci.id === itemId || get()._getItemKey(ci) === itemId
+          );
+          
+          if (!itemToUpdate) return state;
+          
+          // Generate the full key for the item
+          const fullKey = get()._getItemKey(itemToUpdate);
+          
+          // Update the notes of the matching item
+          return {
+            cartItems: state.cartItems.map(ci => 
+              get()._getItemKey(ci) === fullKey
+                ? { ...ci, notes }
+                : ci
+            )
+          };
+        });
       },
     }),
     {

@@ -32,19 +32,45 @@ export function OrderDetailsModal({
 
         <p className="font-medium mb-2 text-sm">Items:</p>
         <div className="space-y-2 mb-4">
-          {order.items.map((item: any, idx: number) => (
-            <div key={idx} className="flex justify-between text-sm">
-              <div>
-                <p className="font-medium">
-                  {item.name} × {item.quantity}
-                </p>
-                {item.notes && (
-                  <p className="text-xs text-gray-600">Notes: {item.notes}</p>
-                )}
+          {order.items.map((item: any, idx: number) => {
+            // Generate a unique key using item properties
+            const itemKey = `${item.id}-${idx}-${JSON.stringify(item.customizations || {})}`;
+            
+            return (
+              <div key={itemKey} className="flex justify-between text-sm">
+                <div>
+                  <p className="font-medium">
+                    {item.name} × {item.quantity}
+                  </p>
+                  {/* Display customizations if they exist */}
+                  {item.customizations && (
+                    <div className="text-xs text-gray-500">
+                      {Array.isArray(item.customizations) ? (
+                        // Handle array format customizations
+                        item.customizations.map((custom: any, cidx: number) => (
+                          <p key={`${itemKey}-c-${cidx}`}>
+                            {custom.option_name}
+                            {custom.price > 0 && ` (+$${custom.price.toFixed(2)})`}
+                          </p>
+                        ))
+                      ) : (
+                        // Handle object format customizations
+                        Object.entries(item.customizations).map(([group, options]: [string, any], cidx: number) => (
+                          <p key={`${itemKey}-c-${cidx}`}>
+                            <span className="font-medium">{group}:</span> {Array.isArray(options) ? options.join(', ') : options}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                  )}
+                  {item.notes && (
+                    <p className="text-xs text-gray-600">Notes: {item.notes}</p>
+                  )}
+                </div>
+                <p>${Number(item.price * item.quantity).toFixed(2)}</p>
               </div>
-              <p>${Number(item.price * item.quantity).toFixed(2)}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
