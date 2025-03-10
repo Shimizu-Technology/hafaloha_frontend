@@ -13,6 +13,7 @@ export interface Restaurant {
   name: string;
   address: string;
   phone_number: string;
+  contact_email?: string;
   time_zone: string;
   time_slot_interval: number;
   default_reservation_length: number;

@@ -251,6 +251,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
           name: restaurant.name,
           address: restaurant.address,
           phone_number: restaurant.phone_number,
+          contact_email: restaurant.contact_email,
           time_zone: restaurant.time_zone,
           time_slot_interval: restaurant.time_slot_interval,
           default_reservation_length: restaurant.default_reservation_length,
@@ -299,6 +300,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
         name: restaurant.name,
         address: restaurant.address,
         phone_number: restaurant.phone_number,
+        contact_email: restaurant.contact_email,
         time_zone: restaurant.time_zone,
         time_slot_interval: restaurant.time_slot_interval,
         default_reservation_length: restaurant.default_reservation_length,
@@ -414,6 +416,17 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
                 value={restaurant.address || ''}
                 onChange={(e) => setRestaurant({...restaurant, address: e.target.value})}
                 placeholder="Enter restaurant address"
+              />
+
+              <Input
+                label="Contact Email"
+                value={restaurant.contact_email || ''}
+                onChange={(e) => setRestaurant({
+                  ...restaurant, 
+                  contact_email: e.target.value
+                })}
+                placeholder="Enter contact email"
+                type="email"
               />
 
               <div>

@@ -89,7 +89,7 @@ export function Footer() {
               <p>{restaurant?.address || "955 Pale San Vitores Rd"}</p>
               <p>Tamuning, Guam 96913</p>
               <p>Phone: {formatPhoneNumber(restaurant?.phone_number) || "+1 (671) 989-3444"}</p>
-              <p>Email: info@hafaloha.com</p>
+              <p>Email: {restaurant?.contact_email || "sales@hafaloha.com"}</p>
             </address>
           </div>
         </div>
