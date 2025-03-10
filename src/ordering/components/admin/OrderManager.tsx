@@ -9,6 +9,8 @@ import { SearchInput } from './SearchInput';
 import { DateFilter, DateFilterOption } from './DateFilter';
 import { CollapsibleOrderCard } from './CollapsibleOrderCard';
 import { MultiSelectActionBar } from './MultiSelectActionBar';
+import { StaffOrderModal } from './StaffOrderModal';
+import toast from 'react-hot-toast';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed';
 
@@ -62,6 +64,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // for the "Edit Order" modal
   const [editingOrder, setEditingOrder] = useState<any | null>(null);
+
+  // for the "Staff Order" modal (POS)
+  const [showStaffOrderModal, setShowStaffOrderModal] = useState(false);
 
   // for mobile menu
   const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
@@ -576,9 +581,20 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       {error && <p className="text-red-600 mb-4">{error}</p>}
 
       {/* Header section */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Order Management</h2>
-        <p className="text-gray-600 text-sm">Manage and track customer orders</p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Order Management</h2>
+          <p className="text-gray-600 text-sm">Manage and track customer orders</p>
+        </div>
+        <button
+          onClick={() => setShowStaffOrderModal(true)}
+          className="px-4 py-2 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28] focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50 flex items-center space-x-2"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          <span>Create Staff Order</span>
+        </button>
       </div>
 
       {/* Filters and controls - optimized for mobile, tablet, and desktop */}
@@ -837,6 +853,25 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           order={editingOrder}
           onClose={() => setEditingOrder(null)}
           onSave={handleSaveEdit}
+        />
+      )}
+
+      {/* Staff Order Modal (POS) */}
+      {showStaffOrderModal && (
+        <StaffOrderModal
+          onClose={() => setShowStaffOrderModal(false)}
+          onOrderCreated={(orderId) => {
+            setShowStaffOrderModal(false);
+            // Refresh orders
+            fetchOrders();
+            // Optionally, select the newly created order
+            if (setSelectedOrderId) {
+              setSelectedOrderId(Number(orderId));
+            }
+            // Show success message with toast instead of alert
+            toast.success(`Staff order #${orderId} created successfully!`);
+          }}
+          restaurantId={restaurantId}
         />
       )}
     </div>
