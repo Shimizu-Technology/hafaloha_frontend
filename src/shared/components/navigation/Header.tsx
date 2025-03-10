@@ -152,7 +152,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Mobile menu button */}
           <button
@@ -182,7 +182,7 @@ export function Header() {
           </Link>
 
           {/* Desktop Nav (hidden on mobile) */}
-          <nav className="hidden lg:flex items-center space-x-6">
+          <nav className="hidden lg:flex items-center space-x-2 xl:space-x-6">
             <Link
               to="/menu"
               className={`px-3 py-2 rounded-md text-gray-700 hover:text-[#c1902f] hover:bg-gray-50
@@ -208,34 +208,34 @@ export function Header() {
             */}
             
             {/* Info section with subtle divider */}
-            <div className="flex items-center space-x-4 pl-2 border-l border-gray-200">
-              <div className="flex items-center text-gray-600 whitespace-nowrap group">
+            <div className="flex items-center space-x-2 sm:space-x-3 xl:space-x-4 pl-2 border-l border-gray-200">
+              <div className="hidden xl:flex items-center text-gray-600 group">
                 <Clock className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
                 <span className="text-sm">11AM-9PM</span>
               </div>
               
-              <div className="flex items-center text-gray-600 whitespace-nowrap group">
+              <div className="hidden lg:flex xl:flex items-center text-gray-600 group">
                 <MapPin className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
-                <span className="text-sm">{restaurant?.address ? restaurant.address.split(',')[0] : 'Tamuning'}</span>
+                <span className="text-sm truncate max-w-[100px] xl:max-w-none">{restaurant?.address ? restaurant.address.split(',')[0] : 'Tamuning'}</span>
               </div>
               
               {restaurant?.phone_number ? (
                 <a
                   href={`tel:${restaurant.phone_number}`}
-                  className="flex items-center text-gray-600 whitespace-nowrap hover:text-[#c1902f] 
+                  className="flex items-center text-gray-600 hover:text-[#c1902f] 
                            transition-colors duration-200 group"
                 >
-                  <Phone className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
-                  <span className="text-sm">{formatPhoneNumber(restaurant.phone_number)}</span>
+                  <Phone className="h-4 w-4 mr-1 xl:mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
+                  <span className="hidden sm:inline text-sm">{formatPhoneNumber(restaurant.phone_number)}</span>
                 </a>
               ) : (
                 <a
                   href="tel:+16719893444"
-                  className="flex items-center text-gray-600 whitespace-nowrap hover:text-[#c1902f] 
+                  className="flex items-center text-gray-600 hover:text-[#c1902f] 
                            transition-colors duration-200 group"
                 >
-                  <Phone className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
-                  <span className="text-sm">(671) 989-3444</span>
+                  <Phone className="h-4 w-4 mr-1 xl:mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
+                  <span className="hidden sm:inline text-sm">(671) 989-3444</span>
                 </a>
               )}
             </div>
