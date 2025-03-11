@@ -91,7 +91,9 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
-    setActiveMenu
+    setActiveMenu,
+    startInventoryPolling,
+    stopInventoryPolling
   } = useMenuStore();
 
   const { categories, fetchCategories } = useCategoryStore();
@@ -117,16 +119,28 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
-  // NEW: inventory modal state
+  // Inventory modal state
   const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [inventoryModalItem, setInventoryModalItem] = useState<MenuItem | null>(null);
+  
+  // For item-specific polling when editing
+  const [editItemPollingActive, setEditItemPollingActive] = useState(false);
+  const [polledItemId, setPolledItemId] = useState<number | null>(null);
 
-  // On mount => fetch all items (admin) + categories + menus
+  // On mount => fetch all items (admin) + categories + menus and start inventory polling
   useEffect(() => {
     fetchAllMenuItemsForAdmin();
     fetchCategories();
     fetchMenus();
-  }, [fetchAllMenuItemsForAdmin, fetchCategories, fetchMenus]);
+    
+    // Start automatic polling for inventory updates 
+    startInventoryPolling();
+    
+    // Clean up when the component unmounts
+    return () => {
+      stopInventoryPolling();
+    };
+  }, [fetchAllMenuItemsForAdmin, fetchCategories, fetchMenus, startInventoryPolling, stopInventoryPolling]);
 
   // Set the current menu as the default selected menu
   useEffect(() => {
@@ -256,6 +270,14 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       available_quantity: availableQty,
     });
     setIsEditing(true);
+    
+    // Start polling for this specific item's inventory updates
+    if (item.enable_stock_tracking) {
+      setPolledItemId(Number(item.id));
+      setEditItemPollingActive(true);
+      // Use the menu store's polling function for just this item
+      startInventoryPolling(item.id);
+    }
   };
 
   /**
@@ -290,9 +312,45 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     setOptionsModalItem(null);
   };
 
+  // Effect to update the editing item when menu items are refreshed
+  useEffect(() => {
+    if (isEditing && editingItem && editingItem.id && editItemPollingActive) {
+      const editingItemId = editingItem.id; // Get this once to avoid reference issues
+      const updatedItem = menuItems.find(item => Number(item.id) === editingItemId);
+      
+      if (updatedItem) {
+        const stockQty = updatedItem.stock_quantity || 0;
+        const damagedQty = updatedItem.damaged_quantity || 0;
+        const availableQty = Math.max(0, stockQty - damagedQty);
+        const threshold = updatedItem.low_stock_threshold || 10;
+        
+        // Only update if the data actually changed to avoid infinite loops
+        if (
+          stockQty !== editingItem.stock_quantity ||
+          damagedQty !== editingItem.damaged_quantity ||
+          threshold !== editingItem.low_stock_threshold ||
+          updatedItem.stock_status !== editingItem.stock_status ||
+          !!updatedItem.enable_stock_tracking !== editingItem.enable_stock_tracking
+        ) {
+          setEditingItem(prevItem => {
+            if (!prevItem) return prevItem;
+            return {
+              ...prevItem,
+              enable_stock_tracking: !!updatedItem.enable_stock_tracking,
+              stock_quantity: stockQty,
+              damaged_quantity: damagedQty,
+              low_stock_threshold: threshold,
+              available_quantity: availableQty,
+              stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'
+            };
+          });
+        }
+      }
+    }
+  }, [menuItems, isEditing, editItemPollingActive]);
+
   /**
    * Manage inventory => show the modal
-   * NEW
    */
   const handleManageInventory = (item: MenuItem) => {
     setInventoryModalItem(item);
@@ -305,28 +363,7 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     setInventoryModalItem(null);
     
     // Force a full refresh of menu items to get updated inventory and tracking status
-    fetchAllMenuItemsForAdmin().then(() => {
-      // If we're currently editing an item, update its data to reflect inventory changes
-      if (editingItem && editingItem.id && itemBeforeClosing && Number(itemBeforeClosing.id) === editingItem.id) {
-        const updatedItem = menuItems.find(item => Number(item.id) === editingItem.id);
-        if (updatedItem) {
-          const stockQty = updatedItem.stock_quantity || 0;
-          const damagedQty = updatedItem.damaged_quantity || 0;
-          const availableQty = Math.max(0, stockQty - damagedQty);
-          
-          setEditingItem({
-            ...editingItem,
-            enable_stock_tracking: !!updatedItem.enable_stock_tracking,
-            stock_quantity: stockQty,
-            damaged_quantity: damagedQty,
-            low_stock_threshold: updatedItem.low_stock_threshold || 10,
-            available_quantity: availableQty,
-            // Set stock_status based on the server's response
-            stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'
-          });
-        }
-      }
-    });
+    fetchAllMenuItemsForAdmin();
   };
 
   // Use our loading overlay hook
@@ -831,6 +868,12 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
               </h3>
               <button
                 onClick={() => {
+                  // Stop item-specific polling when closing the edit modal
+                  if (editItemPollingActive) {
+                    stopInventoryPolling();
+                    setEditItemPollingActive(false);
+                    setPolledItemId(null);
+                  }
                   setIsEditing(false);
                   setEditingItem(null);
                 }}

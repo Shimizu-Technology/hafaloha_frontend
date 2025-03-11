@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MenuItem as MenuItemType, MenuItemStockAudit } from '../../../ordering/types/menu';
 import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
+import { useMenuStore } from '../../store/menuStore';
 import { format } from 'date-fns';
 
 interface ItemInventoryModalProps {
@@ -31,7 +32,8 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   const [damageReason, setDamageReason] = useState<string>('');
   
   // State for "Update stock" form
-  const [newStockQuantity, setNewStockQuantity] = useState<number>(0);
+  const [stockOperation, setStockOperation] = useState<'add' | 'remove'>('add');
+  const [stockAdjustmentAmount, setStockAdjustmentAmount] = useState<number>(0);
   const [reasonType, setReasonType] = useState<'restock' | 'adjustment' | 'other'>('restock');
   const [reasonDetails, setReasonDetails] = useState<string>('');
   
@@ -43,21 +45,70 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Load menu item data when opened
+  // Access menu store for real-time inventory updates
+  const { startInventoryPolling, stopInventoryPolling } = useMenuStore();
+
+  // Load menu item data when opened and start polling for real-time updates
   useEffect(() => {
     if (open && menuItem) {
       setEnableTracking(menuItem.enable_stock_tracking || false);
       setStockQuantity(menuItem.stock_quantity || 0);
       setDamagedQuantity(menuItem.damaged_quantity || 0);
       setLowStockThreshold(menuItem.low_stock_threshold || 10);
-      setNewStockQuantity(menuItem.stock_quantity || 0);
+      setStockAdjustmentAmount(0); // Reset adjustment amount when opening modal
       
       // Only load audit history if tracking is enabled
       if (menuItem.enable_stock_tracking) {
         loadAuditHistory();
       }
+      
+      // Start polling for real-time inventory updates
+      startInventoryPolling(menuItem.id);
     }
-  }, [open, menuItem]);
+    
+    // Clean up polling when the modal closes
+    return () => {
+      stopInventoryPolling();
+    };
+  }, [open, menuItem, startInventoryPolling, stopInventoryPolling]);
+
+  // Load and refresh inventory data when menuItem changes
+  useEffect(() => {
+    if (menuItem && open) {
+      // Update local state when menuItem is refreshed (e.g., by polling)
+      setStockQuantity(menuItem.stock_quantity || 0);
+      setDamagedQuantity(menuItem.damaged_quantity || 0);
+      setLowStockThreshold(menuItem.low_stock_threshold || 10);
+      setStockAdjustmentAmount(0); // Reset to zero when the menuItem changes
+    }
+  }, [menuItem, open]);
+
+  // Function to refresh inventory data
+  const refreshInventoryData = async () => {
+    if (!menuItem?.id) return;
+    
+    try {
+      // Fetch the latest menu item data
+      const updatedItem = await menuItemsApi.getById(menuItem.id);
+      
+      // Update local state with the latest values
+      setStockQuantity(updatedItem.stock_quantity || 0);
+      setDamagedQuantity(updatedItem.damaged_quantity || 0);
+      setLowStockThreshold(updatedItem.low_stock_threshold || 10);
+      setStockAdjustmentAmount(0); // Reset adjustment amount after refresh
+      
+      // Refresh audit history
+      loadAuditHistory();
+      
+      // Notify parent component
+      onSave();
+      
+      return updatedItem;
+    } catch (err) {
+      console.error('Failed to refresh inventory data:', err);
+      return null;
+    }
+  };
 
   const loadAuditHistory = async () => {
     if (!menuItem) return;
@@ -87,11 +138,11 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         low_stock_threshold: enableTracking ? lowStockThreshold : undefined
       });
       
+      // Immediately refresh inventory data
+      await refreshInventoryData();
+      
       setSuccess('Inventory settings saved successfully');
       setTimeout(() => setSuccess(null), 3000);
-      
-      // Callback to notify the parent component about the save
-      onSave();
     } catch (err) {
       console.error('Failed to save inventory settings:', err);
       setError('Failed to save inventory settings');
@@ -120,14 +171,13 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         reason: damageReason
       });
       
+      // Immediately refresh inventory data to show updated values
+      await refreshInventoryData();
+      
       setSuccess('Items marked as damaged successfully');
       setDamageQuantity(1);
       setDamageReason('');
       setTimeout(() => setSuccess(null), 3000);
-      
-      // Refresh the data
-      loadAuditHistory();
-      onSave();
     } catch (err) {
       console.error('Failed to mark items as damaged:', err);
       setError('Failed to mark items as damaged');
@@ -138,26 +188,38 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   const handleUpdateStock = async () => {
     if (!menuItem) return;
     
-    if (newStockQuantity < 0) {
-      setError('Stock quantity cannot be negative');
+    // Calculate the new stock quantity based on the operation
+    const calculatedNewQuantity = stockOperation === 'add' 
+      ? stockQuantity + stockAdjustmentAmount 
+      : stockQuantity - stockAdjustmentAmount;
+    
+    // Validate the operation
+    if (calculatedNewQuantity < 0) {
+      setError('Cannot remove more items than current stock');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    if (stockAdjustmentAmount <= 0) {
+      setError('Quantity must be greater than zero');
       setTimeout(() => setError(null), 3000);
       return;
     }
     
     try {
       await menuItemsApi.updateStock(menuItem.id, {
-        stock_quantity: newStockQuantity,
+        stock_quantity: calculatedNewQuantity,
         reason_type: reasonType,
         reason_details: reasonDetails
       });
       
+      // Immediately refresh inventory data to show updated values
+      await refreshInventoryData();
+      
       setSuccess('Stock updated successfully');
       setReasonDetails('');
+      setStockAdjustmentAmount(0);
       setTimeout(() => setSuccess(null), 3000);
-      
-      // Refresh the data
-      loadAuditHistory();
-      onSave();
     } catch (err) {
       console.error('Failed to update stock:', err);
       setError('Failed to update stock');
@@ -227,11 +289,11 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                           low_stock_threshold: newValue ? lowStockThreshold : undefined
                         });
                         
+                        // Refresh inventory data immediately
+                        await refreshInventoryData();
+                        
                         setSuccess('Inventory tracking ' + (newValue ? 'enabled' : 'disabled') + ' successfully');
                         setTimeout(() => setSuccess(null), 3000);
-                        
-                        // Refresh data
-                        onSave();
                       } catch (err) {
                         console.error('Failed to update inventory tracking:', err);
                         setError('Failed to update inventory tracking');
@@ -348,16 +410,61 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
               
               <h3 className="font-semibold text-lg mb-4">Update Stock Quantity</h3>
               
+              <div className="mb-4">
+                <p className="text-gray-700 mb-2">
+                  Current Stock: <span className="font-bold">{stockQuantity}</span> items
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">New Stock Quantity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Operation</label>
+                  <div className="flex space-x-4">
+                    <label className={`inline-flex items-center px-3 py-2 rounded-md cursor-pointer ${
+                      stockOperation === 'add' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        className="sr-only"
+                        checked={stockOperation === 'add'}
+                        onChange={() => setStockOperation('add')}
+                      />
+                      <span className="ml-1">Add to Stock</span>
+                    </label>
+                    <label className={`inline-flex items-center px-3 py-2 rounded-md cursor-pointer ${
+                      stockOperation === 'remove' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        className="sr-only"
+                        checked={stockOperation === 'remove'}
+                        onChange={() => setStockOperation('remove')}
+                      />
+                      <span className="ml-1">Remove from Stock</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity to {stockOperation === 'add' ? 'Add' : 'Remove'}
+                  </label>
                   <input
                     type="number"
-                    className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
-                    value={newStockQuantity}
-                    min={0}
-                    onChange={(e) => setNewStockQuantity(parseInt(e.target.value) || 0)}
+                    className={`w-full border rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-opacity-50 ${
+                      stockOperation === 'add' 
+                        ? 'border-green-300 focus:ring-green-500 focus:border-green-500' 
+                        : 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                    }`}
+                    value={stockAdjustmentAmount}
+                    min={1}
+                    onChange={(e) => setStockAdjustmentAmount(parseInt(e.target.value) || 0)}
                   />
+                  {stockOperation === 'remove' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Maximum: {stockQuantity} items
+                    </p>
+                  )}
                 </div>
                 
                 <div>
@@ -365,7 +472,14 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   <select
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
                     value={reasonType}
-                    onChange={(e) => setReasonType(e.target.value as 'restock' | 'adjustment' | 'other')}
+                    onChange={(e) => {
+                      const selectedType = e.target.value as 'restock' | 'adjustment' | 'other';
+                      setReasonType(selectedType);
+                      // Automatically set the stock operation based on reason type
+                      if (selectedType === 'restock') {
+                        setStockOperation('add');
+                      }
+                    }}
                   >
                     <option value="restock">Restock</option>
                     <option value="adjustment">Inventory Adjustment</option>
@@ -373,7 +487,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   </select>
                 </div>
                 
-                <div>
+                <div className="md:col-span-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Details (Optional)</label>
                   <input
                     type="text"
@@ -384,14 +498,30 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   />
                 </div>
                 
-                <div className="md:col-span-3 flex justify-end">
-                  <button
-                    className="bg-[#c1902f] hover:bg-[#a97c28] text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={handleUpdateStock}
-                    disabled={newStockQuantity < 0}
-                  >
-                    Update Stock
-                  </button>
+                <div className="md:col-span-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">
+                        New total will be: <span className="font-bold">
+                          {stockOperation === 'add' 
+                            ? stockQuantity + stockAdjustmentAmount 
+                            : Math.max(0, stockQuantity - stockAdjustmentAmount)
+                          } items
+                        </span>
+                      </p>
+                    </div>
+                    <button
+                      className={`py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed text-white ${
+                        stockOperation === 'add'
+                          ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
+                          : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+                      }`}
+                      onClick={handleUpdateStock}
+                      disabled={stockAdjustmentAmount <= 0 || (stockOperation === 'remove' && stockAdjustmentAmount > stockQuantity)}
+                    >
+                      {stockOperation === 'add' ? 'Add' : 'Remove'} Stock
+                    </button>
+                  </div>
                 </div>
               </div>
               

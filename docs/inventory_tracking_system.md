@@ -142,6 +142,22 @@ When inventory tracking is enabled, the stock status field is automatically dete
 
 The MenuManager displays appropriate status indicators and badges based on this status.
 
+### Order Processing Integration
+
+The inventory tracking system is fully integrated with the ordering process:
+
+1. When a customer places an order for items with inventory tracking enabled:
+   - The backend automatically deducts the ordered quantity from the stock
+   - The system creates stock audit records with the order reference
+   - The stock status is updated in real-time based on available inventory
+
+2. Administrators can view:
+   - Current inventory levels in the inventory management modal
+   - Full audit history showing which orders consumed inventory
+   - Automatic status changes as items go from "In Stock" to "Low Stock" or "Out of Stock"
+
+This integration ensures inventory levels are always accurate and reflect real-time usage as orders are placed.
+
 ## UX Considerations
 
 - The inventory toggle has immediate effect, reducing user confusion

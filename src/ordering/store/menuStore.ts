@@ -4,6 +4,7 @@ import { menusApi, Menu } from '../../shared/api/endpoints/menus';
 import { handleApiError } from '../../shared/utils/errorHandler';
 import { MenuItem } from '../types/menu';
 import { apiClient } from '../../shared/api/apiClient';
+import { menuItemsApi } from '../../shared/api/endpoints/menuItems';
 
 interface MenuState {
   menus: Menu[];
@@ -11,6 +12,10 @@ interface MenuState {
   menuItems: MenuItem[];
   loading: boolean;
   error: string | null;
+  
+  // Inventory polling state
+  inventoryPolling: boolean;
+  inventoryPollingInterval: number | null;
   
   // Actions
   fetchMenus: () => Promise<void>;
@@ -24,6 +29,13 @@ interface MenuState {
   addMenuItem: (data: any) => Promise<MenuItem | null>;
   updateMenuItem: (id: number | string, data: any) => Promise<MenuItem | null>;
   deleteMenuItem: (id: number | string) => Promise<boolean>;
+  
+  // Inventory polling actions
+  startInventoryPolling: (menuItemId?: number | string) => void;
+  stopInventoryPolling: () => void;
+  
+  // Get individual menu item with fresh data
+  getMenuItemById: (id: number | string) => Promise<MenuItem | null>;
 }
 
 export const useMenuStore = create<MenuState>((set, get) => ({
@@ -32,6 +44,10 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   menuItems: [],
   loading: false,
   error: null,
+  
+  // Inventory polling state
+  inventoryPolling: false,
+  inventoryPollingInterval: null,
 
   fetchMenus: async () => {
     set({ loading: true, error: null });
@@ -296,6 +312,64 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       const errorMessage = handleApiError(error);
       set({ error: errorMessage, loading: false });
       return false;
+    }
+  },
+  
+  // Get a single menu item by ID
+  getMenuItemById: async (id: number | string) => {
+    try {
+      const item = await menuItemsApi.getById(id);
+      
+      // Update this item in the store
+      set(state => ({
+        menuItems: state.menuItems.map(existingItem => 
+          String(existingItem.id) === String(id) 
+            ? { ...item, image: item.image_url || existingItem.image || '/placeholder-food.jpg' }
+            : existingItem
+        )
+      }));
+      
+      return item;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage });
+      return null;
+    }
+  },
+  
+  // Start polling for inventory updates
+  startInventoryPolling: (menuItemId?: number | string) => {
+    // First stop any existing polling
+    get().stopInventoryPolling();
+    
+    // Set polling flag to true
+    set({ inventoryPolling: true });
+    
+    // Start a new polling interval
+    const intervalId = window.setInterval(async () => {
+      // If we have a specific menu item ID, just fetch that one
+      if (menuItemId) {
+        await get().getMenuItemById(menuItemId);
+      } else {
+        // Otherwise refresh all menu items
+        await get().fetchAllMenuItemsForAdmin();
+      }
+    }, 10000); // Poll every 10 seconds
+    
+    // Store the interval ID so we can clear it later
+    set({ inventoryPollingInterval: intervalId });
+  },
+  
+  // Stop polling for inventory updates
+  stopInventoryPolling: () => {
+    const { inventoryPollingInterval } = get();
+    
+    if (inventoryPollingInterval !== null) {
+      window.clearInterval(inventoryPollingInterval);
+      set({ 
+        inventoryPollingInterval: null,
+        inventoryPolling: false
+      });
     }
   }
 }));
