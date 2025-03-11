@@ -19,13 +19,17 @@ import {
   CheckCircle,
   ShoppingCart,
   AlertCircle,
-  Bell
+  Bell,
+  Package
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
 import useNotificationStore from '../../store/notificationStore';
 import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
+import { MenuItem } from '../../types/menu';
+import { useMenuStore } from '../../store/menuStore';
+import { calculateAvailableQuantity } from '../../utils/inventoryUtils';
 
 type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise';
 
@@ -82,6 +86,17 @@ export function AdminDashboard() {
   const [showStockNotifications, setShowStockNotifications] = useState(false);
   const [stockAlertCount, setStockAlertCount] = useState(0);
   const { getStockAlerts, hasUnacknowledgedNotifications, fetchNotifications } = useNotificationStore();
+  const { menuItems } = useMenuStore();
+  
+  // Track acknowledged low stock items with their quantities to avoid showing the same notification repeatedly
+  const [acknowledgedLowStockItems, setAcknowledgedLowStockItems] = useState<Record<string, number>>(() => {
+    const stored = localStorage.getItem('acknowledgedLowStockItems');
+    return stored ? JSON.parse(stored) : {};
+  });
+  
+  // For editing menu item and inventory management
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState<string | null>(null);
+  const [openInventoryForItem, setOpenInventoryForItem] = useState<string | null>(null);
   
   // Loading state for acknowledge all button
   const [isAcknowledgingAll, setIsAcknowledgingAll] = useState(false);
@@ -303,14 +318,121 @@ export function AdminDashboard() {
     setStockAlertCount(stockAlerts.length);
   }, [getStockAlerts]);
   
+  // Function to acknowledge a low stock item
+  const acknowledgeLowStockItem = (itemId: string, currentQty: number) => {
+    const updatedItems = { ...acknowledgedLowStockItems, [itemId]: currentQty };
+    setAcknowledgedLowStockItems(updatedItems);
+    localStorage.setItem('acknowledgedLowStockItems', JSON.stringify(updatedItems));
+  };
+  
+  // Function to display low stock notification
+  const displayLowStockNotification = (item: MenuItem) => {
+    const availableQty = calculateAvailableQuantity(item);
+    
+    toast.custom((t) => (
+      <div
+        className={`relative bg-white rounded-xl shadow-md border border-gray-100 animate-slideUp transition-all duration-300 ${t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+        style={{ minWidth: '280px', maxWidth: '95vw' }}
+      >
+        {/* Close button */}
+        <button
+          onClick={() => {
+            toast.remove(`low_stock_${item.id}`);
+            acknowledgeLowStockItem(item.id, availableQty);
+          }}
+          className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          <XIcon className="h-4 w-4" />
+        </button>
+
+        {/* Simple header with icon and item name */}
+        <div className="flex items-center p-4 pb-2">
+          <div className="text-orange-500 mr-2">
+            <Package className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-medium text-gray-900">
+              {item.name} <span className="text-orange-500 font-normal">Low Stock</span>
+              <span className="ml-2 text-orange-600 font-medium">{availableQty}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Action buttons - styled like the order notification */}
+        <div className="p-4 pt-2 flex space-x-2">
+          <button
+            onClick={() => {
+              toast.remove(`low_stock_${item.id}`);
+              acknowledgeLowStockItem(item.id, availableQty);
+              setActiveTab('menu');
+              setOpenInventoryForItem(item.id);
+            }}
+            className="flex-1 bg-[#c1902f] text-white px-3 py-2 rounded-lg font-medium text-sm hover:bg-[#d4a43f] transition-colors shadow-sm"
+          >
+            Manage
+          </button>
+          <button
+            onClick={() => {
+              toast.remove(`low_stock_${item.id}`);
+              acknowledgeLowStockItem(item.id, availableQty);
+            }}
+            className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-200 transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: Infinity,
+      id: `low_stock_${item.id}`,
+    });
+  };
+  
   // Handle stock notification view
   const handleStockNotificationView = (notification: any) => {
-    // Navigate to the merchandise tab and select the variant
-    setActiveTab('merchandise');
+    // Navigate to the menu tab
+    setActiveTab('menu');
+    
+    // If the notification has an item ID, open the inventory modal for it
+    if (notification.item_id) {
+      setOpenInventoryForItem(notification.item_id);
+    }
     
     // Close notification panel
     setShowStockNotifications(false);
   };
+  
+  // Effect to check for low stock items and display notifications
+  useEffect(() => {
+    // Only run for admin users
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return;
+    }
+    
+    // Check for low stock items
+    const lowStockItems = menuItems.filter(item => {
+      if (!item.enable_stock_tracking) return false;
+      
+      const availableQty = calculateAvailableQuantity(item);
+      const threshold = item.low_stock_threshold || 10;
+      
+      return availableQty > 0 && availableQty <= threshold;
+    });
+    
+    // Display notifications for low stock items that haven't been acknowledged
+    // or where the quantity has decreased since last acknowledgment
+    lowStockItems.forEach(item => {
+      const availableQty = calculateAvailableQuantity(item);
+      const acknowledgedQty = acknowledgedLowStockItems[item.id];
+      
+      // Show notification if:
+      // 1. Item has never been acknowledged, or
+      // 2. Current quantity is lower than when it was last acknowledged
+      if (acknowledgedQty === undefined || availableQty < acknowledgedQty) {
+        displayLowStockNotification(item);
+      }
+    });
+  }, [menuItems, acknowledgedLowStockItems, user, calculateAvailableQuantity]);
 
   useEffect(() => {
     // Only run polling for admin users
@@ -541,7 +663,14 @@ export function AdminDashboard() {
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'menu' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-              {activeTab === 'menu' && <MenuManager restaurantId={currentRestaurantId} />}
+              {activeTab === 'menu' && (
+                <MenuManager 
+                  restaurantId={currentRestaurantId} 
+                  selectedMenuItemId={selectedMenuItemId}
+                  openInventoryForItem={openInventoryForItem}
+                  onInventoryModalClose={() => setOpenInventoryForItem(null)}
+                />
+              )}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'promos' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>

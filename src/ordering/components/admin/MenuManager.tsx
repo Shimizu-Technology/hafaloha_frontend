@@ -9,8 +9,9 @@ import { useCategoryStore } from '../../store/categoryStore'; // to fetch real c
 import { api, uploadMenuItemImage } from '../../lib/api';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { Tooltip } from '../../../shared/components/ui';
+import { deriveStockStatus, calculateAvailableQuantity } from '../../utils/inventoryUtils';
 
-// NEW: import your ItemInventoryModal
+// Import ItemInventoryModal
 import ItemInventoryModal from './ItemInventoryModal';
 
 /**
@@ -78,9 +79,12 @@ function formatDate(dateStr?: string | null) {
 
 interface MenuManagerProps {
   restaurantId?: string;
+  selectedMenuItemId?: string | null;
+  openInventoryForItem?: string | null;
+  onInventoryModalClose?: () => void;
 }
 
-export function MenuManager({ restaurantId }: MenuManagerProps) {
+export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryForItem, onInventoryModalClose }: MenuManagerProps) {
   const {
     menus,
     menuItems,
@@ -141,6 +145,26 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       stopInventoryPolling();
     };
   }, [fetchAllMenuItemsForAdmin, fetchCategories, fetchMenus, startInventoryPolling, stopInventoryPolling]);
+  
+  // Handle selectedMenuItemId from props (for opening edit modal from notifications)
+  useEffect(() => {
+    if (selectedMenuItemId) {
+      const item = menuItems.find(item => item.id === selectedMenuItemId);
+      if (item) {
+        handleEdit(item);
+      }
+    }
+  }, [selectedMenuItemId, menuItems]);
+  
+  // Handle openInventoryForItem from props (for opening inventory modal from notifications)
+  useEffect(() => {
+    if (openInventoryForItem) {
+      const item = menuItems.find(item => item.id === openInventoryForItem);
+      if (item) {
+        handleManageInventory(item);
+      }
+    }
+  }, [openInventoryForItem, menuItems]);
 
   // Set the current menu as the default selected menu
   useEffect(() => {
@@ -362,6 +386,11 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     const itemBeforeClosing = inventoryModalItem;
     setInventoryModalItem(null);
     
+    // Call the callback to reset the openInventoryForItem state in the parent component
+    if (onInventoryModalClose) {
+      onInventoryModalClose();
+    }
+    
     // Force a full refresh of menu items to get updated inventory and tracking status
     fetchAllMenuItemsForAdmin();
   };
@@ -410,24 +439,12 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       finalLabel = 'Limited Time';
     }
     
-    // Determine stock status from inventory levels if tracking is enabled
-    let derivedStockStatus = editingItem.stock_status;
+    // Use utility function to determine stock status consistently
+    let derivedStockStatus = deriveStockStatus(editingItem);
+    
+    // Update the available_quantity in the editingItem
     if (editingItem.enable_stock_tracking) {
-      const stockQty = editingItem.stock_quantity || 0;
-      const damagedQty = editingItem.damaged_quantity || 0;
-      const availableQty = Math.max(0, stockQty - damagedQty);
-      const threshold = editingItem.low_stock_threshold || 10;
-      
-      if (availableQty <= 0) {
-        derivedStockStatus = 'out_of_stock';
-      } else if (availableQty <= threshold) {
-        derivedStockStatus = 'low_stock';
-      } else {
-        derivedStockStatus = 'in_stock';
-      }
-      
-      // Also update the available_quantity in the editingItem
-      editingItem.available_quantity = availableQty;
+      editingItem.available_quantity = calculateAvailableQuantity(editingItem);
     }
 
     try {
@@ -752,10 +769,10 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
 
                     <div className="mt-2 flex flex-wrap">
                       {/* Stock/featured badges */}
-                      {item.stock_status === 'out_of_stock' && (
+                      {item.stock_status === 'out_of_stock' && !item.enable_stock_tracking && (
                         <Badge bgColor="bg-gray-600">Out of Stock</Badge>
                       )}
-                      {item.stock_status === 'low_stock' && (
+                      {item.stock_status === 'low_stock' && !item.enable_stock_tracking && (
                         <Badge bgColor="bg-orange-500">Low Stock</Badge>
                       )}
                       {(item.advance_notice_hours ?? 0) >= 24 && (
@@ -771,6 +788,14 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                       )}
                       {item.enable_stock_tracking && (
                         <Badge bgColor="bg-blue-500">Inventory Tracked</Badge>
+                      )}
+                      {item.enable_stock_tracking && deriveStockStatus(item) === 'low_stock' && (
+                        <Badge bgColor="bg-orange-500">
+                          Low Stock ({calculateAvailableQuantity(item)} left)
+                        </Badge>
+                      )}
+                      {item.enable_stock_tracking && deriveStockStatus(item) === 'out_of_stock' && (
+                        <Badge bgColor="bg-gray-600">Out of Stock</Badge>
                       )}
                     </div>
 
@@ -1230,20 +1255,19 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                         {/* Display status based on inventory levels */}
                         <div className="py-2 px-3 border rounded-md bg-gray-50">
                           {(() => {
-                            // Calculate available quantity
-                            const stockQty = editingItem.stock_quantity || 0;
-                            const damagedQty = editingItem.damaged_quantity || 0;
-                            const availableQty = Math.max(0, stockQty - damagedQty);
+                            // Use utility functions for consistent calculations
+                            const availableQty = calculateAvailableQuantity(editingItem);
                             const threshold = editingItem.low_stock_threshold || 10;
+                            const status = deriveStockStatus(editingItem);
                             
-                            // Determine status and color
+                            // Determine status label and color
                             let statusLabel = "In Stock";
                             let statusColor = "bg-green-500";
                             
-                            if (availableQty <= 0) {
+                            if (status === 'out_of_stock') {
                               statusLabel = "Out of Stock";
                               statusColor = "bg-red-500";
-                            } else if (availableQty <= threshold) {
+                            } else if (status === 'low_stock') {
                               statusLabel = "Low Stock";
                               statusColor = "bg-yellow-500";
                             }

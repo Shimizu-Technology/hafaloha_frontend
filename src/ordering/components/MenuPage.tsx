@@ -5,6 +5,7 @@ import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
 import { MenuItemSkeletonGrid } from '../../shared/components/ui/SkeletonLoader';
+import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 
 export function MenuPage() {
   const { menuItems, fetchMenuItems, loading, error } = useMenuStore();

@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
 import type { MenuItem as MenuItemType } from '../types/menu';
+import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 
 interface MenuItemProps {
   item: MenuItemType;
@@ -17,9 +18,11 @@ export function MenuItem({ item, index }: MenuItemProps) {
   const [showCustomization, setShowCustomization] = useState(false);
   const [buttonClicked, setButtonClicked] = useState(false);
 
-  // Check status
-  const isOutOfStock = item.stock_status === 'out_of_stock';
-  const isLowStock = item.stock_status === 'low_stock';
+  // Check status using utility function for consistency
+  const stockStatus = deriveStockStatus(item);
+  const isOutOfStock = stockStatus === 'out_of_stock';
+  const isLowStock = stockStatus === 'low_stock';
+  const availableQuantity = calculateAvailableQuantity(item);
 
   function handleQuickAdd() {
     if (isOutOfStock) {
@@ -97,7 +100,8 @@ export function MenuItem({ item, index }: MenuItemProps) {
             )}
             {isLowStock && (
               <div className="mt-2 inline-block bg-orange-400 text-white text-xs font-bold rounded-full px-2 py-1">
-                Low Stock
+                Low Stock {item.enable_stock_tracking && item.stock_quantity !== undefined && item.damaged_quantity !== undefined && 
+                  `(${Math.max(0, item.stock_quantity - item.damaged_quantity)} left)`}
               </div>
             )}
 
