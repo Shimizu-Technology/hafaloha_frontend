@@ -189,9 +189,10 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     if (!menuItem) return;
     
     // Calculate the new stock quantity based on the operation
-    const calculatedNewQuantity = stockOperation === 'add' 
-      ? stockQuantity + stockAdjustmentAmount 
-      : stockQuantity - stockAdjustmentAmount;
+    const calculatedNewQuantity =
+      stockOperation === 'add'
+        ? stockQuantity + stockAdjustmentAmount
+        : stockQuantity - stockAdjustmentAmount;
     
     // Validate the operation
     if (calculatedNewQuantity < 0) {
@@ -234,14 +235,27 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-auto max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800">Inventory Management: {menuItem.name}</h2>
-          <button 
+          <h2 className="text-xl font-semibold text-gray-800">
+            Inventory Management: {menuItem.name}
+          </h2>
+          <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 focus:outline-none"
             aria-label="Close"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -266,8 +280,8 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
           <div className="mb-6">
             <div className="flex items-center mb-2">
               <label className="inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   checked={enableTracking}
                   onChange={async (e) => {
                     const newValue = e.target.checked;
@@ -286,13 +300,19 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                           enable_stock_tracking: newValue,
                           stock_quantity: newValue ? stockQuantity : 0,
                           damaged_quantity: newValue ? damagedQuantity : 0,
-                          low_stock_threshold: newValue ? lowStockThreshold : undefined
+                          low_stock_threshold: newValue
+                            ? lowStockThreshold
+                            : undefined
                         });
                         
                         // Refresh inventory data immediately
                         await refreshInventoryData();
                         
-                        setSuccess('Inventory tracking ' + (newValue ? 'enabled' : 'disabled') + ' successfully');
+                        setSuccess(
+                          'Inventory tracking ' +
+                            (newValue ? 'enabled' : 'disabled') +
+                            ' successfully'
+                        );
                         setTimeout(() => setSuccess(null), 3000);
                       } catch (err) {
                         console.error('Failed to update inventory tracking:', err);
@@ -307,11 +327,14 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   className="sr-only peer"
                 />
                 <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#c1902f]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#c1902f]"></div>
-                <span className="ml-3 text-gray-900 font-medium">Enable Inventory Tracking</span>
+                <span className="ml-3 text-gray-900 font-medium">
+                  Enable Inventory Tracking
+                </span>
               </label>
             </div>
             <p className="text-sm text-gray-500">
-              When enabled, you can track stock quantities, set low stock thresholds, and mark items as damaged.
+              When enabled, you can track stock quantities, set low stock
+              thresholds, and mark items as damaged.
             </p>
           </div>
           
@@ -321,43 +344,63 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock Quantity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stock Quantity
+                  </label>
                   <input
                     type="number"
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
                     value={stockQuantity}
                     min={0}
-                    onChange={(e) => setStockQuantity(parseInt(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setStockQuantity(parseInt(e.target.value) || 0)
+                    }
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Damaged Quantity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Damaged Quantity
+                  </label>
                   <input
                     type="number"
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
                     value={damagedQuantity}
                     min={0}
-                    onChange={(e) => setDamagedQuantity(parseInt(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setDamagedQuantity(parseInt(e.target.value) || 0)
+                    }
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Threshold</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Low Stock Threshold
+                  </label>
                   <input
                     type="number"
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
                     value={lowStockThreshold}
                     min={1}
-                    onChange={(e) => setLowStockThreshold(parseInt(e.target.value) || 1)}
+                    onChange={(e) =>
+                      setLowStockThreshold(parseInt(e.target.value) || 1)
+                    }
                   />
-                  <p className="mt-1 text-xs text-gray-500">When stock falls below this number, item will be marked as 'low stock'</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    When stock falls below this number, item will be marked as
+                    'low stock'
+                  </p>
                 </div>
               </div>
               
               <div className="flex justify-between items-center mb-6">
                 <p className="text-gray-800">
-                  Available Quantity: <span className="font-bold">{(stockQuantity - damagedQuantity) > 0 ? (stockQuantity - damagedQuantity) : 0}</span>
+                  Available Quantity:{' '}
+                  <span className="font-bold">
+                    {stockQuantity - damagedQuantity > 0
+                      ? stockQuantity - damagedQuantity
+                      : 0}
+                  </span>
                 </p>
                 
                 <button
@@ -374,18 +417,24 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
               
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
                 <div className="md:col-span-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity to Mark as Damaged</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity to Mark as Damaged
+                  </label>
                   <input
                     type="number"
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
                     value={damageQuantity}
                     min={1}
-                    onChange={(e) => setDamageQuantity(parseInt(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setDamageQuantity(parseInt(e.target.value) || 0)
+                    }
                   />
                 </div>
                 
                 <div className="md:col-span-8">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Damage</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Reason for Damage
+                  </label>
                   <input
                     type="text"
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
@@ -412,35 +461,53 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
               
               <div className="mb-4">
                 <p className="text-gray-700 mb-2">
-                  Current Stock: <span className="font-bold">{stockQuantity}</span> items
+                  Current Stock:{' '}
+                  <span className="font-bold">{stockQuantity}</span> items
                 </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* OPERATION BUTTONS */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Operation</label>
-                  <div className="flex space-x-4">
-                    <label className={`inline-flex items-center px-3 py-2 rounded-md cursor-pointer ${
-                      stockOperation === 'add' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-gray-100 text-gray-700'
-                    }`}>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Operation
+                  </label>
+                  {/* Make sure each label is half-width using grid or fixed widths */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label
+                      className={`flex items-center justify-center px-3 py-2 rounded-md cursor-pointer text-sm font-medium text-center
+                        ${
+                          stockOperation === 'add'
+                            ? 'bg-green-100 text-green-800 border border-green-300'
+                            : 'bg-gray-100 text-gray-700'
+                        }
+                      `}
+                    >
                       <input
                         type="radio"
                         className="sr-only"
                         checked={stockOperation === 'add'}
                         onChange={() => setStockOperation('add')}
                       />
-                      <span className="ml-1">Add to Stock</span>
+                      <span>Add</span>
                     </label>
-                    <label className={`inline-flex items-center px-3 py-2 rounded-md cursor-pointer ${
-                      stockOperation === 'remove' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-gray-100 text-gray-700'
-                    }`}>
+                    
+                    <label
+                      className={`flex items-center justify-center px-3 py-2 rounded-md cursor-pointer text-sm font-medium text-center
+                        ${
+                          stockOperation === 'remove'
+                            ? 'bg-red-100 text-red-800 border border-red-300'
+                            : 'bg-gray-100 text-gray-700'
+                        }
+                      `}
+                    >
                       <input
                         type="radio"
                         className="sr-only"
                         checked={stockOperation === 'remove'}
                         onChange={() => setStockOperation('remove')}
                       />
-                      <span className="ml-1">Remove from Stock</span>
+                      <span>Remove</span>
                     </label>
                   </div>
                 </div>
@@ -452,13 +519,15 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   <input
                     type="number"
                     className={`w-full border rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-opacity-50 ${
-                      stockOperation === 'add' 
-                        ? 'border-green-300 focus:ring-green-500 focus:border-green-500' 
+                      stockOperation === 'add'
+                        ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
                         : 'border-red-300 focus:ring-red-500 focus:border-red-500'
                     }`}
                     value={stockAdjustmentAmount}
                     min={1}
-                    onChange={(e) => setStockAdjustmentAmount(parseInt(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setStockAdjustmentAmount(parseInt(e.target.value) || 0)
+                    }
                   />
                   {stockOperation === 'remove' && (
                     <p className="text-xs text-gray-500 mt-1">
@@ -468,12 +537,17 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Reason Type
+                  </label>
                   <select
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
                     value={reasonType}
                     onChange={(e) => {
-                      const selectedType = e.target.value as 'restock' | 'adjustment' | 'other';
+                      const selectedType = e.target.value as
+                        | 'restock'
+                        | 'adjustment'
+                        | 'other';
                       setReasonType(selectedType);
                       // Automatically set the stock operation based on reason type
                       if (selectedType === 'restock') {
@@ -488,7 +562,9 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                 </div>
                 
                 <div className="md:col-span-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Details (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Details (Optional)
+                  </label>
                   <input
                     type="text"
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
@@ -502,11 +578,12 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600">
-                        New total will be: <span className="font-bold">
-                          {stockOperation === 'add' 
-                            ? stockQuantity + stockAdjustmentAmount 
-                            : Math.max(0, stockQuantity - stockAdjustmentAmount)
-                          } items
+                        New total will be:{' '}
+                        <span className="font-bold">
+                          {stockOperation === 'add'
+                            ? stockQuantity + stockAdjustmentAmount
+                            : Math.max(0, stockQuantity - stockAdjustmentAmount)}
+                          {' '}items
                         </span>
                       </p>
                     </div>
@@ -517,7 +594,11 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                           : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
                       }`}
                       onClick={handleUpdateStock}
-                      disabled={stockAdjustmentAmount <= 0 || (stockOperation === 'remove' && stockAdjustmentAmount > stockQuantity)}
+                      disabled={
+                        stockAdjustmentAmount <= 0 ||
+                        (stockOperation === 'remove' &&
+                          stockAdjustmentAmount > stockQuantity)
+                      }
                     >
                       {stockOperation === 'add' ? 'Add' : 'Remove'} Stock
                     </button>
@@ -536,11 +617,36 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Previous Qty</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Qty</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                        <th
+                          scope="col"
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          Date
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          Previous Qty
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          New Qty
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          Change
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          Reason
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -583,7 +689,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-          <button 
+          <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
           >
