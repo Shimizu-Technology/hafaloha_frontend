@@ -1,686 +1,166 @@
-# **Hafaloha Frontend**
+# Hafaloha Frontend
 
-A React-based frontend for the Hafaloha multi-tenant restaurant management SaaS platform.
+Frontend web application for the Hafaloha restaurant management system.
 
-## **Overview**
+## Features
 
-Hafaloha frontend provides user interfaces for:
+- Online ordering system with customizable menu items
+- Reservation system with table layout visualization
+- Admin dashboard for order management and analytics
+- Customer profiles with order history
+- VIP code system for exclusive access
+- Merchandise store with variant support
+- Real-time notifications
+- Multi-language support (English, Japanese, Korean)
+- Responsive design for mobile and desktop
+- Inventory tracking system for menu items
 
-1. **Online Ordering** - Browse menus, customize items, place orders, and process payments
-2. **Merchandise Shopping** - Browse merchandise collections, view item details, and add to cart
-3. **Reservations** - Book tables, view availability, and manage reservations
-4. **Admin Dashboard** - Manage menus, merchandise, track orders, configure restaurant settings, process payments, and view analytics
+## Inventory Tracking System
 
-The frontend is built with **React.js** with **TypeScript**, styled with **Tailwind CSS**, and uses **Zustand** for state management. It communicates with the Hafaloha API backend through a RESTful interface.
+The application includes a comprehensive inventory tracking system for menu items, allowing restaurant staff to:
 
----
+- Enable/disable inventory tracking per menu item
+- Set and monitor stock quantities
+- Record damaged items with reasons
+- Update stock levels with audit trails
+- Configure low stock thresholds
+- See automatic status updates based on inventory levels
 
-## **Multi-tenant Architecture**
+For detailed documentation, see [Inventory Tracking System Documentation](docs/inventory_tracking_system.md).
 
-Hafaloha is designed as a SaaS (Software as a Service) platform that supports multiple restaurants, each with their own branding, configuration, and data. The frontend supports this multi-tenant approach through several key features:
+## Tech Stack
 
-### 1. Restaurant Context
+- React 18
+- TypeScript
+- Tailwind CSS
+- Vite
+- React Router
+- React Query
+- Zustand (state management)
+- i18next (internationalization)
+- Chart.js (analytics)
+- date-fns (date manipulation)
 
-The frontend maintains restaurant context through:
+## Getting Started
 
-- **JWT Tokens** - Contains restaurant_id claim for authenticated users
-- **Default Restaurant ID** - For public pages (configured in environment)
-- **Restaurant Selector** - For super admin users managing multiple restaurants
+### Prerequisites
 
-```typescript
-// src/shared/config.ts
-export const config = {
-  // API base URL
-  apiBaseUrl: import.meta.env.VITE_API_URL || 'http://localhost:3000',
-  
-  // Default restaurant ID (for public endpoints)
-  restaurantId: import.meta.env.VITE_RESTAURANT_ID || '1',
-};
+- Node.js (v16+)
+- npm or yarn
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/your-username/hafaloha-frontend.git
+cd hafaloha-frontend
 ```
 
-### 2. API Client with Restaurant Context
-
-The API client automatically adds restaurant context to requests:
-
-```typescript
-// Add restaurant_id to the data payload if needed
-if (needsRestaurantContext(endpoint) && !data.restaurant_id) {
-  const token = localStorage.getItem('token') || '';
-  const restaurantId = getRestaurantId(token) || DEFAULT_RESTAURANT_ID;
-  
-  if (restaurantId) {
-    data = { ...data, restaurant_id: restaurantId };
-  }
-}
+2. Install dependencies:
+```bash
+npm install
+# or
+yarn
 ```
 
-### 3. JWT Token Handling
-
-The frontend extracts and uses restaurant context from JWT tokens:
-
-```typescript
-// Get restaurant ID from JWT token
-export function getRestaurantId(token: string): string | null {
-  if (!token) return null;
-  
-  try {
-    const payload = decodeJwt(token);
-    return payload.restaurant_id;
-  } catch (e) {
-    console.error('Error getting restaurant ID from token:', e);
-    return null;
-  }
-}
-```
-
-### 4. Restaurant-Specific UI
-
-For admin users who manage multiple restaurants, a RestaurantSelector component allows switching contexts:
-
-```tsx
-<RestaurantSelector
-  restaurants={restaurants}
-  currentRestaurantId={selectedRestaurantId}
-  onChange={setSelectedRestaurantId}
-/>
-```
-
-### 5. Restaurant Data Management
-
-The application uses a centralized restaurant store to manage restaurant data and ensure real-time updates across all components:
-
-```typescript
-// src/shared/store/restaurantStore.ts
-export const useRestaurantStore = create<RestaurantStore>((set, get) => ({
-  restaurant: null,
-  loading: false,
-  error: null,
-  fetchRestaurant: async () => {
-    // Fetch restaurant data from API
-  },
-  updateRestaurant: async (data: Partial<Restaurant>) => {
-    // Update restaurant data in both API and local state
-  }
-}));
-```
-
-The RestaurantProvider component ensures that restaurant data is always up-to-date:
-
-```tsx
-// src/shared/components/restaurant/RestaurantProvider.tsx
-export function RestaurantProvider({ children }: RestaurantProviderProps) {
-  const { fetchRestaurant } = useRestaurantStore();
-  
-  useEffect(() => {
-    // Fetch restaurant data on mount
-    fetchRestaurant();
-    
-    // Set up polling to keep data fresh
-    const intervalId = setInterval(() => {
-      fetchRestaurant();
-    }, 30000);
-    
-    return () => clearInterval(intervalId);
-  }, [fetchRestaurant]);
-  
-  return <>{children}</>;
-}
-```
-
-### 6. CORS Configuration Management
-
-Admins can configure allowed origins for each restaurant through the AllowedOriginsSettings component (currently hidden in the UI but functionality is preserved):
-
-```tsx
-<AllowedOriginsSettings onSaved={handleSaved} />
-```
-
----
-
-## **Project Structure**
-
-```
-.
-├── src/
-│   ├── GlobalLayout.tsx        # Global layout wrapper
-│   ├── RootApp.tsx             # Root application component
-│   ├── main.tsx                # Application entry point
-│   ├── ordering/               # Online ordering application
-│   │   ├── OnlineOrderingApp.tsx
-│   │   ├── components/
-│   │   │   ├── admin/          # Admin dashboard components
-│   │   │   └── ...
-│   │   ├── store/              # Zustand state stores
-│   │   └── types/              # TypeScript type definitions
-│   ├── reservations/           # Reservations application
-│   │   ├── ReservationsApp.tsx
-│   │   ├── components/
-│   │   │   ├── dashboard/      # Reservation management dashboard
-│   │   │   └── ...
-│   │   └── types/
-│   └── shared/                 # Shared modules across applications
-│       ├── api/                # Shared API client and endpoints
-│       ├── auth/               # Authentication components and store
-│       ├── components/         # Shared UI components
-│       │   ├── auth/           # Authentication forms
-│       │   ├── navigation/     # Header and Footer
-│       │   ├── profile/        # User profile components
-│       │   ├── restaurant/     # Restaurant context provider
-│       │   └── ui/             # Reusable UI components
-│       ├── i18n/               # Internationalization
-│       ├── store/              # Shared state stores
-│       ├── types/              # Shared type definitions
-│       └── utils/              # Utility functions
-└── public/
-    └── locales/                # Translation files
-        ├── en/                 # English
-        ├── ja/                 # Japanese
-        └── ko/                 # Korean
-```
-
----
-
-## **Key Components**
-
-### 1. Authentication
-
-- **LoginForm/SignUpForm** - User authentication
-- **AuthContext/AuthStore** - Manage authentication state
-- **JWT Utilities** - Handle token expiration and restaurant context
-
-### 2. Online Ordering
-
-- **MenuPage** - Display menu items by category
-- **MenuItem** - Individual menu item with customization options
-- **CartPage** - Shopping cart management
-- **CheckoutPage** - Complete order placement
-
-### 3. Merchandise Management
-
-- **MerchandisePage** - Display merchandise items by collection
-- **MerchandiseManager** - Admin interface for managing merchandise
-  - **Collection Management** - Create, edit, and delete merchandise collections
-  - **Collection Activation** - Set a specific collection as active to display to customers
-  - **All Items View** - View all merchandise items across collections
-  - **Item Management** - Add, edit, and delete merchandise items
-  - **S3 Image Upload** - Direct upload of merchandise images to cloud storage
-  - **Image Preview** - Preview images during item creation and editing
-  - **Stock Status Tracking** - Track items as "In Stock", "Low Stock", or "Out of Stock"
-  - **Tab-based Navigation** - Easy navigation between different merchandise collections
-  - **Visual Indicators** - Clear visual indicators for active collections and item status
-  - **Responsive Design** - Optimized layout for all device sizes
-
-### 4. Reservations
-
-- **ReservationForm** - Book new reservations
-- **SeatLayoutCanvas** - Visual table layout
-- **SeatPreferenceWizard** - Select preferred seating
-
-### 5. Admin Dashboard
-
-- **AdminDashboard** - Main admin interface with persistent order notifications
-- **MenuManager** - Manage menu items and categories
-  - **Multiple Menus** - Create, edit, clone, and switch between multiple menus for different occasions
-  - **Menu Activation** - Set a specific menu as active to display to customers
-- **OrderManager** - View and process orders with real-time auto-refresh functionality
-  - **Search Functionality** - Search across order details including name, email, order contents
-  - **Date Filtering** - Default to today's orders with options to view other time periods
-  - **Visual Time Indicators** - Show how long orders have been in their current status
-  - **Collapsible Details** - Expand/collapse order details for better space usage
-  - **New Order Highlighting** - Visual cues for newly arrived orders
-  - **Multi-select Orders** - Select multiple orders to perform batch actions
-  - **SetEtaModal** - Specialized modal for setting pickup times, with different interfaces for regular orders (5-60 minute ETA) and advance notice orders (next-day time slots)
-  - **Pagination** - Efficient pagination controls for handling large order volumes
-  - **Mobile Optimization** - Fully responsive design with touch-friendly controls
-- **AnalyticsManager** - View business metrics
-- **RestaurantSettings** - Configure restaurant information with real-time updates
-  - **Notification Channels** - Configure email and SMS preferences for customer communications
-- **PaymentSettings** - Configure payment gateway settings (Braintree/PayPal)
-  - **Test Mode** - Toggle between test and production environments
-  - **Credentials Management** - Securely store and manage payment gateway credentials
-- **VIP Access Management** - Control exclusive access to ordering system
-  - **VIP-Only Mode** - Toggle to restrict ordering to VIP customers only
-  - **VIP Code Management** - Create, edit, and track usage of VIP access codes
-  - **Usage Limits** - Set maximum usage counts for individual or group VIP codes
-  - **Email Distribution** - Send VIP codes to customers via email
-  - **Detailed documentation** - See [VIP Code System Documentation](docs/vip_code_system.md)
-- **GeneralSettings** - Manage site-wide settings like hero and spinner images
-- **RestaurantSelector** - Switch between restaurants (for super admins)
-- **AllowedOriginsSettings** - Configure CORS for restaurant frontends (currently hidden)
-
-### 6. Shared Components
-
-- **Header/Footer** - Navigation components used across all applications
-- **ProfilePage** - User profile management
-- **RestaurantProvider** - Provides restaurant context to components
-
----
-
-## **Code Organization**
-
-The codebase has been reorganized to improve maintainability and reduce duplication:
-
-1. **Shared Components** - Common components like Header, Footer, and authentication forms have been moved to the shared directory
-2. **Shared API Client** - A unified API client is used across all applications
-3. **Shared Auth Store** - Authentication state is managed in a single location
-4. **Shared Types** - Common TypeScript interfaces are defined once and reused
-
-This organization allows for:
-- Consistent UI/UX across applications
-- Reduced code duplication
-- Easier maintenance
-- Better type safety
-
----
-
-## **Environment Variables**
-
-The frontend requires these environment variables:
-
-- `VITE_API_URL` - Base URL of the Hafaloha API (e.g., 'http://localhost:3000')
-- `VITE_RESTAURANT_ID` - Default restaurant ID for public pages
-
-For local development, create a `.env.local` file in the project root:
-
+3. Set up environment variables:
+- Create a `.env.local` file in the project root with:
 ```
 VITE_API_URL=http://localhost:3000
-VITE_RESTAURANT_ID=1
+VITE_DEFAULT_LANGUAGE=en
 ```
 
-For production, set these variables in your hosting environment (e.g., Netlify environment variables).
-
----
-
-## **Local Development**
-
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/YourUsername/hafaloha-frontend.git
-   cd hafaloha-frontend
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Start the Development Server**
-   ```bash
-   npm run dev
-   ```
-   This will start the development server at `http://localhost:5173`.
-
-4. **Build for Production**
-   ```bash
-   npm run build
-   ```
-   The built files will be in the `dist` directory.
-
----
-
-## **Deployment**
-
-### Netlify Deployment
-
-1. **Connect your GitHub repository to Netlify**
-
-2. **Configure Build Settings**
-   - Build command: `npm run build`
-   - Publish directory: `dist`
-
-3. **Set Environment Variables**
-   - `VITE_API_URL` - Your production API URL
-   - `VITE_RESTAURANT_ID` - Default restaurant ID
-
-4. **Configure Redirects**
-   Create a `_redirects` file in the `public` directory:
-   ```
-   /* /index.html 200
-   ```
-   This enables client-side routing for SPAs.
-
-### Restaurant-Specific Deployments
-
-For a true multi-tenant setup, you can deploy restaurant-specific frontends:
-
-1. **Create a separate Netlify site for each restaurant**
-2. **Set VITE_RESTAURANT_ID to the specific restaurant's ID**
-3. **Use custom domains for each restaurant** (e.g., restaurant-name.hafaloha.com)
-4. **Configure allowed origins in the restaurant settings in the admin dashboard**
-
----
-
-## **Performance Optimizations**
-
-Hafaloha includes several performance optimizations to ensure it can handle high traffic loads:
-
-### 1. Image Optimization
-
-The CachedImage component provides efficient image loading and caching:
-
-```typescript
-// src/shared/components/ui/CachedImage.tsx
-export function CachedImage({ 
-  src, 
-  alt, 
-  className, 
-  width, 
-  height, 
-  loading = 'lazy',
-  onLoad,
-  onError
-}: CachedImageProps) {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  
-  useEffect(() => {
-    // Check localStorage cache first
-    const cachedImage = localStorage.getItem(`image_cache:${src}`);
-    if (cachedImage) {
-      setImageSrc(cachedImage);
-      setIsLoading(false);
-      return;
-    }
-    
-    // Fetch and cache the image
-    const fetchImage = async () => {
-      try {
-        const response = await fetch(src);
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        
-        // Cache in localStorage (with size limits)
-        try {
-          localStorage.setItem(`image_cache:${src}`, objectUrl);
-        } catch (e) {
-          // Handle storage quota exceeded
-          console.warn('LocalStorage quota exceeded, clearing image cache');
-          clearOldImageCache();
-        }
-        
-        setImageSrc(objectUrl);
-        setIsLoading(false);
-      } catch (err) {
-        setError(err instanceof Error ? err : new Error(String(err)));
-        setIsLoading(false);
-      }
-    };
-    
-    fetchImage();
-  }, [src]);
-  
-  // Render optimized image with placeholder
-  return (
-    <>
-      {isLoading && <div className="animate-pulse bg-gray-200" style={{ width, height }} />}
-      {error && <div className="bg-red-100 text-red-500 text-xs p-2">Failed to load image</div>}
-      {imageSrc && (
-        <img
-          src={imageSrc}
-          alt={alt}
-          className={className}
-          width={width}
-          height={height}
-          loading={loading}
-          onLoad={onLoad}
-          onError={(e) => {
-            setError(new Error('Failed to load image'));
-            onError?.(e);
-          }}
-        />
-      )}
-    </>
-  );
-}
+4. Start the development server:
+```bash
+npm run dev
+# or
+yarn dev
 ```
 
-Key features:
-- Client-side caching using localStorage
-- Lazy loading support
-- Loading placeholders and error states
-- Responsive image support
+By default, the application will run at `http://localhost:5173`.
 
-### 2. Pagination
+## Project Structure
 
-The application implements efficient pagination for handling large datasets:
-
-```typescript
-// In OrderManager.tsx
-// Pagination state
-const [currentPage, setCurrentPage] = useState(1);
-const ordersPerPage = 10;
-
-// Calculate pagination
-const totalOrders = filteredOrders.length;
-const totalPages = Math.ceil(totalOrders / ordersPerPage);
-
-// Get current page of orders
-const indexOfLastOrder = currentPage * ordersPerPage;
-const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
-
-// Reset to first page when filters change
-useEffect(() => {
-  setCurrentPage(1);
-}, [selectedStatus, sortNewestFirst]);
+```
+src/
+├── shared/            # Shared components, hooks, and utilities
+│   ├── api/           # API client and endpoints
+│   ├── auth/          # Authentication related components
+│   ├── components/    # Shared UI components
+│   ├── hooks/         # Custom React hooks
+│   ├── store/         # Global state management
+│   └── utils/         # Utility functions
+│
+├── ordering/          # Online ordering system
+│   ├── components/    # Ordering-specific components
+│   ├── store/         # Ordering-specific state
+│   ├── types/         # TypeScript types for ordering
+│   └── utils/         # Ordering-specific utilities
+│
+├── reservations/      # Reservation system
+│   ├── components/    # Reservation-specific components
+│   ├── store/         # Reservation-specific state
+│   └── types/         # TypeScript types for reservations
+│
+├── RootApp.tsx        # Main application component
+└── main.tsx          # Entry point
 ```
 
-The pagination UI includes:
-- Previous/Next buttons
-- Page number indicators
-- Visual feedback for current page
-- Disabled states for navigation limits
+## Available Scripts
 
-### 3. Mobile Optimization
+- `npm run dev` - Start the development server
+- `npm run build` - Build the application for production
+- `npm run preview` - Preview the production build locally
+- `npm run lint` - Run ESLint to check code quality
+- `npm run format` - Format code with Prettier
+- `npm run test` - Run tests (when implemented)
 
-The application is fully optimized for mobile devices:
+## Environment Variables
 
-- Responsive design patterns throughout the application
-- Mobile-specific components like MobileSelect
-- Touch-friendly UI elements
-- Optimized image loading for mobile bandwidth
+- `VITE_API_URL` - URL for the backend API
+- `VITE_DEFAULT_LANGUAGE` - Default language for the application
+- `VITE_ENABLE_MOCK_API` - Enable mock API for development (optional)
+- `VITE_ENABLE_ANALYTICS` - Enable analytics tracking (optional)
 
-## **Real-time Updates and Polling**
+## Deployment
 
-Hafaloha implements intelligent polling mechanisms to provide real-time updates without requiring manual page refreshes:
+The application is configured for deployment to Netlify. The `_redirects` file in the `public` directory ensures proper routing for single-page applications.
 
-### 1. Intelligent Toast Notification System
+### Build for Production
 
-The application implements a sophisticated toast notification system with different behaviors for different types of notifications:
-
-```typescript
-// In RootApp.tsx - Global toast configuration
-<Toaster 
-  position="top-right" 
-  reverseOrder={false}
-  containerStyle={{
-    maxHeight: '100vh',
-    overflow: 'auto',
-    paddingRight: '10px',
-    scrollBehavior: 'smooth'
-  }}
-  containerClassName="scrollable-toast-container"
-  gutter={8}
-  toastOptions={{
-    // Default duration of 5 seconds for regular toasts
-    duration: 5000,
-    // Customize for different screen sizes
-    className: '',
-    style: {
-      maxWidth: '100%',
-      width: 'auto'
-    }
-  }}
-/>
+```bash
+npm run build
+# or
+yarn build
 ```
 
-Key features of this implementation:
-- **Differentiated Notification Types**: Regular success/error messages auto-dismiss after 5 seconds, while important order notifications persist until acknowledged
-- **Robust Dismissal Mechanism**: Uses multiple toast removal methods with delayed attempts to ensure notifications are properly removed
-- **Scrollable Interface**: When multiple notifications appear, users can scroll through them all
+This will generate optimized static assets in the `dist` directory, which can be deployed to any static hosting service.
 
-The implementation includes responsive design considerations for different device sizes:
+## Internationalization
 
-```css
-/* Mobile optimization */
-@media (max-width: 480px) {
-  /* Mobile phones */
-  .scrollable-toast-container > div > div {
-    width: 95% !important;
-    max-width: 95vw !important;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
+The application supports multiple languages using i18next. Translation files are located in:
 
-@media (min-width: 481px) and (max-width: 768px) {
-  /* Tablets and iPad mini */
-  .scrollable-toast-container > div > div {
-    width: 90% !important;
-    max-width: 400px !important;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
+```
+public/locales/{language-code}/{namespace}.json
 ```
 
-Key features of this implementation:
-- **Full-height Scrolling**: Uses the entire viewport height for notifications
-- **Responsive Design**: Optimized for mobile, tablet, and desktop views
-- **Touch-friendly**: Enhanced scrolling behavior for touch devices
-- **Consistent UI**: Maintains the same look and feel across all device sizes
-- **Improved Accessibility**: Ensures all notifications are accessible via scrolling
+Currently supported languages:
+- English (en)
+- Japanese (ja)
+- Korean (ko)
 
-### 2. Order Notifications and Acknowledgment
+To add a new language, create a new directory with the language code and copy the translation files from an existing language.
 
-The AdminDashboard implements a server-side order acknowledgment system that ensures important notifications persist across page refreshes:
+## Contributing
 
-```typescript
-// Function to acknowledge an order via the API
-const acknowledgeOrder = async (orderId: number) => {
-  try {
-    await api.post(`/orders/${orderId}/acknowledge`);
-    console.log(`[AdminDashboard] Order ${orderId} acknowledged`);
-  } catch (err) {
-    console.error(`[AdminDashboard] Failed to acknowledge order ${orderId}:`, err);
-  }
-};
+1. Fork the repository
+2. Create a new branch (`git checkout -b feature/your-feature`)
+3. Make your changes
+4. Run tests and ensure code quality (`npm run lint && npm run test`)
+5. Commit your changes (`git commit -m 'Add some feature'`)
+6. Push to the branch (`git push origin feature/your-feature`)
+7. Create a new Pull Request
 
-// Check for unacknowledged orders on component mount
-const checkForUnacknowledgedOrders = async () => {
-  try {
-    // Get unacknowledged orders from the last 24 hours
-    const url = `/orders/unacknowledged?hours=24`;
-    const unacknowledgedOrders: Order[] = await api.get(url);
-    
-    // Display notifications for unacknowledged orders
-    unacknowledgedOrders.forEach(order => {
-      displayOrderNotification(order);
-    });
-  } catch (err) {
-    console.error('[AdminDashboard] Failed to check for unacknowledged orders:', err);
-  }
-};
-```
+## License
 
-Key features of this implementation:
-- **Server-side Persistence**: Order acknowledgments are stored in the database, ensuring they persist across sessions
-- **User-specific Acknowledgments**: Each admin user has their own acknowledgment status for orders
-- **Automatic Recovery**: Unacknowledged notifications reappear after page refresh
-- **Time-based Filtering**: Only shows unacknowledged orders from the last 24 hours by default
-- **Scrollable Interface**: When multiple notifications appear, users can scroll through them all
-
-### 2. Order Management Auto-refresh
-
-The OrderManager component automatically refreshes order data every 30 seconds using an optimized approach:
-
-```typescript
-// Constants for configuration
-const POLLING_INTERVAL = 30000; // 30 seconds
-
-// Set up polling with visibility detection
-useEffect(() => {
-  // Initial fetch with loading state
-  fetchOrders();
-  
-  let pollingInterval: number | null = null;
-  
-  // Function to start polling
-  const startPolling = () => {
-    if (pollingInterval) clearInterval(pollingInterval);
-    
-    pollingInterval = window.setInterval(() => {
-      // Use the quiet fetch that doesn't trigger loading indicators
-      useOrderStore.getState().fetchOrdersQuietly();
-    }, POLLING_INTERVAL);
-  };
-  
-  // Start polling immediately
-  startPolling();
-  
-  // Pause polling when tab is not visible
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-  
-  // Clean up on unmount
-  return () => {
-    if (pollingInterval) clearInterval(pollingInterval);
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-  };
-}, [fetchOrders]);
-```
-
-Key features of this implementation:
-- **Quiet Fetching**: Uses `fetchOrdersQuietly()` which updates data without triggering loading states, preventing UI "shake"
-- **Visibility Detection**: Pauses polling when the browser tab is not visible to save resources
-- **Automatic Resumption**: Immediately fetches fresh data when the tab becomes visible again
-- **Clean Cleanup**: Properly removes intervals and event listeners on component unmount
-
-### 2. Restaurant Data Polling
-
-As shown earlier, the RestaurantProvider also implements polling to keep restaurant data fresh:
-
-```typescript
-// Set up polling to keep data fresh
-const intervalId = setInterval(() => {
-  fetchRestaurant();
-}, 30000);
-
-return () => clearInterval(intervalId);
-```
-
-These polling mechanisms ensure that admins always see the most up-to-date information without manual intervention.
-
----
-
-## **Integration with Backend**
-
-The frontend integrates with the Hafaloha API backend through RESTful API calls. Key integration points include:
-
-1. **Authentication** - JWT tokens with restaurant context
-2. **Restaurant Context** - Automatic filtering of data by restaurant
-3. **Image Storage** - S3 URLs for menu item images and site assets
-4. **Notifications** - Display status from backend notification systems
-5. **Merchandise Management** - Full CRUD operations for merchandise collections and items
-
-The backend README contains more details about the API endpoints and multi-tenant architecture.
-
----
-
-## **Browser Compatibility**
-
-Hafaloha frontend is compatible with:
-- Chrome (latest 2 versions)
-- Firefox (latest 2 versions)
-- Safari (latest 2 versions)
-- Edge (latest version)
-
----
-
-## **Contact & Support**
-
-For questions about the frontend architecture, React components, or state management, please contact the development team.
-
----
-
-**Hafaloha - Your Restaurant Management SaaS Platform**
+This project is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.

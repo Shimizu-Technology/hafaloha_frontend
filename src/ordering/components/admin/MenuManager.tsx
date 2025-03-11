@@ -1,7 +1,7 @@
 // src/ordering/components/admin/MenuManager.tsx
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, X, Save, BookOpen } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, BookOpen, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
@@ -9,6 +9,9 @@ import { useCategoryStore } from '../../store/categoryStore'; // to fetch real c
 import { api, uploadMenuItemImage } from '../../lib/api';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { Tooltip } from '../../../shared/components/ui';
+
+// NEW: import your ItemInventoryModal
+import ItemInventoryModal from './ItemInventoryModal';
 
 /**
  * Local form data for creating/updating a menu item.
@@ -33,6 +36,13 @@ interface MenuItemFormData {
   featured: boolean;
   stock_status: 'in_stock' | 'out_of_stock' | 'low_stock';
   status_note?: string | null;
+  
+  // Inventory tracking fields
+  enable_stock_tracking?: boolean;
+  stock_quantity?: number;
+  damaged_quantity?: number;
+  low_stock_threshold?: number;
+  available_quantity?: number; // Computed: stock_quantity - damaged_quantity
 }
 
 /** Option groups (unchanged). */
@@ -103,9 +113,13 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
 
-  // For managing option groups
+  // For managing option groups and inventory
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
+
+  // NEW: inventory modal state
+  const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
+  const [inventoryModalItem, setInventoryModalItem] = useState<MenuItem | null>(null);
 
   // On mount => fetch all items (admin) + categories + menus
   useEffect(() => {
@@ -172,6 +186,18 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     featured: false,
     stock_status: 'in_stock',
     status_note: '',
+    enable_stock_tracking: false,
+    stock_quantity: 0,
+    damaged_quantity: 0,
+    low_stock_threshold: 10,
+    available_quantity: 0,
+  };
+
+  /**
+   * Function to refresh data after inventory changes
+   */
+  const refreshAfterInventoryChanges = () => {
+    fetchAllMenuItemsForAdmin();
   };
 
   /**
@@ -197,6 +223,11 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
    * Handle editing an existing item => fill form data
    */
   const handleEdit = (item: MenuItem) => {
+    // Calculate available quantity
+    const stockQty = item.stock_quantity || 0;
+    const damagedQty = item.damaged_quantity || 0;
+    const availableQty = Math.max(0, stockQty - damagedQty);
+    
     setEditingItem({
       id: Number(item.id),
       name: item.name,
@@ -218,6 +249,11 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
           ? 'low_stock'
           : (item.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
       status_note: item.status_note || '',
+      enable_stock_tracking: !!item.enable_stock_tracking,
+      stock_quantity: stockQty,
+      damaged_quantity: damagedQty,
+      low_stock_threshold: item.low_stock_threshold || 10,
+      available_quantity: availableQty,
     });
     setIsEditing(true);
   };
@@ -252,6 +288,45 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
   const handleCloseOptionsModal = () => {
     setOptionsModalOpen(false);
     setOptionsModalItem(null);
+  };
+
+  /**
+   * Manage inventory => show the modal
+   * NEW
+   */
+  const handleManageInventory = (item: MenuItem) => {
+    setInventoryModalItem(item);
+    setInventoryModalOpen(true);
+  };
+  
+  const handleCloseInventoryModal = () => {
+    setInventoryModalOpen(false);
+    const itemBeforeClosing = inventoryModalItem;
+    setInventoryModalItem(null);
+    
+    // Force a full refresh of menu items to get updated inventory and tracking status
+    fetchAllMenuItemsForAdmin().then(() => {
+      // If we're currently editing an item, update its data to reflect inventory changes
+      if (editingItem && editingItem.id && itemBeforeClosing && Number(itemBeforeClosing.id) === editingItem.id) {
+        const updatedItem = menuItems.find(item => Number(item.id) === editingItem.id);
+        if (updatedItem) {
+          const stockQty = updatedItem.stock_quantity || 0;
+          const damagedQty = updatedItem.damaged_quantity || 0;
+          const availableQty = Math.max(0, stockQty - damagedQty);
+          
+          setEditingItem({
+            ...editingItem,
+            enable_stock_tracking: !!updatedItem.enable_stock_tracking,
+            stock_quantity: stockQty,
+            damaged_quantity: damagedQty,
+            low_stock_threshold: updatedItem.low_stock_threshold || 10,
+            available_quantity: availableQty,
+            // Set stock_status based on the server's response
+            stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'
+          });
+        }
+      }
+    });
   };
 
   // Use our loading overlay hook
@@ -297,6 +372,26 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
     if (editingItem.seasonal && !finalLabel) {
       finalLabel = 'Limited Time';
     }
+    
+    // Determine stock status from inventory levels if tracking is enabled
+    let derivedStockStatus = editingItem.stock_status;
+    if (editingItem.enable_stock_tracking) {
+      const stockQty = editingItem.stock_quantity || 0;
+      const damagedQty = editingItem.damaged_quantity || 0;
+      const availableQty = Math.max(0, stockQty - damagedQty);
+      const threshold = editingItem.low_stock_threshold || 10;
+      
+      if (availableQty <= 0) {
+        derivedStockStatus = 'out_of_stock';
+      } else if (availableQty <= threshold) {
+        derivedStockStatus = 'low_stock';
+      } else {
+        derivedStockStatus = 'in_stock';
+      }
+      
+      // Also update the available_quantity in the editingItem
+      editingItem.available_quantity = availableQty;
+    }
 
     try {
       await withLoading(async () => {
@@ -309,7 +404,8 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
           if (id) {
             const payload = { 
               ...rest, 
-              promo_label: finalLabel
+              promo_label: finalLabel,
+              stock_status: derivedStockStatus
             };
             updatedItem = await updateMenuItem(String(id), payload);
             
@@ -352,7 +448,8 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
           const { imageFile, id, ...rest } = editingItem;
           const payload = { 
             ...rest, 
-            promo_label: finalLabel
+            promo_label: finalLabel,
+            stock_status: derivedStockStatus
           };
           updatedItem = await addMenuItem(payload);
           
@@ -366,14 +463,12 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
           }
           
           // Close the form after adding a new item so the user can see it in the list
-          // They can always click edit if they want to add options or make further changes
           setIsEditing(false);
           setEditingItem(null);
         }
       });
       
-      // For updates, don't close the form automatically - let the user close it when they're ready
-      // This only applies to updates, not new items (which are handled above)
+      // For updates, do NOT close automatically – user can keep editing if desired
       // setIsEditing(false);
       // setEditingItem(null);
     } catch (err) {
@@ -637,6 +732,9 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                       {item.featured && (
                         <Badge bgColor="bg-yellow-500">Featured</Badge>
                       )}
+                      {item.enable_stock_tracking && (
+                        <Badge bgColor="bg-blue-500">Inventory Tracked</Badge>
+                      )}
                     </div>
 
                     {/* Optional note */}
@@ -650,11 +748,12 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                     {dateInfo}
                   </div>
 
-                  <div className="mt-auto flex justify-between items-center pt-4">
-                    <div className="flex items-center space-x-4">
+                  <div className="mt-auto pt-4">
+                    <div className="flex justify-between items-center">
                       <span className="text-base sm:text-lg font-semibold">
                         ${Number(item.price).toFixed(2)}
                       </span>
+
                       {/* Edit Item */}
                       <button
                         onClick={() => handleEdit(item)}
@@ -662,6 +761,16 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                       >
                         <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
+
+                      {/* NEW: Manage Inventory */}
+                      <button
+                        onClick={() => handleManageInventory(item)}
+                        className="p-2 text-gray-600 hover:text-blue-600"
+                        title="Manage Inventory"
+                      >
+                        <Package className="h-4 w-4 sm:h-5 sm:w-5" />
+                      </button>
+
                       {/* Delete Item */}
                       <button
                         onClick={() => {
@@ -1058,65 +1167,185 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                   />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  {/* Stock Status */}
-                  <div className="flex-1">
-                    <div className="flex items-center mb-1">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Inventory Status
-                      </label>
-                      <Tooltip 
-                        content="Set the current availability status. 'Low Stock' shows a warning but still allows ordering. 'Out of Stock' disables ordering."
-                        position="top"
-                        icon
-                        iconClassName="ml-1 h-4 w-4"
-                      />
-                    </div>
-                    <select
-                      value={editingItem.stock_status ?? 'in_stock'}
-                      onChange={(e) =>
-                        setEditingItem({
-                          ...editingItem,
-                          stock_status: e.target.value as
-                            | 'in_stock'
-                            | 'out_of_stock'
-                            | 'low_stock',
-                        })
-                      }
-                      className="w-full px-4 py-2 border rounded-md"
-                    >
-                      <option value="in_stock">In Stock</option>
-                      <option value="out_of_stock">Out of Stock</option>
-                      <option value="low_stock">Low Stock</option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      "Low Stock" shows a warning but still allows ordering.
-                      "Out of Stock" disables ordering.
-                    </p>
-                  </div>
+                  {editingItem.enable_stock_tracking ? (
+                    // Inventory tracking is enabled - show automatic status
+                    <>
+                      {/* Inventory-Controlled Status */}
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Inventory-Controlled Status
+                          </label>
+                          <Tooltip 
+                            content="Status is automatically determined based on available inventory levels."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        
+                        {/* Display status based on inventory levels */}
+                        <div className="py-2 px-3 border rounded-md bg-gray-50">
+                          {(() => {
+                            // Calculate available quantity
+                            const stockQty = editingItem.stock_quantity || 0;
+                            const damagedQty = editingItem.damaged_quantity || 0;
+                            const availableQty = Math.max(0, stockQty - damagedQty);
+                            const threshold = editingItem.low_stock_threshold || 10;
+                            
+                            // Determine status and color
+                            let statusLabel = "In Stock";
+                            let statusColor = "bg-green-500";
+                            
+                            if (availableQty <= 0) {
+                              statusLabel = "Out of Stock";
+                              statusColor = "bg-red-500";
+                            } else if (availableQty <= threshold) {
+                              statusLabel = "Low Stock";
+                              statusColor = "bg-yellow-500";
+                            }
+                            
+                            return (
+                              <>
+                                <div className="flex items-center">
+                                  <div className={`h-3 w-3 rounded-full mr-2 ${statusColor}`}></div>
+                                  <span className="font-medium">{statusLabel}</span>
+                                </div>
+                                
+                                <div className="text-sm text-gray-600 mt-2">
+                                  <div>Available: {availableQty} items</div>
+                                  <div>Low Stock Threshold: {threshold} items</div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        
+                        <p className="text-xs text-gray-500 mt-1">
+                          Status is automatically determined by inventory levels.
+                        </p>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingItem.id) {
+                              handleManageInventory({
+                                ...editingItem,
+                                id: editingItem.id.toString(),
+                              } as unknown as MenuItem);
+                            }
+                          }}
+                          className="mt-2 text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                        >
+                          <Package className="h-4 w-4 mr-1" />
+                          Manage Inventory
+                        </button>
+                      </div>
+                      
+                      {/* Status Note */}
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Status Note (Optional)
+                          </label>
+                          <Tooltip 
+                            content="Add a note to explain the current status, such as 'Temporarily using a different sauce' or 'Back in stock next week'."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        <textarea
+                          value={editingItem.status_note ?? ''}
+                          onChange={(e) =>
+                            setEditingItem({ ...editingItem, status_note: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border rounded-md"
+                          rows={2}
+                          placeholder={'e.g. "Supplier delayed; we\'re using a temporary sauce."'}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    // Manual status selection when inventory tracking is disabled
+                    <>
+                      {/* Stock Status */}
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Inventory Status
+                          </label>
+                          <Tooltip 
+                            content="Set the current availability status. 'Low Stock' shows a warning but still allows ordering. 'Out of Stock' disables ordering."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        <select
+                          value={editingItem.stock_status ?? 'in_stock'}
+                          onChange={(e) =>
+                            setEditingItem({
+                              ...editingItem,
+                              stock_status: e.target.value as
+                                | 'in_stock'
+                                | 'out_of_stock'
+                                | 'low_stock',
+                            })
+                          }
+                          className="w-full px-4 py-2 border rounded-md"
+                        >
+                          <option value="in_stock">In Stock</option>
+                          <option value="out_of_stock">Out of Stock</option>
+                          <option value="low_stock">Low Stock</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          "Low Stock" shows a warning but still allows ordering.
+                          "Out of Stock" disables ordering.
+                        </p>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingItem.id) {
+                              handleManageInventory({
+                                ...editingItem,
+                                id: editingItem.id.toString(),
+                              } as unknown as MenuItem);
+                            }
+                          }}
+                          className="mt-2 text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                        >
+                          <Package className="h-4 w-4 mr-1" />
+                          Enable Inventory Tracking
+                        </button>
+                      </div>
 
-                  {/* Status Note */}
-                  <div className="flex-1">
-                    <div className="flex items-center mb-1">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Status Note (Optional)
-                      </label>
-                      <Tooltip 
-                        content="Add a note to explain the current status, such as 'Temporarily using a different sauce' or 'Back in stock next week'."
-                        position="top"
-                        icon
-                        iconClassName="ml-1 h-4 w-4"
-                      />
-                    </div>
-                    <textarea
-                      value={editingItem.status_note ?? ''}
-                      onChange={(e) =>
-                        setEditingItem({ ...editingItem, status_note: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border rounded-md"
-                      rows={2}
-                      placeholder={'e.g. "Supplier delayed; we\'re using a temporary sauce."'}
-                    />
-                  </div>
+                      {/* Status Note */}
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Status Note (Optional)
+                          </label>
+                          <Tooltip 
+                            content="Add a note to explain the current status, such as 'Temporarily using a different sauce' or 'Back in stock next week'."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        <textarea
+                          value={editingItem.status_note ?? ''}
+                          onChange={(e) =>
+                            setEditingItem({ ...editingItem, status_note: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border rounded-md"
+                          rows={2}
+                          placeholder={'e.g. "Supplier delayed; we\'re using a temporary sauce."'}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1181,15 +1410,15 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
                 <div className="mt-6">
                   <button
                     type="button"
-                  onClick={() => {
-                    if (editingItem.id) {
-                      handleManageOptions({
-                        ...editingItem,
-                        id: editingItem.id.toString(),
-                        category_ids: editingItem.category_ids,
-                      } as unknown as MenuItem);
-                    }
-                  }}
+                    onClick={() => {
+                      if (editingItem.id) {
+                        handleManageOptions({
+                          ...editingItem,
+                          id: editingItem.id.toString(),
+                          category_ids: editingItem.category_ids,
+                        } as unknown as MenuItem);
+                      }
+                    }}
                     className="px-4 py-2 border rounded-md hover:bg-gray-50"
                   >
                     Manage Options
@@ -1225,6 +1454,48 @@ export function MenuManager({ restaurantId }: MenuManagerProps) {
       {/* Options Modal */}
       {optionsModalOpen && optionsModalItem && (
         <OptionGroupsModal item={optionsModalItem} onClose={handleCloseOptionsModal} />
+      )}
+
+      {/* NEW: Inventory Modal */}
+      {inventoryModalOpen && inventoryModalItem && (
+        <ItemInventoryModal
+          open={inventoryModalOpen}
+          menuItem={inventoryModalItem}
+          onClose={handleCloseInventoryModal}
+          onSave={refreshAfterInventoryChanges}
+          onEnableTrackingChange={(enabled) => {
+            // Immediately update the editing form if we're currently editing this item
+            if (editingItem && editingItem.id && inventoryModalItem.id === String(editingItem.id)) {
+              // Update the editing item's tracking status and associated fields
+              setEditingItem(prev => {
+                if (!prev) return prev;
+                
+                // Set stock status based on whether tracking is enabled and available quantity
+                let newStockStatus = prev.stock_status;
+                if (enabled) {
+                  const stockQty = inventoryModalItem.stock_quantity || 0;
+                  const damagedQty = inventoryModalItem.damaged_quantity || 0;
+                  const availableQty = Math.max(0, stockQty - damagedQty);
+                  const threshold = inventoryModalItem.low_stock_threshold || 10;
+                  
+                  if (availableQty <= 0) {
+                    newStockStatus = 'out_of_stock';
+                  } else if (availableQty <= threshold) {
+                    newStockStatus = 'low_stock';
+                  } else {
+                    newStockStatus = 'in_stock';
+                  }
+                }
+                
+                return {
+                  ...prev,
+                  enable_stock_tracking: enabled,
+                  stock_status: newStockStatus
+                };
+              });
+            }
+          }}
+        />
       )}
     </div>
   );

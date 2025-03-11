@@ -23,6 +23,21 @@ export interface OptionGroup {
 }
 
 /**
+ * Stock audit record for tracking inventory changes
+ */
+export interface MenuItemStockAudit {
+  id: number;
+  menu_item_id: number;
+  previous_quantity: number;
+  new_quantity: number;
+  reason?: string;
+  user_id?: number;
+  order_id?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * API response shape for a menu item 
  */
 export interface MenuItem {
@@ -60,6 +75,13 @@ export interface MenuItem {
   // Inventory status
   stock_status?: 'in_stock' | 'out_of_stock' | 'low_stock' | 'limited';
   status_note?: string | null;
+  
+  // Inventory tracking
+  enable_stock_tracking?: boolean;
+  stock_quantity?: number;
+  damaged_quantity?: number;
+  low_stock_threshold?: number;
+  available_quantity?: number; // Computed: stock_quantity - damaged_quantity
 }
 
 /**
@@ -68,4 +90,21 @@ export interface MenuItem {
 export interface MenuItemFormData extends Omit<MenuItem, 'id'> {
   id?: number | string;
   imageFile?: File | null;
+}
+
+/**
+ * Parameters for marking an item as damaged
+ */
+export interface MarkAsDamagedParams {
+  quantity: number;
+  reason: string;
+}
+
+/**
+ * Parameters for updating stock quantity
+ */
+export interface UpdateStockParams {
+  stock_quantity: number;
+  reason_type: 'restock' | 'adjustment' | 'other';
+  reason_details?: string;
 }
