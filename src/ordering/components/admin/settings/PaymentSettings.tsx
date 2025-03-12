@@ -31,9 +31,8 @@ const Switch: React.FC<{
 
 interface PaymentSettings {
   test_mode: boolean;
-  merchant_id: string;
-  public_key: string;
-  private_key: string;
+  client_id: string;
+  client_secret: string;
   environment: 'sandbox' | 'production';
 }
 
@@ -42,9 +41,8 @@ export function PaymentSettings() {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<PaymentSettings>({
     test_mode: true,
-    merchant_id: '',
-    public_key: '',
-    private_key: '',
+    client_id: '',
+    client_secret: '',
     environment: 'sandbox'
   });
 
@@ -60,9 +58,8 @@ export function PaymentSettings() {
         
         setSettings({
           test_mode: paymentGateway.test_mode !== false, // Default to true if not set
-          merchant_id: paymentGateway.merchant_id || '',
-          public_key: paymentGateway.public_key || '',
-          private_key: paymentGateway.private_key || '',
+          client_id: paymentGateway.client_id || '',
+          client_secret: paymentGateway.client_secret || '',
           environment: paymentGateway.environment || 'sandbox'
         });
       } catch (error) {
@@ -102,17 +99,19 @@ export function PaymentSettings() {
       const currentSettings: any = await api.get('/admin/settings');
       
       // Create the payload with the updated payment gateway settings
+      // The 'restaurant' property is required by the backend controller
       const payload = {
-        admin_settings: {
-          // Preserve existing admin settings
-          ...(currentSettings.admin_settings || {}),
-          // Update payment gateway settings
-          payment_gateway: {
-            test_mode: settings.test_mode,
-            merchant_id: settings.merchant_id,
-            public_key: settings.public_key,
-            private_key: settings.private_key,
-            environment: settings.environment
+        restaurant: {
+          admin_settings: {
+            // Preserve existing admin settings
+            ...(currentSettings.admin_settings || {}),
+            // Update payment gateway settings
+            payment_gateway: {
+              test_mode: settings.test_mode,
+              client_id: settings.client_id,
+              client_secret: settings.client_secret,
+              environment: settings.environment
+            }
           }
         }
       };
@@ -143,50 +142,32 @@ export function PaymentSettings() {
           description="Configure your payment processing settings."
           icon={<CreditCard className="h-6 w-6" />}
         />
-        
-        <Switch 
-          checked={settings.test_mode}
-          onChange={handleTestModeToggle}
-          className={`${
-            settings.test_mode ? 'bg-blue-600' : 'bg-gray-200'
-          } relative inline-flex h-6 w-11 items-center rounded-full`}
-        >
-          <span className="sr-only">Enable test mode</span>
-          <span
-            className={`${
-              settings.test_mode ? 'translate-x-6' : 'translate-x-1'
-            } inline-block h-4 w-4 transform rounded-full bg-white transition`}
-          />
-        </Switch>
       </div>
       
       <div className="bg-white p-6 rounded-lg shadow">
         {/* Test Mode Description */}
-        <div>
-          <h3 className="text-lg font-medium">Test Mode</h3>
-          <p className="text-sm text-gray-500">
-            Enable test mode to allow orders without payment processing
-          </p>
-        </div>
-        <Switch 
-          checked={settings.test_mode}
-          onChange={handleTestModeToggle}
-          className={`${
-            settings.test_mode ? 'bg-blue-600' : 'bg-gray-200'
-          } relative inline-flex h-6 w-11 items-center rounded-full`}
-        >
-          <span className="sr-only">Enable test mode</span>
-          <span
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h3 className="text-lg font-medium">Test Mode</h3>
+            <p className="text-sm text-gray-500">
+              Enable test mode to allow orders without payment processing
+            </p>
+          </div>
+          <Switch 
+            checked={settings.test_mode}
+            onChange={handleTestModeToggle}
             className={`${
-              settings.test_mode ? 'translate-x-6' : 'translate-x-1'
-            } inline-block h-4 w-4 transform rounded-full bg-white transition`}
-          />
-        </Switch>
+              settings.test_mode ? 'bg-blue-600' : 'bg-gray-200'
+            } relative inline-flex h-6 w-11 items-center rounded-full`}
+          >
+            <span className="sr-only">Enable test mode</span>
+          </Switch>
+        </div>
       </div>
       
-      {/* Braintree Credentials */}
+      {/* PayPal Credentials */}
       <div className="border-t pt-4">
-        <h3 className="text-lg font-medium mb-4">Braintree Credentials</h3>
+        <h3 className="text-lg font-medium mb-4">PayPal Credentials</h3>
         
         <div className="space-y-4">
           {/* Environment Selection */}
@@ -206,53 +187,52 @@ export function PaymentSettings() {
             </select>
           </div>
           
-          {/* Merchant ID */}
+          {/* Client ID */}
           <div>
-            <label htmlFor="merchant_id" className="block text-sm font-medium text-gray-700 mb-1">
-              Merchant ID
+            <label htmlFor="client_id" className="block text-sm font-medium text-gray-700 mb-1">
+              Client ID
             </label>
             <input
               type="text"
-              id="merchant_id"
-              name="merchant_id"
-              value={settings.merchant_id}
+              id="client_id"
+              name="client_id"
+              value={settings.client_id}
               onChange={handleInputChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter your Braintree Merchant ID"
+              placeholder="Enter your PayPal Client ID"
             />
           </div>
           
-          {/* Public Key */}
+          {/* Client Secret */}
           <div>
-            <label htmlFor="public_key" className="block text-sm font-medium text-gray-700 mb-1">
-              Public Key
-            </label>
-            <input
-              type="text"
-              id="public_key"
-              name="public_key"
-              value={settings.public_key}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter your Braintree Public Key"
-            />
-          </div>
-          
-          {/* Private Key */}
-          <div>
-            <label htmlFor="private_key" className="block text-sm font-medium text-gray-700 mb-1">
-              Private Key
+            <label htmlFor="client_secret" className="block text-sm font-medium text-gray-700 mb-1">
+              Client Secret
             </label>
             <input
               type="password"
-              id="private_key"
-              name="private_key"
-              value={settings.private_key}
+              id="client_secret"
+              name="client_secret"
+              value={settings.client_secret}
               onChange={handleInputChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter your Braintree Private Key"
+              placeholder="Enter your PayPal Client Secret"
             />
           </div>
+        </div>
+
+        {/* Help Text */}
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-md">
+          <p className="text-sm text-blue-700">
+            <strong>How to get PayPal credentials:</strong>
+          </p>
+          <ol className="text-sm text-blue-700 list-decimal pl-5 mt-2">
+            <li>Go to <a href="https://developer.paypal.com/dashboard/" target="_blank" rel="noopener noreferrer" className="underline">PayPal Developer Dashboard</a></li>
+            <li>Log in with your PayPal Business account</li>
+            <li>Navigate to "My Apps & Credentials"</li>
+            <li>Create a new REST API app or select an existing one</li>
+            <li>Copy the Client ID and Secret from the app credentials</li>
+            <li>Make sure "Advanced (Expanded) Credit and Debit Card Payments" is enabled</li>
+          </ol>
         </div>
       </div>
       

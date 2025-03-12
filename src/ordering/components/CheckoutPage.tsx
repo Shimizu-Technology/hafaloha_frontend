@@ -1,7 +1,7 @@
 // src/ordering/components/CheckoutPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, Mail, Phone, User } from 'lucide-react';
+import { Mail, Phone, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { useAuthStore } from '../store/authStore';
@@ -12,14 +12,12 @@ import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { validateVipCode } from '../../shared/api/endpoints/vipAccess';
 import { PickupInfo } from './location/PickupInfo';
 import { VipCodeInput } from './VipCodeInput';
+import { PayPalCheckout } from './payment/PayPalCheckout';
 
 interface CheckoutFormData {
   name: string;
   email: string;
   phone: string;
-  cardNumber: string;
-  expiryDate: string;
-  cvv: string;
   specialInstructions: string;
   promoCode: string;
   vipCode: string;
@@ -48,9 +46,6 @@ export function CheckoutPage() {
     name: user ? `${user.first_name} ${user.last_name}` : '',
     email: user?.email || '',
     phone: user?.phone || '', // if user has phone => use it, else blank => +1671 later
-    cardNumber: '',
-    expiryDate: '',
-    cvv: '',
     specialInstructions: '',
     promoCode: '',
     vipCode: '',
@@ -62,6 +57,8 @@ export function CheckoutPage() {
   const [finalTotal, setFinalTotal] = useState(rawTotal);
   const [vipCodeValid, setVipCodeValid] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentProcessed, setPaymentProcessed] = useState(false);
+  const [paymentTransactionId, setPaymentTransactionId] = useState<string | null>(null);
 
   // If phone is blank => prefill +1671
   useEffect(() => {
@@ -117,12 +114,26 @@ export function CheckoutPage() {
     setVipCodeValid(valid);
   };
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  // Handler for when PayPal payment completes successfully
+  const handlePaymentSuccess = (details: {
+    status: string;
+    transaction_id: string;
+    amount: string;
+  }) => {
+    setPaymentProcessed(true);
+    setPaymentTransactionId(details.transaction_id);
+    // We'll submit the order after the payment is processed
+    submitOrder(details.transaction_id);
+  };
 
+  // Handler for PayPal payment errors
+  const handlePaymentError = (error: Error) => {
+    console.error('Payment failed:', error);
+    toast.error(`Payment failed: ${error.message}`);
+    setIsSubmitting(false);
+  };
+
+  async function submitOrder(transactionId: string) {
     try {
       // Check if any item needs 24-hr notice
       const hasAny24hrItem = cartItems.some(
@@ -138,6 +149,45 @@ export function CheckoutPage() {
         return;
       }
 
+      // Use transaction ID as the payment_method_nonce since that's 
+      // what the API expects from the previous implementation
+      const newOrder = await addOrder(
+        cartItems,
+        finalTotal,
+        formData.specialInstructions,
+        formData.name,
+        finalPhone,
+        formData.email,
+        transactionId, // Use the transaction ID as the payment method nonce
+        'credit_card',
+        formData.vipCode
+      );
+
+      toast.success('Order placed successfully!');
+
+      const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
+      navigate('/order-confirmation', {
+        state: {
+          orderId: newOrder.id || '12345',
+          total: finalTotal,
+          estimatedTime,
+          hasAny24hrItem,
+        },
+      });
+    } catch (err: any) {
+      console.error('Failed to create order:', err);
+      toast.error('Failed to place order. Please try again.');
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
       // Check for VIP-only mode and attempt to validate code if not already validated
       if (restaurant?.vip_only_checkout && !vipCodeValid && formData.vipCode.trim()) {
         try {
@@ -167,32 +217,18 @@ export function CheckoutPage() {
         return;
       }
 
-      const newOrder = await addOrder(
-        cartItems,
-        finalTotal,
-        formData.specialInstructions,
-        formData.name,
-        finalPhone,
-        formData.email,
-        undefined,
-        'credit_card',
-        formData.vipCode
-      );
+      // If payment already processed (unlikely in normal flow), just submit the order
+      if (paymentProcessed && paymentTransactionId) {
+        await submitOrder(paymentTransactionId);
+        return;
+      }
 
-      toast.success('Order placed successfully!');
-
-      const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
-      navigate('/order-confirmation', {
-        state: {
-          orderId: newOrder.id || '12345',
-          total: finalTotal,
-          estimatedTime,
-          hasAny24hrItem,
-        },
-      });
+      // Otherwise, the PayPalCheckout component will handle payment
+      // and call our success/error handlers
+      // No need to do anything here as the PayPal component will trigger the callbacks
     } catch (err: any) {
-      console.error('Failed to create order:', err);
-      toast.error('Failed to place order. Please try again.');
+      console.error('Failed during checkout process:', err);
+      toast.error('Failed to process checkout. Please try again.');
       setIsSubmitting(false);
     }
   }
@@ -279,72 +315,17 @@ export function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment Info */}
+            {/* Payment Info - Using PayPal Checkout */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
-              <div className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="cardNumber"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    <CreditCard className="inline-block w-4 h-4 mr-2" />
-                    Card Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="cardNumber"
-                    name="cardNumber"
-                    required
-                    placeholder="1234 5678 9012 3456"
-                    value={formData.cardNumber}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md
-                      focus:ring-[#c1902f] focus:border-[#c1902f]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="expiryDate"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Expiry Date <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="expiryDate"
-                      name="expiryDate"
-                      required
-                      placeholder="MM/YY"
-                      value={formData.expiryDate}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md
-                        focus:ring-[#c1902f] focus:border-[#c1902f]"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="cvv"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      CVV <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="cvv"
-                      name="cvv"
-                      required
-                      placeholder="123"
-                      value={formData.cvv}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md
-                        focus:ring-[#c1902f] focus:border-[#c1902f]"
-                    />
-                  </div>
-                </div>
-              </div>
+              <PayPalCheckout 
+                amount={finalTotal.toString()} 
+                clientId={(restaurant?.admin_settings?.payment_gateway?.client_id as string) || "sandbox_client_id"}
+                currency="USD"
+                testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true} // Use nullish coalescing to default to true only when null/undefined
+                onPaymentSuccess={handlePaymentSuccess}
+                onPaymentError={handlePaymentError}
+              />
             </div>
 
             {/* VIP Code Input (only appears when restaurant is in VIP-only mode) */}

@@ -2,9 +2,9 @@
 import { api } from '../apiClient';
 
 /**
- * Get a client token for Braintree
+ * Get a client token for payment initialization
  * @param restaurantId The ID of the restaurant
- * @returns A client token for initializing Braintree
+ * @returns A client token for initializing the payment provider
  */
 export const getClientToken = async (restaurantId: string): Promise<string> => {
   const response: any = await api.get(`/payments/client_token?restaurant_id=${restaurantId}`);
@@ -12,7 +12,52 @@ export const getClientToken = async (restaurantId: string): Promise<string> => {
 };
 
 /**
- * Process a payment with Braintree
+ * Create a PayPal order
+ * @param restaurantId The ID of the restaurant
+ * @param amount The amount to charge
+ * @returns The order creation result with an orderID
+ */
+export const createOrder = async (
+  restaurantId: string,
+  amount: number
+): Promise<{
+  success: boolean;
+  orderID?: string;
+  message?: string;
+}> => {
+  return await api.post('/payments/create_order', {
+    restaurant_id: restaurantId,
+    amount,
+  });
+};
+
+/**
+ * Capture a PayPal order
+ * @param restaurantId The ID of the restaurant
+ * @param orderID The order ID from PayPal
+ * @returns The transaction result
+ */
+export const captureOrder = async (
+  restaurantId: string,
+  orderID: string
+): Promise<{
+  success: boolean;
+  transaction?: {
+    id: string;
+    status: string;
+    amount: number;
+  };
+  message?: string;
+  errors?: string[];
+}> => {
+  return await api.post('/payments/capture_order', {
+    restaurant_id: restaurantId,
+    orderID,
+  });
+};
+
+/**
+ * Process a payment with Braintree (legacy method)
  * @param restaurantId The ID of the restaurant
  * @param amount The amount to charge
  * @param paymentMethodNonce The payment method nonce from Braintree

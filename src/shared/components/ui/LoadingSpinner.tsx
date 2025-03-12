@@ -7,9 +7,10 @@ import fallbackSpinner from '../../assets/Hafaloha-Fat-Pua.png';
 interface LoadingSpinnerProps {
   className?: string;
   showText?: boolean;
+  text?: string;
 }
 
-export function LoadingSpinner({ className = '', showText = true }: LoadingSpinnerProps) {
+export function LoadingSpinner({ className = '', showText = true, text = "Loading..." }: LoadingSpinnerProps) {
   // Get the restaurant from the store
   const restaurant = useRestaurantStore((state) => state.restaurant);
   
@@ -30,7 +31,7 @@ export function LoadingSpinner({ className = '', showText = true }: LoadingSpinn
         />
       </div>
       {showText && (
-        <p className="text-white font-medium">Loading...</p>
+        <p className="text-white font-medium">{text}</p>
       )}
     </div>
   );
