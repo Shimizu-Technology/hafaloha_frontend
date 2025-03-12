@@ -82,6 +82,16 @@ export interface MenuItem {
   damaged_quantity?: number;
   low_stock_threshold?: number;
   available_quantity?: number; // Computed: stock_quantity - damaged_quantity
+  
+  // Customizations for order items
+  customizations?: Record<string, string[]> | any;
+  
+  // Payment status for added items in orders
+  paymentStatus?: 'needs_payment' | 'already_paid';
+  
+  // For inventory tracking when removing items
+  inventoryAction?: 'return_to_inventory' | 'mark_as_damaged';
+  damageReason?: string;
 }
 
 /**
@@ -98,6 +108,7 @@ export interface MenuItemFormData extends Omit<MenuItem, 'id'> {
 export interface MarkAsDamagedParams {
   quantity: number;
   reason: string;
+  order_id?: string | number;  // When marking item as damaged from an order
 }
 
 /**
@@ -105,6 +116,6 @@ export interface MarkAsDamagedParams {
  */
 export interface UpdateStockParams {
   stock_quantity: number;
-  reason_type: 'restock' | 'adjustment' | 'other';
+  reason_type: 'restock' | 'adjustment' | 'other' | 'return';
   reason_details?: string;
 }

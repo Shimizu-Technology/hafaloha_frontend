@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { menusApi, Menu } from '../../shared/api/endpoints/menus';
 import { handleApiError } from '../../shared/utils/errorHandler';
-import { MenuItem } from '../types/menu';
+import { MenuItem, Category } from '../types/menu';
 import { apiClient } from '../../shared/api/apiClient';
 import { menuItemsApi } from '../../shared/api/endpoints/menuItems';
 
@@ -10,6 +10,7 @@ interface MenuState {
   menus: Menu[];
   currentMenuId: number | null;
   menuItems: MenuItem[];
+  categories: Category[];
   loading: boolean;
   error: string | null;
   
@@ -21,6 +22,7 @@ interface MenuState {
   fetchMenus: () => Promise<void>;
   fetchMenuItems: () => Promise<void>;
   fetchAllMenuItemsForAdmin: () => Promise<void>;
+  fetchCategories: () => Promise<void>;
   createMenu: (name: string, restaurantId: number) => Promise<Menu | null>;
   updateMenu: (id: number, data: Partial<Menu>) => Promise<Menu | null>;
   deleteMenu: (id: number) => Promise<boolean>;
@@ -42,6 +44,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   menus: [],
   currentMenuId: null,
   menuItems: [],
+  categories: [],
   loading: false,
   error: null,
   
@@ -172,6 +175,17 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       const errorMessage = handleApiError(error);
       set({ error: errorMessage, loading: false });
       return null;
+    }
+  },
+
+  fetchCategories: async () => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.get('/categories');
+      set({ categories: response.data, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
     }
   },
 

@@ -31,7 +31,9 @@ const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({ item, onClose, onUp
   const [operation, setOperation] = useState<'add' | 'remove'>('add');
   const [reason, setReason] = useState<string>('restock');
   const [damagedQty, setDamagedQty] = useState<number>(1);
-  const [damageReason, setDamageReason] = useState<string>('');
+  const [damageReason, setDamageReason] = useState<string>('fell');
+  const [otherDamageReason, setOtherDamageReason] = useState<string>('');
+  const [damageReasonOptions, setDamageReasonOptions] = useState<string[]>(['fell', 'bad/spoiled', 'other']);
   const [details, setDetails] = useState<string>('');
 
   // Example audit data - in a real app, this might come from the backend
@@ -59,7 +61,26 @@ const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({ item, onClose, onUp
   };
 
   const handleMarkDamaged = () => {
+    // Determine the final reason (either selected preset or custom)
+    const finalReason = damageReason === 'other' ? otherDamageReason : damageReason;
+    
+    // Save custom reason if checkbox is checked
+    if (damageReason === 'other' && 
+        (document.getElementById('saveCustomReason') as HTMLInputElement)?.checked && 
+        otherDamageReason.trim() !== '') {
+      // Add the new reason before 'other' in the options array
+      setDamageReasonOptions(prev => [
+        ...prev.filter(opt => opt !== 'other'), 
+        otherDamageReason, 
+        'other'
+      ]);
+    }
+    
     const newQty = Math.max(0, (item.quantity || 0) - damagedQty);
+    
+    // We can't include damageReason in the update as it's not part of the InventoryStatus type
+    // But we can log it for auditing purposes
+    console.log(`Item ${item.itemId} marked as damaged. Reason: ${finalReason}`);
     
     onUpdateInventory(item.itemId, { 
       quantity: newQty,
@@ -273,15 +294,51 @@ className={`flex items-center justify-center p-3 rounded-md border w-[140px] ${
                 <label htmlFor="damageReason" className="block text-sm font-medium text-gray-700 mb-1">
                   Reason for Damage
                 </label>
-                <input
-                  type="text"
+                <select
                   id="damageReason"
                   value={damageReason}
                   onChange={(e) => setDamageReason(e.target.value)}
-                  placeholder="e.g., Dropped on floor, Expired, etc."
                   className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
+                >
+                  {damageReasonOptions.map((option) => (
+                    option !== 'other' ? 
+                      <option key={option} value={option}>
+                        {option.charAt(0).toUpperCase() + option.slice(1)}
+                      </option> 
+                    : 
+                      <option key="other" value="other">Other (specify)</option>
+                  ))}
+                </select>
               </div>
+              
+              {damageReason === 'other' && (
+                <div className="mt-3">
+                  <label htmlFor="otherDamageReason" className="block text-sm font-medium text-gray-700 mb-1">
+                    Specify Other Reason
+                  </label>
+                  <input
+                    type="text"
+                    id="otherDamageReason"
+                    value={otherDamageReason}
+                    onChange={(e) => setOtherDamageReason(e.target.value)}
+                    placeholder="Enter custom reason"
+                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              )}
+              
+              {damageReason === 'other' && otherDamageReason.trim() !== '' && (
+                <div className="mt-3 flex items-center">
+                  <input
+                    type="checkbox"
+                    id="saveCustomReason"
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="saveCustomReason" className="ml-2 block text-sm text-gray-700">
+                    Save this reason for future use
+                  </label>
+                </div>
+              )}
               
               <div className="pt-4">
                 <button

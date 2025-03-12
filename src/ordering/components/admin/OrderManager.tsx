@@ -1,4 +1,5 @@
 // src/ordering/components/admin/OrderManager.tsx
+
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
@@ -10,6 +11,8 @@ import { DateFilter, DateFilterOption } from './DateFilter';
 import { CollapsibleOrderCard } from './CollapsibleOrderCard';
 import { MultiSelectActionBar } from './MultiSelectActionBar';
 import { StaffOrderModal } from './StaffOrderModal';
+import { BulkInventoryActionDialog } from './BulkInventoryActionDialog'; // <-- NEW
+import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';     // <-- For processing inventory
 import toast from 'react-hot-toast';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed';
@@ -24,6 +27,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const {
     orders,
     fetchOrders,
+    fetchOrdersQuietly,    // For background polling
     updateOrderStatus,
     updateOrderStatusQuietly,
     updateOrderData,
@@ -54,7 +58,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // selected orders for batch actions
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   
-  // new orders highlighting
+  // new orders highlighting (for newly arrived orders during polling)
   const [newOrders, setNewOrders] = useState<Set<string>>(new Set());
 
   // for the "Set ETA" modal
@@ -68,62 +72,70 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // for the "Staff Order" modal (POS)
   const [showStaffOrderModal, setShowStaffOrderModal] = useState(false);
 
-  // for mobile menu
+  // for mobile menu (if you have a contextual menu or dropdown)
   const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 10;
 
-  // Constants for configuration - auto-refresh interval
-  const POLLING_INTERVAL = 30000; // 30 seconds - could be moved to a config file or environment variable
+  // Auto-refresh interval in ms
+  const POLLING_INTERVAL = 30000; // 30 seconds
 
-  // State to track if we're currently refreshing data
+  // Are we in the middle of refreshing data (quietly)?
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // fetch all orders on mount and set up polling for automatic refreshes
+  // If we are updating an order’s status, block certain UI interactions
+  const [isStatusUpdateInProgress, setIsStatusUpdateInProgress] = useState(false);
+
+  // For temporarily highlighting a specific order row
+  const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
+  
+  //
+  // NEW: State for inventory-based cancellation flow
+  //
+  const [showInventoryDialog, setShowInventoryDialog] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<any | null>(null);
+  const [batchOrdersToCancel, setBatchOrdersToCancel] = useState<any[]>([]);
+  const [isBatchCancel, setIsBatchCancel] = useState(false);
+
+  // ----------------------------------
+  // Fetch orders on mount + Setup Polling
+  // ----------------------------------
   useEffect(() => {
-    // Initial fetch - this one can show loading state
+    // 1) Initial fetch with full loading state
     fetchOrders();
-    
-    // Store the current orders to detect new ones
-    const currentOrderIds = new Set(orders.map(o => o.id));
-    
-    // Set up polling with visibility detection
+
+    // 2) Track current order IDs to detect new ones
+    const currentOrderIds = new Set(orders.map((o) => o.id));
     let pollingInterval: number | null = null;
-    
-    // Function to start polling
+
+    // Start polling function
     const startPolling = () => {
-      // Clear any existing interval first
       if (pollingInterval) clearInterval(pollingInterval);
-      
-      // Set up new interval with the quiet fetch that doesn't trigger loading indicators
       pollingInterval = window.setInterval(() => {
-        // Use the fetchOrdersQuietly function from the store
-        // This won't update the loading state, preventing UI "shake"
-        const store = useOrderStore.getState();
-        store.fetchOrdersQuietly().then(() => {
-          // Check for new orders by comparing with previous set
-          const newOrderIds = store.orders
-            .filter(o => !currentOrderIds.has(o.id))
-            .map(o => o.id);
-          
+        fetchOrdersQuietly().then(() => {
+          const storeOrders = useOrderStore.getState().orders;
+          const newOrderIds = storeOrders
+            .filter((o) => !currentOrderIds.has(o.id))
+            .map((o) => o.id);
+
           if (newOrderIds.length > 0) {
-            // Add to new orders set
-            setNewOrders(prev => {
+            // Mark them as new
+            setNewOrders((prev) => {
               const updated = new Set(prev);
-              newOrderIds.forEach(id => updated.add(id));
+              newOrderIds.forEach((id) => updated.add(id));
               return updated;
             });
-            
-            // Update current orders
-            newOrderIds.forEach(id => currentOrderIds.add(id));
-            
-            // Clear new order highlight after 30 seconds
+
+            // Update the known IDs
+            newOrderIds.forEach((id) => currentOrderIds.add(id));
+
+            // Clear highlight after 30s
             setTimeout(() => {
-              setNewOrders(prev => {
+              setNewOrders((prev) => {
                 const updated = new Set(prev);
-                newOrderIds.forEach(id => updated.delete(id));
+                newOrderIds.forEach((id) => updated.delete(id));
                 return updated;
               });
             }, 30000);
@@ -131,143 +143,204 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         });
       }, POLLING_INTERVAL);
     };
-    
-    // Function to stop polling
+
+    // Stop polling function
     const stopPolling = () => {
       if (pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
       }
     };
-    
-    // Start polling immediately
+
+    // Start polling now
     startPolling();
-    
-    // Set up visibility change detection to pause polling when tab is not visible
+
+    // Pause polling if the tab is hidden
     const handleVisibilityChange = () => {
       if (document.hidden) {
         stopPolling();
       } else {
-        // When becoming visible again, fetch immediately then start polling
-        useOrderStore.getState().fetchOrdersQuietly();
+        // Refresh once, then start again
+        fetchOrdersQuietly();
         startPolling();
       }
     };
-    
-    // Add visibility change listener
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-  // Clean up on component unmount
-  return () => {
-    stopPolling();
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-  };
-}, [fetchOrders]);
 
-  // Track if the status update is in progress to prevent opening edit modal
-  const [isStatusUpdateInProgress, setIsStatusUpdateInProgress] = useState(false);
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchOrders, fetchOrdersQuietly]);
 
-  // State to track highlighted orders (for visual feedback)
-  const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
-
-  // Toggle order expansion
+  // ----------------------------------
+  // Collapsible / Multi-select logic
+  // ----------------------------------
   const toggleOrderExpand = useCallback((orderId: string) => {
-    setExpandedOrders(prev => {
+    setExpandedOrders((prev) => {
       const updated = new Set(prev);
-      if (updated.has(orderId)) {
-        updated.delete(orderId);
-      } else {
-        updated.add(orderId);
-      }
+      if (updated.has(orderId)) updated.delete(orderId);
+      else updated.add(orderId);
       return updated;
     });
   }, []);
-  
-  // Toggle order selection
+
   const toggleOrderSelection = useCallback((orderId: string, selected: boolean) => {
-    setSelectedOrders(prev => {
+    setSelectedOrders((prev) => {
       const updated = new Set(prev);
-      if (selected) {
-        updated.add(orderId);
-      } else {
-        updated.delete(orderId);
-      }
+      if (selected) updated.add(orderId);
+      else updated.delete(orderId);
       return updated;
     });
   }, []);
-  
-  // Clear all selections
+
   const clearSelections = useCallback(() => {
     setSelectedOrders(new Set());
   }, []);
-  
-  // Batch actions for selected orders
+
+  // ----------------------------------
+  // Single + Batch Cancelation with Inventory
+  // ----------------------------------
+
+  /**
+   * Single-order flow: Confirm with user, then show BulkInventoryActionDialog
+   * to handle inventory for any tracked items, then finalize cancellation.
+   */
+  const handleCancelOrder = useCallback((order: any) => {
+    if (window.confirm('Are you sure you want to cancel this order?')) {
+      setOrderToCancel(order);
+      setIsBatchCancel(false);
+      setShowInventoryDialog(true); // shows BulkInventoryActionDialog
+    }
+  }, []);
+
+  /**
+   * Batch cancel flow: gather the orders, show BulkInventoryActionDialog
+   */
+  const handleBatchMarkAsCancelled = useCallback(() => {
+    const ordersToCancel = orders.filter((o) => selectedOrders.has(o.id));
+    if (ordersToCancel.length > 0) {
+      setBatchOrdersToCancel(ordersToCancel);
+      setIsBatchCancel(true);
+      setShowInventoryDialog(true);
+    }
+  }, [orders, selectedOrders]);
+
+  /**
+   * Called when BulkInventoryActionDialog is done (Confirm & Continue).
+   * Processes each item action (damaged or not) and calls updateOrderStatusQuietly.
+   */
+  const processInventoryActionsAndCancel = async (inventoryActions: any[]) => {
+    setIsStatusUpdateInProgress(true);
+    try {
+      console.log("Processing inventory actions:", inventoryActions);
+      
+      // 1) Process each inventory action
+      for (const action of inventoryActions) {
+        if (action.action === 'mark_as_damaged') {
+          // Mark items as damaged - use the orderId from the action
+          // (which comes from the specific order the item belongs to)
+          console.log(`Marking item ${action.itemId} as damaged (qty: ${action.quantity})`);
+          await menuItemsApi.markAsDamaged(action.itemId, {
+            quantity: action.quantity,
+            reason: action.reason || 'Damaged during order cancellation',
+            order_id: action.orderId || orderToCancel?.id || ''
+          });
+        } else if (action.action === 'return_to_inventory') {
+          // Explicitly return items to inventory by increasing stock
+          console.log(`Returning item ${action.itemId} to inventory (qty: ${action.quantity})`);
+          // Get current item details
+          const menuItem = await menuItemsApi.getById(action.itemId);
+          
+          // Calculate new stock level after returning items
+          const newStockLevel = (menuItem.stock_quantity || 0) + action.quantity;
+          
+          // Update stock level with explicit API call
+          await menuItemsApi.updateStock(action.itemId, {
+            stock_quantity: newStockLevel,
+            reason_type: 'return',
+            reason_details: `Items returned from cancelled Order #${action.orderId || orderToCancel?.id || ''}`
+          });
+        }
+      }
+
+      // 2) Cancel the orders
+      if (isBatchCancel) {
+        // For batch
+        for (const ord of batchOrdersToCancel) {
+          await updateOrderStatusQuietly(ord.id, 'cancelled');
+        }
+        clearSelections();
+      } else if (orderToCancel) {
+        // For single
+        await updateOrderStatusQuietly(orderToCancel.id, 'cancelled');
+      }
+
+      // 3) Reset state
+      setBatchOrdersToCancel([]);
+      setOrderToCancel(null);
+      setIsBatchCancel(false);
+      setShowInventoryDialog(false);
+
+    } catch (error) {
+      console.error('Error processing inventory actions:', error);
+      toast.error('Failed to process inventory changes');
+    } finally {
+      setIsStatusUpdateInProgress(false);
+    }
+  };
+
+  // ----------------------------------
+  // Other batch actions (ready/completed)
+  // ----------------------------------
   const handleBatchMarkAsReady = useCallback(async () => {
     setIsStatusUpdateInProgress(true);
-    
     try {
-      // Process orders sequentially to avoid race conditions
       for (const orderId of selectedOrders) {
         await updateOrderStatusQuietly(orderId, 'ready');
       }
-      
-      // Clear selections after successful update
       clearSelections();
     } finally {
       setIsStatusUpdateInProgress(false);
     }
   }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
-  
+
   const handleBatchMarkAsCompleted = useCallback(async () => {
     setIsStatusUpdateInProgress(true);
-    
     try {
       for (const orderId of selectedOrders) {
         await updateOrderStatusQuietly(orderId, 'completed');
       }
-      
       clearSelections();
     } finally {
       setIsStatusUpdateInProgress(false);
     }
   }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
-  
-  const handleBatchMarkAsCancelled = useCallback(async () => {
-    setIsStatusUpdateInProgress(true);
-    
-    try {
-      for (const orderId of selectedOrders) {
-        await updateOrderStatusQuietly(orderId, 'cancelled');
-      }
-      
-      clearSelections();
-    } finally {
-      setIsStatusUpdateInProgress(false);
-    }
-  }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
-  
-  // Date filter functions
+
+  // ----------------------------------
+  // Date / Search / Filter
+  // ----------------------------------
   const getDateRange = useCallback(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     const weekStart = new Date(today);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    
+
     const lastWeekStart = new Date(weekStart);
     lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-    
+
     const lastWeekEnd = new Date(weekStart);
     lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
-    
+
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    
+
     switch (dateFilter) {
       case 'today':
         return { start: today, end: tomorrow };
@@ -285,129 +358,129 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         return { start: today, end: tomorrow };
     }
   }, [dateFilter, customStartDate, customEndDate]);
-  
-  // Search function
+
+  // Simple search function
   const searchOrders = useCallback((order: any, query: string) => {
     if (!query) return true;
-    
+
     const searchLower = query.toLowerCase();
-    
-    // Search in order ID
-    if (order.id.toString().includes(searchLower)) return true;
-    
-    // Search in customer name
+
+    // Search in ID
+    if (String(order.id).includes(searchLower)) return true;
+
+    // Customer name
     if (order.contact_name && order.contact_name.toLowerCase().includes(searchLower)) return true;
-    
-    // Search in customer email
+
+    // Email
     if (order.contact_email && order.contact_email.toLowerCase().includes(searchLower)) return true;
-    
-    // Search in customer phone
+
+    // Phone
     if (order.contact_phone && order.contact_phone.toLowerCase().includes(searchLower)) return true;
-    
-    // Search in special instructions
+
+    // Special instructions
     const instructions = (order.special_instructions || order.specialInstructions || '').toLowerCase();
     if (instructions.includes(searchLower)) return true;
-    
-    // Search in order items
+
+    // Order items
     if (order.items && order.items.length > 0) {
-      return order.items.some((item: any) => 
-        item.name.toLowerCase().includes(searchLower) ||
-        (item.notes && item.notes.toLowerCase().includes(searchLower))
-      );
+      return order.items.some((item: any) => {
+        if (item.name.toLowerCase().includes(searchLower)) return true;
+        if (item.notes && item.notes.toLowerCase().includes(searchLower)) return true;
+        return false;
+      });
     }
-    
+
     return false;
   }, []);
-  
-  // Apply all filters
+
+  // Combined filtering + sorting
   const filteredOrders = useMemo(() => {
-    // First sort orders by creation date
-    const sortedOrders = [...orders].sort((a, b) => {
-      // Convert strings to Date objects for comparison
-      const dateA = new Date(a.createdAt || 0);
-      const dateB = new Date(b.createdAt || 0);
-      // Sort based on sortNewestFirst flag
-      return sortNewestFirst 
-        ? dateB.getTime() - dateA.getTime() // newest first
-        : dateA.getTime() - dateB.getTime(); // oldest first
+    // 1) Sort
+    const sorted = [...orders].sort((a, b) => {
+      const dateA = new Date(a.createdAt);
+      const dateB = new Date(b.createdAt);
+      return sortNewestFirst ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
     });
-    
-    // Apply date filter
+
+    // 2) Date range
     const { start, end } = getDateRange();
-    const dateFiltered = sortedOrders.filter(order => {
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= start && orderDate < end;
+    const dateFiltered = sorted.filter((ord) => {
+      const d = new Date(ord.createdAt);
+      return d >= start && d < end;
     });
-    
-    // Apply status filter
-    const statusFiltered = selectedStatus === 'all'
-      ? dateFiltered
-      : dateFiltered.filter(order => order.status === selectedStatus);
-    
-    // Apply search filter
+
+    // 3) Status filter
+    const statusFiltered =
+      selectedStatus === 'all'
+        ? dateFiltered
+        : dateFiltered.filter((o) => o.status === selectedStatus);
+
+    // 4) Search
     return searchQuery
-      ? statusFiltered.filter(order => searchOrders(order, searchQuery))
+      ? statusFiltered.filter((ord) => searchOrders(ord, searchQuery))
       : statusFiltered;
   }, [orders, sortNewestFirst, selectedStatus, searchQuery, getDateRange, searchOrders]);
-      
-  // Calculate pagination
+
+  // Pagination
   const totalOrders = filteredOrders.length;
   const totalPages = Math.ceil(totalOrders / ordersPerPage);
-  
-  // Get current page of orders
   const indexOfLastOrder = currentPage * ordersPerPage;
   const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
   const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
-  
-  // Reset to first page when filters change
+
+  // When filters change, reset to page 1
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedStatus, sortNewestFirst, searchQuery, dateFilter]);
-  
-  // if the parent sets a selectedOrderId => expand the order card and scroll to it
-  // but only if it's not from a status update
+
+  // If the parent sets a selectedOrderId => expand that order
+  // (And scroll to it if it's in the list)
   useEffect(() => {
     if (selectedOrderId && !isStatusUpdateInProgress) {
-      const found = orders.find(o => Number(o.id) === selectedOrderId);
+      const found = orders.find((o) => Number(o.id) === selectedOrderId);
       if (found) {
-        // Reset filters to ensure the order is visible
+        // Show it
         setSelectedStatus('all');
         setSearchQuery('');
-        
-        // Find the order in the filtered list to determine which page it's on
-        const orderIndex = filteredOrders.findIndex(o => Number(o.id) === selectedOrderId);
-        if (orderIndex >= 0) {
-          // Calculate which page the order should be on
-          const targetPage = Math.floor(orderIndex / ordersPerPage) + 1;
+
+        // Figure out which page it's on
+        const idx = filteredOrders.findIndex((o) => Number(o.id) === selectedOrderId);
+        if (idx >= 0) {
+          const targetPage = Math.floor(idx / ordersPerPage) + 1;
           setCurrentPage(targetPage);
         }
-        
-        // Add to expanded orders
-        setExpandedOrders(prev => {
+
+        // Expand
+        setExpandedOrders((prev) => {
           const updated = new Set(prev);
           updated.add(found.id);
           return updated;
         });
-        
-        // Highlight the order for visual feedback
+
+        // Highlight
         setHighlightedOrderId(found.id);
-        
-        // Clear highlight after 5 seconds
         setTimeout(() => {
           setHighlightedOrderId(null);
         }, 5000);
-        
-        // Schedule scrolling after render
+
+        // Scroll to it
         setTimeout(() => {
-          const orderElement = document.getElementById(`order-${found.id}`);
-          if (orderElement) {
-            orderElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          const elem = document.getElementById(`order-${found.id}`);
+          if (elem) {
+            elem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         }, 100);
       }
     }
-  }, [selectedOrderId, orders, isStatusUpdateInProgress, filteredOrders, ordersPerPage]);
+  }, [
+    selectedOrderId,
+    orders,
+    isStatusUpdateInProgress,
+    filteredOrders,
+    ordersPerPage,
+  ]);
 
+  // For the "view details" modal
   function closeModal() {
     setSelectedOrder(null);
     if (setSelectedOrderId) {
@@ -415,33 +488,29 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }
   }
 
-  // handle ETA confirm => patch status=preparing & estimated_pickup_time
+  // For setting an order to "preparing" with an ETA
   async function handleConfirmEta() {
     if (!orderToPrep) {
       setShowEtaModal(false);
       return;
     }
 
+    // Calculate pickup time
     let pickupTime: string;
-    
     if (requiresAdvanceNotice(orderToPrep)) {
-      // For advance notice orders, create a timestamp for tomorrow at the selected time
       const [hourStr, minuteStr] = String(etaMinutes).split('.');
       const hour = parseInt(hourStr, 10);
-      const minute = parseInt(minuteStr || '0', 10);
-      
+      const minute = parseInt(minuteStr || '0', 10) === 3 ? 30 : 0;
+
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(hour, minute, 0, 0);
-      
       pickupTime = tomorrow.toISOString();
     } else {
-      // For regular orders, just add minutes to current time
       pickupTime = new Date(Date.now() + Number(etaMinutes) * 60_000).toISOString();
     }
 
     setIsStatusUpdateInProgress(true);
-    // Use the quiet version for smoother UI
     await updateOrderStatusQuietly(orderToPrep.id, 'preparing', pickupTime);
     setIsStatusUpdateInProgress(false);
 
@@ -458,12 +527,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       ready: 'bg-green-100 text-green-800',
       completed: 'bg-gray-100 text-gray-800',
       cancelled: 'bg-red-100 text-red-800',
-      confirmed: 'bg-purple-100 text-purple-800', // Added confirmed status
+      confirmed: 'bg-purple-100 text-purple-800', 
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
-  // Check if an order requires 24-hour advance notice
+  // Check if an order requires 24-hour notice
   const requiresAdvanceNotice = (order: any) => {
     return order.requires_advance_notice === true;
   };
@@ -474,24 +543,23 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     return isNaN(d.getTime()) ? 'No pickup time set' : d.toLocaleString();
   };
 
-  // Called when admin finishes editing the order in the modal
+  // Called when admin finishes editing the order in the AdminEditOrderModal
   async function handleSaveEdit(updatedData: any) {
-    // updatedData might contain items, total, status, instructions, etc.
     await updateOrderData(updatedData.id, updatedData);
     setEditingOrder(null);
   }
 
-  // Toggle sort direction
+  // Toggle sort
   const toggleSortDirection = () => {
     setSortNewestFirst(!sortNewestFirst);
   };
 
-  // Toggle order actions menu
+  // Show/hide order actions (if needed on mobile)
   const toggleOrderActions = (orderId: number) => {
     setShowOrderActions(showOrderActions === orderId ? null : orderId);
   };
 
-  // Render order actions for CollapsibleOrderCard - optimized for touch
+  // Single-order action buttons for CollapsibleOrderCard
   const renderOrderActions = (order: any) => {
     return (
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -505,11 +573,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 min-w-[120px] flex-grow sm:flex-grow-0"
               onClick={() => {
                 setOrderToPrep(order);
-                // Set default ETA based on order type
                 if (requiresAdvanceNotice(order)) {
-                  setEtaMinutes(10.0); // Default to 10 AM next day
+                  setEtaMinutes(10.0); // default for next-day
                 } else {
-                  setEtaMinutes(5); // Default to 5 minutes
+                  setEtaMinutes(5);
                 }
                 setShowEtaModal(true);
               }}
@@ -517,6 +584,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               Start Preparing
             </button>
           )}
+
           {order.status === 'preparing' && (
             <button
               className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium hover:bg-green-600 min-w-[120px] flex-grow sm:flex-grow-0"
@@ -529,6 +597,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               Mark as Ready
             </button>
           )}
+
           {order.status === 'ready' && (
             <button
               className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-medium hover:bg-gray-600 min-w-[120px] flex-grow sm:flex-grow-0"
@@ -542,32 +611,37 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             </button>
           )}
           
+          {/* Edit button */}
           <button
             className="p-2 text-gray-400 hover:text-gray-600 rounded-md"
-            onClick={() => {
-              setEditingOrder(order);
-            }}
+            onClick={() => setEditingOrder(order)}
             aria-label="Edit order"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
+                 viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M11 5H6a2 2 0 
+                   00-2 2v11a2 2 0 
+                   002 2h11a2 2 0 
+                   002-2v-5m-1.414-9.414a2 
+                   2 0 112.828 2.828L11.828 
+                   15H9v-2.828l8.586-8.586z"
+              />
             </svg>
           </button>
           
+          {/* Cancel button (with inventory handling) */}
           {(order.status === 'pending' || order.status === 'preparing') && (
             <button
               className="p-2 text-red-400 hover:text-red-600 rounded-md"
-              onClick={() => {
-                if (window.confirm('Are you sure you want to cancel this order?')) {
-                  setIsStatusUpdateInProgress(true);
-                  updateOrderStatusQuietly(order.id, 'cancelled')
-                    .finally(() => setIsStatusUpdateInProgress(false));
-                }
-              }}
+              onClick={() => handleCancelOrder(order)}
               aria-label="Cancel order"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           )}
@@ -590,17 +664,20 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           onClick={() => setShowStaffOrderModal(true)}
           className="px-4 py-2 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28] focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50 flex items-center space-x-2"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+            />
           </svg>
           <span>Create Staff Order</span>
         </button>
       </div>
 
-      {/* Filters and controls - optimized for mobile, tablet, and desktop */}
+      {/* Top Filters (Date, Search, Sort) */}
       <div className="mb-6 space-y-4">
-        {/* Date, search and sort area */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Date Filter */}
           <div className="w-full">
             <DateFilter
               selectedOption={dateFilter}
@@ -613,7 +690,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               }}
             />
           </div>
-          
+
+          {/* Search */}
           <div className="w-full">
             <SearchInput
               value={searchQuery}
@@ -622,7 +700,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               className="w-full"
             />
           </div>
-          
+
+          {/* Sort + total # */}
           <div className="w-full flex items-center justify-between">
             <MobileSelect
               options={[
@@ -630,18 +709,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 { value: 'oldest', label: 'Sort: Oldest First' }
               ]}
               value={sortNewestFirst ? 'newest' : 'oldest'}
-              onChange={(value) => setSortNewestFirst(value === 'newest')}
+              onChange={(val) => setSortNewestFirst(val === 'newest')}
             />
-            
+
             <div className="text-sm text-gray-500 font-medium ml-3 whitespace-nowrap">
               {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
             </div>
           </div>
         </div>
 
-        {/* Status filter buttons - horizontal scrolling with improved mobile styling */}
+        {/* Status filter buttons */}
         <div className="relative mt-2">
-          {/* Scrollable container with improved touch scrolling for mobile */}
           <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1 pb-2 -mb-1 snap-x touch-pan-x">
             <button
               onClick={() => setSelectedStatus('all')}
@@ -655,7 +733,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             >
               All Orders
             </button>
-            {(['pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(status => (
+            {(['pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map((status) => (
               <button
                 key={status}
                 onClick={() => setSelectedStatus(status)}
@@ -674,18 +752,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         </div>
       </div>
 
-      {/* Orders list - with collapsible cards */}
+      {/* Orders list or loading */}
       <div className="pb-16">
         {loading ? (
-          // Skeleton loading state
+          // Show skeletons
           <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div 
-                key={`skeleton-${index}`} 
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={`skeleton-${i}`}
                 className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse animate-fadeIn"
-                style={{ animationDelay: `${index * 150}ms` }}
+                style={{ animationDelay: `${i * 150}ms` }}
               >
-                {/* Skeleton header */}
                 <div className="flex justify-between items-center p-3 border-b border-gray-100">
                   <div>
                     <div className="h-5 w-32 bg-gray-200 rounded mb-2"></div>
@@ -696,8 +773,6 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
                   </div>
                 </div>
-                
-                {/* Skeleton content */}
                 <div className="p-3">
                   <div className="mb-4">
                     <div className="h-4 w-24 bg-gray-200 rounded mb-2"></div>
@@ -712,12 +787,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                       </div>
                     </div>
                   </div>
-                  
                   <div className="space-y-2 mb-3">
                     <div className="h-3 w-48 bg-gray-200 rounded"></div>
                     <div className="h-3 w-40 bg-gray-200 rounded"></div>
                   </div>
-                  
                   <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
                     <div className="h-4 w-24 bg-gray-200 rounded"></div>
                     <div className="h-8 w-24 bg-gray-200 rounded"></div>
@@ -732,6 +805,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           </div>
         ) : (
           <div>
+            {/* CollapsibleOrderCard list */}
             <div className="space-y-4 mb-6">
               {currentOrders.map((order) => (
                 <CollapsibleOrderCard
@@ -742,7 +816,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   isNew={newOrders.has(order.id)}
                   isSelected={selectedOrders.has(order.id)}
                   isHighlighted={highlightedOrderId === order.id}
-                  onSelectChange={(selected) => toggleOrderSelection(order.id, selected)}
+                  onSelectChange={(sel) => toggleOrderSelection(order.id, sel)}
                   renderActions={() => renderOrderActions(order)}
                   getStatusBadgeColor={getStatusBadgeColor}
                   formatDate={formatDate}
@@ -750,12 +824,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 />
               ))}
             </div>
-            
-            {/* Pagination controls - optimized for mobile */}
+
+            {/* Pagination controls */}
             {totalPages > 1 && (
               <div className="flex justify-center items-center space-x-2 mt-6 pb-4">
                 <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
                   className={`px-4 py-2 rounded-md text-sm font-medium ${
                     currentPage === 1
@@ -766,9 +840,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 >
                   Previous
                 </button>
-                
+
+                {/* Page buttons (desktop) */}
                 <div className="hidden sm:flex space-x-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                     <button
                       key={page}
                       onClick={() => setCurrentPage(page)}
@@ -784,16 +859,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     </button>
                   ))}
                 </div>
-                
+
                 {/* Mobile page indicator */}
                 <div className="sm:hidden flex items-center px-3">
                   <span className="text-sm font-medium">
                     Page {currentPage} of {totalPages}
                   </span>
                 </div>
-                
+
                 <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
                   className={`px-4 py-2 rounded-md text-sm font-medium ${
                     currentPage === totalPages
@@ -811,29 +886,24 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       </div>
 
       {/* Multi-select action bar */}
-      <MultiSelectActionBar
-        selectedCount={selectedOrders.size}
-        onClearSelection={clearSelections}
-        onMarkAsReady={handleBatchMarkAsReady}
-        onMarkAsCompleted={handleBatchMarkAsCompleted}
-        onMarkAsCancelled={handleBatchMarkAsCancelled}
-        isProcessing={isStatusUpdateInProgress}
-      />
-
-      {/* Click outside handler for order actions dropdown */}
-      {showOrderActions !== null && (
-        <div 
-          className="fixed inset-0 h-full w-full z-0"
-          onClick={() => setShowOrderActions(null)}
-        ></div>
+      {selectedOrders.size > 0 && (
+        <MultiSelectActionBar
+          selectedCount={selectedOrders.size}
+          onClearSelection={clearSelections}
+          onMarkAsReady={handleBatchMarkAsReady}
+          onMarkAsCompleted={handleBatchMarkAsCompleted}
+          onMarkAsCancelled={handleBatchMarkAsCancelled} // now uses the new inventory logic
+          isProcessing={isStatusUpdateInProgress}
+        />
       )}
 
-      {/* Details modal */}
+      {/* Modals and Overlays */}
+      {/* 1) Details modal */}
       {selectedOrder && (
         <OrderDetailsModal order={selectedOrder} onClose={closeModal} />
       )}
 
-      {/* "Set ETA" modal */}
+      {/* 2) "Set ETA" modal */}
       {showEtaModal && orderToPrep && (
         <SetEtaModal
           order={orderToPrep}
@@ -847,7 +917,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         />
       )}
 
-      {/* "Edit Order" modal */}
+      {/* 3) "Edit Order" modal */}
       {editingOrder && (
         <AdminEditOrderModal
           order={editingOrder}
@@ -856,7 +926,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         />
       )}
 
-      {/* Staff Order Modal (POS) */}
+      {/* 4) Staff Order Modal (POS) */}
       {showStaffOrderModal && (
         <StaffOrderModal
           onClose={() => setShowStaffOrderModal(false)}
@@ -864,14 +934,27 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             setShowStaffOrderModal(false);
             // Refresh orders
             fetchOrders();
-            // Optionally, select the newly created order
             if (setSelectedOrderId) {
               setSelectedOrderId(Number(orderId));
             }
-            // Show success message with toast instead of alert
             toast.success(`Staff order #${orderId} created successfully!`);
           }}
           restaurantId={restaurantId}
+        />
+      )}
+
+      {/* 5) Inventory Action Dialog for cancels (single or batch) */}
+      {showInventoryDialog && (
+        <BulkInventoryActionDialog
+          order={isBatchCancel ? batchOrdersToCancel : orderToCancel}
+          onClose={() => {
+            setShowInventoryDialog(false);
+            setOrderToCancel(null);
+            setBatchOrdersToCancel([]);
+            setIsBatchCancel(false);
+          }}
+          onConfirm={processInventoryActionsAndCancel}
+          isBatch={isBatchCancel}
         />
       )}
     </div>
