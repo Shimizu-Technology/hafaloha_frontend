@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { api } from '../../../lib/api';
 import { toast } from 'react-hot-toast';
 import { formatPhoneNumber } from '../../../../shared/utils/formatters';
+import { AlertTriangle, X, KeyRound, Mail, Trash2 } from 'lucide-react';
 
 // Same phone check from SignUpForm
 // Matches +3-4 digits for country/area code, plus exactly 7 digits => total 10 or 11 digits after the plus
@@ -82,13 +83,22 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
     }
   }
 
+  // States for delete confirmation modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  
+  // Open delete confirmation modal
+  function openDeleteModal() {
+    setShowDeleteModal(true);
+  }
+  
+  // Close delete confirmation modal
+  function closeDeleteModal() {
+    setShowDeleteModal(false);
+  }
+  
   async function handleDelete() {
     if (!user) return;
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${user.email}? This cannot be undone.`
-    );
-    if (!confirmed) return;
-
+    
     setLoading(true);
     try {
       await api.delete(`/admin/users/${user.id}`);
@@ -97,9 +107,8 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
     } catch (error) {
       console.error(error);
       toast.error('Failed to delete user.');
-      onClose(false);
-    } finally {
       setLoading(false);
+      closeDeleteModal();
     }
   }
 
@@ -113,6 +122,50 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
     } catch (error) {
       console.error(error);
       toast.error('Failed to send the invite/reset link.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // States for reset password modal
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState(false);
+  
+  // Open password reset modal
+  function openPasswordResetModal() {
+    setNewPassword('');
+    setPasswordError('');
+    setResetSuccess(false);
+    setShowPasswordResetModal(true);
+  }
+  
+  // Close password reset modal
+  function closePasswordResetModal() {
+    setShowPasswordResetModal(false);
+  }
+  
+  // Admin reset password function => POST /admin/users/:id/admin_reset_password
+  async function handleAdminResetPassword() {
+    if (!user) return;
+    
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      await api.post(`/admin/users/${user.id}/admin_reset_password`, {
+        password: newPassword
+      });
+      
+      setResetSuccess(true);
+      toast.success(`Password has been reset for ${user.email}`);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to reset the password.');
     } finally {
       setLoading(false);
     }
@@ -219,72 +272,232 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
           </div>
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex justify-end items-center space-x-2 mt-6">
-          {/* (Re)send invite/reset link => only if existing user */}
-          {!isCreateMode && (
-            <button
-              type="button"
-              onClick={handleResendInvite}
-              disabled={loading}
-              className="px-3 py-2 text-sm bg-blue-600 text-white rounded 
-                         hover:bg-blue-700 transition-colors duration-200
-                         disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Sending...
-                </span>
-              ) : 'Send Invite/Reset Link'}
-            </button>
+          {/* Delete Confirmation Modal */}
+          {showDeleteModal && (
+            <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm animate-fadeIn">
+              <div className="bg-white w-full max-w-md rounded-lg shadow-xl p-6 mx-4 animate-slideUp">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Confirm Deletion</h3>
+                  <button 
+                    onClick={closeDeleteModal}
+                    className="text-gray-400 hover:text-gray-500 transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                
+                <div className="p-4 mb-4 bg-red-50 border border-red-200 rounded-md">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <Trash2 className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-red-800">
+                        Are you sure you want to delete {user?.email}?
+                      </p>
+                      <p className="mt-1 text-sm text-red-700">
+                        This action cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={closeDeleteModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 
+                            rounded-md shadow-sm hover:bg-gray-50 focus:outline-none transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={loading}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent 
+                            rounded-md shadow-sm hover:bg-red-700 focus:outline-none transition-colors
+                            disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Deleting...' : 'Delete User'}
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
-          {/* Delete => only if existing user */}
-          {!isCreateMode && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={loading}
-              className="px-3 py-2 text-sm text-white bg-red-600 
-                         rounded hover:bg-red-700 transition-colors duration-200
-                         disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Deleting...' : 'Delete'}
-            </button>
+          {/* Password Reset Modal */}
+          {showPasswordResetModal && (
+            <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm animate-fadeIn">
+              <div className="bg-white w-full max-w-md rounded-lg shadow-xl p-6 mx-4 animate-slideUp">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Reset Password</h3>
+                  <button 
+                    onClick={closePasswordResetModal}
+                    className="text-gray-400 hover:text-gray-500 transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                
+                {resetSuccess ? (
+                  <div className="p-4 mb-4 bg-green-50 border border-green-200 rounded-md">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <KeyRound className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-green-800">
+                          Password has been successfully reset for {user?.email}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mb-4 text-sm text-gray-700">
+                      Set a new password for <span className="font-medium">{user?.email}</span>. Make sure to communicate this password to the user securely.
+                    </p>
+                    
+                    <div className="mb-4">
+                      <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">
+                        New Password
+                      </label>
+                      <input
+                        id="new-password"
+                        type="text"
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          if (passwordError && e.target.value.length >= 6) {
+                            setPasswordError('');
+                          }
+                        }}
+                        className={`w-full p-2 border ${passwordError ? 'border-red-300' : 'border-gray-300'} 
+                                  rounded-md focus:ring-[#c1902f] focus:border-[#c1902f] transition-colors`}
+                        placeholder="Enter new password"
+                      />
+                      {passwordError && (
+                        <p className="mt-1 text-sm text-red-600">{passwordError}</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        onClick={closePasswordResetModal}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 
+                                 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdminResetPassword}
+                        disabled={loading}
+                        className="px-4 py-2 text-sm font-medium text-white bg-[#c1902f] border border-transparent 
+                                rounded-md shadow-sm hover:bg-[#d4a43f] focus:outline-none transition-colors
+                                disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? 'Resetting...' : 'Reset Password'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => onClose(false)}
-            className="px-3 py-2 text-sm text-gray-600 border border-gray-300
-                       rounded hover:bg-gray-50 transition-colors duration-200"
-          >
-            Cancel
-          </button>
+          {/* Action Buttons Section */}
+          <div className="mt-8">
+            {/* Admin special actions - only if existing user */}
+            {!isCreateMode && (
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                {/* Send Reset Link button */}
+                <button
+                  type="button"
+                  onClick={handleResendInvite}
+                  disabled={loading}
+                  className="flex flex-col items-center justify-center px-4 py-3 text-sm font-medium text-white bg-blue-600 
+                          rounded-md shadow-md hover:bg-blue-700 transition-colors duration-200
+                          disabled:opacity-50 disabled:cursor-not-allowed h-24"
+                >
+                  {loading ? (
+                    <span className="flex flex-col items-center justify-center h-full">
+                      <svg className="animate-spin mb-2 h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Sending...</span>
+                    </span>
+                  ) : (
+                    <>
+                      <Mail className="mb-2 h-6 w-6" />
+                      <span>Send Reset Link</span>
+                    </>
+                  )}
+                </button>
+                
+                {/* Reset Password Directly button */}
+                <button
+                  type="button"
+                  onClick={openPasswordResetModal}
+                  disabled={loading}
+                  className="flex flex-col items-center justify-center px-4 py-3 text-sm font-medium text-white bg-[#8854d0]
+                          rounded-md shadow-md hover:bg-[#a55eea] transition-colors duration-200
+                          disabled:opacity-50 disabled:cursor-not-allowed h-24"
+                >
+                  <KeyRound className="mb-2 h-6 w-6" />
+                  <span>Reset Password</span>
+                </button>
 
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handleSave}
-            className="px-3 py-2 text-sm text-white bg-[#c1902f]
-                       rounded hover:bg-[#d4a43f] transition-all duration-200
-                       transform hover:scale-[1.02] active:scale-[0.98]
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <span className="flex items-center">
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {isCreateMode ? 'Creating...' : 'Saving...'}
-              </span>
-            ) : (isCreateMode ? 'Create' : 'Save')}
-          </button>
+                {/* Delete button */}
+                <button
+                  type="button"
+                  onClick={openDeleteModal}
+                  disabled={loading}
+                  className="flex flex-col items-center justify-center px-4 py-3 text-sm font-medium text-white bg-red-600 
+                          rounded-md shadow-md hover:bg-red-700 transition-colors duration-200
+                          disabled:opacity-50 disabled:cursor-not-allowed h-24"
+                >
+                  <Trash2 className="mb-2 h-6 w-6" />
+                  <span>Delete</span>
+                </button>
+              </div>
+            )}
+
+            {/* Save/Cancel Buttons */}
+            <div className="flex justify-between pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => onClose(false)}
+                className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300
+                        rounded-md shadow-sm hover:bg-gray-50 transition-colors duration-200"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSave}
+                className="px-5 py-2.5 text-sm font-medium text-white bg-[#c1902f]
+                        rounded-md shadow-sm hover:bg-[#d4a43f] transition-all duration-200
+                        transform hover:scale-[1.02] active:scale-[0.98]
+                        disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <span className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {isCreateMode ? 'Creating...' : 'Saving...'}
+                  </span>
+                ) : (isCreateMode ? 'Create' : 'Save')}
+              </button>
+            </div>
         </div>
       </div>
     </div>
