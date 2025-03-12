@@ -28,30 +28,36 @@ export function Footer() {
               ingredients in a relaxed, tropical atmosphere.
             </p>
             <div className="flex space-x-4">
-              <a
-                href="https://facebook.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-300 hover:text-[#c1902f]"
-              >
-                <Facebook />
-              </a>
-              <a
-                href="https://instagram.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-300 hover:text-[#c1902f]"
-              >
-                <Instagram />
-              </a>
-              <a
-                href="https://twitter.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-300 hover:text-[#c1902f]"
-              >
-                <Twitter />
-              </a>
+              {restaurant?.facebook_url && (
+                <a
+                  href={restaurant.facebook_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-300 hover:text-[#c1902f]"
+                >
+                  <Facebook />
+                </a>
+              )}
+              {restaurant?.instagram_url && (
+                <a
+                  href={restaurant.instagram_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-300 hover:text-[#c1902f]"
+                >
+                  <Instagram />
+                </a>
+              )}
+              {restaurant?.twitter_url && (
+                <a
+                  href={restaurant.twitter_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-300 hover:text-[#c1902f]"
+                >
+                  <Twitter />
+                </a>
+              )}
             </div>
           </div>
 

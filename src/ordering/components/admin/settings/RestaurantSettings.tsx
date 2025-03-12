@@ -253,6 +253,9 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
           custom_pickup_location: restaurant.custom_pickup_location,
           phone_number: restaurant.phone_number,
           contact_email: restaurant.contact_email,
+          facebook_url: restaurant.facebook_url,
+          instagram_url: restaurant.instagram_url,
+          twitter_url: restaurant.twitter_url,
           time_zone: restaurant.time_zone,
           time_slot_interval: restaurant.time_slot_interval,
           default_reservation_length: restaurant.default_reservation_length,
@@ -303,6 +306,9 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
             custom_pickup_location: restaurant.custom_pickup_location,
             phone_number: restaurant.phone_number,
             contact_email: restaurant.contact_email,
+            facebook_url: restaurant.facebook_url,
+            instagram_url: restaurant.instagram_url,
+            twitter_url: restaurant.twitter_url,
             time_zone: restaurant.time_zone,
             time_slot_interval: restaurant.time_slot_interval,
             default_reservation_length: restaurant.default_reservation_length,
@@ -443,6 +449,50 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
                 placeholder="Enter contact email"
                 type="email"
               />
+
+              <div className="space-y-4 mt-4 pt-4 border-t border-gray-100">
+                <h4 className="text-base font-medium text-gray-700">Social Media Links</h4>
+                
+                <Input
+                  label="Facebook URL"
+                  value={restaurant.facebook_url || ''}
+                  onChange={(e) => setRestaurant({
+                    ...restaurant, 
+                    facebook_url: e.target.value
+                  })}
+                  placeholder="e.g., https://facebook.com/hafaloha"
+                  type="url"
+                />
+                
+                <Input
+                  label="Instagram URL"
+                  value={restaurant.instagram_url || ''}
+                  onChange={(e) => setRestaurant({
+                    ...restaurant, 
+                    instagram_url: e.target.value
+                  })}
+                  placeholder="e.g., https://instagram.com/hafaloha"
+                  type="url"
+                />
+                
+                <Input
+                  label="Twitter URL"
+                  value={restaurant.twitter_url || ''}
+                  onChange={(e) => setRestaurant({
+                    ...restaurant, 
+                    twitter_url: e.target.value
+                  })}
+                  placeholder="e.g., https://twitter.com/hafaloha"
+                  type="url"
+                />
+                
+                <p className="text-sm text-gray-500 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  Leave social media fields empty to hide their respective icons in the footer.
+                </p>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">

@@ -20,6 +20,10 @@ export interface Restaurant {
   admin_settings: Record<string, any>;
   allowed_origins: string[];
   custom_pickup_location?: string;
+  // Social media fields
+  facebook_url?: string;
+  instagram_url?: string;
+  twitter_url?: string;
   // VIP-related fields
   vip_only_checkout?: boolean;
   vip_enabled?: boolean;
