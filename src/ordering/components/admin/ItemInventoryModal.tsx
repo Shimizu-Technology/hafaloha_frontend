@@ -29,7 +29,9 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   
   // State for "Mark as damaged" form
   const [damageQuantity, setDamageQuantity] = useState<number>(1);
-  const [damageReason, setDamageReason] = useState<string>('');
+  const [damageReason, setDamageReason] = useState<string>('fell');
+  const [otherDamageReason, setOtherDamageReason] = useState<string>('');
+  const [damageReasonOptions, setDamageReasonOptions] = useState<string[]>(['fell', 'bad/spoiled', 'other']);
   
   // State for "Update stock" form
   const [stockOperation, setStockOperation] = useState<'add' | 'remove'>('add');
@@ -83,25 +85,33 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     }
   }, [menuItem, open]);
 
-  // Function to refresh inventory data
-  const refreshInventoryData = async () => {
+  // Function to refresh inventory data with optimizations to prevent page shaking
+  const refreshInventoryData = async (options = { 
+    refreshAuditHistory: true, 
+    notifyParent: true 
+  }) => {
     if (!menuItem?.id) return;
     
     try {
       // Fetch the latest menu item data
       const updatedItem = await menuItemsApi.getById(menuItem.id);
       
-      // Update local state with the latest values
+      // Update local state with the latest values using functional updates
+      // to ensure we're working with the most current state
       setStockQuantity(updatedItem.stock_quantity || 0);
       setDamagedQuantity(updatedItem.damaged_quantity || 0);
       setLowStockThreshold(updatedItem.low_stock_threshold || 10);
       setStockAdjustmentAmount(0); // Reset adjustment amount after refresh
       
-      // Refresh audit history
-      loadAuditHistory();
+      // Only refresh audit history if specifically requested
+      if (options.refreshAuditHistory) {
+        loadAuditHistory();
+      }
       
-      // Notify parent component
-      onSave();
+      // Only notify parent if specifically requested
+      if (options.notifyParent) {
+        onSave();
+      }
       
       return updatedItem;
     } catch (err) {
@@ -128,24 +138,33 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   const handleSaveSettings = async () => {
     if (!menuItem) return;
     
+    // Show success message immediately for better responsiveness
+    setSuccess('Inventory settings saved successfully');
+    setTimeout(() => setSuccess(null), 3000);
+    
     try {
-      // When disabling inventory tracking, explicitly set values to 0/undefined
-      // This ensures the database clears these values when tracking is off
-      await menuItemsApi.update(menuItem.id, {
+      // Set optimistic updates locally first
+      const updatedValues = {
         enable_stock_tracking: enableTracking,
         stock_quantity: enableTracking ? stockQuantity : 0,
         damaged_quantity: enableTracking ? damagedQuantity : 0,
         low_stock_threshold: enableTracking ? lowStockThreshold : undefined
+      };
+      
+      // When disabling inventory tracking, explicitly set values to 0/undefined
+      // This ensures the database clears these values when tracking is off
+      await menuItemsApi.update(menuItem.id, updatedValues);
+      
+      // Refresh inventory data without refreshing audit history
+      // to prevent unnecessary DOM updates
+      await refreshInventoryData({ 
+        refreshAuditHistory: false,
+        notifyParent: true
       });
-      
-      // Immediately refresh inventory data
-      await refreshInventoryData();
-      
-      setSuccess('Inventory settings saved successfully');
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to save inventory settings:', err);
       setError('Failed to save inventory settings');
+      setTimeout(() => setSuccess(null), 0); // Clear any success message
       setTimeout(() => setError(null), 3000);
     }
   };
@@ -159,28 +178,55 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
       return;
     }
     
-    if (!damageReason.trim()) {
+    // Determine the final reason (either selected preset or custom)
+    const finalReason = damageReason === 'other' ? otherDamageReason : damageReason;
+    
+    if (!finalReason.trim()) {
       setError('Please provide a reason for marking items as damaged');
       setTimeout(() => setError(null), 3000);
       return;
     }
     
+    // Save custom reason if checkbox is checked
+    if (damageReason === 'other' && 
+        (document.getElementById('saveCustomReason') as HTMLInputElement)?.checked && 
+        otherDamageReason.trim() !== '') {
+      // Add the new reason before 'other' in the options array
+      setDamageReasonOptions(prev => [
+        ...prev.filter(opt => opt !== 'other'), 
+        otherDamageReason, 
+        'other'
+      ]);
+    }
+    
+    // Apply optimistic updates to the UI immediately
+    const newDamagedQuantity = damagedQuantity + damageQuantity;
+    setDamagedQuantity(newDamagedQuantity);
+    
+    // Show success message immediately for better responsiveness
+    setSuccess('Items marked as damaged successfully');
+    setDamageQuantity(1); // Reset form
+    setDamageReason('fell'); // Reset to default option
+    setOtherDamageReason(''); // Clear custom reason
+    
     try {
       await menuItemsApi.markAsDamaged(menuItem.id, {
         quantity: damageQuantity,
-        reason: damageReason
+        reason: finalReason
       });
       
-      // Immediately refresh inventory data to show updated values
-      await refreshInventoryData();
+      // Refresh inventory data in the background with minimal UI disruption
+      await refreshInventoryData({ 
+        refreshAuditHistory: true, // We need audit history for damaged items
+        notifyParent: true
+      });
       
-      setSuccess('Items marked as damaged successfully');
-      setDamageQuantity(1);
-      setDamageReason('');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to mark items as damaged:', err);
       setError('Failed to mark items as damaged');
+      setDamagedQuantity(damagedQuantity); // Revert the optimistic update
+      setTimeout(() => setSuccess(null), 0); // Clear success message
       setTimeout(() => setError(null), 3000);
     }
   };
@@ -207,6 +253,15 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
       return;
     }
     
+    // Apply optimistic updates to the UI immediately
+    const originalStockQuantity = stockQuantity;
+    setStockQuantity(calculatedNewQuantity);
+    
+    // Show success message immediately for better responsiveness
+    setSuccess('Stock updated successfully');
+    setReasonDetails('');
+    setStockAdjustmentAmount(0);
+    
     try {
       await menuItemsApi.updateStock(menuItem.id, {
         stock_quantity: calculatedNewQuantity,
@@ -214,16 +269,18 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         reason_details: reasonDetails
       });
       
-      // Immediately refresh inventory data to show updated values
-      await refreshInventoryData();
+      // Refresh inventory data in the background with minimal UI disruption
+      await refreshInventoryData({ 
+        refreshAuditHistory: true, // We need audit history for stock updates
+        notifyParent: true
+      });
       
-      setSuccess('Stock updated successfully');
-      setReasonDetails('');
-      setStockAdjustmentAmount(0);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to update stock:', err);
       setError('Failed to update stock');
+      setStockQuantity(originalStockQuantity); // Revert the optimistic update
+      setTimeout(() => setSuccess(null), 0); // Clear success message
       setTimeout(() => setError(null), 3000);
     }
   };
@@ -292,6 +349,13 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                       onEnableTrackingChange(newValue);
                     }
                     
+                    // Show success message immediately for better user feedback
+                    setSuccess(
+                      'Inventory tracking ' +
+                        (newValue ? 'enabled' : 'disabled') +
+                        ' successfully'
+                    );
+                    
                     // Immediately save the change to the database
                     if (menuItem) {
                       try {
@@ -305,18 +369,17 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                             : undefined
                         });
                         
-                        // Refresh inventory data immediately
-                        await refreshInventoryData();
+                        // Refresh inventory data with minimal UI disruption
+                        await refreshInventoryData({
+                          refreshAuditHistory: false,
+                          notifyParent: true
+                        });
                         
-                        setSuccess(
-                          'Inventory tracking ' +
-                            (newValue ? 'enabled' : 'disabled') +
-                            ' successfully'
-                        );
                         setTimeout(() => setSuccess(null), 3000);
                       } catch (err) {
                         console.error('Failed to update inventory tracking:', err);
                         setError('Failed to update inventory tracking');
+                        setTimeout(() => setSuccess(null), 0); // Clear success message
                         setTimeout(() => setError(null), 3000);
                         
                         // Revert the UI if the API call fails
@@ -435,14 +498,49 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Reason for Damage
                   </label>
-                  <input
-                    type="text"
+                  <select
                     className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
                     value={damageReason}
-                    placeholder="e.g., Dropped on floor, Expired, etc."
                     onChange={(e) => setDamageReason(e.target.value)}
-                  />
+                  >
+                    {damageReasonOptions.map((option) => (
+                      option !== 'other' ? 
+                        <option key={option} value={option}>
+                          {option.charAt(0).toUpperCase() + option.slice(1)}
+                        </option> 
+                      : 
+                        <option key="other" value="other">Other (specify)</option>
+                    ))}
+                  </select>
                 </div>
+                
+                {damageReason === 'other' && (
+                  <div className="md:col-span-8">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Specify Other Reason
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
+                      value={otherDamageReason}
+                      placeholder="Enter custom reason"
+                      onChange={(e) => setOtherDamageReason(e.target.value)}
+                    />
+                  </div>
+                )}
+                
+                {damageReason === 'other' && otherDamageReason.trim() !== '' && (
+                  <div className="md:col-span-8 flex items-center">
+                    <input
+                      type="checkbox"
+                      id="saveCustomReason"
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                    />
+                    <label htmlFor="saveCustomReason" className="ml-2 block text-sm text-gray-700">
+                      Save this reason for future use
+                    </label>
+                  </div>
+                )}
                 
                 <div className="md:col-span-12 flex justify-end">
                   <button
