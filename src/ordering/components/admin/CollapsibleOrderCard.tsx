@@ -115,6 +115,22 @@ export function CollapsibleOrderCard({
               <span className="font-medium text-gray-700">Pickup: </span>
               <span>{formatDate((order as any).estimatedPickupTime || (order as any).estimated_pickup_time)}</span>
             </div>
+            
+            {/* Preview of order items in collapsed state */}
+            {!isExpanded && order.items && order.items.length > 0 && (
+              <div className="mt-2">
+                <h4 className="font-medium text-sm text-gray-700">Items:</h4>
+                <div className="text-sm text-gray-600 mt-1">
+                  {order.items.map((item: any, index: number) => (
+                    <div key={index} className="inline-flex items-center mr-2 mb-1">
+                      <span className="bg-gray-100 px-2 py-0.5 rounded-full text-xs">
+                        {item.quantity}× {item.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="text-left sm:text-right">
             <p className="font-medium text-sm">
@@ -158,15 +174,68 @@ export function CollapsibleOrderCard({
             <div className="space-y-2">
               {order.items && order.items.length > 0 ? (
                 order.items.map((item: any, index: number) => (
-                  <div key={index} className="flex justify-between text-sm">
-                    <div className="pr-2">
-                      <span className="font-medium">
-                        {item.name} × {item.quantity}
-                      </span>
+                  <div key={index} className="mb-3 last:mb-0">
+                    <div className="flex justify-between text-sm">
+                      <div className="pr-2">
+                        <span className="font-medium">
+                          {item.name} × {item.quantity}
+                        </span>
+                      </div>
+                      <div className="text-right whitespace-nowrap">
+                        ${Number(item.price * item.quantity).toFixed(2)}
+                      </div>
                     </div>
-                    <div className="text-right whitespace-nowrap">
-                      ${Number(item.price * item.quantity).toFixed(2)}
-                    </div>
+                    
+                    {/* Display customizations if they exist */}
+                    {item.customizations && Object.keys(item.customizations).length > 0 && (
+                      <div className="mt-1 ml-2 bg-gray-50 p-2 rounded-md">
+                        <div className="text-xs text-gray-600">
+                          {Array.isArray(item.customizations) ? (
+                            // array format
+                            item.customizations.map((custom: any, cidx: number) => (
+                              <div key={`custom-${index}-${cidx}`}>
+                                {custom.option_name}
+                                {custom.price > 0 && ` (+$${custom.price.toFixed(2)})`}
+                              </div>
+                            ))
+                          ) : (
+                            // object format
+                            Object.entries(item.customizations).map(
+                              ([group, options]: [string, any], cidx: number) => (
+                                <div key={`custom-${index}-${cidx}`}>
+                                  <span className="font-medium">{group}:</span>{' '}
+                                  {Array.isArray(options) ? options.join(', ') : options}
+                                </div>
+                              )
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Display option groups if they exist */}
+                    {item.option_groups && item.option_groups.length > 0 && (
+                      <div className="mt-1 ml-2 bg-gray-50 p-2 rounded-md">
+                        <div className="text-xs text-gray-600">
+                          {item.option_groups.map((group: any, gidx: number) => (
+                            <div key={`option-group-${index}-${gidx}`}>
+                              <span className="font-medium">{group.name}:</span>{' '}
+                              {group.options
+                                .filter((opt: any) => opt.selected)
+                                .map((opt: any) => opt.name)
+                                .join(', ')}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Display notes if they exist */}
+                    {item.notes && item.notes.trim() && (
+                      <div className="mt-1 ml-2 text-xs text-gray-500 italic">
+                        Note: {item.notes}
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
