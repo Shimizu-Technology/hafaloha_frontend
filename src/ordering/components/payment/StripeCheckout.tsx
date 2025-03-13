@@ -10,6 +10,7 @@ interface StripeCheckoutProps {
   onPaymentSuccess: (details: {
     status: string;
     transaction_id: string;
+    payment_id?: string; // Added for webhook lookups
     amount: string;
   }) => void;
   onPaymentError: (error: Error) => void;
@@ -175,9 +176,11 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     // Test mode - simulate successful payment
     if (testMode) {
       setTimeout(() => {
+        const testId = `pi_test_${Math.random().toString(36).substring(2, 15)}`;
         onPaymentSuccess({
           status: 'succeeded',
-          transaction_id: `pi_test_${Math.random().toString(36).substring(2, 15)}`,
+          transaction_id: testId,
+          payment_id: testId, // Use the same ID for payment_id
           amount: amount,
         });
         setProcessing(false);
@@ -211,6 +214,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         onPaymentSuccess({
           status: paymentIntent.status,
           transaction_id: paymentIntent.id,
+          payment_id: paymentIntent.id, // Store payment_id for webhook lookups
           amount: (paymentIntent.amount / 100).toString(), // Convert from cents
         });
         return true;
