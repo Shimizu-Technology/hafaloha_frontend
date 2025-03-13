@@ -41,6 +41,8 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   const stripeLoaded = useRef(false);
   const paymentIntentCreated = useRef(false);
   const elementsInitialized = useRef(false);
+  const paymentElementMounted = useRef(false);
+  const paymentElementRef = useRef<HTMLDivElement>(null);
 
   // Load Stripe.js - only once
   useEffect(() => {
@@ -138,6 +140,26 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     });
     setElements(elementsInstance);
   }, [stripe, clientSecret, testMode]);
+
+  // Mount payment element when elements is ready
+  useEffect(() => {
+    // Skip if already mounted or if we're in test mode or if elements isn't ready
+    if (paymentElementMounted.current || testMode || !elements || !paymentElementRef.current) {
+      return;
+    }
+    
+    // Mark as mounted to prevent creating multiple elements
+    paymentElementMounted.current = true;
+    
+    // Create and mount the payment element
+    const paymentElement = elements.create('payment');
+    paymentElement.mount(paymentElementRef.current);
+    
+    // Cleanup function to unmount element when component unmounts
+    return () => {
+      paymentElement.unmount();
+    };
+  }, [elements, testMode]);
 
   // Process payment function - exposed to parent via ref
   const processPayment = async (): Promise<boolean> => {
@@ -295,12 +317,8 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
           </div>
         ) : (
           <div>
-            <div id="payment-element" className="mb-6">
-              {stripe && elements && (
-                <div>
-                  {elements.create('payment').mount('#payment-element')}
-                </div>
-              )}
+            <div id="payment-element" ref={paymentElementRef} className="mb-6">
+              {/* Payment Element will be mounted here by the useEffect hook */}
             </div>
             
             {/* No submit button - parent will call processPayment */}
