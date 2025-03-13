@@ -149,7 +149,8 @@ export function AdminDashboard() {
 
   // Function to display order notification
   const displayOrderNotification = (order: Order) => {
-    const createdAtStr = new Date(order.createdAt).toLocaleString();
+    // Handle both snake_case and camelCase date formats
+  const createdAtStr = new Date(order.created_at || order.createdAt || Date.now()).toLocaleString();
     const itemCount = order.items?.length || 0;
     const totalPrice = (order.total ?? 0).toFixed(2);
     const contactName = (order as any).contact_name || 'N/A';

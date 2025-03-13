@@ -397,15 +397,15 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const filteredOrders = useMemo(() => {
     // 1) Sort
     const sorted = [...orders].sort((a, b) => {
-      const dateA = new Date(a.createdAt);
-      const dateB = new Date(b.createdAt);
+      const dateA = new Date(a.created_at || a.createdAt || Date.now());
+      const dateB = new Date(b.created_at || b.createdAt || Date.now());
       return sortNewestFirst ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
     });
 
     // 2) Date range
     const { start, end } = getDateRange();
     const dateFiltered = sorted.filter((ord) => {
-      const d = new Date(ord.createdAt);
+      const d = new Date(ord.created_at || ord.createdAt || Date.now());
       return d >= start && d < end;
     });
 

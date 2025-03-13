@@ -7,23 +7,42 @@ export interface OrderItem {
   quantity: number;
   options?: string[];
   notes?: string;
+  customizations?: any[];
+}
+
+export interface MerchandiseOrderItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  variant_id?: number;
+  size?: string;
+  color?: string;
+  notes?: string;
 }
 
 export interface Order {
   id: string;
-  createdAt: string;
-  updatedAt: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'error';
   items: OrderItem[];
+  merchandise_items?: MerchandiseOrderItem[];
   total: number;
-  subtotal: number;
-  tax: number;
+  subtotal?: number;
+  tax?: number;
   tip?: number;
+  special_instructions?: string;
   contact_name?: string;
   contact_phone?: string;
   contact_email?: string;
   pickup_time?: string;
+  payment_method?: string;
+  transaction_id?: string;
   restaurant_id?: string;
+  error?: string; // For error handling in optimistic updates
 }
 
 export interface OrderManagerProps {

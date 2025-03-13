@@ -1,5 +1,5 @@
 // src/ordering/components/CheckoutPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Phone, User } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -7,12 +7,14 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { usePromoStore } from '../store/promoStore';
 import { useOrderStore } from '../store/orderStore';
+import { LoadingSpinner } from '../../shared/components/ui';
 import { FormSkeleton } from '../../shared/components/ui/SkeletonLoader';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { validateVipCode } from '../../shared/api/endpoints/vipAccess';
 import { PickupInfo } from './location/PickupInfo';
 import { VipCodeInput } from './VipCodeInput';
-import { PayPalCheckout } from './payment/PayPalCheckout';
+import { PayPalCheckout, PayPalCheckoutRef } from './payment/PayPalCheckout';
+import { StripeCheckout, StripeCheckoutRef } from './payment/StripeCheckout';
 
 interface CheckoutFormData {
   name: string;
@@ -57,8 +59,13 @@ export function CheckoutPage() {
   const [finalTotal, setFinalTotal] = useState(rawTotal);
   const [vipCodeValid, setVipCodeValid] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentProcessed, setPaymentProcessed] = useState(false);
   const [paymentTransactionId, setPaymentTransactionId] = useState<string | null>(null);
+  
+  // Refs for payment components
+  const paypalRef = useRef<PayPalCheckoutRef>(null);
+  const stripeRef = useRef<StripeCheckoutRef>(null);
 
   // If phone is blank => prefill +1671
   useEffect(() => {
@@ -85,6 +92,13 @@ export function CheckoutPage() {
       }));
     }
   }, [user]);
+
+  // Update final total whenever cart items change
+  useEffect(() => {
+    setFinalTotal(rawTotal);
+    // Reset applied promo when cart changes
+    setAppliedPromo(null);
+  }, [rawTotal]);
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
@@ -114,22 +128,24 @@ export function CheckoutPage() {
     setVipCodeValid(valid);
   };
 
-  // Handler for when PayPal payment completes successfully
+  // Handler for when payment completes successfully
   const handlePaymentSuccess = (details: {
     status: string;
     transaction_id: string;
     amount: string;
   }) => {
+    setPaymentProcessing(false);
     setPaymentProcessed(true);
     setPaymentTransactionId(details.transaction_id);
-    // We'll submit the order after the payment is processed
+    // Submit the order with the transaction ID
     submitOrder(details.transaction_id);
   };
 
-  // Handler for PayPal payment errors
+  // Handler for payment errors
   const handlePaymentError = (error: Error) => {
     console.error('Payment failed:', error);
     toast.error(`Payment failed: ${error.message}`);
+    setPaymentProcessing(false);
     setIsSubmitting(false);
   };
 
@@ -223,9 +239,33 @@ export function CheckoutPage() {
         return;
       }
 
-      // Otherwise, the PayPalCheckout component will handle payment
-      // and call our success/error handlers
-      // No need to do anything here as the PayPal component will trigger the callbacks
+      // Process payment based on selected payment processor
+      const isStripe = restaurant?.admin_settings?.payment_gateway?.payment_processor === 'stripe';
+      
+      // Set payment processing state to true to show the overlay
+      setPaymentProcessing(true);
+      
+      if (isStripe && stripeRef.current) {
+        // Process with Stripe
+        const success = await stripeRef.current.processPayment();
+        if (!success) {
+          setPaymentProcessing(false);
+          setIsSubmitting(false);
+        }
+      } else if (paypalRef.current) {
+        // Process with PayPal
+        const success = await paypalRef.current.processPayment();
+        if (!success) {
+          setPaymentProcessing(false);
+          setIsSubmitting(false);
+        }
+      } else {
+        // No payment processor available
+        toast.error('Payment processing is not available');
+        setPaymentProcessing(false);
+        setIsSubmitting(false);
+      }
+      
     } catch (err: any) {
       console.error('Failed during checkout process:', err);
       toast.error('Failed to process checkout. Please try again.');
@@ -234,7 +274,15 @@ export function CheckoutPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+      {/* Full-screen overlay for payment processing */}
+      {paymentProcessing && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+            <LoadingSpinner text="Processing Payment" className="mb-2" />
+          </div>
+        </div>
+      )}
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
       <div className="lg:grid lg:grid-cols-12 lg:gap-8">
         {/* LEFT: The form */}
@@ -315,17 +363,33 @@ export function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment Info - Using PayPal Checkout */}
+            {/* Payment Information */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
-              <PayPalCheckout 
-                amount={finalTotal.toString()} 
-                clientId={(restaurant?.admin_settings?.payment_gateway?.client_id as string) || "sandbox_client_id"}
-                currency="USD"
-                testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true} // Use nullish coalescing to default to true only when null/undefined
-                onPaymentSuccess={handlePaymentSuccess}
-                onPaymentError={handlePaymentError}
-              />
+              
+              {/* Conditionally render PayPal or Stripe checkout based on payment processor setting */}
+              {restaurant?.admin_settings?.payment_gateway?.payment_processor === 'stripe' ? (
+                <StripeCheckout 
+                  ref={stripeRef}
+                  amount={finalTotal.toString()} 
+                  publishableKey={(restaurant?.admin_settings?.payment_gateway?.publishable_key as string) || ""}
+                  currency="USD"
+                  testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true}
+                  onPaymentSuccess={handlePaymentSuccess}
+                  onPaymentError={handlePaymentError}
+                />
+              ) : (
+                // Default to PayPal if not specified or if set to 'paypal'
+                <PayPalCheckout 
+                  ref={paypalRef}
+                  amount={finalTotal.toString()} 
+                  clientId={(restaurant?.admin_settings?.payment_gateway?.client_id as string) || "sandbox_client_id"}
+                  currency="USD"
+                  testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true}
+                  onPaymentSuccess={handlePaymentSuccess}
+                  onPaymentError={handlePaymentError}
+                />
+              )}
             </div>
 
             {/* VIP Code Input (only appears when restaurant is in VIP-only mode) */}
@@ -394,7 +458,6 @@ export function CheckoutPage() {
 
               <button
                 type="submit"
-                onClick={handleSubmit}
                 disabled={isSubmitting}
                 className={`w-full bg-[#c1902f] text-white py-3 px-4
                   rounded-md hover:bg-[#d4a43f] transition-colors duration-200
