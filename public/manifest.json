@@ -1,0 +1,21 @@
+{
+  "name": "Hafaloha",
+  "short_name": "Hafaloha",
+  "description": "Hafaloha online ordering and restaurant management system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#c1902f",
+  "icons": [
+    {
+      "src": "/hafaloha-logo-white-bg.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/hafaloha-logo-white-bg.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

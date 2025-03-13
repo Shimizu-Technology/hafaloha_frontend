@@ -136,7 +136,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         variables: {
           colorPrimary: '#c1902f',
         },
-      },
+      }
     });
     setElements(elementsInstance);
   }, [stripe, clientSecret, testMode]);
@@ -153,11 +153,16 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     
     // Create and mount the payment element
     const paymentElement = elements.create('payment');
+    
+    // Mount the element
     paymentElement.mount(paymentElementRef.current);
     
     // Cleanup function to unmount element when component unmounts
     return () => {
-      paymentElement.unmount();
+      if (paymentElementMounted.current) {
+        paymentElement.unmount();
+        paymentElementMounted.current = false;
+      }
     };
   }, [elements, testMode]);
 
