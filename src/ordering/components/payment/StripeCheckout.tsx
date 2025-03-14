@@ -173,9 +173,11 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     
     setProcessing(true);
     
-    // Test mode - simulate successful payment
+    // Application test mode - simulate successful payment
     if (testMode) {
       setTimeout(() => {
+        // Generate a Stripe-like test payment intent ID
+        // This format matches what Stripe would generate in their test mode
         const testId = `pi_test_${Math.random().toString(36).substring(2, 15)}`;
         onPaymentSuccess({
           status: 'succeeded',
