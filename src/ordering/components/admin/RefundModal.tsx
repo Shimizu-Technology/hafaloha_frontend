@@ -11,6 +11,9 @@ interface RefundModalProps {
   onRefundCreated: () => void;
 }
 
+// Valid Stripe refund reasons
+type RefundReason = 'requested_by_customer' | 'duplicate' | 'fraudulent';
+
 export function RefundModal({
   isOpen,
   onClose,
@@ -19,7 +22,7 @@ export function RefundModal({
   onRefundCreated,
 }: RefundModalProps) {
   const [amount, setAmount] = useState<string>(maxRefundable.toFixed(2));
-  const [reason, setReason] = useState<string>('');
+  const [reason, setReason] = useState<RefundReason>('requested_by_customer');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +57,7 @@ export function RefundModal({
     try {
       await orderPaymentsApi.createRefund(orderId, {
         amount: refundAmount,
-        reason: reason || 'Customer requested refund',
+        reason: reason,
       });
 
       // Notify parent component
@@ -143,14 +146,19 @@ export function RefundModal({
                       <label htmlFor="refund-reason" className="block text-sm font-medium text-gray-700 mb-1">
                         Reason for Refund
                       </label>
-                      <textarea
+                      <select
                         id="refund-reason"
                         className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        placeholder="Reason for refund"
-                        rows={3}
                         value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                      ></textarea>
+                        onChange={(e) => setReason(e.target.value as RefundReason)}
+                      >
+                        <option value="requested_by_customer">Customer requested refund</option>
+                        <option value="duplicate">Duplicate charge</option>
+                        <option value="fraudulent">Fraudulent charge</option>
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500">
+                        These are the only valid reasons accepted by Stripe for refunds.
+                      </p>
                     </div>
 
                     {error && (
