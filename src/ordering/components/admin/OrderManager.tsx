@@ -11,11 +11,13 @@ import { DateFilter, DateFilterOption } from './DateFilter';
 import { CollapsibleOrderCard } from './CollapsibleOrderCard';
 import { MultiSelectActionBar } from './MultiSelectActionBar';
 import { StaffOrderModal } from './StaffOrderModal';
-import { BulkInventoryActionDialog } from './BulkInventoryActionDialog'; // <-- NEW
-import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';     // <-- For processing inventory
+import { BulkInventoryActionDialog } from './BulkInventoryActionDialog';
+import { RefundModal } from './RefundModal';
+import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
+import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 import toast from 'react-hot-toast';
 
-type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed';
+type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded' | 'partially_refunded';
 
 interface OrderManagerProps {
   selectedOrderId?: number | null;
@@ -71,6 +73,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // for the "Staff Order" modal (POS)
   const [showStaffOrderModal, setShowStaffOrderModal] = useState(false);
+  
+  // for the "Refund" modal
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [orderToRefund, setOrderToRefund] = useState<any | null>(null);
 
   // for mobile menu (if you have a contextual menu or dropdown)
   const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
@@ -527,7 +533,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       ready: 'bg-green-100 text-green-800',
       completed: 'bg-gray-100 text-gray-800',
       cancelled: 'bg-red-100 text-red-800',
-      confirmed: 'bg-purple-100 text-purple-800', 
+      confirmed: 'bg-purple-100 text-purple-800',
+      refunded: 'bg-purple-100 text-purple-800',
+      partially_refunded: 'bg-orange-100 text-orange-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -561,90 +569,131 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // Single-order action buttons for CollapsibleOrderCard
   const renderOrderActions = (order: any) => {
+    // Check if order is refunded or partially refunded
+    const isRefunded = order.status === 'refunded' || order.status === 'partially_refunded';
+    
+    // Calculate net amount and refund info for display
+    const netAmount = Number(order.total || 0) - (order.total_refunded || 0);
+    const refundInfo = isRefunded ? (
+      <div className="text-sm">
+        <span className="font-medium">
+          {order.status === 'refunded' ? 'Fully Refunded' : 'Partially Refunded'}
+        </span>
+        {order.status === 'partially_refunded' && (
+          <span className="ml-1">
+            (${order.total_refunded?.toFixed(2) || '0.00'})
+          </span>
+        )}
+      </div>
+    ) : null;
+    
     return (
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <p className="font-medium text-sm">
-          Total: ${Number(order.total || 0).toFixed(2)}
-        </p>
+        <div>
+          <p className="font-medium text-sm">
+            Total: ${Number(order.total || 0).toFixed(2)}
+          </p>
+          {refundInfo}
+        </div>
         
         <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
-          {order.status === 'pending' && (
-            <button
-              className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 min-w-[120px] flex-grow sm:flex-grow-0"
-              onClick={() => {
-                setOrderToPrep(order);
-                if (requiresAdvanceNotice(order)) {
-                  setEtaMinutes(10.0); // default for next-day
-                } else {
-                  setEtaMinutes(5);
-                }
-                setShowEtaModal(true);
-              }}
-            >
-              Start Preparing
-            </button>
-          )}
+          {/* Only show workflow buttons if not refunded */}
+          {!isRefunded && (
+            <>
+              {order.status === 'pending' && (
+                <button
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 min-w-[120px] flex-grow sm:flex-grow-0"
+                  onClick={() => {
+                    setOrderToPrep(order);
+                    if (requiresAdvanceNotice(order)) {
+                      setEtaMinutes(10.0); // default for next-day
+                    } else {
+                      setEtaMinutes(5);
+                    }
+                    setShowEtaModal(true);
+                  }}
+                >
+                  Start Preparing
+                </button>
+              )}
 
-          {order.status === 'preparing' && (
-            <button
-              className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium hover:bg-green-600 min-w-[120px] flex-grow sm:flex-grow-0"
-              onClick={() => {
-                setIsStatusUpdateInProgress(true);
-                updateOrderStatusQuietly(order.id, 'ready')
-                  .finally(() => setIsStatusUpdateInProgress(false));
-              }}
-            >
-              Mark as Ready
-            </button>
-          )}
+              {order.status === 'preparing' && (
+                <button
+                  className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium hover:bg-green-600 min-w-[120px] flex-grow sm:flex-grow-0"
+                  onClick={() => {
+                    setIsStatusUpdateInProgress(true);
+                    updateOrderStatusQuietly(order.id, 'ready')
+                      .finally(() => setIsStatusUpdateInProgress(false));
+                  }}
+                >
+                  Mark as Ready
+                </button>
+              )}
 
-          {order.status === 'ready' && (
-            <button
-              className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-medium hover:bg-gray-600 min-w-[120px] flex-grow sm:flex-grow-0"
-              onClick={() => {
-                setIsStatusUpdateInProgress(true);
-                updateOrderStatusQuietly(order.id, 'completed')
-                  .finally(() => setIsStatusUpdateInProgress(false));
-              }}
-            >
-              Complete
-            </button>
+              {order.status === 'ready' && (
+                <button
+                  className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-medium hover:bg-gray-600 min-w-[120px] flex-grow sm:flex-grow-0"
+                  onClick={() => {
+                    setIsStatusUpdateInProgress(true);
+                    updateOrderStatusQuietly(order.id, 'completed')
+                      .finally(() => setIsStatusUpdateInProgress(false));
+                  }}
+                >
+                  Complete
+                </button>
+              )}
+              
+              {/* Refund button - show for paid orders that aren't fully refunded */}
+              {(order.status === 'completed' || order.status === 'ready' || 
+                order.status === 'partially_refunded') && 
+                order.payment_status === 'completed' && (
+                <button
+                  className="px-4 py-2 bg-purple-500 text-white rounded-md text-sm font-medium hover:bg-purple-600 min-w-[120px] flex-grow sm:flex-grow-0"
+                  onClick={() => {
+                    setOrderToRefund(order);
+                    setShowRefundModal(true);
+                  }}
+                >
+                  {order.status === 'partially_refunded' ? 'Additional Refund' : 'Refund'}
+                </button>
+              )}
+              
+              {/* Cancel button (with inventory handling) */}
+              {(order.status === 'pending' || order.status === 'preparing') && (
+                <button
+                  className="p-2 text-red-400 hover:text-red-600 rounded-md"
+                  onClick={() => handleCancelOrder(order)}
+                  aria-label="Cancel order"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
+                      viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </>
           )}
           
-          {/* Edit button */}
+          {/* Edit button - always available */}
           <button
             className="p-2 text-gray-400 hover:text-gray-600 rounded-md"
             onClick={() => setEditingOrder(order)}
             aria-label="Edit order"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
-                 viewBox="0 0 24 24" stroke="currentColor">
+                viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M11 5H6a2 2 0 
-                   00-2 2v11a2 2 0 
-                   002 2h11a2 2 0 
-                   002-2v-5m-1.414-9.414a2 
-                   2 0 112.828 2.828L11.828 
-                   15H9v-2.828l8.586-8.586z"
+                  00-2 2v11a2 2 0 
+                  002 2h11a2 2 0 
+                  002-2v-5m-1.414-9.414a2 
+                  2 0 112.828 2.828L11.828 
+                  15H9v-2.828l8.586-8.586z"
               />
             </svg>
           </button>
-          
-          {/* Cancel button (with inventory handling) */}
-          {(order.status === 'pending' || order.status === 'preparing') && (
-            <button
-              className="p-2 text-red-400 hover:text-red-600 rounded-md"
-              onClick={() => handleCancelOrder(order)}
-              aria-label="Cancel order"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
-                   viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
     );
@@ -733,7 +782,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             >
               All Orders
             </button>
-            {(['pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map((status) => (
+            {(['pending', 'preparing', 'ready', 'completed', 'cancelled', 'refunded', 'partially_refunded'] as const).map((status) => (
               <button
                 key={status}
                 onClick={() => setSelectedStatus(status)}
@@ -955,6 +1004,53 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           }}
           onConfirm={processInventoryActionsAndCancel}
           isBatch={isBatchCancel}
+        />
+      )}
+
+      {/* 6) Refund Modal */}
+      {showRefundModal && orderToRefund && (
+        <RefundModal
+          isOpen={showRefundModal}
+          orderId={Number(orderToRefund.id)}
+          maxRefundable={Number(orderToRefund.total || 0) - (orderToRefund.total_refunded || 0)}
+          onClose={() => {
+            setShowRefundModal(false);
+            setOrderToRefund(null);
+          }}
+          onRefundCreated={async () => {
+            try {
+              setIsStatusUpdateInProgress(true);
+              
+              // Get the refund amount to determine if it's a full or partial refund
+              const result = await orderPaymentsApi.getPayments(orderToRefund.id);
+              const { total_paid, total_refunded } = result.data;
+              
+              // Check if this is a full refund (all money returned)
+              const isFullRefund = Math.abs(total_paid - total_refunded) < 0.01;
+              
+              // Update the order status based on refund type
+              if (isFullRefund) {
+                await updateOrderStatusQuietly(orderToRefund.id, 'refunded');
+              } else if (total_refunded > 0) {
+                await updateOrderStatusQuietly(orderToRefund.id, 'partially_refunded');
+              }
+              
+              // Refresh orders to get the updated data
+              await fetchOrders();
+              
+              // Close the modal
+              setShowRefundModal(false);
+              setOrderToRefund(null);
+              
+              // Show success message
+              toast.success('Refund processed successfully');
+            } catch (error) {
+              console.error('Error processing refund:', error);
+              toast.error('Failed to update order status after refund.');
+            } finally {
+              setIsStatusUpdateInProgress(false);
+            }
+          }}
         />
       )}
     </div>

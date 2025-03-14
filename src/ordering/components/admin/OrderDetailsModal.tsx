@@ -1,5 +1,6 @@
 // src/ordering/components/admin/OrderDetailsModal.tsx
 import React from 'react';
+import { OrderPaymentHistory } from './OrderPaymentHistory';
 
 interface OrderDetailsModalProps {
   order: any;
@@ -10,6 +11,8 @@ export function OrderDetailsModal({
   order,
   onClose
 }: OrderDetailsModalProps) {
+  const isRefunded = order.status === 'refunded';
+  const isPartiallyRefunded = order.status === 'partially_refunded';
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4 animate-fadeIn">
       <div className="bg-white rounded-lg shadow-md max-w-lg w-full p-4 relative animate-slideUp">
@@ -25,7 +28,18 @@ export function OrderDetailsModal({
           </svg>
         </button>
 
-        <h3 className="text-lg font-bold mb-3">Order #{order.id}</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-bold">Order #{order.id}</h3>
+          {(isRefunded || isPartiallyRefunded) && (
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              isRefunded 
+                ? 'bg-purple-100 text-purple-800' 
+                : 'bg-orange-100 text-orange-800'
+            }`}>
+              {isRefunded ? 'Refunded' : 'Partial Refund'}
+            </span>
+          )}
+        </div>
         <p className="text-xs text-gray-500 mb-3">
           Placed: {new Date(order.createdAt).toLocaleString()}
         </p>
@@ -73,16 +87,35 @@ export function OrderDetailsModal({
           })}
         </div>
 
-        <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
-          <p className="font-medium">
-            Total: ${Number(order.total || 0).toFixed(2)}
-          </p>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-[#c1902f] text-white text-sm rounded hover:bg-[#d4a43f]"
-          >
-            Close
-          </button>
+        {/* Payment History Section */}
+        {order.order_payments && order.order_payments.length > 0 && (
+          <div className="mt-4 mb-4 border-t border-gray-200 pt-3">
+            <h4 className="font-medium mb-2 text-sm">Payment History:</h4>
+            <OrderPaymentHistory payments={order.order_payments} />
+          </div>
+        )}
+
+        <div className="border-t border-gray-200 pt-3">
+          <div className="flex justify-between items-center mb-3">
+            <p className="font-medium">
+              Total: ${Number(order.total || 0).toFixed(2)}
+            </p>
+            {(isRefunded || isPartiallyRefunded) && (
+              <p className="text-sm text-gray-600">
+                {isRefunded 
+                  ? 'This order has been fully refunded.' 
+                  : 'This order has been partially refunded.'}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-[#c1902f] text-white text-sm rounded hover:bg-[#d4a43f]"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>

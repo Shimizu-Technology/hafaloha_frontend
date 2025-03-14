@@ -133,9 +133,20 @@ export function CollapsibleOrderCard({
             )}
           </div>
           <div className="text-left sm:text-right">
-            <p className="font-medium text-sm">
-              Total: ${Number(order.total || 0).toFixed(2)}
-            </p>
+            <div className="flex items-center justify-end">
+              <p className="font-medium text-sm">
+                Total: ${Number(order.total || 0).toFixed(2)}
+              </p>
+              {(order.status === 'refunded' || order.status === 'partially_refunded') && (
+                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  order.status === 'refunded' 
+                    ? 'bg-purple-100 text-purple-800' 
+                    : 'bg-orange-100 text-orange-800'
+                }`}>
+                  {order.status === 'refunded' ? 'Refunded' : 'Partial Refund'}
+                </span>
+              )}
+            </div>
             <button
               onClick={onToggleExpand}
               className="text-[#c1902f] hover:text-[#a07929] text-sm font-medium flex items-center mt-1 py-1"
