@@ -2,9 +2,18 @@
 
 import { apiClient } from '../apiClient';
 
+interface RefundItem {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
 interface RefundRequest {
   amount: number;
   reason?: string;
+  description?: string;
+  refunded_items?: RefundItem[];
 }
 
 interface AdditionalPaymentRequest {

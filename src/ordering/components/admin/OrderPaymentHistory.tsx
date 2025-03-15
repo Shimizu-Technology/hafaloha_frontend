@@ -1,6 +1,13 @@
 // src/ordering/components/admin/OrderPaymentHistory.tsx
 
-import React from 'react';
+import React, { useState } from 'react';
+
+interface RefundedItem {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+}
 
 interface OrderPayment {
   id: number;
@@ -11,6 +18,8 @@ interface OrderPayment {
   created_at: string;
   description?: string;
   transaction_id?: string;
+  payment_details?: any;
+  refunded_items?: RefundedItem[];
 }
 
 interface OrderPaymentHistoryProps {
@@ -83,6 +92,21 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
     }
   };
 
+  // Helper function to get refunded items from either direct property or payment_details
+  const getRefundedItems = (payment: OrderPayment) => {
+    // First check if refunded_items is directly on the payment
+    if (payment.refunded_items && payment.refunded_items.length > 0) {
+      return payment.refunded_items;
+    }
+    
+    // Then check if it's in payment_details
+    if (payment.payment_details && payment.payment_details.refunded_items) {
+      return payment.payment_details.refunded_items;
+    }
+    
+    return null;
+  };
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       {/* Payment history table */}
@@ -108,27 +132,103 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {payments.map((payment) => (
-              <tr key={payment.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                  {formatDate(payment.created_at)}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {getPaymentTypeBadge(payment.payment_type)}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                  {formatPaymentMethod(payment.payment_method)}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {getPaymentStatusBadge(payment.status)}
-                </td>
-                <td className={`px-4 py-3 whitespace-nowrap text-sm font-medium text-right ${
-                  payment.payment_type === 'refund' ? 'text-red-600' : 'text-gray-900'
-                }`}>
-                  {payment.payment_type === 'refund' ? '-' : ''}${parseFloat(String(payment.amount)).toFixed(2)}
-                </td>
-              </tr>
-            ))}
+            {payments.map((payment) => {
+              const [showDetails, setShowDetails] = useState(false);
+              const refundedItems = getRefundedItems(payment);
+              
+              return (
+                <React.Fragment key={payment.id}>
+                  <tr 
+                    className={`hover:bg-gray-50 cursor-pointer ${payment.payment_type === 'refund' ? 'bg-red-50' : ''}`}
+                    onClick={() => setShowDetails(!showDetails)}
+                  >
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(payment.created_at)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {getPaymentTypeBadge(payment.payment_type)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {formatPaymentMethod(payment.payment_method)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {getPaymentStatusBadge(payment.status)}
+                    </td>
+                    <td className={`px-4 py-3 whitespace-nowrap text-sm font-medium text-right ${
+                      payment.payment_type === 'refund' ? 'text-red-600' : 'text-gray-900'
+                    }`}>
+                      {payment.payment_type === 'refund' ? '-' : ''}${parseFloat(String(payment.amount)).toFixed(2)}
+                    </td>
+                  </tr>
+                  
+                  {/* Expandable details row */}
+                  {showDetails && (
+                    <tr className={payment.payment_type === 'refund' ? 'bg-red-50' : 'bg-gray-50'}>
+                      <td colSpan={5} className="px-4 py-3 text-sm">
+                        <div className="border-t border-gray-200 pt-2">
+                          {payment.payment_type === 'refund' && (
+                            <div className="mb-3 bg-red-50 p-2 rounded border border-red-100">
+                              <div className="font-medium text-red-700 mb-1">Refund Details</div>
+                              {payment.description && (
+                                <div className="mb-2">
+                                  <span className="font-medium">Reason:</span> {payment.description}
+                                </div>
+                              )}
+                              
+                              {/* Display refunded items */}
+                              {refundedItems && refundedItems.length > 0 ? (
+                                <div className="mb-2">
+                                  <span className="font-medium">Refunded Items:</span>
+                                  <ul className="mt-1 pl-5 list-disc">
+                                    {refundedItems.map((item: RefundedItem, idx: number) => (
+                                      <li key={idx} className="text-sm">
+                                        {item.name} × {item.quantity} (${(item.price * item.quantity).toFixed(2)})
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : (
+                                <div className="text-sm text-red-600 italic">
+                                  No specific items recorded for this refund
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {payment.transaction_id && (
+                            <div className="mb-2">
+                              <span className="font-medium">Transaction ID:</span> {payment.transaction_id}
+                            </div>
+                          )}
+                          
+                          {/* Display payment details in a user-friendly format */}
+                          {payment.payment_details && (
+                            <div className="mb-2">
+                              <span className="font-medium">Additional Details:</span>
+                              <div className="mt-1 text-sm">
+                                {payment.payment_details.status && (
+                                  <div><span className="font-medium">Status:</span> {payment.payment_details.status}</div>
+                                )}
+                                {payment.payment_details.test_mode && (
+                                  <div><span className="font-medium">Test Mode:</span> Yes</div>
+                                )}
+                                {payment.payment_details.amount && (
+                                  <div><span className="font-medium">Amount:</span> ${payment.payment_details.amount}</div>
+                                )}
+                                {payment.payment_details.error_handled && (
+                                  <div><span className="font-medium">Error Handled:</span> {payment.payment_details.error_handled}</div>
+                                )}
+                                {/* Add any other relevant fields here */}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
             
             {/* If no payments, show a message */}
             {payments.length === 0 && (

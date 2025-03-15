@@ -15,6 +15,7 @@ import { BulkInventoryActionDialog } from './BulkInventoryActionDialog';
 import { RefundModal } from './RefundModal';
 import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
+import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
 import toast from 'react-hot-toast';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded' | 'partially_refunded';
@@ -235,14 +236,32 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   /**
    * Called when BulkInventoryActionDialog is done (Confirm & Continue).
    * Processes each item action (damaged or not) and calls updateOrderStatusQuietly.
+   * Also handles payment actions (refund, store credit, etc.) if specified.
    */
   const processInventoryActionsAndCancel = async (inventoryActions: any[]) => {
     setIsStatusUpdateInProgress(true);
     try {
       console.log("Processing inventory actions:", inventoryActions);
       
+      // Group actions by order ID for payment processing
+      const actionsByOrder = new Map<string | number, any[]>();
+      
       // 1) Process each inventory action
       for (const action of inventoryActions) {
+        // Group by order ID for payment processing
+        const orderId = action.orderId || orderToCancel?.id || '';
+        if (!actionsByOrder.has(orderId)) {
+          actionsByOrder.set(orderId, []);
+        }
+        actionsByOrder.get(orderId)?.push(action);
+        
+        // Skip inventory processing for placeholder items (itemId = 0)
+        if (action.itemId === 0) {
+          console.log('Skipping inventory processing for placeholder item');
+          continue;
+        }
+        
+        // Process inventory action
         if (action.action === 'mark_as_damaged') {
           // Mark items as damaged - use the orderId from the action
           // (which comes from the specific order the item belongs to)
@@ -250,7 +269,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           await menuItemsApi.markAsDamaged(action.itemId, {
             quantity: action.quantity,
             reason: action.reason || 'Damaged during order cancellation',
-            order_id: action.orderId || orderToCancel?.id || ''
+            order_id: orderId
           });
         } else if (action.action === 'return_to_inventory') {
           // Explicitly return items to inventory by increasing stock
@@ -265,12 +284,83 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           await menuItemsApi.updateStock(action.itemId, {
             stock_quantity: newStockLevel,
             reason_type: 'return',
-            reason_details: `Items returned from cancelled Order #${action.orderId || orderToCancel?.id || ''}`
+            reason_details: `Items returned from cancelled Order #${orderId}`
           });
         }
       }
 
-      // 2) Cancel the orders
+      // 2) Process payment actions for each order
+      if (inventoryActions.length > 0) {
+        const paymentAction = inventoryActions[0].paymentAction;
+        const paymentReason = inventoryActions[0].paymentReason || 'Order cancelled';
+        
+        if (paymentAction && paymentAction !== 'no_action') {
+          // Process each order's payment
+          for (const [orderId, actions] of actionsByOrder.entries()) {
+            // Get the order object
+            const orderObj = isBatchCancel 
+              ? batchOrdersToCancel.find(o => o.id === orderId)
+              : orderToCancel;
+              
+            if (!orderObj) continue;
+            
+            // Calculate total refund amount for this order
+            const refundItems = actions.map(action => ({
+              id: action.itemId,
+              name: action.name || 'Item',
+              quantity: action.quantity,
+              price: action.price || 0
+            }));
+            
+            // Process based on payment action type
+            switch (paymentAction) {
+              case 'refund':
+                try {
+                  await orderPaymentOperationsApi.createPartialRefund(Number(orderId), {
+                    amount: orderObj.total, // Full order amount for cancellation
+                    reason: paymentReason,
+                    items: refundItems,
+                    refunded_items: refundItems
+                  });
+                  console.log(`Refund processed for order ${orderId}`);
+                } catch (error) {
+                  console.error(`Error processing refund for order ${orderId}:`, error);
+                  toast.error(`Failed to process refund for order #${orderId}`);
+                }
+                break;
+                
+              case 'store_credit':
+                try {
+                  await orderPaymentOperationsApi.addStoreCredit(Number(orderId), {
+                    amount: orderObj.total, // Full order amount for cancellation
+                    reason: paymentReason,
+                    email: orderObj.contact_email
+                  });
+                  console.log(`Store credit added for order ${orderId}`);
+                } catch (error) {
+                  console.error(`Error adding store credit for order ${orderId}:`, error);
+                  toast.error(`Failed to add store credit for order #${orderId}`);
+                }
+                break;
+                
+              case 'adjust_total':
+                try {
+                  await orderPaymentOperationsApi.adjustOrderTotal(Number(orderId), {
+                    new_total: 0, // Set to 0 for cancellation
+                    reason: paymentReason
+                  });
+                  console.log(`Order total adjusted for order ${orderId}`);
+                } catch (error) {
+                  console.error(`Error adjusting total for order ${orderId}:`, error);
+                  toast.error(`Failed to adjust total for order #${orderId}`);
+                }
+                break;
+            }
+          }
+        }
+      }
+
+      // 3) Cancel the orders
       if (isBatchCancel) {
         // For batch
         for (const ord of batchOrdersToCancel) {
@@ -282,7 +372,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         await updateOrderStatusQuietly(orderToCancel.id, 'cancelled');
       }
 
-      // 3) Reset state
+      // 4) Reset state
       setBatchOrdersToCancel([]);
       setOrderToCancel(null);
       setIsBatchCancel(false);
@@ -590,9 +680,20 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     return (
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <p className="font-medium text-sm">
-            Total: ${Number(order.total || 0).toFixed(2)}
-          </p>
+          {isRefunded ? (
+            <p className="font-medium text-sm">
+              <span className="line-through text-gray-400 mr-2">
+                ${Number(order.total || 0).toFixed(2)}
+              </span>
+              <span>
+                ${netAmount.toFixed(2)}
+              </span>
+            </p>
+          ) : (
+            <p className="font-medium text-sm">
+              Total: ${Number(order.total || 0).toFixed(2)}
+            </p>
+          )}
           {refundInfo}
         </div>
         

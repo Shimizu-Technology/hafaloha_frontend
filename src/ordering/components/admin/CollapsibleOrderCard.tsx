@@ -1,5 +1,26 @@
+// src/ordering/components/admin/CollapsibleOrderCard.tsx
 import React, { useState } from 'react';
 import { StatusTimer } from './StatusTimer';
+
+interface RefundedItem {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+interface OrderPayment {
+  id: number;
+  payment_type: 'initial' | 'additional' | 'refund';
+  amount: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+  description?: string;
+  transaction_id?: string;
+  payment_details?: any;
+  refunded_items?: RefundedItem[];
+}
 
 interface CollapsibleOrderCardProps {
   order: any;
@@ -30,14 +51,31 @@ export function CollapsibleOrderCard({
 }: CollapsibleOrderCardProps) {
   
   // Animation classes for new orders
-  const newOrderClasses = isNew 
-    ? 'animate-pulse-light border-yellow-300 shadow-yellow-100' 
+  const newOrderClasses = isNew
+    ? 'animate-pulse-light border-yellow-300 shadow-yellow-100'
     : '';
-  
-  // Highlight classes for orders selected via notification
   const highlightClasses = isHighlighted
-    ? 'ring-2 ring-[#c1902f] ring-opacity-70 shadow-md' 
+    ? 'ring-2 ring-[#c1902f] ring-opacity-70 shadow-md'
     : '';
+
+  // Calculate the actual total based on the items in the order
+  const calculatedTotal = (order.items || []).reduce((sum: number, item: any) => {
+    const price = parseFloat(String(item.price)) || 0;
+    const qty = parseInt(String(item.quantity), 10) || 0;
+    return sum + price * qty;
+  }, 0);
+  
+  // Sum of all refunds
+  const refunds = (order.order_payments || []).filter((p: OrderPayment) => p.payment_type === 'refund');
+  const totalRefunded = refunds.reduce((sum: number, p: OrderPayment) => sum + parseFloat(String(p.amount)), 0);
+  
+  // Use the calculated total as the original total, or fall back to order.total if no items
+  const originalTotal = calculatedTotal > 0 ? calculatedTotal : parseFloat(String(order.total || 0));
+  const netTotal = Math.max(0, originalTotal - totalRefunded);
+
+  // Decide if partial or full
+  const isFullyRefunded = totalRefunded > 0 && Math.abs(netTotal) < 0.01;
+  const isPartiallyRefunded = totalRefunded > 0 && netTotal > 0;
   
   return (
     <div 
@@ -134,19 +172,40 @@ export function CollapsibleOrderCard({
           </div>
           <div className="text-left sm:text-right">
             <div className="flex items-center justify-end">
-              <p className="font-medium text-sm">
-                Total: ${Number(order.total || 0).toFixed(2)}
-              </p>
-              {(order.status === 'refunded' || order.status === 'partially_refunded') && (
-                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-                  order.status === 'refunded' 
-                    ? 'bg-purple-100 text-purple-800' 
-                    : 'bg-orange-100 text-orange-800'
-                }`}>
-                  {order.status === 'refunded' ? 'Refunded' : 'Partial Refund'}
-                </span>
+              {totalRefunded > 0 ? (
+                <>
+                  <span className="line-through text-gray-400 mr-2">
+                    ${originalTotal.toFixed(2)}
+                  </span>
+                  <span className="mr-2">
+                    ${netTotal.toFixed(2)}
+                  </span>
+                  {isFullyRefunded ? (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Refunded
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                      Partial Refund
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span>Total: ${originalTotal.toFixed(2)}</span>
               )}
             </div>
+            
+            {/* Show total refunded amount */}
+            {totalRefunded > 0 && (
+              <div className="mt-1 text-xs text-red-600">
+                <div className="flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                  </svg>
+                  Refunded: ${totalRefunded.toFixed(2)}
+                </div>
+              </div>
+            )}
             <button
               onClick={onToggleExpand}
               className="text-[#c1902f] hover:text-[#a07929] text-sm font-medium flex items-center mt-1 py-1"
@@ -262,6 +321,82 @@ export function CollapsibleOrderCard({
               <p className="text-sm text-gray-600 break-words">
                 {(order as any).special_instructions || (order as any).specialInstructions}
               </p>
+            </div>
+          )}
+          
+          {/* Show subtotal */}
+          <div className="mb-4">
+            <div className="flex justify-between items-center">
+              <h4 className="font-medium text-sm text-gray-700">Subtotal:</h4>
+              <span className="text-sm font-medium">${originalTotal.toFixed(2)}</span>
+            </div>
+            
+            {/* If there are refunds, show the refund amount and net total */}
+            {totalRefunded > 0 && (
+              <>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-sm text-red-600">Refunded:</span>
+                  <span className="text-sm font-medium text-red-600">-${totalRefunded.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center mt-1 pt-1 border-t border-gray-100">
+                  <span className="text-sm font-medium text-gray-700">Net Total:</span>
+                  <span className="text-sm font-medium">${netTotal.toFixed(2)}</span>
+                </div>
+              </>
+            )}
+          </div>
+          
+          {/* Render refunds if present */}
+          {refunds.length > 0 && (
+            <div className="mb-4 bg-red-50 p-3 rounded-md border border-red-100">
+              <h4 className="font-medium text-sm text-red-700 mb-1 flex items-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4 mr-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M3 10h10a8 8
+                       0 018 8v2M3 10l6
+                       6m-6-6l6-6"
+                  />
+                </svg>
+                Refund Information:
+              </h4>
+              <div className="space-y-2">
+                {refunds.map((refund: OrderPayment, idx: number) => (
+                    <div key={idx} className="text-sm text-red-600 border-b border-red-100 pb-2 last:border-0 last:pb-0">
+                      <div className="flex justify-between">
+                        <span>Amount: ${parseFloat(String(refund.amount)).toFixed(2)}</span>
+                        <span className="text-red-500 text-xs">
+                          {new Date(refund.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {refund.description && (
+                        <div className="text-xs text-red-500 mt-1">
+                          Reason: {refund.description}
+                        </div>
+                      )}
+                      
+                      {/* Display refunded items if available */}
+                          {refund.refunded_items && refund.refunded_items.length > 0 && (
+                            <div className="mt-2 bg-red-100 p-2 rounded">
+                              <div className="text-xs font-medium text-red-700 mb-1">Refunded Items:</div>
+                              <ul className="list-disc pl-5 text-xs">
+                                {refund.refunded_items.map((item: RefundedItem, itemIdx: number) => (
+                              <li key={itemIdx} className="mb-1">
+                                {item.name} × {item.quantity} (${(item.price * item.quantity).toFixed(2)})
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                }
+              </div>
             </div>
           )}
 

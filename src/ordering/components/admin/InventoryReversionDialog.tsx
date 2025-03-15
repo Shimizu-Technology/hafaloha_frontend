@@ -62,7 +62,7 @@ export function InventoryReversionDialog({ itemName, onClose, onConfirm }: Inven
             {action === 'mark_as_damaged' && (
               <div className="mt-4">
                 <label htmlFor="damage-reason" className="block text-sm font-medium text-gray-700 mb-1">
-                  Reason (optional)
+                  Reason (Required)
                 </label>
                 <input
                   type="text"
@@ -71,6 +71,7 @@ export function InventoryReversionDialog({ itemName, onClose, onConfirm }: Inven
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="e.g., Dropped, customer complaint, etc."
+                  required
                 />
               </div>
             )}
@@ -88,7 +89,13 @@ export function InventoryReversionDialog({ itemName, onClose, onConfirm }: Inven
           <button
             type="button"
             className="px-4 py-2 bg-[#c1902f] border border-transparent rounded-md text-white hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f]"
-            onClick={() => onConfirm(action, action === 'mark_as_damaged' ? reason : undefined)}
+            onClick={() => {
+              if (action === 'mark_as_damaged' && !reason.trim()) {
+                alert('Please provide a reason for marking the item as damaged.');
+                return;
+              }
+              onConfirm(action, action === 'mark_as_damaged' ? reason : undefined);
+            }}
           >
             Confirm
           </button>

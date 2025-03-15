@@ -3,11 +3,19 @@
 import React, { useState } from 'react';
 import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 
+interface RefundItem {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
 interface RefundModalProps {
   isOpen: boolean;
   onClose: () => void;
   orderId: number;
   maxRefundable: number;
+  orderItems?: any[]; // Original order items
   onRefundCreated: () => void;
 }
 
@@ -19,12 +27,15 @@ export function RefundModal({
   onClose,
   orderId,
   maxRefundable,
+  orderItems = [],
   onRefundCreated,
 }: RefundModalProps) {
   const [amount, setAmount] = useState<string>(maxRefundable.toFixed(2));
   const [reason, setReason] = useState<RefundReason>('requested_by_customer');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedItems, setSelectedItems] = useState<RefundItem[]>([]);
+  const [customReason, setCustomReason] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -33,6 +44,21 @@ export function RefundModal({
     // Only allow valid numbers
     if (/^\d*\.?\d{0,2}$/.test(value)) {
       setAmount(value);
+    }
+  };
+
+  const handleItemSelect = (item: any, isSelected: boolean) => {
+    if (isSelected) {
+      // Add item to selected items
+      setSelectedItems([...selectedItems, {
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price
+      }]);
+    } else {
+      // Remove item from selected items
+      setSelectedItems(selectedItems.filter(i => i.id !== item.id));
     }
   };
 
@@ -58,6 +84,8 @@ export function RefundModal({
       await orderPaymentsApi.createRefund(orderId, {
         amount: refundAmount,
         reason: reason,
+        description: customReason || undefined,
+        refunded_items: selectedItems.length > 0 ? selectedItems : undefined
       });
 
       // Notify parent component
@@ -142,6 +170,33 @@ export function RefundModal({
                       </p>
                     </div>
 
+                    {/* Items being refunded */}
+                    {orderItems && orderItems.length > 0 && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Select Items Being Refunded
+                        </label>
+                        <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2">
+                          {orderItems.map((item, idx) => (
+                            <div key={idx} className="flex items-center mb-2 last:mb-0">
+                              <input
+                                type="checkbox"
+                                id={`item-${idx}`}
+                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                onChange={(e) => handleItemSelect(item, e.target.checked)}
+                              />
+                              <label htmlFor={`item-${idx}`} className="ml-2 block text-sm text-gray-900">
+                                {item.name} × {item.quantity} (${(item.price * item.quantity).toFixed(2)})
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Selecting items helps track what was refunded
+                        </p>
+                      </div>
+                    )}
+
                     <div className="mb-4">
                       <label htmlFor="refund-reason" className="block text-sm font-medium text-gray-700 mb-1">
                         Reason for Refund
@@ -159,6 +214,20 @@ export function RefundModal({
                       <p className="mt-1 text-xs text-gray-500">
                         These are the only valid reasons accepted by Stripe for refunds.
                       </p>
+                    </div>
+
+                    <div className="mb-4">
+                      <label htmlFor="custom-reason" className="block text-sm font-medium text-gray-700 mb-1">
+                        Additional Notes (Optional)
+                      </label>
+                      <textarea
+                        id="custom-reason"
+                        className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                        rows={2}
+                        placeholder="Add more details about this refund"
+                        value={customReason}
+                        onChange={(e) => setCustomReason(e.target.value)}
+                      />
                     </div>
 
                     {error && (
