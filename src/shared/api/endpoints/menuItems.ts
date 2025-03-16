@@ -11,16 +11,29 @@ export const menuItemsApi = {
   /**
    * Get all menu items
    */
-  getAll: async (params?: { menu_id?: number; category_id?: number; admin?: boolean }): Promise<MenuItem[]> => {
-    const response = await apiClient.get('/menu_items', { params });
+  getAll: async (params?: { 
+    menu_id?: number; 
+    category_id?: number; 
+    admin?: boolean; 
+    include_stock?: boolean;
+    show_all?: boolean;
+  }): Promise<MenuItem[]> => {
+    const response = await apiClient.get('/menu_items', { 
+      params: { 
+        ...params,
+        include_stock: params?.include_stock !== false // Default to true unless explicitly set to false
+      } 
+    });
     return response.data;
   },
 
   /**
    * Get a specific menu item by ID
    */
-  getById: async (id: string | number): Promise<MenuItem> => {
-    const response = await apiClient.get(`/menu_items/${id}`);
+  getById: async (id: string | number, includeStock: boolean = true): Promise<MenuItem> => {
+    const response = await apiClient.get(`/menu_items/${id}`, {
+      params: { include_stock: includeStock }
+    });
     return response.data;
   },
 

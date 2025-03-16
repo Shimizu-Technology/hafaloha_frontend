@@ -1,3 +1,5 @@
+// src/ordering/components/admin/StaffOrderModal.tsx
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
@@ -187,33 +189,33 @@ function MenuItemsPanel({
                         
                         {/* Details */}
                         <div className="flex-1 p-2 flex flex-col justify-between overflow-hidden">
-                          {/* Title with truncation */}
-                          <h4 className="font-medium text-gray-900 text-sm sm:text-base truncate leading-tight">
-                            {item.name}
-                          </h4>
-                          
-                          {/* Price below title */}
-                          <div className="flex flex-col mt-1">
-                            <p className="text-[#c1902f] font-semibold text-sm sm:text-base">
+                          <div className="flex flex-col mb-1">
+                            {/* Title with better visibility */}
+                            <h4 className="font-medium text-gray-900 text-sm sm:text-base leading-tight line-clamp-2">
+                              {item.name}
+                            </h4>
+                            
+                            {/* Price below title */}
+                            <p className="text-[#c1902f] font-semibold text-sm sm:text-base mt-1">
                               ${item.price.toFixed(2)}
                             </p>
-                            
-                            {/* Stock indicator - only show if stock tracking is enabled */}
-                            {item.enable_stock_tracking && item.available_quantity !== undefined && (
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                {(() => {
-                                  // Calculate effective available quantity by subtracting cart quantity
-                                  const cartItem = findCartItem(item.id);
-                                  const cartQuantity = cartItem ? cartItem.quantity : 0;
-                                  const effectiveQuantity = item.available_quantity - cartQuantity;
-                                  
-                                  return effectiveQuantity > 0 
-                                    ? `${effectiveQuantity} left` 
-                                    : 'Out of stock';
-                                })()}
-                              </p>
-                            )}
                           </div>
+                          
+                          {/* Stock indicator - only show if stock tracking is enabled */}
+                          {item.enable_stock_tracking && item.available_quantity !== undefined && (
+                            <p className="text-xs text-gray-500 mt-0.5 mb-1">
+                              {(() => {
+                                // Calculate effective available quantity by subtracting cart quantity
+                                const cartItem = findCartItem(item.id);
+                                const cartQuantity = cartItem ? cartItem.quantity : 0;
+                                const effectiveQuantity = item.available_quantity - cartQuantity;
+                                
+                                return effectiveQuantity > 0 
+                                  ? `${effectiveQuantity} left` 
+                                  : 'Out of stock';
+                              })()}
+                            </p>
+                          )}
 
                           {/* Add / Customize Buttons */}
                           <div className="flex justify-end mt-2">

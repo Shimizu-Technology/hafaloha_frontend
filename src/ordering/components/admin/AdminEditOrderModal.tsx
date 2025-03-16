@@ -1,6 +1,7 @@
 // src/ordering/components/admin/AdminEditOrderModal.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast'; // Ensure this import is present for toast usage
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 import { SetEtaModal } from './SetEtaModal';
 import { SearchableMenuItemSelector } from './SearchableMenuItemSelector';
@@ -68,6 +69,20 @@ export interface OrderItem {
   unpaidQuantity?: number;    // How many units still require payment
 }
 
+// -------------- NEW HELPER FOR AVAILABLE QUANTITY --------------
+/**
+ * Safely calculate how many units of this item are actually available in inventory.
+ * If stock tracking is disabled or stock_quantity is undefined, treat as unlimited.
+ * Damaged quantity is subtracted out.
+ */
+function calculateAvailableQuantity(item: OrderItem): number {
+  if (!item.enable_stock_tracking || item.stock_quantity === undefined) {
+    return Infinity; // No tracking = unlimited
+  }
+  const damagedQty = item.damaged_quantity || 0;
+  return Math.max(0, item.stock_quantity - damagedQty);
+}
+
 export function AdminEditOrderModal({
   order,
   onClose,
@@ -76,14 +91,7 @@ export function AdminEditOrderModal({
   // ----------------------------------------------------------------
   // 1) Original vs. local items
   // ----------------------------------------------------------------
-  /**
-   * Holds the original array of items from the order (used to detect new vs. existing).
-   */
   const [originalItems, setOriginalItems] = useState<OrderItem[]>([]);
-
-  /**
-   * Track the edit state of items in the order; this is what the user manipulates in the UI.
-   */
   const [localItems, setLocalItems] = useState<OrderItem[]>(() => {
     if (!order.items) return [];
     // Make a deep copy with a unique _editId for each item
@@ -167,7 +175,7 @@ export function AdminEditOrderModal({
       setOriginalItems(initialItems);
       setNewlyAddedItemIds(new Set());
 
-      // Possibly fetch extra data (like stock details) from the backend
+      // Handle undefined/null inventory values safely
       const fetchCompleteMenuItemData = async () => {
         try {
           setLoadingMenuItemData(true);
@@ -178,17 +186,25 @@ export function AdminEditOrderModal({
                 .getById(it.id!)
                 .then((fullItem) => ({
                   ...it,
-                  enable_stock_tracking: fullItem.enable_stock_tracking,
-                  stock_quantity: fullItem.stock_quantity,
-                  damaged_quantity: fullItem.damaged_quantity,
-                  low_stock_threshold: fullItem.low_stock_threshold,
+                  // Use safe defaults to protect against undefined
+                  enable_stock_tracking: fullItem.enable_stock_tracking || false,
+                  stock_quantity: fullItem.stock_quantity || 0,
+                  damaged_quantity: fullItem.damaged_quantity || 0,
+                  low_stock_threshold: fullItem.low_stock_threshold || 5,
                 }))
                 .catch((err) => {
                   console.error(
                     `Failed to fetch data for menu item ${it.id}:`,
                     err
                   );
-                  return it;
+                  // Provide safe defaults if API call fails
+                  return {
+                    ...it,
+                    enable_stock_tracking: false,
+                    stock_quantity: 0,
+                    damaged_quantity: 0,
+                    low_stock_threshold: 5,
+                  };
                 })
             );
 
@@ -222,6 +238,7 @@ export function AdminEditOrderModal({
           );
         } catch (error) {
           console.error('Error fetching menu item data:', error);
+          toast.error('Unable to load inventory data. Some features may be limited.');
         } finally {
           setLoadingMenuItemData(false);
         }
@@ -249,7 +266,6 @@ export function AdminEditOrderModal({
   // We initialize localTotal from the *items* rather than just `order.total`
   const [localTotal, setLocalTotal] = useState<string>(() => {
     if (!order.items) return '0.00';
-
     const initialSubtotal = order.items.reduce((sum: number, it: any) => {
       const price = parseFloat(String(it.price)) || 0;
       const qty = parseInt(String(it.quantity), 10) || 0;
@@ -345,7 +361,6 @@ export function AdminEditOrderModal({
         setIsStatusDropdownOpen(false);
       }
     }
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
@@ -380,10 +395,9 @@ export function AdminEditOrderModal({
       stock_quantity: selectedItem.stock_quantity,
       damaged_quantity: selectedItem.damaged_quantity,
       low_stock_threshold: selectedItem.low_stock_threshold,
-      // For better quantity tracking:
-      originalQuantity: 0, // not originally on the order
-      paidQuantity: 0,     // no units paid
-      unpaidQuantity: newQuantity,   // all units need payment
+      originalQuantity: 0,
+      paidQuantity: 0,
+      unpaidQuantity: newQuantity,
     };
 
     setNewlyAddedItemIds((prev) => {
@@ -404,85 +418,99 @@ export function AdminEditOrderModal({
     updatePaymentSummary();
   }
 
+  // -------------- UPDATED ITEM QUANTITY FUNCTION --------------
   /**
-   * Main function to update quantity:
-   * - If quantity goes up: track the new unpaid units.
-   * - If quantity goes down below paid quantity: partial refund logic.
-   * - If user reverts to the original quantity, revert to original paid/unpaid state.
+   * Enhanced quantity control that checks partial item availability (stock).
+   * If we exceed effective availability, we reduce quantity and show a toast.
+   * Also handles partial refund if user lowers quantity below paid portion.
    */
   function updateItemQuantity(_editId: string, newQuantity: number) {
-    setLocalItems((prev) =>
-      prev.map((item) => {
-        if (item._editId !== _editId) return item;
+    setLocalItems((prev) => {
+      const itemToUpdate = prev.find((item) => item._editId === _editId);
+      if (!itemToUpdate) return prev;
 
-        const oldQuantity = item.quantity;
-        // If no change, do nothing
-        if (oldQuantity === newQuantity) {
-          return item;
-        }
+      const oldQuantity = itemToUpdate.quantity;
+      if (oldQuantity === newQuantity) {
+        return prev; // No change
+      }
 
-        // If the item had some portion already paid
-        const { originalQuantity = 0, paidQuantity = 0 } = item;
+      // 1) Check partial item availability
+      const originalItem = originalItems.find(
+        (oi) => oi.id === itemToUpdate.id
+      );
+      const originalQty = originalItem ? originalItem.quantity : 0;
 
-        // 1) If user reverts quantity to the original
-        if (newQuantity === originalQuantity) {
+      // Calculate how many are truly available in stock
+      const availableQty = calculateAvailableQuantity(itemToUpdate);
+
+      // Effective availability includes the portion already in the original order
+      // (since those units are presumably "reserved")
+      const effectiveAvailable = availableQty + originalQty;
+
+      if (newQuantity > effectiveAvailable) {
+        toast(
+          `Only ${effectiveAvailable} units of ${itemToUpdate.name} are available. Setting quantity to maximum available.`,
+          { icon: '⚠️' } // or style with a warning color
+        );
+        newQuantity = effectiveAvailable;
+      }
+
+      // 2) Check partial refund scenario if user lowers quantity below paidQuantity
+      const paidQuantity = itemToUpdate.paidQuantity || 0;
+      if (newQuantity < paidQuantity) {
+        setPendingQuantityChange({
+          editId: _editId,
+          oldQuantity,
+          newQuantity,
+          item: { ...itemToUpdate },
+        });
+
+        // The portion being removed is (paidQuantity - newQuantity).
+        const removedQty = paidQuantity - newQuantity;
+        const refundItem = {
+          ...itemToUpdate,
+          quantity: removedQty,
+        };
+        setItemToRemove({ item: refundItem, editId: _editId });
+        setShowPaymentHandlingDialog(true);
+
+        return prev; // We'll finalize after user picks how to handle it
+      }
+
+      // 3) If quantity > paidQuantity => these extra units are unpaid
+      // 4) If user reverts quantity exactly back to original, mark as fully paid again
+      return prev.map((it) => {
+        if (it._editId !== _editId) return it;
+
+        // If user sets newQuantity back to the original
+        if (newQuantity === it.originalQuantity) {
           return {
-            ...item,
+            ...it,
             quantity: newQuantity,
             paymentStatus: 'already_paid',
-            paidQuantity: originalQuantity,
+            paidQuantity: newQuantity,
             unpaidQuantity: 0,
           };
         }
 
-        // 2) If quantity > paidQuantity => new units are unpaid
         if (newQuantity > paidQuantity) {
           const unpaidUnits = newQuantity - paidQuantity;
-          // Mark the item as needing payment
           return {
-            ...item,
+            ...it,
             quantity: newQuantity,
             paymentStatus: 'needs_payment',
-            // Paid portion stays the same
-            paidQuantity: paidQuantity,
-            // Calculate unpaid units
+            paidQuantity,
             unpaidQuantity: unpaidUnits,
           };
         }
 
-        // 3) If quantity < paidQuantity => partial refund scenario
-        if (newQuantity < paidQuantity) {
-          // But we handle the "refund" in a dialog. For now, we set up the pendingQuantityChange
-          setPendingQuantityChange({
-            editId: _editId,
-            oldQuantity,
-            newQuantity,
-            item: { ...item },
-          });
-
-          // The portion being removed is (paidQuantity - newQuantity).
-          // We'll pass that to PaymentHandlingDialog for partial refund / store credit, etc.
-          const removedQty = paidQuantity - newQuantity;
-
-          // We'll open the dialog with that item "slice"
-          const refundItem = {
-            ...item,
-            quantity: removedQty,
-          };
-          setItemToRemove({ item: refundItem, editId: _editId });
-          setShowPaymentHandlingDialog(true);
-
-          // Return the item as-is for now; we only finalize after the user's choice
-          return item;
-        }
-
-        // Otherwise, default fallback
+        // Fallback
         return {
-          ...item,
+          ...it,
           quantity: newQuantity,
         };
-      })
-    );
+      });
+    });
   }
 
   function handleRemoveItem(editId: string) {
@@ -557,16 +585,15 @@ export function AdminEditOrderModal({
   // 5) PaymentHandlingDialog & partial-refund actions
   // ----------------------------------------------------------------
   function handlePaymentAction(
-    action: PaymentAction | 'cancel' | 'none', 
-    reason: string, 
-    amount: number, 
-    inventoryAction?: InventoryAction, 
+    action: PaymentAction | 'cancel' | 'none',
+    reason: string,
+    amount: number,
+    inventoryAction?: InventoryAction,
     inventoryReason?: string
   ) {
     // This is called once the user chooses "Refund" / "StoreCredit" / "NoAction" etc.
     if (!itemToRemove) return;
     const { item, editId } = itemToRemove;
-
     const isPartialQuantity = !!pendingQuantityChange;
 
     // If action is 'cancel', just close the dialog without making changes
@@ -635,33 +662,31 @@ export function AdminEditOrderModal({
 
     // Handle inventory action if provided and item has stock tracking
     if (item.enable_stock_tracking && inventoryAction) {
-      if (inventoryAction === 'mark_as_damaged') {
-        // Add to items to mark as damaged
-        if (item.id) {
-          setItemsToMarkAsDamaged((prev) => [
-            ...prev,
-            {
-              itemId: item.id!,
-              quantity: isPartialQuantity && pendingQuantityChange 
-                ? pendingQuantityChange.oldQuantity - pendingQuantityChange.newQuantity 
+      if (inventoryAction === 'mark_as_damaged' && item.id) {
+        setItemsToMarkAsDamaged((prev) => [
+          ...prev,
+          {
+            itemId: item.id!,
+            quantity:
+              isPartialQuantity && pendingQuantityChange
+                ? pendingQuantityChange.oldQuantity -
+                  pendingQuantityChange.newQuantity
                 : item.quantity,
-              reason: inventoryReason || 'Removed during order edit',
-            },
-          ]);
-        }
-      } else if (inventoryAction === 'return_to_inventory') {
-        // Add to items to return to inventory
-        if (item.id) {
-          setItemsToReturnToInventory((prev) => [
-            ...prev,
-            {
-              itemId: item.id!,
-              quantity: isPartialQuantity && pendingQuantityChange 
-                ? pendingQuantityChange.oldQuantity - pendingQuantityChange.newQuantity 
+            reason: inventoryReason || 'Removed during order edit',
+          },
+        ]);
+      } else if (inventoryAction === 'return_to_inventory' && item.id) {
+        setItemsToReturnToInventory((prev) => [
+          ...prev,
+          {
+            itemId: item.id!,
+            quantity:
+              isPartialQuantity && pendingQuantityChange
+                ? pendingQuantityChange.oldQuantity -
+                  pendingQuantityChange.newQuantity
                 : item.quantity,
-            },
-          ]);
-        }
+          },
+        ]);
       }
     }
 
@@ -675,7 +700,7 @@ export function AdminEditOrderModal({
             return {
               ...i,
               quantity: pendingQuantityChange.newQuantity,
-              paidQuantity: pendingQuantityChange.newQuantity, // They refunded the removed portion
+              paidQuantity: pendingQuantityChange.newQuantity,
               paymentStatus: 'already_paid',
               unpaidQuantity: 0,
             };
@@ -780,7 +805,7 @@ export function AdminEditOrderModal({
       const responseData = resp as any;
       let { payments: list, total_paid, total_refunded } = responseData.data;
 
-      // If no payments returned but order has a total, simulate an initial payment record
+      // If no payments exist but order has total, simulate an initial payment
       if (list.length === 0 && order.total > 0) {
         const initialPayment: OrderPayment = {
           id: 0,
@@ -824,14 +849,13 @@ export function AdminEditOrderModal({
 
   function handleRefundCreated() {
     // after a refund, re-fetch
-    fetchPayments();
 
     // Recalc local total from items
+    fetchPayments();
     const currentSubtotal = calculateSubtotalFromItems(localItems);
     const sumRefundsLocal = payments
       .filter((p) => p.payment_type === 'refund')
       .reduce((acc, p) => acc + parseFloat(String(p.amount)), 0);
-
     const newNet = Math.max(0, currentSubtotal - sumRefundsLocal);
     setLocalTotal(newNet.toFixed(2));
 
@@ -918,15 +942,140 @@ export function AdminEditOrderModal({
   }
 
   async function processInventoryChanges() {
-    // In a real implementation, your backend might handle inventory changes.
-    console.log('Processing inventory changes if needed...');
-    for (const item of localItems) {
-      if (!item.enable_stock_tracking) continue;
-      const orig = findOriginalItem(item);
-      // Check differences or do your own logic.
+    // Optionally, do any required inventory logic here in your backend calls
+  }
+
+  // -------------- NEW INVENTORY VALIDATION BEFORE SAVE --------------
+  async function validateInventoryAvailability(): Promise<{
+    success: boolean;
+    error?: string;
+    items?: Array<{ id: string | number; name: string; requested: number; available: number }>;
+  }> {
+    try {
+      const itemsToValidate = localItems
+        .filter((item) => item.enable_stock_tracking)
+        .map((item) => ({
+          id: item.id,
+          quantity: item.quantity,
+          originalQuantity: findOriginalItem(item)?.quantity || 0,
+        }));
+      if (itemsToValidate.length === 0) return { success: true };
+
+      // Perform client-side validation since there's no backend endpoint
+      const validationResults = await Promise.all(
+        itemsToValidate.map(async (item) => {
+          try {
+            // Get the latest item data from the API
+            const menuItem = await menuItemsApi.getById(item.id as string | number);
+            
+            // Calculate effective available quantity
+            const availableQty = menuItem.available_quantity || 0;
+            const effectiveAvailable = availableQty + item.originalQuantity;
+            
+            return {
+              id: item.id,
+              name: menuItem.name,
+              requested: item.quantity,
+              available: effectiveAvailable,
+              isValid: item.quantity <= effectiveAvailable
+            };
+          } catch (err) {
+            console.error(`Failed to validate item ${item.id}:`, err);
+            return null;
+          }
+        })
+      );
+      
+      // Filter out any null results and find invalid items
+      const validResults = validationResults.filter(r => r !== null) as Array<any>;
+      const invalidItems = validResults.filter(r => !r.isValid);
+      
+      if (invalidItems.length > 0) {
+        return {
+          success: false,
+          error: 'Some items have limited availability',
+          items: invalidItems.map(item => ({
+            id: item.id,
+            name: item.name,
+            requested: item.requested,
+            available: item.available
+          }))
+        };
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Inventory validation error:', error);
+      return {
+        success: false,
+        error: 'Failed to verify inventory availability. Please try again.',
+      };
     }
   }
 
+  function handleInventoryValidationFailure(
+    error: string,
+    items?: Array<{ id: string | number; name: string; requested: number; available: number }>
+  ) {
+    if (items && items.length > 0) {
+      toast.error(
+        <div>
+          <p className="font-bold">Some items have limited availability</p>
+          <p>The following items have changed since you started editing:</p>
+          <ul className="mt-2 list-disc pl-4">
+            {items.map((item) => (
+              <li key={item.id}>
+                {item.name}: <span className="text-red-600 font-medium">
+                  {item.available} available
+                </span>{' '}
+                (you requested {item.requested})
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2">Would you like to adjust quantities to available amounts or cancel?</p>
+          <div className="mt-2 flex space-x-2">
+            <button
+              onClick={() => adjustToAvailableQuantities(items)}
+              className="px-3 py-1 bg-blue-500 text-white rounded"
+            >
+              Adjust Quantities
+            </button>
+            <button
+              onClick={() => toast.dismiss()}
+              className="px-3 py-1 bg-gray-300 text-gray-700 rounded"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>,
+        { duration: 10000 }
+      );
+    } else {
+      toast.error(`Inventory validation failed: ${error}`);
+    }
+  }
+
+  function adjustToAvailableQuantities(
+    items: Array<{ id: string | number; name: string; available: number }>
+  ) {
+    setLocalItems((prev) =>
+      prev.map((item) => {
+        const stockInfo = items.find((i) => i.id === item.id);
+        if (stockInfo) {
+          return {
+            ...item,
+            quantity: Math.min(item.quantity, stockInfo.available),
+          };
+        }
+        return item;
+      })
+    );
+    toast.success('Quantities adjusted to match available inventory');
+  }
+
+  // ----------------------------------------------------------------
+  // 8) Final saving logic
+  // ----------------------------------------------------------------
   function handleSave() {
     // If going from pending -> preparing, show ETA modal
     const { shouldShowEtaModal } = handleOrderPreparationStatus(
@@ -953,12 +1102,23 @@ export function AdminEditOrderModal({
     setShowEtaUpdateModal(false);
   }
 
+  // -------------- UPDATED PROCEED WITH SAVE --------------
   async function proceedWithSave(pickupTime?: string) {
     try {
-      // 1) Process any inventory changes
+      // 1) Verify inventory availability first
+      const inventoryValidation = await validateInventoryAvailability();
+      if (!inventoryValidation.success) {
+        handleInventoryValidationFailure(
+          inventoryValidation.error || 'Unknown error',
+          inventoryValidation.items
+        );
+        return;
+      }
+
+      // 2) Process inventory changes if needed
       await processInventoryChanges();
 
-      // 2) Mark items as damaged if flagged
+      // 3) Mark items as damaged (if any)
       if (itemsToMarkAsDamaged.length > 0) {
         const damageCalls = itemsToMarkAsDamaged.map((d) =>
           menuItemsApi.markAsDamaged(d.itemId, {
@@ -970,7 +1130,7 @@ export function AdminEditOrderModal({
         await Promise.all(damageCalls);
       }
 
-      // 3) Process items to return to inventory
+      // 4) Return items to inventory (if any)
       if (itemsToReturnToInventory.length > 0) {
         try {
           const inventoryCalls = itemsToReturnToInventory.map(async (i) => {
@@ -985,24 +1145,22 @@ export function AdminEditOrderModal({
               return menuItemsApi.updateStock(i.itemId, {
                 stock_quantity: newStockLevel,
                 reason_type: 'return',
-                reason_details: `Items returned from edited Order #${order.id}`
+                reason_details: `Items returned from edited Order #${order.id}`,
               });
             } catch (err) {
               console.error(`Failed to update inventory for item ${i.itemId}:`, err);
               return Promise.reject(err);
             }
           });
-          
+
           await Promise.all(inventoryCalls);
-          console.log(`Successfully returned ${itemsToReturnToInventory.length} items to inventory`);
         } catch (error) {
           console.error('Error processing inventory returns:', error);
           alert('Failed to return some items to inventory. Check console for details.');
         }
       }
 
-      // 4) Process all payment adjustments
-      //    a) Refunds
+      // 5) Process all payment adjustments
       for (const refund of paymentAdjustments.refunds) {
         try {
           await orderPaymentOperationsApi.createPartialRefund(order.id, {
@@ -1065,7 +1223,7 @@ export function AdminEditOrderModal({
         }
       }
 
-      // 5) Build updated order object
+      // 6) Build updated order object
       const parsedTotal = parseFloat(localTotal) || 0;
       const cleanedItems = localItems.map((i) => ({
         id: i.id,
@@ -1102,16 +1260,24 @@ export function AdminEditOrderModal({
         estimated_pickup_time: pickupTime || order.estimatedPickupTime,
       };
 
-      // 6) Trigger onSave for the parent to actually update the backend
+      // 7) Trigger parent onSave
       onSave(updatedOrder);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving order changes:', error);
-      alert('Failed to save order changes. Check console for details.');
+
+      // Enhanced error handling for inventory/POS failures
+      if (error.response?.status === 503 || error.code === 'NETWORK_ERROR') {
+        toast.error(
+          'Network issue when verifying inventory. Please try again or check your connection.'
+        );
+      } else {
+        toast.error('Failed to save order changes. Check console for details.');
+      }
     }
   }
 
   // ----------------------------------------------------------------
-  // 8) UI rendering & helper functions
+  // 9) UI rendering & helper functions
   // ----------------------------------------------------------------
   function calculateSubtotalFromItems(items: OrderItem[]) {
     return items.reduce((sum, it) => {
@@ -1153,11 +1319,11 @@ export function AdminEditOrderModal({
     const itemsNeedingPayment = localItems.filter(
       (it) => it.paymentStatus === 'needs_payment'
     );
-    
+
     const totalUnpaidAmount = itemsNeedingPayment.reduce((sum, item) => {
       const price = parseFloat(String(item.price)) || 0;
       const unpaidQty = item.unpaidQuantity || 0;
-      return sum + (price * unpaidQty);
+      return sum + price * unpaidQty;
     }, 0);
 
     const hasItemsNeedingPayment = itemsNeedingPayment.length > 0;
@@ -1168,31 +1334,71 @@ export function AdminEditOrderModal({
         {hasItemsNeedingPayment && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <div className="flex items-start">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className="h-5 w-5 text-amber-500 mt-0.5 mr-2 flex-shrink-0" 
-                fill="none" 
-                viewBox="0 0 24 24" 
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 text-amber-500 mt-0.5 mr-2 flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
                 stroke="currentColor"
               >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth="2" 
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 8c-1.657 0-3
+                    .895-3 2s1.343 2
+                    3
+                    2
+                    3
+                    .895
+                    3
+                    2-1.343
+                    2-3
+                    2m0-8c1.11
+                    0
+                    2.08.402
+                    2.599
+                    1M12
+                    8V7m0
+                    1v8m0
+                    0v1m0-1c-1.11
+                    0-2.08-.402-2.599-1M21
+                    12a9
+                    9
+                    0
+                    11-18
+                    0
+                    9
+                    9
+                    0
+                    0118
+                    0z"
                 />
               </svg>
               <div>
-                <h4 className="font-medium text-sm text-amber-800">Payment Required</h4>
+                <h4 className="font-medium text-sm text-amber-800">
+                  Payment Required
+                </h4>
                 <p className="text-sm text-amber-700 mt-1">
-                  {itemsNeedingPayment.reduce((total, item) => total + (item.unpaidQuantity || 0), 0) === 1 ? (
+                  {itemsNeedingPayment.reduce(
+                    (total, item) => total + (item.unpaidQuantity || 0),
+                    0
+                  ) === 1 ? (
                     <>1 unit requires payment.</>
                   ) : (
-                    <>{itemsNeedingPayment.reduce((total, item) => total + (item.unpaidQuantity || 0), 0)} units require payment.</>
+                    <>
+                      {itemsNeedingPayment.reduce(
+                        (total, item) => total + (item.unpaidQuantity || 0),
+                        0
+                      )}{' '}
+                      units require payment.
+                    </>
                   )}
                 </p>
                 <p className="text-sm text-amber-700 mt-1">
-                  <span className="font-medium">Amount due: ${totalUnpaidAmount.toFixed(2)}</span>
+                  <span className="font-medium">
+                    Amount due: ${totalUnpaidAmount.toFixed(2)}
+                  </span>
                 </p>
                 <div className="mt-3">
                   <button
@@ -1213,7 +1419,10 @@ export function AdminEditOrderModal({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth="2"
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                        d="M12
+                          6v6m0
+                          0v6m0-6h6m-6
+                          0H6"
                       />
                     </svg>
                     Process Payment
@@ -1223,7 +1432,7 @@ export function AdminEditOrderModal({
             </div>
           </div>
         )}
-        
+
         <div className="space-y-3">
           {localItems.map((item, idx) => (
             <div
@@ -1248,214 +1457,279 @@ export function AdminEditOrderModal({
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="2"
-                      d="M19 7l-.867 12.142A2
-                        2 0 0116.138 21H7.862a2 2 0
-                        01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1
-                        1 0 00-1-1h-4a1 1 0
-                        00-1 1v3M4 7h16"
+                      d="M19
+                        7l-.867
+                        12.142A2
+                        2
+                        0
+                        0116.138
+                        21H7.862a2
+                        2
+                        0
+                        01-1.995-1.858L5
+                        7m5
+                        4v6m4-6v6m1-10V4a1
+                        1
+                        0
+                        00-1-1h-4a1
+                        1
+                        0
+                        00-1
+                        1v3M4
+                        7h16"
                     />
                   </svg>
                   Remove
                 </button>
               </div>
 
-              {/* Item Fields */}
-              <div className="space-y-3">
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm"
-                    value={item.name}
-                    onChange={(e) =>
-                      handleItemChange(item._editId, 'name', e.target.value)
-                    }
-                  />
-                </div>
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm"
+                  value={item.name}
+                  onChange={(e) =>
+                    handleItemChange(item._editId, 'name', e.target.value)
+                  }
+                />
+              </div>
 
-                {/* Quantity & Price */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Quantity
-                      </label>
-                      {item.paymentStatus === 'already_paid' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                          Already Paid
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
-                      <button
-                        type="button"
-                        className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border-r border-gray-300 transition-colors"
-                        onClick={() =>
-                          updateItemQuantity(
-                            item._editId,
-                            Math.max(1, item.quantity - 1)
-                          )
-                        }
-                        disabled={item.quantity <= 1}
-                        aria-label="Decrease quantity"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M20 12H4"
-                          />
-                        </svg>
-                      </button>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 text-center border-0 focus:ring-0"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const newVal = e.target.value;
-                          if (newVal === '' || /^\d+$/.test(newVal)) {
-                            const parsedVal =
-                              newVal === ''
-                                ? 1
-                                : Math.max(1, parseInt(newVal, 10));
-                            updateItemQuantity(item._editId, parsedVal);
-                          }
-                        }}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                      />
-                      <button
-                        type="button"
-                        className="px-3 py-2 bg-green-50 hover:bg-green-100 text-green-800 border-l border-gray-300 transition-colors"
-                        onClick={() =>
-                          updateItemQuantity(item._editId, item.quantity + 1)
-                        }
-                        aria-label="Increase quantity"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                          />
-                        </svg>
-                      </button>
-                    </div>
+              {/* Quantity & Price */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Quantity
+                    </label>
                     {item.paymentStatus === 'already_paid' && (
-                      <p className="mt-1 text-xs text-gray-500">
-                        Decreasing quantity will require a refund or
-                        store-credit flow.
-                      </p>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        Already Paid
+                      </span>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Price
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500 sm:text-sm">$</span>
-                      </div>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="border border-gray-300 rounded-md pl-7 pr-3 py-2 w-full text-sm"
-                        value={item.price}
-                        onChange={(e) =>
-                          handleItemChange(
-                            item._editId,
-                            'price',
-                            e.target.value
-                          )
+                  <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+                    <button
+                      type="button"
+                      className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border-r border-gray-300 transition-colors"
+                      onClick={() =>
+                        updateItemQuantity(
+                          item._editId,
+                          Math.max(1, item.quantity - 1)
+                        )
+                      }
+                      disabled={item.quantity <= 1}
+                      aria-label="Decrease quantity"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M20
+                            12H4"
+                        />
+                      </svg>
+                    </button>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 text-center border-0 focus:ring-0"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const newVal = e.target.value;
+                        if (newVal === '' || /^\d+$/.test(newVal)) {
+                          const parsedVal =
+                            newVal === ''
+                              ? 1
+                              : Math.max(1, parseInt(newVal, 10));
+                          updateItemQuantity(item._editId, parsedVal);
                         }
-                      />
-                    </div>
+                      }}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                    />
+                    <button
+                      type="button"
+                      className="px-3 py-2 bg-green-50 hover:bg-green-100 text-green-800 border-l border-gray-300 transition-colors"
+                      onClick={() =>
+                        updateItemQuantity(item._editId, item.quantity + 1)
+                      }
+                      aria-label="Increase quantity"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12
+                            6v6m0
+                            0v6m0-6h6m-6
+                            0H6"
+                        />
+                      </svg>
+                    </button>
                   </div>
+                  {item.paymentStatus === 'already_paid' && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Decreasing quantity will require a refund or
+                      store-credit flow.
+                    </p>
+                  )}
                 </div>
-
-                {/* Notes */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
+                    Price
                   </label>
-                  <input
-                    type="text"
-                    className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm"
-                    value={item.notes || ''}
-                    onChange={(e) =>
-                      handleItemChange(item._editId, 'notes', e.target.value)
-                    }
-                    placeholder="Special requests / modifications"
-                  />
-                </div>
-
-                {/* Explicit Payment Status toggle (optional) */}
-                <div className="mt-2">
-                  <PaymentStatusSelector
-                    value={item.paymentStatus || 'needs_payment'}
-                    onChange={(st) => handlePaymentStatusChange(item._editId, st)}
-                  />
-                </div>
-
-                {/* Display customizations if any */}
-                {item.customizations &&
-                  Object.keys(item.customizations).length > 0 && (
-                    <div className="bg-gray-50 p-3 rounded-md">
-                      <h6 className="text-sm font-medium text-gray-700 mb-2">
-                        Customizations:
-                      </h6>
-                      <div className="space-y-2">
-                        {Object.entries(item.customizations).map(
-                          ([category, values]) => (
-                            <div key={category} className="text-sm">
-                              <span className="font-medium">
-                                {category}:
-                              </span>
-                              {Array.isArray(values) ? (
-                                <ul className="list-disc pl-5 mt-1">
-                                  {values.map((val, idx2) => (
-                                    <li key={idx2} className="text-gray-600">
-                                      {val}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <span className="text-gray-600 ml-2">
-                                  {String(values)}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        )}
-                      </div>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-gray-500 sm:text-sm">$</span>
                     </div>
-                  )}
-
-                {/* Show item total */}
-                <div className="pt-2 text-right text-sm font-medium text-gray-700">
-                  Item Total: $
-                  {(
-                    (parseFloat(String(item.price)) || 0) *
-                    (parseInt(String(item.quantity), 10) || 0)
-                  ).toFixed(2)}
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="border border-gray-300 rounded-md pl-7 pr-3 py-2 w-full text-sm"
+                      value={item.price}
+                      onChange={(e) =>
+                        handleItemChange(item._editId, 'price', e.target.value)
+                      }
+                    />
+                  </div>
                 </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <input
+                  type="text"
+                  className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm"
+                  value={item.notes || ''}
+                  onChange={(e) =>
+                    handleItemChange(item._editId, 'notes', e.target.value)
+                  }
+                  placeholder="Special requests / modifications"
+                />
+              </div>
+
+              {/* --- NEW: Enhanced Inventory Status UI --- */}
+              {item.enable_stock_tracking && item.stock_quantity !== undefined && (
+                <div className="mt-1">
+                  {(() => {
+                    const availableQty = calculateAvailableQuantity(item);
+                    const originalItem = findOriginalItem(item);
+                    const originalQty = originalItem
+                      ? originalItem.quantity
+                      : 0;
+                    const effectiveAvailable = availableQty + originalQty;
+                    const remainingAfterOrder =
+                      effectiveAvailable - item.quantity;
+
+                    if (remainingAfterOrder < 0) {
+                      // Exceeds stock
+                      return (
+                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                          Exceeds available stock by{' '}
+                          {Math.abs(remainingAfterOrder)}
+                        </span>
+                      );
+                    } else if (remainingAfterOrder === 0) {
+                      // Last items
+                      return (
+                        <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                          Last items in stock
+                        </span>
+                      );
+                    } else if (availableQty <= 0) {
+                      // Out of stock
+                      return (
+                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                          Out of stock
+                        </span>
+                      );
+                    } else if (
+                      availableQty <= (item.low_stock_threshold || 5)
+                    ) {
+                      // Low stock
+                      return (
+                        <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                          Low stock: {remainingAfterOrder} remaining
+                        </span>
+                      );
+                    } else {
+                      // Normal stock
+                      return (
+                        <span className="text-xs text-gray-500">
+                          {remainingAfterOrder} remaining in stock
+                        </span>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
+
+              {/* Payment Status Toggle */}
+              <div className="mt-2">
+                <PaymentStatusSelector
+                  value={item.paymentStatus || 'needs_payment'}
+                  onChange={(st) => handlePaymentStatusChange(item._editId, st)}
+                />
+              </div>
+
+              {/* Show customizations if any */}
+              {item.customizations && Object.keys(item.customizations).length > 0 && (
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <h6 className="text-sm font-medium text-gray-700 mb-2">
+                    Customizations:
+                  </h6>
+                  <div className="space-y-2">
+                    {Object.entries(item.customizations).map(
+                      ([category, values]) => (
+                        <div key={category} className="text-sm">
+                          <span className="font-medium">{category}:</span>
+                          {Array.isArray(values) ? (
+                            <ul className="list-disc pl-5 mt-1">
+                              {values.map((val, idx2) => (
+                                <li key={idx2} className="text-gray-600">
+                                  {val}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-gray-600 ml-2">
+                              {String(values)}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Item Total */}
+              <div className="pt-2 text-right text-sm font-medium text-gray-700">
+                Item Total: $
+                {(
+                  (parseFloat(String(item.price)) || 0) *
+                  (parseInt(String(item.quantity), 10) || 0)
+                ).toFixed(2)}
               </div>
             </div>
           ))}
@@ -1478,8 +1752,10 @@ export function AdminEditOrderModal({
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth="2"
-              d="M12 6v6m0
-                0v6m0-6h6m-6 0H6"
+              d="M12
+                6v6m0
+                0v6m0-6h6m-6
+                0H6"
             />
           </svg>
           Add Item
@@ -1590,8 +1866,18 @@ export function AdminEditOrderModal({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M12 8v4l3 3m6-3a9 9
-                    0 11-18 0 9 9 0 0118 0z"
+                  d="M12
+                    8v4l3
+                    3m6-3a9
+                    9
+                    0
+                    11-18
+                    0
+                    9
+                    9
+                    0
+                    0118
+                    0z"
                 />
               </svg>
               <div>
@@ -1606,9 +1892,7 @@ export function AdminEditOrderModal({
                     ).toLocaleString()}
                   </p>
                 ) : (
-                  <p className="text-sm text-amber-700 mt-1">
-                    No ETA set
-                  </p>
+                  <p className="text-sm text-amber-700 mt-1">No ETA set</p>
                 )}
               </div>
             </div>
@@ -1625,11 +1909,20 @@ export function AdminEditOrderModal({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M12 9v2m0
-                    4h.01m-6.938 4h13.856c1.54
-                    0 2.502-1.667 1.732-3L13.732
+                  d="M12
+                    9v2m0
+                    4h.01m-6.938
+                    4h13.856c1.54
+                    0
+                    2.502-1.667
+                    1.732-3L13.732
                     4c-.77-1.333-2.694-1.333-3.464
-                    0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    0L3.34
+                    16c-.77
+                    1.333.192
+                    3
+                    1.732
+                    3z"
                 />
               </svg>
               <p className="text-sm text-amber-800">
@@ -1655,11 +1948,24 @@ export function AdminEditOrderModal({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M11 5H6a2 2 0
-                    00-2 2v11a2 2 0
-                    002 2h11a2 2 0
-                    002-2v-5m-1.414-9.414a2 2 0
-                    112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  d="M11
+                    5H6a2
+                    2
+                    0
+                    00-2
+                    2v11a2
+                    2
+                    0
+                    002
+                    2h11a2
+                    2
+                    0
+                    002-2v-5m-1.414-9.414a2
+                    2
+                    0
+                    112.828
+                    2.828L11.828
+                    15H9v-2.828l8.586-8.586z"
                 />
               </svg>
               Update ETA
@@ -1713,7 +2019,10 @@ export function AdminEditOrderModal({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth="2"
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                        d="M12
+                          6v6m0
+                          0v6m0-6h6m-6
+                          0H6"
                       />
                     </svg>
                     Process Additional Payment
@@ -1741,8 +2050,14 @@ export function AdminEditOrderModal({
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="2"
-                      d="M3 10h10a8 8 0
-                        018 8v2M3 10l6 6m-6-6l6-6"
+                      d="M3
+                        10h10a8
+                        8
+                        0
+                        018
+                        8v2M3
+                        10l6
+                        6m-6-6l6-6"
                     />
                   </svg>
                   Issue Refund
@@ -1751,31 +2066,31 @@ export function AdminEditOrderModal({
 
               <div className="mt-3 text-sm">
                 {hasItemsNeedingPayment && (
-                  <>
-                    <div className="bg-amber-50 border border-amber-100 rounded-md p-3 mb-2">
-                      <p className="text-amber-800 mb-1">
-                        {totalUnpaidUnits === 1 ? (
-                          <>
-                            <span className="font-medium">1</span> unit requires
-                            payment.
-                          </>
-                        ) : (
-                          <>
-                            <span className="font-medium">{totalUnpaidUnits}</span>{' '}
-                            units require payment.
-                          </>
-                        )}
-                      </p>
-                      <p className="text-amber-800 font-medium">
-                        Amount due: $
-                        {itemsNeedingPayment.reduce((sum, item) => {
+                  <div className="bg-amber-50 border border-amber-100 rounded-md p-3 mb-2">
+                    <p className="text-amber-800 mb-1">
+                      {totalUnpaidUnits === 1 ? (
+                        <>
+                          <span className="font-medium">1</span> unit requires
+                          payment.
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-medium">{totalUnpaidUnits}</span>{' '}
+                          units require payment.
+                        </>
+                      )}
+                    </p>
+                    <p className="text-amber-800 font-medium">
+                      Amount due: $
+                      {itemsNeedingPayment
+                        .reduce((sum, item) => {
                           const price = parseFloat(String(item.price)) || 0;
                           const unpaidQty = item.unpaidQuantity || 0;
-                          return sum + (price * unpaidQty);
-                        }, 0).toFixed(2)}
-                      </p>
-                    </div>
-                  </>
+                          return sum + price * unpaidQty;
+                        }, 0)
+                        .toFixed(2)}
+                    </p>
+                  </div>
                 )}
                 <p className="text-gray-600">
                   Max refundable amount:{' '}
@@ -1840,7 +2155,11 @@ export function AdminEditOrderModal({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
-                    d="M6 18L18 6M6 6l12 12"
+                    d="M6
+                      18L18
+                      6M6
+                      6l12
+                      12"
                   />
                 </svg>
               </button>
@@ -1882,10 +2201,25 @@ export function AdminEditOrderModal({
                     >
                       <path
                         fillRule="evenodd"
-                        d="M5.293 7.293a1 1 0
-                          011.414 0L10 10.586l3.293-3.293a1 1 0
-                          111.414 1.414l-4 4a1 1 0
-                          01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        d="M5.293
+                          7.293a1
+                          1
+                          0
+                          011.414
+                          0L10
+                          10.586l3.293-3.293a1
+                          1
+                          0
+                          111.414
+                          1.414l-4
+                          4a1
+                          1
+                          0
+                          01-1.414
+                          0l-4-4a1
+                          1
+                          0
+                          010-1.414z"
                         clipRule="evenodd"
                       />
                     </svg>
@@ -2124,8 +2458,20 @@ export function AdminEditOrderModal({
             setItemToRemove(null);
             setPendingQuantityChange(null);
           }}
-          onAction={(action, reason, amount, inventoryAction, inventoryReason) =>
-            handlePaymentAction(action, reason, amount, inventoryAction, inventoryReason)
+          onAction={(
+            action,
+            reason,
+            amount,
+            inventoryAction,
+            inventoryReason
+          ) =>
+            handlePaymentAction(
+              action,
+              reason,
+              amount,
+              inventoryAction,
+              inventoryReason
+            )
           }
         />
       )}

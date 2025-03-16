@@ -54,8 +54,27 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
     setFilteredItems(filtered);
   }, [searchQuery, selectedCategoryId, menuItems]);
   
+  // Calculate available quantity (stock minus damaged)
+  const calculateAvailableQuantity = (item: MenuItem): number => {
+    if (!item.enable_stock_tracking || item.stock_quantity === undefined) {
+      return Infinity;
+    }
+    
+    // If damaged_quantity is defined, subtract it from stock_quantity
+    const damagedQty = item.damaged_quantity || 0;
+    return Math.max(0, item.stock_quantity - damagedQty);
+  };
+  
   // Handle item selection
   const handleItemSelect = (item: MenuItem) => {
+    // Check stock availability using available quantity
+    const availableQty = calculateAvailableQuantity(item);
+    if (item.enable_stock_tracking && availableQty <= 0) {
+      // Could add a toast notification here
+      alert(`${item.name} is out of stock.`);
+      return;
+    }
+    
     setSelectedItem(item);
     
     // If the item has option groups, go to customize step
@@ -63,8 +82,8 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
       // Initialize selected options
       const initialOptions: Record<string, string[]> = {};
       item.option_groups.forEach(group => {
-      // For required single-select groups, preselect the first option
-      if (group.required && group.max_select === 1) {
+        // For required single-select groups, preselect the first option
+        if (group.required && group.max_select === 1) {
           initialOptions[group.name] = [group.options[0]?.name || ''];
         } else {
           initialOptions[group.name] = [];
@@ -225,30 +244,50 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
             </div>
           ) : (
             <ul className="divide-y divide-gray-200">
-              {filteredItems.map((item) => (
-                <li 
-                  key={item.id} 
-                  className="py-3 px-2 hover:bg-gray-50 cursor-pointer transition-colors rounded-md"
-                  onClick={() => handleItemSelect(item)}
-                >
-                  <div className="flex justify-between">
-                    <div>
-                      <h4 className="font-medium text-gray-900">{item.name}</h4>
-                      {item.description && (
-                        <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
-                      )}
-                      {item.option_groups && item.option_groups.length > 0 && (
-                        <div className="mt-1 text-xs text-[#c1902f] font-medium">
-                          Customizable
-                        </div>
-                      )}
+              {filteredItems.map((item) => {
+                const availableQty = calculateAvailableQuantity(item);
+                const isOutOfStock = item.enable_stock_tracking && availableQty <= 0;
+                const isLowStock = item.enable_stock_tracking && availableQty > 0 && availableQty <= (item.low_stock_threshold || 5);
+                
+                return (
+                  <li 
+                    key={item.id} 
+                    className={`py-3 px-2 hover:bg-gray-50 cursor-pointer transition-colors rounded-md ${
+                      isOutOfStock ? 'opacity-60' : ''
+                    }`}
+                    onClick={() => handleItemSelect(item)}
+                  >
+                    <div className="flex justify-between">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{item.name}</h4>
+                        {item.description && (
+                          <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
+                        )}
+                        {/* Stock information */}
+                        {item.enable_stock_tracking && item.stock_quantity !== undefined && (
+                          <div className="mt-1">
+                            {isOutOfStock ? (
+                              <span className="text-xs font-medium text-red-600">Out of stock</span>
+                            ) : isLowStock ? (
+                              <span className="text-xs font-medium text-amber-600">Low stock: {availableQty} left</span>
+                            ) : (
+                              <span className="text-xs text-gray-500">{availableQty} in stock</span>
+                            )}
+                          </div>
+                        )}
+                        {item.option_groups && item.option_groups.length > 0 && (
+                          <div className="mt-1 text-xs text-[#c1902f] font-medium">
+                            Customizable
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-gray-900 font-medium">
+                        ${parseFloat(String(item.price)).toFixed(2)}
+                      </div>
                     </div>
-                    <div className="text-gray-900 font-medium">
-                      ${parseFloat(String(item.price)).toFixed(2)}
-                    </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

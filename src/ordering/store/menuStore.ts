@@ -192,14 +192,17 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   fetchMenuItems: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get('/menu_items');
-      const menuItems = response.data.map((item: any) => ({
+      // Use the menuItemsApi to get menu items with stock information
+      const menuItems = await menuItemsApi.getAll({ include_stock: true });
+      
+      // Process the items to ensure image property is set
+      const processedItems = menuItems.map((item: any) => ({
         ...item,
         // Ensure the image property is set for compatibility
         image: item.image_url || '/placeholder-food.jpg'
       }));
       
-      set({ menuItems, loading: false });
+      set({ menuItems: processedItems, loading: false });
     } catch (error) {
       const errorMessage = handleApiError(error);
       set({ error: errorMessage, loading: false });
@@ -209,16 +212,21 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   fetchAllMenuItemsForAdmin: async () => {
     set({ loading: true, error: null });
     try {
-      // Important: Don't filter by restaurant's current_menu_id when in admin mode
-      // Explicitly specifying "admin=true" parameter to get ALL menu items regardless of menu
-      const response = await apiClient.get('/menu_items?admin=true&show_all=true');
-      const menuItems = response.data.map((item: any) => ({
+      // Use the menuItemsApi to get all menu items with stock information
+      const menuItems = await menuItemsApi.getAll({ 
+        admin: true, 
+        show_all: true,
+        include_stock: true 
+      });
+      
+      // Process the items to ensure image property is set
+      const processedItems = menuItems.map((item: any) => ({
         ...item,
         // Ensure the image property is set for compatibility
         image: item.image_url || '/placeholder-food.jpg'
       }));
       
-      set({ menuItems, loading: false });
+      set({ menuItems: processedItems, loading: false });
     } catch (error) {
       const errorMessage = handleApiError(error);
       set({ error: errorMessage, loading: false });
