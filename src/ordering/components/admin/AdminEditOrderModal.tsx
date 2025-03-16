@@ -26,7 +26,16 @@ import {
   requiresAdvanceNotice,
 } from '../../../shared/utils/orderUtils';
 
-interface OrderPayment {
+// Define a local interface for refunded items to avoid conflicts
+interface RefundedItem {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+// Rename to avoid conflict with imported type
+interface OrderPaymentLocal {
   id: number;
   payment_type: 'initial' | 'additional' | 'refund';
   amount: number;
@@ -35,6 +44,8 @@ interface OrderPayment {
   created_at: string;
   description?: string;
   transaction_id?: string;
+  payment_details?: any;
+  refunded_items?: RefundedItem[];
 }
 
 interface AdminEditOrderModalProps {
@@ -67,6 +78,26 @@ export interface OrderItem {
   originalQuantity?: number;  // Original quantity from the order
   paidQuantity?: number;      // How many units are already paid for
   unpaidQuantity?: number;    // How many units still require payment
+  // Refund tracking
+  refundedQuantity?: number;  // How many units have been refunded
+  isFullyRefunded?: boolean;  // Whether the item is fully refunded
+  isPartiallyRefunded?: boolean; // Whether the item is partially refunded
+}
+
+/**
+ * Interface to track refund status by item
+ */
+interface RefundedItemsTracker {
+  [itemId: string]: {
+    totalQuantity: number;       // Original quantity in order
+    refundedQuantity: number;    // How many have been refunded
+    refundTransactions: Array<{  // All refund records for this item
+      transactionId: string;
+      date: string;
+      quantity: number;
+      amount: number;
+    }>;
+  };
 }
 
 // -------------- NEW HELPER FOR AVAILABLE QUANTITY --------------
@@ -160,6 +191,11 @@ export function AdminEditOrderModal({
 
   // For loading the full menu item data (e.g. inventory details)
   const [loadingMenuItemData, setLoadingMenuItemData] = useState(false);
+  
+  /**
+   * Tracks refunded items and their quantities
+   */
+  const [refundedItemsMap, setRefundedItemsMap] = useState<RefundedItemsTracker>({});
 
   // On mount/load, set originalItems and fetch any additional item data if needed
   useEffect(() => {
@@ -175,11 +211,59 @@ export function AdminEditOrderModal({
       setOriginalItems(initialItems);
       setNewlyAddedItemIds(new Set());
 
+      // First, fetch payments and refund data to ensure we have it before updating items
+      const fetchPaymentsFirst = async () => {
+        if (order.id) {
+          try {
+            console.log('Fetching payments first for order:', order.id);
+            const resp = await orderPaymentsApi.getPayments(order.id);
+            const responseData = resp as any;
+            let { payments: list, total_paid, total_refunded } = responseData.data;
+            
+            // If no payments exist but order has total, simulate an initial payment
+            if (list.length === 0 && order.total > 0) {
+              const initialPayment: OrderPaymentLocal = {
+                id: 0,
+                payment_type: 'initial',
+                amount: parseFloat(order.total),
+                payment_method: order.payment_method || 'credit_card',
+                status: 'completed',
+                created_at: order.createdAt || new Date().toISOString(),
+                description: 'Initial payment',
+                transaction_id: order.transaction_id || 'N/A',
+              };
+              list = [initialPayment];
+              total_paid = parseFloat(order.total);
+              total_refunded = 0;
+            }
+            
+            // Set payments
+            setPayments(list);
+            setMaxRefundable(Math.max(0, total_paid - total_refunded));
+            
+            // Build refund tracker
+            const refundTracker = buildRefundTracker(list);
+            setRefundedItemsMap(refundTracker);
+            
+            // Now proceed with fetching menu item data
+            await fetchCompleteMenuItemData(initialItems, refundTracker);
+            
+          } catch (err) {
+            console.error('Failed to load payments:', err);
+            // Continue with menu item data even if payments fail
+            await fetchCompleteMenuItemData(initialItems, {});
+          }
+        } else {
+          // No order ID, just fetch menu item data
+          await fetchCompleteMenuItemData(initialItems, {});
+        }
+      };
+
       // Handle undefined/null inventory values safely
-      const fetchCompleteMenuItemData = async () => {
+      const fetchCompleteMenuItemData = async (items: OrderItem[], refundTracker: RefundedItemsTracker) => {
         try {
           setLoadingMenuItemData(true);
-          const menuItemPromises = initialItems
+          const menuItemPromises = items
             .filter((it) => it.id)
             .map((it) =>
               menuItemsApi
@@ -213,11 +297,72 @@ export function AdminEditOrderModal({
           // Update originalItems with full data
           setOriginalItems(completeItems);
 
-          // Also update localItems to reflect any new inventory data
+          // Apply refund information to items before setting them
+          const itemsWithRefundInfo = completeItems.map(item => {
+            // Generate possible keys for this item
+            const possibleKeys = [
+              item.id ? String(item.id) : '',
+              item.name.toLowerCase().replace(/\s+/g, '_')
+            ].filter(Boolean);
+            
+            // Find matching refund info
+            let refundInfo: typeof refundTracker[string] | undefined;
+            let matchedKey = '';
+            
+            // Try direct key matching first
+            for (const key of possibleKeys) {
+              if (refundTracker[key]) {
+                refundInfo = refundTracker[key];
+                matchedKey = key;
+                break;
+              }
+            }
+            
+            // If no direct match, try to find by matching function
+            if (!refundInfo) {
+              for (const key in refundTracker) {
+                const matchedItem = matchRefundedItemToOrderItem(key, [item]);
+                if (matchedItem) {
+                  refundInfo = refundTracker[key];
+                  matchedKey = key;
+                  break;
+                }
+              }
+            }
+            
+            // If we found refund info, update the item
+            if (refundInfo) {
+              // Update total quantity in the tracker
+              if (matchedKey) {
+                refundTracker[matchedKey].totalQuantity = item.quantity;
+              }
+              
+              // Determine if fully or partially refunded
+              const isFullyRefunded = refundInfo.refundedQuantity >= item.quantity;
+              const isPartiallyRefunded = refundInfo.refundedQuantity > 0 && !isFullyRefunded;
+              
+              return {
+                ...item,
+                refundedQuantity: refundInfo.refundedQuantity,
+                isFullyRefunded,
+                isPartiallyRefunded
+              };
+            }
+            
+            // No match found, ensure refund properties are reset
+            return {
+              ...item,
+              refundedQuantity: 0,
+              isFullyRefunded: false,
+              isPartiallyRefunded: false
+            };
+          });
+
+          // Update localItems with the enriched data that includes both inventory and refund info
           setLocalItems((prevLocal) =>
             prevLocal.map((localItem) => {
               if (!localItem.id) return localItem;
-              const enriched = completeItems.find(
+              const enriched = itemsWithRefundInfo.find(
                 (ci) => ci.id && String(ci.id) === String(localItem.id)
               );
               if (!enriched) return localItem;
@@ -244,9 +389,10 @@ export function AdminEditOrderModal({
         }
       };
 
-      fetchCompleteMenuItemData();
+      // Start the process by fetching payments first
+      fetchPaymentsFirst();
     }
-  }, [order.items]);
+  }, [order.items, order.id]);
 
   // ----------------------------------------------------------------
   // 2) Order-level local state
@@ -313,7 +459,7 @@ export function AdminEditOrderModal({
   // ----------------------------------------------------------------
   // 3) Payment / Refund state
   // ----------------------------------------------------------------
-  const [payments, setPayments] = useState<OrderPayment[]>([]);
+  const [payments, setPayments] = useState<OrderPaymentLocal[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [maxRefundable, setMaxRefundable] = useState<number>(0);
   const [showRefundModal, setShowRefundModal] = useState(false);
@@ -786,9 +932,475 @@ export function AdminEditOrderModal({
     setItemToRemove(null);
   }
 
+  /**
+   * Builds a tracker for refunded items based on payment history
+   */
+  function buildRefundTracker(paymentsList: OrderPaymentLocal[]): RefundedItemsTracker {
+    const tracker: RefundedItemsTracker = {};
+    
+    // Filter for refund transactions
+    const refundTransactions = paymentsList.filter(p => p.payment_type === 'refund');
+    
+    // Process each refund transaction
+    refundTransactions.forEach(refund => {
+      try {
+        // Try to extract refunded items from payment_details or refunded_items first
+        if (refund.refunded_items && refund.refunded_items.length > 0) {
+          refund.refunded_items.forEach((item: RefundedItem) => {
+            const itemKey = String(item.id || item.name.toLowerCase().replace(/\s+/g, '_'));
+            if (!tracker[itemKey]) {
+              tracker[itemKey] = {
+                totalQuantity: 0, // Will be updated later
+                refundedQuantity: item.quantity,
+                refundTransactions: [{
+                  transactionId: String(refund.id),
+                  date: refund.created_at,
+                  quantity: item.quantity,
+                  amount: item.price * item.quantity
+                }]
+              };
+            } else {
+              tracker[itemKey].refundedQuantity += item.quantity;
+              tracker[itemKey].refundTransactions.push({
+                transactionId: String(refund.id),
+                date: refund.created_at,
+                quantity: item.quantity,
+                amount: item.price * item.quantity
+              });
+            }
+          });
+          return; // Skip the description parsing if we have refunded_items data
+        }
+        
+        // Try to extract from payment_details
+        if (refund.payment_details && refund.payment_details.refunded_items) {
+          const refundedItems = refund.payment_details.refunded_items;
+          refundedItems.forEach((item: any) => {
+            const itemKey = String(item.id || item.name.toLowerCase().replace(/\s+/g, '_'));
+            if (!tracker[itemKey]) {
+              tracker[itemKey] = {
+                totalQuantity: 0,
+                refundedQuantity: item.quantity,
+                refundTransactions: [{
+                  transactionId: String(refund.id),
+                  date: refund.created_at,
+                  quantity: item.quantity,
+                  amount: item.price * item.quantity
+                }]
+              };
+            } else {
+              tracker[itemKey].refundedQuantity += item.quantity;
+              tracker[itemKey].refundTransactions.push({
+                transactionId: String(refund.id),
+                date: refund.created_at,
+                quantity: item.quantity,
+                amount: item.price * item.quantity
+              });
+            }
+          });
+          return;
+        }
+        
+        // If no structured data, fall back to description parsing
+        const description = refund.description || '';
+        
+        // Various parsing strategies
+        // 1. Look for patterns like "Build-a-Bowl × 1 ($9.25)"
+        const itemMatch = description.match(/([^×]+)\s*×\s*(\d+)\s*\(\$([^)]+)\)/);
+        if (itemMatch) {
+          const [_, itemName, quantityStr, priceStr] = itemMatch;
+          const quantity = parseInt(quantityStr, 10);
+          const price = parseFloat(priceStr);
+          const nameKey = itemName.trim().toLowerCase().replace(/\s+/g, '_');
+          
+          if (!tracker[nameKey]) {
+            tracker[nameKey] = {
+              totalQuantity: 0,
+              refundedQuantity: quantity,
+              refundTransactions: [{
+                transactionId: String(refund.id),
+                date: refund.created_at,
+                quantity,
+                amount: !isNaN(price) ? price * quantity : refund.amount
+              }]
+            };
+          } else {
+            tracker[nameKey].refundedQuantity += quantity;
+            tracker[nameKey].refundTransactions.push({
+              transactionId: String(refund.id),
+              date: refund.created_at,
+              quantity,
+              amount: !isNaN(price) ? price * quantity : refund.amount
+            });
+          }
+          return;
+        }
+        
+        // 2. Pattern: "Refund for: 2x Item Name ($10.00)"
+        const refundedItemsMatch = description.match(/Refund for:\s*(.*?)(\$|$)/);
+        if (refundedItemsMatch) {
+          const itemsText = refundedItemsMatch[1];
+          // Try to parse items like "2x Item Name, 1x Another Item"
+          const itemMatches = itemsText.match(/(\d+)x\s+([^,]+)(?:,|$)/g);
+          
+          if (itemMatches) {
+            itemMatches.forEach(match => {
+              const parts = match.split('x');
+              if (parts.length >= 2) {
+                const quantityStr = parts[0].trim();
+                const itemName = parts.slice(1).join('x').trim(); // Handle item names that might contain 'x'
+                const quantity = parseInt(quantityStr, 10);
+                
+                if (!isNaN(quantity) && itemName) {
+                  // Use item name as key if no ID available
+                  const itemKey = itemName.toLowerCase().replace(/\s+/g, '_');
+                  
+                  if (!tracker[itemKey]) {
+                    tracker[itemKey] = {
+                      totalQuantity: 0, // Will be updated later
+                      refundedQuantity: quantity,
+                      refundTransactions: [{
+                        transactionId: String(refund.id),
+                        date: refund.created_at,
+                        quantity,
+                        amount: refund.amount / itemMatches.length // Approximate if multiple items
+                      }]
+                    };
+                  } else {
+                    // Add to existing refund record
+                    tracker[itemKey].refundedQuantity += quantity;
+                    tracker[itemKey].refundTransactions.push({
+                      transactionId: String(refund.id),
+                      date: refund.created_at,
+                      quantity,
+                      amount: refund.amount / itemMatches.length
+                    });
+                  }
+                }
+              }
+            });
+            return;
+          }
+        }
+        
+        // 3. Pattern: "Refund: Item Name"
+        const simpleRefundMatch = description.match(/Refund:\s*(.+)/i);
+        if (simpleRefundMatch && simpleRefundMatch[1]) {
+          const itemName = simpleRefundMatch[1].trim();
+          const nameKey = itemName.toLowerCase().replace(/\s+/g, '_');
+          
+          if (!tracker[nameKey]) {
+            tracker[nameKey] = {
+              totalQuantity: 0,
+              refundedQuantity: 1, // Assume 1 if not specified
+              refundTransactions: [{
+                transactionId: String(refund.id),
+                date: refund.created_at,
+                quantity: 1,
+                amount: refund.amount
+              }]
+            };
+          } else {
+            tracker[nameKey].refundedQuantity += 1;
+            tracker[nameKey].refundTransactions.push({
+              transactionId: String(refund.id),
+              date: refund.created_at,
+              quantity: 1,
+              amount: refund.amount
+            });
+          }
+          return;
+        }
+        
+        // If we can't parse specific items, create a generic entry
+        const genericKey = `refund_${refund.id}`;
+        tracker[genericKey] = {
+          totalQuantity: 0,
+          refundedQuantity: 1,
+          refundTransactions: [{
+            transactionId: String(refund.id),
+            date: refund.created_at,
+            quantity: 1,
+            amount: refund.amount
+          }]
+        };
+      } catch (error) {
+        console.error('Error processing refund transaction:', error);
+      }
+    });
+    
+    return tracker;
+  }
+
+  /**
+   * Match a refunded item to an order item using various matching strategies
+   */
+  function matchRefundedItemToOrderItem(refundKey: string, orderItems: OrderItem[]): OrderItem | undefined {
+    // Try exact ID match first
+    const idMatch = orderItems.find(item => 
+      item.id && String(item.id).toLowerCase() === refundKey.toLowerCase()
+    );
+    if (idMatch) return idMatch;
+    
+    // Try name match (normalize the refundKey if it's a name-based key)
+    const normalizedKey = refundKey.replace(/_/g, ' ');
+    const nameMatch = orderItems.find(item => 
+      item.name.toLowerCase() === normalizedKey.toLowerCase()
+    );
+    if (nameMatch) return nameMatch;
+    
+    // If it's a generic refund key (refund_123), just return undefined
+    if (refundKey.startsWith('refund_')) return undefined;
+    
+    // Try partial name match as last resort
+    const partialMatch = orderItems.find(item => 
+      normalizedKey.toLowerCase().includes(item.name.toLowerCase()) ||
+      item.name.toLowerCase().includes(normalizedKey.toLowerCase())
+    );
+    
+    if (partialMatch) return partialMatch;
+    
+    // Try matching by first word of item name (common for items like "Cali Poke")
+    const firstWordMatch = orderItems.find(item => {
+      const firstWord = item.name.split(' ')[0].toLowerCase();
+      return normalizedKey.toLowerCase().includes(firstWord) || 
+             firstWord.includes(normalizedKey.toLowerCase());
+    });
+    
+    // Try matching by removing common words like "Bowl", "Plate", etc.
+    if (!firstWordMatch) {
+      const commonWords = ['bowl', 'plate', 'combo', 'special', 'regular', 'large', 'small', 'medium'];
+      const filteredItems = orderItems.filter(item => {
+        const itemWords = item.name.toLowerCase().split(' ');
+        const keyWords = normalizedKey.toLowerCase().split(' ');
+        
+        // Remove common words from both
+        const filteredItemWords = itemWords.filter(word => !commonWords.includes(word));
+        const filteredKeyWords = keyWords.filter(word => !commonWords.includes(word));
+        
+        // Check if any significant words match
+        return filteredItemWords.some(word => 
+          filteredKeyWords.some(keyWord => 
+            word.includes(keyWord) || keyWord.includes(word)
+          )
+        );
+      });
+      
+      if (filteredItems.length > 0) {
+        return filteredItems[0]; // Return the first match
+      }
+    }
+    
+    return firstWordMatch;
+  }
+
+  /**
+   * Update local items with refund information
+   */
+  function updateLocalItemsWithRefundInfo(refundTracker: RefundedItemsTracker) {
+    setLocalItems(prevItems => {
+      return prevItems.map(item => {
+        // Generate possible keys for this item
+        const possibleKeys = [
+          item.id ? String(item.id) : '',
+          item.name.toLowerCase().replace(/\s+/g, '_')
+        ].filter(Boolean);
+        
+        // Find matching refund info
+        let refundInfo: typeof refundTracker[string] | undefined;
+        let matchedKey = '';
+        
+        // 1. Try direct key matching first
+        for (const key of possibleKeys) {
+          if (refundTracker[key]) {
+            refundInfo = refundTracker[key];
+            matchedKey = key;
+            break;
+          }
+        }
+        
+        // 2. If no direct match, try to find by matching function
+        if (!refundInfo) {
+          for (const key in refundTracker) {
+            const matchedItem = matchRefundedItemToOrderItem(key, [item]);
+            if (matchedItem) {
+              refundInfo = refundTracker[key];
+              matchedKey = key;
+              break;
+            }
+          }
+        }
+        
+        // 3. Try fuzzy matching by checking if the name contains parts of any refund key
+        if (!refundInfo) {
+          for (const key in refundTracker) {
+            if (key.startsWith('refund_')) continue; // Skip generic entries
+            
+            const refundItemName = key.replace(/_/g, ' ');
+            if (
+              item.name.toLowerCase().includes(refundItemName) || 
+              refundItemName.includes(item.name.toLowerCase())
+            ) {
+              refundInfo = refundTracker[key];
+              matchedKey = key;
+              break;
+            }
+          }
+        }
+        
+        // If we found refund info, update the item
+        if (refundInfo) {
+          // Update total quantity in the tracker
+          refundTracker[matchedKey].totalQuantity = item.quantity;
+          
+          // Determine if fully or partially refunded
+          const isFullyRefunded = refundInfo.refundedQuantity >= item.quantity;
+          const isPartiallyRefunded = refundInfo.refundedQuantity > 0 && !isFullyRefunded;
+          
+          return {
+            ...item,
+            refundedQuantity: refundInfo.refundedQuantity,
+            isFullyRefunded,
+            isPartiallyRefunded
+          };
+        }
+        
+        // No match found, ensure refund properties are reset
+        return {
+          ...item,
+          refundedQuantity: 0,
+          isFullyRefunded: false,
+          isPartiallyRefunded: false
+        };
+      });
+    });
+  }
+
   // ----------------------------------------------------------------
   // 6) Payment tab & Additional Payment logic
   // ----------------------------------------------------------------
+  
+  // Fetch payments and process refunds immediately when component mounts
+  useEffect(() => {
+    async function initializePaymentsAndRefunds() {
+      if (order.id) {
+        try {
+          console.log('Initializing payments and refunds for order:', order.id);
+          // Fetch payments
+          const resp = await orderPaymentsApi.getPayments(order.id);
+          const responseData = resp as any;
+          let { payments: list, total_paid, total_refunded } = responseData.data;
+          
+          console.log('Payments fetched:', list.length, 'payments found');
+          
+          // If no payments exist but order has total, simulate an initial payment
+          if (list.length === 0 && order.total > 0) {
+            console.log('No payments found, creating initial payment');
+            const initialPayment: OrderPaymentLocal = {
+              id: 0,
+              payment_type: 'initial',
+              amount: parseFloat(order.total),
+              payment_method: order.payment_method || 'credit_card',
+              status: 'completed',
+              created_at: order.createdAt || new Date().toISOString(),
+              description: 'Initial payment',
+              transaction_id: order.transaction_id || 'N/A',
+            };
+            list = [initialPayment];
+            total_paid = parseFloat(order.total);
+            total_refunded = 0;
+          }
+          
+          // Set payments
+          setPayments(list);
+          setMaxRefundable(Math.max(0, total_paid - total_refunded));
+          
+          // Process refunds immediately
+          if (list.length > 0) {
+            const refundTransactions = list.filter((p: OrderPaymentLocal) => p.payment_type === 'refund');
+            console.log('Refund transactions found:', refundTransactions.length);
+            
+            // Always build the refund tracker, even if no refund transactions
+            // This ensures we process any refunds that might exist
+            const refundTracker = buildRefundTracker(list);
+            console.log('Refund tracker built:', Object.keys(refundTracker).length, 'items tracked');
+            
+            // Set the refunded items map
+            setRefundedItemsMap(refundTracker);
+            
+            // Apply refund information to local items immediately
+            // We call this directly instead of relying on the useEffect dependency
+            updateLocalItemsWithRefundInfo(refundTracker);
+            
+            if (refundTransactions.length > 0) {
+              // Update total to reflect refunds
+              const currentSubtotal = calculateSubtotal();
+              const sumRefundsLocal = list
+                .filter((p: OrderPaymentLocal) => p.payment_type === 'refund')
+                .reduce((acc: number, p: OrderPaymentLocal) => acc + parseFloat(String(p.amount)), 0);
+              
+              if (sumRefundsLocal > 0) {
+                const newNet = Math.max(0, parseFloat(currentSubtotal) - sumRefundsLocal);
+                setLocalTotal(newNet.toFixed(2));
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load payments:', err);
+          
+          // Fallback if the API fails
+          if (order.total > 0) {
+            setMaxRefundable(parseFloat(order.total));
+            const initialPayment: OrderPaymentLocal = {
+              id: 0,
+              payment_type: 'initial',
+              amount: parseFloat(order.total),
+              payment_method: order.payment_method || 'credit_card',
+              status: 'completed',
+              created_at: order.createdAt || new Date().toISOString(),
+              description: 'Initial payment',
+              transaction_id: order.transaction_id || 'N/A',
+            };
+            setPayments([initialPayment]);
+          }
+        }
+      }
+    }
+    
+    // Call immediately when component mounts
+    initializePaymentsAndRefunds();
+  }, [order.id]);
+  
+  // Single useEffect to handle all payment and refund-related updates
+  // This prevents race conditions between multiple useEffects
+  useEffect(() => {
+    if (order.id && payments.length > 0) {
+      console.log('Processing payments and refunds in unified handler');
+      
+      // 1. Build refund tracker
+      const refundTracker = buildRefundTracker(payments);
+      
+      // 2. Update refundedItemsMap state (but don't depend on it for updates)
+      setRefundedItemsMap(refundTracker);
+      
+      // 3. Apply refund information directly to items
+      // This ensures the refund info is applied in a single, consistent way
+      updateLocalItemsWithRefundInfo(refundTracker);
+      
+      // 4. Update total based on refunds
+      const currentSubtotal = calculateSubtotal();
+      const sumRefundsLocal = payments
+        .filter((p: OrderPaymentLocal) => p.payment_type === 'refund')
+        .reduce((acc: number, p: OrderPaymentLocal) => acc + parseFloat(String(p.amount)), 0);
+      
+      if (sumRefundsLocal > 0) {
+        const newNet = Math.max(0, parseFloat(currentSubtotal) - sumRefundsLocal);
+        setLocalTotal(newNet.toFixed(2));
+      }
+    }
+  }, [order.id, payments]);
+  
+  // Refresh payments when switching to payments tab
   useEffect(() => {
     if (activeTab === 'payments' && order.id) {
       fetchPayments();
@@ -807,7 +1419,7 @@ export function AdminEditOrderModal({
 
       // If no payments exist but order has total, simulate an initial payment
       if (list.length === 0 && order.total > 0) {
-        const initialPayment: OrderPayment = {
+        const initialPayment: OrderPaymentLocal = {
           id: 0,
           payment_type: 'initial',
           amount: parseFloat(order.total),
@@ -830,7 +1442,7 @@ export function AdminEditOrderModal({
       // Fallback if the API fails
       if (order.total > 0) {
         setMaxRefundable(parseFloat(order.total));
-        const initialPayment: OrderPayment = {
+        const initialPayment: OrderPaymentLocal = {
           id: 0,
           payment_type: 'initial',
           amount: parseFloat(order.total),
@@ -848,28 +1460,37 @@ export function AdminEditOrderModal({
   }
 
   function handleRefundCreated() {
-    // after a refund, re-fetch
-
-    // Recalc local total from items
-    fetchPayments();
-    const currentSubtotal = calculateSubtotalFromItems(localItems);
-    const sumRefundsLocal = payments
-      .filter((p) => p.payment_type === 'refund')
-      .reduce((acc, p) => acc + parseFloat(String(p.amount)), 0);
-    const newNet = Math.max(0, currentSubtotal - sumRefundsLocal);
-    setLocalTotal(newNet.toFixed(2));
-
-    // Possibly update status to refunded or partially_refunded
-    try {
-      const isFullRefund = Math.abs(newNet) < 0.01;
-      if (isFullRefund) {
-        setLocalStatus('refunded');
-      } else if (sumRefundsLocal > 0) {
-        setLocalStatus('partially_refunded');
+    // After a refund, re-fetch payments
+    fetchPayments().then(() => {
+      // After fetching payments, rebuild the refund tracker
+      if (payments.length > 0) {
+        const refundTracker = buildRefundTracker(payments);
+        setRefundedItemsMap(refundTracker);
+        
+        // Apply refund information to local items
+        updateLocalItemsWithRefundInfo(refundTracker);
       }
-    } catch (error) {
-      console.error('Error updating status after refund:', error);
-    }
+      
+      // Recalc local total from items
+      const currentSubtotal = calculateSubtotalFromItems(localItems);
+      const sumRefundsLocal = payments
+        .filter((p: OrderPaymentLocal) => p.payment_type === 'refund')
+        .reduce((acc: number, p: OrderPaymentLocal) => acc + parseFloat(String(p.amount)), 0);
+      const newNet = Math.max(0, currentSubtotal - sumRefundsLocal);
+      setLocalTotal(newNet.toFixed(2));
+
+      // Possibly update status to refunded or partially_refunded
+      try {
+        const isFullRefund = Math.abs(newNet) < 0.01;
+        if (isFullRefund) {
+          setLocalStatus('refunded');
+        } else if (sumRefundsLocal > 0) {
+          setLocalStatus('partially_refunded');
+        }
+      } catch (error) {
+        console.error('Error updating status after refund:', error);
+      }
+    });
   }
 
   function handleProcessAdditionalPayment() {
@@ -1306,14 +1927,25 @@ export function AdminEditOrderModal({
   }
 
   // ------------------ RENDER TABS ------------------
+  // Helper function to count total refunded items
+  function getTotalRefundedItemsCount() {
+    return localItems.filter(item => 
+      item.isFullyRefunded || item.isPartiallyRefunded
+    ).length;
+  }
+
+  // Removed the redundant effect that was causing circular dependencies
+
   function renderItemsTab() {
     const currentSubtotal = calculateSubtotal();
-    // Sum of *recorded* refunds from the payments array
+    
+    // Sum of refunds from the payments array
     const sumRefundsHere = payments
-      .filter((p) => p.payment_type === 'refund')
-      .reduce((acc, p) => acc + parseFloat(String(p.amount)), 0);
+      .filter((p: OrderPaymentLocal) => p.payment_type === 'refund')
+      .reduce((acc: number, p: OrderPaymentLocal) => acc + parseFloat(String(p.amount)), 0);
 
-    const net = Math.max(0, parseFloat(currentSubtotal) - sumRefundsHere);
+    // Calculate the actual net total after refunds
+    const netTotal = Math.max(0, parseFloat(currentSubtotal) - sumRefundsHere);
 
     // Calculate payment summary information
     const itemsNeedingPayment = localItems.filter(
@@ -1327,9 +1959,46 @@ export function AdminEditOrderModal({
     }, 0);
 
     const hasItemsNeedingPayment = itemsNeedingPayment.length > 0;
+    const hasRefundedItems = getTotalRefundedItemsCount() > 0;
 
     return (
       <div className="space-y-4 p-4 sm:p-6">
+        {/* Refunded Items Banner */}
+        {hasRefundedItems && (
+          <div className="bg-amber-50 border border-amber-200 p-3 rounded-md mb-4">
+            <div className="flex items-start">
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="h-5 w-5 text-amber-500 mr-2 mt-0.5 flex-shrink-0" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth="2" 
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                />
+              </svg>
+              <div>
+                <h4 className="font-medium text-amber-800">
+                  This order contains refunded items
+                </h4>
+                <p className="text-sm text-amber-700">
+                  {getTotalRefundedItemsCount()} {getTotalRefundedItemsCount() === 1 ? 'item has' : 'items have'} been fully or partially refunded.
+                </p>
+                <button 
+                  onClick={() => setActiveTab('payments')}
+                  className="text-sm text-amber-800 underline mt-1 hover:text-amber-900"
+                >
+                  View payment history
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Payment Summary Alert - show at the top of the Items tab */}
         {hasItemsNeedingPayment && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
@@ -1437,15 +2106,57 @@ export function AdminEditOrderModal({
           {localItems.map((item, idx) => (
             <div
               key={item._editId}
-              className="border border-gray-200 rounded-lg p-4 space-y-3 transition-shadow hover:shadow-md"
+              className={`border border-gray-200 rounded-lg p-4 space-y-3 transition-shadow hover:shadow-md ${
+                item.isFullyRefunded ? 'bg-gray-100' : ''
+              }`}
             >
               {/* Header Row */}
               <div className="flex items-center justify-between">
-                <h5 className="font-medium text-gray-900">Item {idx + 1}</h5>
+                <div className="flex items-center">
+                  <h5 className={`font-medium ${item.isFullyRefunded ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                    {item.isFullyRefunded ? <s>Item {idx + 1}</s> : `Item ${idx + 1}`}
+                  </h5>
+                  
+                  {/* Refund badges with tooltips */}
+                  {item.isFullyRefunded && (
+                    <div className="relative group ml-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                        Refunded
+                      </span>
+                      <div className="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded py-1 px-2 -mt-1 left-0 ml-6 w-48">
+                        {refundedItemsMap[item.id ? String(item.id) : item.name.toLowerCase().replace(/\s+/g, '_')]?.refundTransactions.map((t, i) => (
+                          <div key={i} className="mb-1">
+                            Refunded on {new Date(t.date).toLocaleDateString()}
+                          </div>
+                        )) || "Refund details not available"}
+                      </div>
+                    </div>
+                  )}
+                  {item.isPartiallyRefunded && (
+                    <div className="relative group ml-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                        Partially Refunded ({item.refundedQuantity} of {item.quantity + (item.refundedQuantity || 0)} units)
+                      </span>
+                      <div className="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded py-1 px-2 -mt-1 left-0 ml-6 w-48">
+                        {refundedItemsMap[item.id ? String(item.id) : item.name.toLowerCase().replace(/\s+/g, '_')]?.refundTransactions.map((t, i) => (
+                          <div key={i} className="mb-1">
+                            {t.quantity} unit(s) refunded on {new Date(t.date).toLocaleDateString()}
+                          </div>
+                        )) || "Refund details not available"}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
                 <button
                   type="button"
                   onClick={() => handleRemoveItem(item._editId)}
-                  className="text-red-600 text-sm font-medium hover:text-red-700 transition-colors flex items-center"
+                  disabled={item.isFullyRefunded}
+                  className={`text-sm font-medium flex items-center ${
+                    item.isFullyRefunded 
+                      ? 'text-gray-400 cursor-not-allowed' 
+                      : 'text-red-600 hover:text-red-700 transition-colors'
+                  }`}
                 >
                   <svg
                     className="h-4 w-4 mr-1"
@@ -1490,11 +2201,14 @@ export function AdminEditOrderModal({
                 </label>
                 <input
                   type="text"
-                  className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm"
+                  className={`border border-gray-300 rounded-md px-3 py-2 w-full text-sm ${
+                    item.isFullyRefunded ? 'bg-gray-100 text-gray-500 line-through' : ''
+                  }`}
                   value={item.name}
                   onChange={(e) =>
                     handleItemChange(item._editId, 'name', e.target.value)
                   }
+                  disabled={item.isFullyRefunded}
                 />
               </div>
 
@@ -1514,14 +2228,18 @@ export function AdminEditOrderModal({
                   <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
                     <button
                       type="button"
-                      className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border-r border-gray-300 transition-colors"
+                      className={`px-3 py-2 ${
+                        item.isFullyRefunded 
+                          ? 'bg-gray-100 text-gray-400' 
+                          : 'bg-amber-50 hover:bg-amber-100 text-amber-800'
+                      } border-r border-gray-300 transition-colors`}
                       onClick={() =>
                         updateItemQuantity(
                           item._editId,
                           Math.max(1, item.quantity - 1)
                         )
                       }
-                      disabled={item.quantity <= 1}
+                      disabled={item.quantity <= 1 || item.isFullyRefunded || (item.isPartiallyRefunded && item.quantity <= (item.refundedQuantity || 0))}
                       aria-label="Decrease quantity"
                     >
                       <svg
@@ -1542,7 +2260,9 @@ export function AdminEditOrderModal({
                     </button>
                     <input
                       type="text"
-                      className="w-full px-3 py-2 text-center border-0 focus:ring-0"
+                      className={`w-full px-3 py-2 text-center border-0 focus:ring-0 ${
+                        item.isFullyRefunded ? 'bg-gray-100 text-gray-500' : ''
+                      }`}
                       value={item.quantity}
                       onChange={(e) => {
                         const newVal = e.target.value;
@@ -1551,18 +2271,31 @@ export function AdminEditOrderModal({
                             newVal === ''
                               ? 1
                               : Math.max(1, parseInt(newVal, 10));
+                          
+                          // For partially refunded items, don't allow quantity below refunded amount
+                          if (item.isPartiallyRefunded && parsedVal < (item.refundedQuantity || 0)) {
+                            toast.error(`Cannot reduce quantity below refunded amount (${item.refundedQuantity})`);
+                            return;
+                          }
+                          
                           updateItemQuantity(item._editId, parsedVal);
                         }
                       }}
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      disabled={item.isFullyRefunded}
                     />
                     <button
                       type="button"
-                      className="px-3 py-2 bg-green-50 hover:bg-green-100 text-green-800 border-l border-gray-300 transition-colors"
+                      className={`px-3 py-2 ${
+                        item.isFullyRefunded 
+                          ? 'bg-gray-100 text-gray-400' 
+                          : 'bg-green-50 hover:bg-green-100 text-green-800'
+                      } border-l border-gray-300 transition-colors`}
                       onClick={() =>
                         updateItemQuantity(item._editId, item.quantity + 1)
                       }
+                      disabled={item.isFullyRefunded}
                       aria-label="Increase quantity"
                     >
                       <svg
@@ -1584,6 +2317,14 @@ export function AdminEditOrderModal({
                       </svg>
                     </button>
                   </div>
+                  
+                  {/* Show refund breakdown for partially refunded items */}
+                  {item.isPartiallyRefunded && (
+                    <p className="mt-1 text-xs text-gray-600">
+                      <span className="font-medium">{item.quantity}</span> active, 
+                      <span className="font-medium text-red-600"> {item.refundedQuantity}</span> refunded
+                    </p>
+                  )}
                   {item.paymentStatus === 'already_paid' && (
                     <p className="mt-1 text-xs text-gray-500">
                       Decreasing quantity will require a refund or
@@ -1602,11 +2343,14 @@ export function AdminEditOrderModal({
                     <input
                       type="number"
                       step="0.01"
-                      className="border border-gray-300 rounded-md pl-7 pr-3 py-2 w-full text-sm"
+                      className={`border border-gray-300 rounded-md pl-7 pr-3 py-2 w-full text-sm ${
+                        item.isFullyRefunded ? 'bg-gray-100 text-gray-500 line-through' : ''
+                      }`}
                       value={item.price}
                       onChange={(e) =>
                         handleItemChange(item._editId, 'price', e.target.value)
                       }
+                      disabled={item.isFullyRefunded}
                     />
                   </div>
                 </div>
@@ -1619,12 +2363,15 @@ export function AdminEditOrderModal({
                 </label>
                 <input
                   type="text"
-                  className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm"
+                  className={`border border-gray-300 rounded-md px-3 py-2 w-full text-sm ${
+                    item.isFullyRefunded ? 'bg-gray-100 text-gray-500 line-through' : ''
+                  }`}
                   value={item.notes || ''}
                   onChange={(e) =>
                     handleItemChange(item._editId, 'notes', e.target.value)
                   }
                   placeholder="Special requests / modifications"
+                  disabled={item.isFullyRefunded}
                 />
               </div>
 
@@ -1686,10 +2433,16 @@ export function AdminEditOrderModal({
 
               {/* Payment Status Toggle */}
               <div className="mt-2">
-                <PaymentStatusSelector
-                  value={item.paymentStatus || 'needs_payment'}
-                  onChange={(st) => handlePaymentStatusChange(item._editId, st)}
-                />
+                {item.isFullyRefunded ? (
+                  <div className="text-sm text-gray-500 py-2 px-3 bg-gray-100 rounded-md">
+                    Payment Status: {item.paymentStatus === 'already_paid' ? 'Already Paid' : 'Needs Payment'}
+                  </div>
+                ) : (
+                  <PaymentStatusSelector
+                    value={item.paymentStatus || 'needs_payment'}
+                    onChange={(st) => handlePaymentStatusChange(item._editId, st)}
+                  />
+                )}
               </div>
 
               {/* Show customizations if any */}

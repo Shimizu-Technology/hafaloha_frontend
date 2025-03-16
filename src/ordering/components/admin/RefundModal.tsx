@@ -1,13 +1,14 @@
 // src/ordering/components/admin/RefundModal.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 
 interface RefundItem {
   id: number;
   name: string;
-  quantity: number;
+  quantity: number;  // Quantity being refunded
   price: number;
+  originalQuantity?: number; // Original quantity in the order
 }
 
 interface RefundModalProps {
@@ -15,7 +16,7 @@ interface RefundModalProps {
   onClose: () => void;
   orderId: number;
   maxRefundable: number;
-  orderItems?: any[]; // Original order items
+  orderItems?: any[]; // Original order items with refund status
   onRefundCreated: () => void;
 }
 
@@ -36,35 +37,182 @@ export function RefundModal({
   const [error, setError] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<RefundItem[]>([]);
   const [customReason, setCustomReason] = useState<string>('');
+  const [isManuallyEdited, setIsManuallyEdited] = useState<boolean>(false);
+  const [selectAll, setSelectAll] = useState<boolean>(false);
+  const [itemQuantities, setItemQuantities] = useState<Record<number, number>>({});
+  const [calculatedAmount, setCalculatedAmount] = useState<number>(0);
+  const [amountChangeHighlight, setAmountChangeHighlight] = useState<boolean>(false);
+
+  // Get refundable items (not fully refunded) using useMemo to avoid recalculation on every render
+  const refundableItems = useMemo(() => {
+    return orderItems.filter(item => !item.isFullyRefunded);
+  }, [orderItems]);
+
+  // Define an interface for order items
+  interface OrderItemWithRefund {
+    id: number;
+    name: string;
+    quantity: number;
+    price: number;
+    isFullyRefunded?: boolean;
+    isPartiallyRefunded?: boolean;
+    refundedQuantity?: number;
+    [key: string]: any; // Allow other properties
+  }
+
+  // Initialize item quantities when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (refundableItems.length > 0) {
+        const initialQuantities: Record<number, number> = {};
+        refundableItems.forEach((item: OrderItemWithRefund) => {
+          // For partially refunded items, only show the non-refunded quantity
+          const availableQuantity = item.isPartiallyRefunded 
+            ? item.quantity - (item.refundedQuantity || 0)
+            : item.quantity;
+          
+          initialQuantities[item.id] = availableQuantity;
+        });
+        setItemQuantities(initialQuantities);
+      }
+      
+      // Reset other state when modal opens
+      setSelectedItems([]);
+      setSelectAll(false);
+      setAmount(maxRefundable.toFixed(2));
+      setIsManuallyEdited(false);
+      setCalculatedAmount(0);
+      setError(null);
+    }
+  }, [isOpen, refundableItems, maxRefundable]);
 
   if (!isOpen) return null;
+
+  // Calculate total refund amount based on selected items and their quantities
+  const calculateRefundAmount = (items: RefundItem[]): number => {
+    return items.reduce((total, item) => {
+      return total + (item.price * item.quantity);
+    }, 0);
+  };
+
+  // Update the amount when selected items change
+  const updateAmountFromSelectedItems = (items: RefundItem[]) => {
+    const newCalculatedAmount = calculateRefundAmount(items);
+    setCalculatedAmount(newCalculatedAmount);
+    
+    // Only update the amount field if it hasn't been manually edited
+    if (!isManuallyEdited) {
+      setAmount(newCalculatedAmount.toFixed(2));
+      // Highlight the amount change
+      setAmountChangeHighlight(true);
+      setTimeout(() => setAmountChangeHighlight(false), 500);
+    }
+  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     // Only allow valid numbers
     if (/^\d*\.?\d{0,2}$/.test(value)) {
       setAmount(value);
+      setIsManuallyEdited(true);
     }
   };
 
-  const handleItemSelect = (item: any, isSelected: boolean) => {
+  // Handle select all checkbox
+  const handleSelectAll = (isSelected: boolean) => {
+    setSelectAll(isSelected);
+    
     if (isSelected) {
-      // Add item to selected items
-      setSelectedItems([...selectedItems, {
+      // Select all refundable items with their current quantities
+      const allItems = refundableItems.map((item: OrderItemWithRefund) => ({
         id: item.id,
         name: item.name,
-        quantity: item.quantity,
-        price: item.price
-      }]);
+        quantity: itemQuantities[item.id] || 
+          (item.isPartiallyRefunded ? item.quantity - (item.refundedQuantity || 0) : item.quantity),
+        price: item.price,
+        originalQuantity: item.quantity
+      }));
+      setSelectedItems(allItems);
+      updateAmountFromSelectedItems(allItems);
+    } else {
+      // Deselect all items
+      setSelectedItems([]);
+      updateAmountFromSelectedItems([]);
+    }
+  };
+
+  // Handle individual item selection
+  const handleItemSelect = (item: OrderItemWithRefund, isSelected: boolean) => {
+    let updatedItems: RefundItem[];
+    
+    if (isSelected) {
+      // Add item to selected items with current quantity
+      const newItem = {
+        id: item.id,
+        name: item.name,
+        quantity: itemQuantities[item.id] || item.quantity,
+        price: item.price,
+        originalQuantity: item.quantity
+      };
+      updatedItems = [...selectedItems, newItem];
     } else {
       // Remove item from selected items
-      setSelectedItems(selectedItems.filter(i => i.id !== item.id));
+      updatedItems = selectedItems.filter(i => i.id !== item.id);
+      
+      // Update select all state
+      if (selectAll) {
+        setSelectAll(false);
+      }
     }
+    
+    setSelectedItems(updatedItems);
+    updateAmountFromSelectedItems(updatedItems);
+  };
+
+  // Handle quantity change for an item
+  const handleQuantityChange = (itemId: number, newQuantity: number, item: OrderItemWithRefund) => {
+    // Ensure quantity is within valid range
+    const availableQuantity = item.isPartiallyRefunded 
+      ? item.quantity - (item.refundedQuantity || 0) 
+      : item.quantity;
+    
+    newQuantity = Math.max(1, Math.min(newQuantity, availableQuantity));
+    
+    // Update quantities state
+    setItemQuantities({
+      ...itemQuantities,
+      [itemId]: newQuantity
+    });
+    
+    // If this item is selected, update its quantity in selectedItems
+    const updatedItems = selectedItems.map(selectedItem => {
+      if (selectedItem.id === itemId) {
+        return {
+          ...selectedItem,
+          quantity: newQuantity
+        };
+      }
+      return selectedItem;
+    });
+    
+    setSelectedItems(updatedItems);
+    updateAmountFromSelectedItems(updatedItems);
+  };
+
+  // Check if an item is selected
+  const isItemSelected = (itemId: number): boolean => {
+    return selectedItems.some(item => item.id === itemId);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // Validate item selection
+    if (selectedItems.length === 0) {
+      setError('Please select at least one item to refund');
+      return;
+    }
 
     // Validate amount
     const refundAmount = parseFloat(amount);
@@ -78,6 +226,16 @@ export function RefundModal({
       return;
     }
 
+    // Warn if manual amount doesn't match calculated amount (if items are selected)
+    if (isManuallyEdited && Math.abs(refundAmount - calculatedAmount) > 0.01 && selectedItems.length > 0) {
+      const confirmOverride = window.confirm(
+        `The refund amount ($${refundAmount.toFixed(2)}) doesn't match the calculated amount from selected items ($${calculatedAmount.toFixed(2)}). Do you want to proceed with the manual amount?`
+      );
+      if (!confirmOverride) {
+        return;
+      }
+    }
+
     // Process refund
     setIsProcessing(true);
     try {
@@ -85,7 +243,7 @@ export function RefundModal({
         amount: refundAmount,
         reason: reason,
         description: customReason || undefined,
-        refunded_items: selectedItems.length > 0 ? selectedItems : undefined
+        refunded_items: selectedItems
       });
 
       // Notify parent component
@@ -143,9 +301,16 @@ export function RefundModal({
                 <div className="mt-4">
                   <form onSubmit={handleSubmit}>
                     <div className="mb-4">
-                      <label htmlFor="refund-amount" className="block text-sm font-medium text-gray-700 mb-1">
-                        Refund Amount
-                      </label>
+                      <div className="flex justify-between items-center">
+                        <label htmlFor="refund-amount" className="block text-sm font-medium text-gray-700 mb-1">
+                          Refund Amount
+                        </label>
+                        {isManuallyEdited && selectedItems.length > 0 && (
+                          <span className="text-xs text-orange-500">
+                            Manual override
+                          </span>
+                        )}
+                      </div>
                       <div className="relative rounded-md shadow-sm">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                           <span className="text-gray-500 sm:text-sm">$</span>
@@ -153,7 +318,9 @@ export function RefundModal({
                         <input
                           type="text"
                           id="refund-amount"
-                          className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+                          className={`focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md transition-colors duration-300 ${
+                            amountChangeHighlight ? 'bg-yellow-50' : ''
+                          }`}
                           placeholder="0.00"
                           value={amount}
                           onChange={handleAmountChange}
@@ -165,34 +332,106 @@ export function RefundModal({
                           </span>
                         </div>
                       </div>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Maximum refundable amount: ${maxRefundable.toFixed(2)}
-                      </p>
+                      <div className="flex justify-between mt-1">
+                        <p className="text-sm text-gray-500">
+                          Maximum refundable amount: ${maxRefundable.toFixed(2)}
+                        </p>
+                        {selectedItems.length > 0 && (
+                          <p className="text-sm text-gray-500">
+                            Selected items total: ${calculatedAmount.toFixed(2)}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Items being refunded */}
-                    {orderItems && orderItems.length > 0 && (
+                    {refundableItems && refundableItems.length > 0 && (
                       <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Select Items Being Refunded
-                        </label>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Select Items Being Refunded
+                          </label>
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              id="select-all"
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                              checked={selectAll}
+                              onChange={(e) => handleSelectAll(e.target.checked)}
+                            />
+                            <label htmlFor="select-all" className="ml-2 block text-sm text-gray-700">
+                              Select All
+                            </label>
+                          </div>
+                        </div>
                         <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2">
-                          {orderItems.map((item, idx) => (
-                            <div key={idx} className="flex items-center mb-2 last:mb-0">
-                              <input
-                                type="checkbox"
-                                id={`item-${idx}`}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                onChange={(e) => handleItemSelect(item, e.target.checked)}
-                              />
-                              <label htmlFor={`item-${idx}`} className="ml-2 block text-sm text-gray-900">
-                                {item.name} × {item.quantity} (${(item.price * item.quantity).toFixed(2)})
-                              </label>
+                          {refundableItems.map((item: OrderItemWithRefund, idx: number) => (
+                            <div 
+                              key={idx} 
+                              className={`flex items-center justify-between mb-2 last:mb-0 p-1 rounded ${
+                                isItemSelected(item.id) ? 'bg-blue-50' : ''
+                              }`}
+                            >
+                              <div className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  id={`item-${idx}`}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                  checked={isItemSelected(item.id)}
+                                  onChange={(e) => handleItemSelect(item, e.target.checked)}
+                                />
+                                <label htmlFor={`item-${idx}`} className="ml-2 block text-sm text-gray-900">
+                                  {item.name} (${item.price.toFixed(2)} each)
+                                </label>
+                              </div>
+                              
+                              {/* Quantity controls */}
+                              {isItemSelected(item.id) && (
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    type="button"
+                                    className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                                    onClick={() => handleQuantityChange(item.id, (itemQuantities[item.id] || item.quantity) - 1, item)}
+                                    disabled={(itemQuantities[item.id] || item.quantity) <= 1}
+                                  >
+                                    -
+                                  </button>
+                                  <span className="text-sm">
+                                    {itemQuantities[item.id] || 
+                                      (item.isPartiallyRefunded 
+                                        ? item.quantity - (item.refundedQuantity || 0) 
+                                        : item.quantity)} of {
+                                      item.isPartiallyRefunded 
+                                        ? `${item.quantity - (item.refundedQuantity || 0)} available` 
+                                        : item.quantity
+                                    }
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                                    onClick={() => handleQuantityChange(item.id, (itemQuantities[item.id] || item.quantity) + 1, item)}
+                                    disabled={(itemQuantities[item.id] || item.quantity) >= 
+                                      (item.isPartiallyRefunded 
+                                        ? item.quantity - (item.refundedQuantity || 0) 
+                                        : item.quantity)}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
                         <p className="mt-1 text-xs text-gray-500">
                           Selecting items helps track what was refunded
+                        </p>
+                      </div>
+                    )}
+                    
+                    {(!refundableItems || refundableItems.length === 0) && (
+                      <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-md text-center">
+                        <p className="text-gray-600">
+                          No items available for refund. All items have been fully refunded.
                         </p>
                       </div>
                     )}
@@ -239,9 +478,9 @@ export function RefundModal({
                     <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
                       <button
                         type="submit"
-                        disabled={isProcessing}
+                        disabled={isProcessing || selectedItems.length === 0}
                         className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm ${
-                          isProcessing ? 'opacity-75 cursor-not-allowed' : ''
+                          isProcessing || selectedItems.length === 0 ? 'opacity-75 cursor-not-allowed' : ''
                         }`}
                       >
                         {isProcessing ? 'Processing...' : 'Process Refund'}
