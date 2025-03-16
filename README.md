@@ -9,24 +9,36 @@ Frontend web application for the Hafaloha restaurant management system.
 - Admin dashboard for order management and analytics
 - Customer profiles with order history
 - VIP code system for exclusive access
-- Merchandise store with variant support
-- Real-time notifications
+- Merchandise store with variant support, categories, and filtering
+- Real-time notifications with enhanced delivery options
 - Multi-language support (English, Japanese, Korean)
 - Responsive design for mobile and desktop
-- Inventory tracking system for menu items
+- Inventory tracking system for menu items and merchandise
+- Multiple payment methods (PayPal, Stripe)
+- Order payment history and refund functionality
+- Store credit system for customers
+- Stock management dashboard for inventory control
+- Role-based authentication and authorization
+- Multi-tenant architecture with restaurant context
 
-## Inventory Tracking System
+## Documentation
 
-The application includes a comprehensive inventory tracking system for menu items, allowing restaurant staff to:
+### Core Systems
 
-- Enable/disable inventory tracking per menu item
-- Set and monitor stock quantities
-- Record damaged items with reasons
-- Update stock levels with audit trails
-- Configure low stock thresholds
-- See automatic status updates based on inventory levels
+- [Authentication and Authorization](docs/authentication_authorization.md) - JWT-based authentication with role-based access control
+- [State Management](docs/state_management.md) - Zustand stores and React Query integration
+- [Inventory Tracking System](docs/inventory_tracking_system.md) - Comprehensive inventory management
+- [Merchandise Management System](docs/merchandise_management_system.md) - Merchandise collections, categories, and variants
 
-For detailed documentation, see [Inventory Tracking System Documentation](docs/inventory_tracking_system.md).
+### Payment Systems
+
+- [Payment Processing](docs/payment_processing.md) - Overview of payment handling
+- [PayPal Integration](docs/paypal_integration.md) - PayPal SDK implementation
+- [Stripe Integration](docs/stripe_integration.md) - Stripe Elements and webhooks
+
+### Access Control
+
+- [VIP Code System](docs/vip_code_system.md) - Exclusive access management
 
 ## Tech Stack
 
@@ -40,6 +52,8 @@ For detailed documentation, see [Inventory Tracking System Documentation](docs/i
 - i18next (internationalization)
 - Chart.js (analytics)
 - date-fns (date manipulation)
+- PayPal SDK
+- Stripe Elements
 
 ## Getting Started
 
