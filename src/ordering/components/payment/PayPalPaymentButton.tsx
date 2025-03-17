@@ -7,6 +7,7 @@ interface PayPalPaymentButtonProps {
     status: string;
     transaction_id: string;
     amount: string;
+    currency?: string;
   }) => void;
   onPaymentError?: (error: Error) => void;
   onPaymentCancel?: () => void;
@@ -60,7 +61,10 @@ export function PayPalPaymentButton({
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ amount }),
+              body: JSON.stringify({ 
+                amount,
+                currency
+              }),
             });
             
             if (!response.ok) {
@@ -99,7 +103,8 @@ export function PayPalPaymentButton({
               onPaymentSuccess({
                 status: captureData.status,
                 transaction_id: captureData.transaction_id,
-                amount: captureData.amount
+                amount: captureData.amount,
+                currency: captureData.currency
               });
             }
             

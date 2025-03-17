@@ -1332,6 +1332,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     transaction_id: string;
     payment_id?: string;
     amount: string;
+    currency?: string;
   }) => {
     setPaymentProcessing(false);
     setPaymentTransactionId(details.transaction_id);

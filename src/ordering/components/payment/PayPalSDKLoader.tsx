@@ -13,7 +13,7 @@ interface PayPalSDKLoaderProps {
 export function PayPalSDKLoader({
   clientId,
   currency = 'USD',
-  components = ['buttons'],
+  components = ['buttons', 'card-fields', 'hosted-fields'],
   onLoaded,
   onError,
   testMode = false,

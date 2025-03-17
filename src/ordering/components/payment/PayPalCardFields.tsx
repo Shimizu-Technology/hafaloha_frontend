@@ -88,15 +88,17 @@ export function PayPalCardFields({ onCardFieldsReady, onError }: PayPalCardField
   
   // Function to check if all fields are valid
   const updateValidity = () => {
-    // In a real implementation, we would check the validity of each field
-    // For this implementation, we'll simulate validity after a delay
-    setTimeout(() => {
-      const newIsValid = true; // Simulated validity
-      setIsValid(newIsValid);
-      if (onCardFieldsReady) {
-        onCardFieldsReady(newIsValid);
-      }
-    }, 500);
+    // Check if all fields are valid
+    const numberValid = cardNumberField.current?.isValid || false;
+    const expiryValid = cardExpiryField.current?.isValid || false;
+    const cvvValid = cardCvvField.current?.isValid || false;
+    
+    const newIsValid = numberValid && expiryValid && cvvValid;
+    setIsValid(newIsValid);
+    
+    if (onCardFieldsReady) {
+      onCardFieldsReady(newIsValid);
+    }
   };
 
   if (isLoading) {

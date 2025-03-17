@@ -195,6 +195,7 @@ export function EnhancedAdditionalPaymentModal({
     status: string;
     transaction_id: string;
     amount: string;
+    currency?: string;
   }) => {
     // Payment succeeded
     setPaymentSuccessful(true);

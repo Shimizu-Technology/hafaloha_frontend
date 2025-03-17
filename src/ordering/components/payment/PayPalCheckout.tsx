@@ -12,6 +12,7 @@ interface PayPalCheckoutProps {
     status: string;
     transaction_id: string;
     amount: string;
+    currency?: string;
   }) => void;
   onPaymentError?: (error: Error) => void;
   onPaymentCancel?: () => void;
@@ -66,6 +67,7 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
     status: string;
     transaction_id: string;
     amount: string;
+    currency?: string;
   }) => {
     setProcessing(false);
     if (onPaymentSuccess) {
@@ -88,7 +90,8 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
             onPaymentSuccess({
               status: 'COMPLETED',
               transaction_id: `TEST-${Date.now()}`,
-              amount
+              amount,
+              currency
             });
           }
           setProcessing(false);
@@ -116,22 +119,51 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
     
     // For card method, we process directly
     if (paymentMethod === 'card' && cardFieldsValid) {
-      // This would trigger the hosted fields submit
-      // In reality, this would need more complex integration with PayPal hosted fields
-      // Simulate success for now
       try {
-        // This would be where the actual PayPal hosted fields submission would happen
-        // For now, we'll just simulate success after a short delay
-        return new Promise(resolve => {
-          setTimeout(() => {
-            handlePaymentSuccess({
-              status: 'COMPLETED',
-              transaction_id: `CARD-${Date.now()}`,
-              amount
-            });
-            resolve(true);
-          }, 1500);
+        // Create order first
+        const orderResponse = await fetch('/paypal/create_order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            amount,
+            currency
+          }),
         });
+        
+        if (!orderResponse.ok) {
+          const errorData = await orderResponse.json();
+          throw new Error(errorData.error || 'Failed to create PayPal order');
+        }
+        
+        const orderData = await orderResponse.json();
+        const orderId = orderData.orderId;
+        
+        // Now capture the order
+        const captureResponse = await fetch('/paypal/capture_order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ orderID: orderId }),
+        });
+        
+        if (!captureResponse.ok) {
+          const errorData = await captureResponse.json();
+          throw new Error(errorData.error || 'Failed to capture PayPal payment');
+        }
+        
+        const captureData = await captureResponse.json();
+        
+        handlePaymentSuccess({
+          status: captureData.status,
+          transaction_id: captureData.transaction_id,
+          amount: captureData.amount,
+          currency: captureData.currency
+        });
+        
+        return true;
       } catch (error) {
         handlePaymentError(error instanceof Error ? error : new Error(String(error)));
         return false;
@@ -224,8 +256,8 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
               <p className="text-gray-700 mb-3">
                 Click the PayPal button below to complete your payment.
               </p>
-              <div className="paypal-button-container" style={{ minHeight: '45px', display: 'none' }}>
-                {/* Hide the actual PayPal button, but it needs to be here for reference */}
+              <div className="paypal-button-container" style={{ minHeight: '45px' }}>
+                {/* PayPal button container */}
                 <div ref={paypalButtonRef}>
                   <PayPalPaymentButton
                     amount={amount}
@@ -300,52 +332,15 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
                     </div>
                   </div>
                   
-                  {/* Processing indicator removed in favor of full-screen overlay */}
+                  <div className="p-2 bg-yellow-50 border border-yellow-100 rounded text-xs text-yellow-700 mt-2">
+                    <strong>Test Mode:</strong> In test mode, any card details will be accepted.
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-700 mb-3">
-                    Enter your card details to complete your payment.
-                  </p>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Card Number
-                    </label>
-                    <input 
-                      type="text"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      placeholder="Card number"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Expiration Date
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="MM/YY"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        CVV
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="123"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="p-2 bg-yellow-50 border border-yellow-100 rounded text-xs text-yellow-700 mt-2">
-                    <strong>Note:</strong> This is a simplified card form. In production, this would use PayPal's secure hosted fields.
-                  </div>
-                </div>
+                <PayPalCardFields 
+                  onCardFieldsReady={handleCardFieldsValidityChange}
+                  onError={handlePaymentError}
+                />
               )}
             </div>
           )}

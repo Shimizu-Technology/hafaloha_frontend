@@ -133,6 +133,7 @@ export function CheckoutPage() {
     status: string;
     transaction_id: string;
     amount: string;
+    currency?: string;
   }) => {
     setPaymentProcessing(false);
     setPaymentProcessed(true);
