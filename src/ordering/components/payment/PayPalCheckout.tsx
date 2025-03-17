@@ -177,15 +177,32 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
     </div>
   );
 
-  // Test mode indicator banner
-  const testModeIndicator = testMode && (
-    <div className="p-2 mb-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
-      <span className="inline-flex items-center bg-yellow-100 text-yellow-800 font-semibold px-2 py-1 rounded mr-2">
-        TEST MODE
-      </span>
-      <span className="text-yellow-700">Payments will be simulated without processing real cards.</span>
-    </div>
-  );
+  // Test mode indicator banner or missing client ID warning
+  const statusBanner = (() => {
+    if (testMode) {
+      return (
+        <div className="p-2 mb-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
+          <span className="inline-flex items-center bg-yellow-100 text-yellow-800 font-semibold px-2 py-1 rounded mr-2">
+            TEST MODE
+          </span>
+          <span className="text-yellow-700">Payments will be simulated without processing real cards.</span>
+        </div>
+      );
+    }
+    
+    if (!clientId) {
+      return (
+        <div className="p-2 mb-4 bg-red-50 border border-red-200 rounded-md text-sm">
+          <span className="inline-flex items-center bg-red-100 text-red-800 font-semibold px-2 py-1 rounded mr-2">
+            CONFIGURATION ERROR
+          </span>
+          <span className="text-red-700">PayPal client ID is not configured. Please set up PayPal in admin settings.</span>
+        </div>
+      );
+    }
+    
+    return null;
+  })();
 
   return (
     <PayPalSDKLoader
@@ -196,7 +213,7 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
       onError={handlePaymentError}
       testMode={testMode}
     >
-      {testModeIndicator}
+      {statusBanner}
       
       {sdkLoaded ? (
         <div className="mt-4">

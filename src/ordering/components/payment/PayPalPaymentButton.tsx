@@ -52,24 +52,65 @@ export function PayPalPaymentButton({
         },
         
         // Create order
-        createOrder: () => {
-          // In a real implementation, this would call your backend to create an order
-          // For this implementation, we'll simulate a successful order creation
-          return Promise.resolve(`PAYPAL-ORDER-${Date.now()}`);
+        createOrder: async () => {
+          try {
+            // Call backend to create a PayPal order
+            const response = await fetch('/paypal/create_order', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ amount }),
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to create PayPal order');
+            }
+            
+            const data = await response.json();
+            return data.orderId;
+          } catch (error) {
+            console.error('Error creating PayPal order:', error);
+            throw error;
+          }
         },
         
         // Handle approval
-        onApprove: async (data: PayPalApproveData, actions: PayPalActions) => {
-          // In a real implementation, this would call your backend to capture the payment
-          // For this implementation, we'll simulate a successful payment
-          if (onPaymentSuccess) {
-            onPaymentSuccess({
-              status: 'COMPLETED',
-              transaction_id: data.orderID || `PAYPAL-TRANSACTION-${Date.now()}`,
-              amount
+        onApprove: async (data: PayPalApproveData) => {
+          try {
+            // Call backend to capture the payment
+            const response = await fetch('/paypal/capture_order', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ orderID: data.orderID }),
             });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to capture PayPal payment');
+            }
+            
+            const captureData = await response.json();
+            
+            if (onPaymentSuccess) {
+              onPaymentSuccess({
+                status: captureData.status,
+                transaction_id: captureData.transaction_id,
+                amount: captureData.amount
+              });
+            }
+            
+            return captureData;
+          } catch (error) {
+            console.error('Error capturing PayPal payment:', error);
+            if (onPaymentError) {
+              onPaymentError(error instanceof Error ? error : new Error(String(error)));
+            }
+            throw error;
           }
-          return Promise.resolve();
         },
         
         // Handle errors

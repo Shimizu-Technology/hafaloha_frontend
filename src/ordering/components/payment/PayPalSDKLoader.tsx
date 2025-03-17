@@ -37,6 +37,14 @@ export function PayPalSDKLoader({
       return;
     }
 
+    // Check if client ID is provided
+    if (!clientId) {
+      const missingClientIdError = new Error('PayPal client ID is not configured. Please set up PayPal in admin settings.');
+      setError(missingClientIdError);
+      if (onError) onError(missingClientIdError);
+      return;
+    }
+
     // Construct the script URL with query parameters
     const script = document.createElement('script');
     const componentsParam = components.join(',');
