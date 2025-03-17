@@ -26,10 +26,49 @@ To use PayPal's services, you need to obtain API credentials:
 1. Configure your PayPal credentials in the Admin Dashboard:
    - Go to Admin → Settings → Payment Gateway
    - Enter your Client ID and Client Secret
+   - Enter your Webhook Secret (for webhook verification)
    - Select the environment (Sandbox or Production)
    - Toggle Test Mode as needed
 
 2. Save your settings
+
+## Webhook Integration
+
+Hafaloha uses PayPal webhooks to receive real-time notifications about payment events. This ensures that your order statuses stay in sync with PayPal's payment processing.
+
+### Setting Up Webhooks
+
+1. Log into your [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/)
+2. Navigate to your app settings
+3. Click on "Webhooks" in the left sidebar
+4. Click "Add Webhook"
+5. Enter your webhook URL:
+   - For production: `https://your-api-domain.com/paypal/webhook`
+   - For development/testing: Use a service like ngrok to expose your local server
+6. Select the following event types:
+   - `PAYMENT.CAPTURE.COMPLETED`
+   - `PAYMENT.CAPTURE.DENIED`
+   - `PAYMENT.CAPTURE.PENDING`
+   - `PAYMENT.CAPTURE.REFUNDED`
+   - `PAYMENT.CAPTURE.REVERSED`
+   - `CHECKOUT.ORDER.APPROVED`
+   - `CHECKOUT.ORDER.COMPLETED`
+   - `CHECKOUT.ORDER.DECLINED`
+   - `PAYMENT.REFUND.COMPLETED`
+   - `PAYMENT.REFUND.FAILED`
+   - `CUSTOMER.DISPUTE.CREATED`
+   - `CUSTOMER.DISPUTE.RESOLVED`
+   - `CUSTOMER.DISPUTE.UPDATED`
+7. Click "Save"
+8. Copy the Webhook ID and Webhook Secret
+9. Enter the Webhook Secret in the Admin Dashboard under Payment Gateway settings
+
+### How Webhooks Work
+
+1. When a payment event occurs (e.g., a payment is completed), PayPal sends a notification to your webhook URL
+2. The system verifies the webhook signature using your webhook secret
+3. Based on the event type, the system updates the order status accordingly
+4. This ensures that your order statuses are always in sync with PayPal's payment processing
 
 ## Test Mode vs. Production Mode
 

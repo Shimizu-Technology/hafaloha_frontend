@@ -39,6 +39,7 @@ interface PaymentSettings {
   client_id: string;
   client_secret: string;
   environment: 'sandbox' | 'production';
+  paypal_webhook_secret: string;
   
   // Stripe fields
   publishable_key: string;
@@ -55,6 +56,7 @@ export function PaymentSettings() {
     client_id: '',
     client_secret: '',
     environment: 'sandbox',
+    paypal_webhook_secret: '',
     publishable_key: '',
     secret_key: '',
     webhook_secret: ''
@@ -76,6 +78,7 @@ export function PaymentSettings() {
           client_id: paymentGateway.client_id || '',
           client_secret: paymentGateway.client_secret || '',
           environment: paymentGateway.environment || 'sandbox',
+          paypal_webhook_secret: paymentGateway.paypal_webhook_secret || '',
           publishable_key: paymentGateway.publishable_key || '',
           secret_key: paymentGateway.secret_key || '',
           webhook_secret: paymentGateway.webhook_secret || ''
@@ -139,6 +142,7 @@ export function PaymentSettings() {
               client_id: settings.client_id,
               client_secret: settings.client_secret,
               environment: settings.environment,
+              paypal_webhook_secret: settings.paypal_webhook_secret,
               // Include Stripe settings
               publishable_key: settings.publishable_key,
               secret_key: settings.secret_key,
@@ -282,6 +286,25 @@ export function PaymentSettings() {
                 placeholder="Enter your PayPal Client Secret"
               />
             </div>
+            
+            {/* PayPal Webhook Secret */}
+            <div>
+              <label htmlFor="paypal_webhook_secret" className="block text-sm font-medium text-gray-700 mb-1">
+                Webhook Secret
+              </label>
+              <input
+                type="password"
+                id="paypal_webhook_secret"
+                name="paypal_webhook_secret"
+                value={settings.paypal_webhook_secret}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter your PayPal Webhook Secret"
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Used to verify webhook events from PayPal
+              </p>
+            </div>
           </div>
 
           {/* Help Text */}
@@ -296,6 +319,8 @@ export function PaymentSettings() {
               <li>Create a new REST API app or select an existing one</li>
               <li>Copy the Client ID and Secret from the app credentials</li>
               <li>Make sure "Advanced (Expanded) Credit and Debit Card Payments" is enabled</li>
+              <li>For the Webhook Secret, go to Webhooks in your app settings</li>
+              <li>Create a webhook endpoint for your site and copy the secret</li>
             </ol>
           </div>
         </div>
