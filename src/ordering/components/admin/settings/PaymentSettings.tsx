@@ -310,24 +310,11 @@ export function PaymentSettings() {
               </p>
             </div>
             
-            {/* PayPal Webhook Secret */}
-            <div>
-              <label htmlFor="paypal_webhook_secret" className="block text-sm font-medium text-gray-700 mb-1">
-                Webhook Secret
-              </label>
-              <input
-                type="password"
-                id="paypal_webhook_secret"
-                name="paypal_webhook_secret"
-                value={settings.paypal_webhook_secret}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter your PayPal Webhook Secret"
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                Used for additional verification of webhook events (optional)
-              </p>
-            </div>
+            {/* PayPal Webhook ID help text */}
+            <p className="mt-1 text-sm text-gray-500">
+              The ID of the webhook you created in the PayPal Developer Dashboard.
+              This is used to verify webhook events from PayPal.
+            </p>
           </div>
 
           {/* Help Text */}
@@ -346,7 +333,7 @@ export function PaymentSettings() {
               <li>Create a webhook with URL: <code>https://your-api-domain.com/paypal/webhook</code></li>
               <li>Select all the payment and checkout event types</li>
               <li>After creating the webhook, copy the Webhook ID (shown in the webhook details)</li>
-              <li>The Webhook Secret field is optional for additional security</li>
+              <li>After creating the webhook, copy the Webhook ID for verification</li>
             </ol>
           </div>
         </div>
