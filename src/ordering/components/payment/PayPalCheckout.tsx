@@ -303,14 +303,49 @@ export const PayPalCheckout = React.forwardRef<PayPalCheckoutRef, PayPalCheckout
                   {/* Processing indicator removed in favor of full-screen overlay */}
                 </div>
               ) : (
-                <>
-                  <PayPalCardFields
-                    onCardFieldsReady={handleCardFieldsValidityChange}
-                    onError={handlePaymentError}
-                  />
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-700 mb-3">
+                    Enter your card details to complete your payment.
+                  </p>
                   
-                  {/* Processing indicator removed in favor of full-screen overlay */}
-                </>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Card Number
+                    </label>
+                    <input 
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      placeholder="Card number"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Expiration Date
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="MM/YY"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        CVV
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="123"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="p-2 bg-yellow-50 border border-yellow-100 rounded text-xs text-yellow-700 mt-2">
+                    <strong>Note:</strong> This is a simplified card form. In production, this would use PayPal's secure hosted fields.
+                  </div>
+                </div>
               )}
             </div>
           )}

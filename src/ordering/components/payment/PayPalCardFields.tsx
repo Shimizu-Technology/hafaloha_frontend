@@ -28,6 +28,11 @@ export function PayPalCardFields({ onCardFieldsReady, onError }: PayPalCardField
     }
 
     try {
+      // Check if the PayPal SDK has the card fields component
+      if (!window.paypal.CardNumberField || !window.paypal.CardExpiryField || !window.paypal.CardCvvField) {
+        throw new Error('PayPal card fields are not available. Make sure to include "card-fields" in the components parameter when loading the PayPal SDK.');
+      }
+      
       // Initialize card number field
       if (cardNumberRef.current && !cardNumberField.current) {
         cardNumberField.current = window.paypal.CardNumberField();
