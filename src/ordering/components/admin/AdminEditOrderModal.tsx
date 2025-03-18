@@ -684,12 +684,12 @@ export function AdminEditOrderModal({
       return;
     }
     
-    // For all other items (paid or with inventory tracking), use RefundModal
+    // Otherwise, open RefundModal with this item pre-selected
+    setShowRefundModal(true);
     setPreSelectedRefundItem({
       id: foundItem.id!,
       quantity: 1 // Default to 1 unit
     });
-    setShowRefundModal(true);
   }
 
   function handleItemChange(
