@@ -9,6 +9,14 @@ interface RefundItem {
   quantity: number;  // Quantity being refunded
   price: number;
   originalQuantity?: number; // Original quantity in the order
+  enable_stock_tracking?: boolean; // Whether this item has inventory tracking
+}
+
+interface InventoryAction {
+  itemId: number;
+  quantity: number;
+  action: 'return_to_inventory' | 'mark_as_damaged';
+  reason?: string;
 }
 
 interface RefundModalProps {
@@ -17,7 +25,11 @@ interface RefundModalProps {
   orderId: number;
   maxRefundable: number;
   orderItems?: any[]; // Original order items with refund status
-  onRefundCreated: () => void;
+  onRefundCreated: (refundedItems: RefundItem[], inventoryActions: InventoryAction[]) => void;
+  preSelectedItem?: {
+    id: number | string;
+    quantity: number;
+  } | null;
 }
 
 // Valid Stripe refund reasons
@@ -30,6 +42,7 @@ export function RefundModal({
   maxRefundable,
   orderItems = [],
   onRefundCreated,
+  preSelectedItem,
 }: RefundModalProps) {
   const [amount, setAmount] = useState<string>(maxRefundable.toFixed(2));
   const [reason, setReason] = useState<RefundReason>('requested_by_customer');
@@ -42,6 +55,17 @@ export function RefundModal({
   const [itemQuantities, setItemQuantities] = useState<Record<number, number>>({});
   const [calculatedAmount, setCalculatedAmount] = useState<number>(0);
   const [amountChangeHighlight, setAmountChangeHighlight] = useState<boolean>(false);
+  
+  // Inventory handling state
+  const [inventoryActions, setInventoryActions] = useState<Record<number, {
+    action: 'return_to_inventory' | 'mark_as_damaged';
+    reason?: string;
+    quantity: number;
+  }>>({});
+  
+  // For damaged item reasons
+  const [damageReasons, setDamageReasons] = useState<Record<number, string>>({});
+  const [showInventorySection, setShowInventorySection] = useState<boolean>(false);
 
   // Get refundable items (not fully refunded) using useMemo to avoid recalculation on every render
   const refundableItems = useMemo(() => {
@@ -60,7 +84,7 @@ export function RefundModal({
     [key: string]: any; // Allow other properties
   }
 
-  // Initialize item quantities when modal opens
+  // Initialize state when modal opens
   useEffect(() => {
     if (isOpen) {
       if (refundableItems.length > 0) {
@@ -83,8 +107,51 @@ export function RefundModal({
       setIsManuallyEdited(false);
       setCalculatedAmount(0);
       setError(null);
+      setInventoryActions({});
+      setDamageReasons({});
+      
+      // Check if we have any items with inventory tracking
+      const hasInventoryItems = refundableItems.some(item => item.enable_stock_tracking);
+      setShowInventorySection(hasInventoryItems);
+      
+      // If we have a pre-selected item, select it
+      if (preSelectedItem) {
+        const itemToSelect = refundableItems.find(item => 
+          String(item.id) === String(preSelectedItem.id)
+        );
+        
+        if (itemToSelect) {
+          // Default to the quantity provided in preSelectedItem (or max available if less)
+          const availableQuantity = itemToSelect.isPartiallyRefunded 
+            ? itemToSelect.quantity - (itemToSelect.refundedQuantity || 0)
+            : itemToSelect.quantity;
+          
+          const selectQuantity = Math.min(preSelectedItem.quantity, availableQuantity);
+          
+          // Add to selected items
+          const newItem = {
+            id: itemToSelect.id,
+            name: itemToSelect.name,
+            quantity: selectQuantity,
+            price: itemToSelect.price,
+            originalQuantity: itemToSelect.quantity,
+            enable_stock_tracking: itemToSelect.enable_stock_tracking
+          };
+          
+          setSelectedItems([newItem]);
+          setItemQuantities(prev => ({
+            ...prev,
+            [itemToSelect.id]: selectQuantity
+          }));
+          
+          // Update amount
+          const itemAmount = selectQuantity * itemToSelect.price;
+          setCalculatedAmount(itemAmount);
+          setAmount(itemAmount.toFixed(2));
+        }
+      }
     }
-  }, [isOpen, refundableItems, maxRefundable]);
+  }, [isOpen, refundableItems, maxRefundable, preSelectedItem]);
 
   if (!isOpen) return null;
 
@@ -204,6 +271,79 @@ export function RefundModal({
     return selectedItems.some(item => item.id === itemId);
   };
 
+  // Update inventory actions when selected items change
+  useEffect(() => {
+    // Remove inventory actions for items that are no longer selected
+    const updatedInventoryActions = { ...inventoryActions };
+    
+    // Check which items are no longer selected
+    Object.keys(updatedInventoryActions).forEach(itemIdStr => {
+      const itemId = parseInt(itemIdStr, 10);
+      if (!selectedItems.some(item => item.id === itemId)) {
+        delete updatedInventoryActions[itemId];
+      }
+    });
+    
+    // Add default inventory actions for newly selected items with inventory tracking
+    selectedItems.forEach(item => {
+      if (item.enable_stock_tracking && !updatedInventoryActions[item.id]) {
+        updatedInventoryActions[item.id] = {
+          action: 'return_to_inventory', // Default action
+          quantity: item.quantity
+        };
+      }
+    });
+    
+    setInventoryActions(updatedInventoryActions);
+  }, [selectedItems]);
+
+  // Update inventory action quantities when item quantities change
+  useEffect(() => {
+    const updatedInventoryActions = { ...inventoryActions };
+    
+    // Update quantities for all inventory actions
+    Object.keys(updatedInventoryActions).forEach(itemIdStr => {
+      const itemId = parseInt(itemIdStr, 10);
+      const selectedItem = selectedItems.find(item => item.id === itemId);
+      
+      if (selectedItem) {
+        updatedInventoryActions[itemId] = {
+          ...updatedInventoryActions[itemId],
+          quantity: selectedItem.quantity
+        };
+      }
+    });
+    
+    setInventoryActions(updatedInventoryActions);
+  }, [itemQuantities, selectedItems]);
+
+  const handleInventoryActionChange = (itemId: number, action: 'return_to_inventory' | 'mark_as_damaged') => {
+    setInventoryActions(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        action,
+        // Clear reason if switching to return_to_inventory
+        reason: action === 'return_to_inventory' ? undefined : prev[itemId]?.reason
+      }
+    }));
+  };
+
+  const handleDamageReasonChange = (itemId: number, reason: string) => {
+    setDamageReasons(prev => ({
+      ...prev,
+      [itemId]: reason
+    }));
+    
+    setInventoryActions(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        reason
+      }
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -226,6 +366,19 @@ export function RefundModal({
       return;
     }
 
+    // Validate inventory actions
+    const inventoryItemsWithoutReason = Object.entries(inventoryActions)
+      .filter(([_, action]) => action.action === 'mark_as_damaged' && !action.reason)
+      .map(([itemId]) => {
+        const item = selectedItems.find(item => item.id === parseInt(itemId, 10));
+        return item?.name || `Item #${itemId}`;
+      });
+
+    if (inventoryItemsWithoutReason.length > 0) {
+      setError(`Please provide damage reasons for: ${inventoryItemsWithoutReason.join(', ')}`);
+      return;
+    }
+
     // Warn if manual amount doesn't match calculated amount (if items are selected)
     if (isManuallyEdited && Math.abs(refundAmount - calculatedAmount) > 0.01 && selectedItems.length > 0) {
       const confirmOverride = window.confirm(
@@ -239,15 +392,40 @@ export function RefundModal({
     // Process refund
     setIsProcessing(true);
     try {
+      // Enhanced logging for debugging inventory actions
+      const inventoryActionsForAPI = Object.entries(inventoryActions).map(([itemId, action]) => {
+        const selectedItem = selectedItems.find(item => item.id === parseInt(itemId, 10));
+        return {
+          item_id: parseInt(itemId, 10),
+          item_name: selectedItem?.name || 'Unknown',
+          action: action.action,
+          reason: action.reason,
+          quantity: selectedItem?.quantity || 1 // Ensure quantity is explicitly set from the selected item
+        };
+      });
+      
+      console.log('Sending inventory actions:', inventoryActionsForAPI);
+      
       await orderPaymentsApi.createRefund(orderId, {
         amount: refundAmount,
         reason: reason,
         description: customReason || undefined,
-        refunded_items: selectedItems
+        refunded_items: selectedItems,
+        inventory_actions: inventoryActionsForAPI
       });
 
-      // Notify parent component
-      onRefundCreated();
+      // Convert inventory actions to array format for the callback
+      const inventoryActionsArray: InventoryAction[] = Object.entries(inventoryActions).map(
+        ([itemId, action]) => ({
+          itemId: parseInt(itemId, 10),
+          quantity: action.quantity,
+          action: action.action,
+          reason: action.reason
+        })
+      );
+
+      // Notify parent component with both refunded items and inventory actions
+      onRefundCreated(selectedItems, inventoryActionsArray);
       
       // Close modal
       onClose();
@@ -387,36 +565,47 @@ export function RefundModal({
                               
                               {/* Quantity controls */}
                               {isItemSelected(item.id) && (
-                                <div className="flex items-center space-x-2">
-                                  <button
-                                    type="button"
-                                    className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                                    onClick={() => handleQuantityChange(item.id, (itemQuantities[item.id] || item.quantity) - 1, item)}
-                                    disabled={(itemQuantities[item.id] || item.quantity) <= 1}
-                                  >
-                                    -
-                                  </button>
-                                  <span className="text-sm">
-                                    {itemQuantities[item.id] || 
-                                      (item.isPartiallyRefunded 
-                                        ? item.quantity - (item.refundedQuantity || 0) 
-                                        : item.quantity)} of {
-                                      item.isPartiallyRefunded 
-                                        ? `${item.quantity - (item.refundedQuantity || 0)} available` 
-                                        : item.quantity
-                                    }
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                                    onClick={() => handleQuantityChange(item.id, (itemQuantities[item.id] || item.quantity) + 1, item)}
-                                    disabled={(itemQuantities[item.id] || item.quantity) >= 
-                                      (item.isPartiallyRefunded 
-                                        ? item.quantity - (item.refundedQuantity || 0) 
-                                        : item.quantity)}
-                                  >
-                                    +
-                                  </button>
+                                <div className="flex flex-col">
+                                  <div className="flex items-center space-x-2">
+                                    <button
+                                      type="button"
+                                      className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                                      onClick={() => handleQuantityChange(item.id, (itemQuantities[item.id] || item.quantity) - 1, item)}
+                                      disabled={(itemQuantities[item.id] || item.quantity) <= 1}
+                                    >
+                                      -
+                                    </button>
+                                    <span className="text-sm font-medium">
+                                      {itemQuantities[item.id] || 
+                                        (item.isPartiallyRefunded 
+                                          ? item.quantity - (item.refundedQuantity || 0) 
+                                          : item.quantity)}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                                      onClick={() => handleQuantityChange(item.id, (itemQuantities[item.id] || item.quantity) + 1, item)}
+                                      disabled={(itemQuantities[item.id] || item.quantity) >= 
+                                        (item.isPartiallyRefunded 
+                                          ? item.quantity - (item.refundedQuantity || 0) 
+                                          : item.quantity)}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                  
+                                  {/* Quantity details */}
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    {item.isPartiallyRefunded ? (
+                                      <div className="flex flex-col">
+                                        <span>Original: {item.quantity + (item.refundedQuantity || 0)}</span>
+                                        <span className="text-red-500">Already refunded: {item.refundedQuantity}</span>
+                                        <span className="text-green-500">Available: {item.quantity - (item.refundedQuantity || 0)}</span>
+                                      </div>
+                                    ) : (
+                                      <span>Total quantity: {item.quantity}</span>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -468,6 +657,79 @@ export function RefundModal({
                         onChange={(e) => setCustomReason(e.target.value)}
                       />
                     </div>
+
+                    {/* Inventory Section - only show if there are items with inventory tracking */}
+                    {showInventorySection && selectedItems.some(item => item.enable_stock_tracking) && (
+                      <div className="mb-4 border-t border-gray-200 pt-4 mt-4">
+                        <h4 className="text-base font-medium text-gray-900 mb-3">
+                          Inventory Handling
+                        </h4>
+                        <p className="text-sm text-gray-600 mb-3">
+                          The following items have inventory tracking. Please specify what should happen to each item.
+                        </p>
+                        
+                        <div className="space-y-4">
+                          {selectedItems
+                            .filter(item => item.enable_stock_tracking)
+                            .map((item, idx) => (
+                              <div key={`inventory-${item.id}`} className="border border-gray-200 rounded-lg p-3">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <h5 className="font-medium text-gray-900">{item.name}</h5>
+                                    <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                                  </div>
+                                </div>
+                                
+                                <div className="mt-2">
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Action
+                                  </label>
+                                  <div className="flex flex-col sm:flex-row gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleInventoryActionChange(item.id, 'return_to_inventory')}
+                                      className={`px-4 py-2 rounded-md text-sm font-medium flex-1 ${
+                                        inventoryActions[item.id]?.action === 'return_to_inventory'
+                                          ? 'bg-green-100 text-green-800 border-2 border-green-300'
+                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      Return to Inventory
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleInventoryActionChange(item.id, 'mark_as_damaged')}
+                                      className={`px-4 py-2 rounded-md text-sm font-medium flex-1 ${
+                                        inventoryActions[item.id]?.action === 'mark_as_damaged'
+                                          ? 'bg-red-100 text-red-800 border-2 border-red-300'
+                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      Mark as Damaged
+                                    </button>
+                                  </div>
+                                </div>
+                                
+                                {/* Reason field for damaged items */}
+                                {inventoryActions[item.id]?.action === 'mark_as_damaged' && (
+                                  <div className="mt-3">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Reason (Required)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={damageReasons[item.id] || ''}
+                                      onChange={(e) => handleDamageReasonChange(item.id, e.target.value)}
+                                      placeholder="Why is this item damaged?"
+                                      className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
 
                     {error && (
                       <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded-md">

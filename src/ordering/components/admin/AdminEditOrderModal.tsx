@@ -467,6 +467,14 @@ export function AdminEditOrderModal({
     useState(false);
   const [showPaymentHandlingDialog, setShowPaymentHandlingDialog] =
     useState(false);
+  
+  /**
+   * Used when pre-selecting an item for refund (e.g., when clicking the trash icon)
+   */
+  const [preSelectedRefundItem, setPreSelectedRefundItem] = useState<{
+    id: number | string;
+    quantity: number;
+  } | null>(null);
 
   // Payment adjustment tracking (e.g., refunds, store credits, etc.)
   const [paymentAdjustments, setPaymentAdjustments] = useState<{
@@ -664,30 +672,24 @@ export function AdminEditOrderModal({
     if (!foundItem) return;
 
     const isNewlyAdded = newlyAddedItemIds.has(editId);
-    const isAlreadyPaid =
-      foundItem.paymentStatus === 'already_paid' && !isNewlyAdded;
 
-    // If it was an original item that’s already paid, we show Payment Handling
-    if (isAlreadyPaid) {
-      setItemToRemove({ item: foundItem, editId });
-      setShowPaymentHandlingDialog(true);
+    // If it's a newly added item (not yet paid for), remove immediately
+    if (isNewlyAdded) {
+      setLocalItems((prev) => {
+        const updated = prev.filter((i) => i._editId !== editId);
+        const newSubtotal = calculateSubtotalFromItems(updated);
+        setLocalTotal(newSubtotal.toFixed(2));
+        return updated;
+      });
       return;
     }
-
-    // If it has inventory tracking and was not newly added, show Inventory reversion
-    if (foundItem.enable_stock_tracking && !isNewlyAdded) {
-      setItemToRemove({ item: foundItem, editId });
-      setShowInventoryDialog(true);
-      return;
-    }
-
-    // Otherwise, remove immediately
-    setLocalItems((prev) => {
-      const updated = prev.filter((i) => i._editId !== editId);
-      const newSubtotal = calculateSubtotalFromItems(updated);
-      setLocalTotal(newSubtotal.toFixed(2));
-      return updated;
+    
+    // For all other items (paid or with inventory tracking), use RefundModal
+    setPreSelectedRefundItem({
+      id: foundItem.id!,
+      quantity: 1 // Default to 1 unit
     });
+    setShowRefundModal(true);
   }
 
   function handleItemChange(
@@ -1459,7 +1461,45 @@ export function AdminEditOrderModal({
     }
   }
 
-  function handleRefundCreated() {
+  function handleRefundCreated(
+    refundedItems: Array<{id: number, quantity: number}>,
+    inventoryActions: Array<{
+      itemId: number,
+      quantity: number,
+      action: 'return_to_inventory' | 'mark_as_damaged',
+      reason?: string
+    }>
+  ) {
+    // Log inventory actions for debugging
+    console.log('Processing inventory actions in handleRefundCreated:', inventoryActions);
+    
+    // Process inventory actions
+    inventoryActions.forEach(action => {
+      // Ensure quantity is a valid number and greater than 0
+      const quantity = Math.max(1, action.quantity || 1); // Default to 1 if undefined or 0
+      
+      if (action.action === 'mark_as_damaged') {
+        console.log(`Marking ${quantity} units of item ${action.itemId} as damaged`);
+        setItemsToMarkAsDamaged(prev => [
+          ...prev,
+          {
+            itemId: action.itemId,
+            quantity: quantity,
+            reason: action.reason || 'Damaged during refund'
+          }
+        ]);
+      } else if (action.action === 'return_to_inventory') {
+        console.log(`Returning ${quantity} units of item ${action.itemId} to inventory`);
+        setItemsToReturnToInventory(prev => [
+          ...prev,
+          {
+            itemId: action.itemId,
+            quantity: quantity
+          }
+        ]);
+      }
+    });
+    
     // After a refund, re-fetch payments
     fetchPayments().then(() => {
       // After fetching payments, rebuild the refund tracker
@@ -1479,16 +1519,17 @@ export function AdminEditOrderModal({
       const newNet = Math.max(0, currentSubtotal - sumRefundsLocal);
       setLocalTotal(newNet.toFixed(2));
 
-      // Possibly update status to refunded or partially_refunded
-      try {
-        const isFullRefund = Math.abs(newNet) < 0.01;
-        if (isFullRefund) {
-          setLocalStatus('refunded');
-        } else if (sumRefundsLocal > 0) {
-          setLocalStatus('partially_refunded');
-        }
-      } catch (error) {
-        console.error('Error updating status after refund:', error);
+      // Check if all items are now refunded
+      const allItemsRefunded = localItems.every(item => 
+        item.isFullyRefunded || 
+        (item.refundedQuantity && item.refundedQuantity >= item.quantity)
+      );
+      
+      // Update status based on refund state
+      if (allItemsRefunded) {
+        setLocalStatus('refunded');
+      } else if (sumRefundsLocal > 0) {
+        setLocalStatus('partially_refunded');
       }
     });
   }
@@ -1754,22 +1795,34 @@ export function AdminEditOrderModal({
       // 4) Return items to inventory (if any)
       if (itemsToReturnToInventory.length > 0) {
         try {
+          console.log('Processing items to return to inventory:', itemsToReturnToInventory);
+          
           const inventoryCalls = itemsToReturnToInventory.map(async (i) => {
             try {
               // Get current item details to know the current stock level
               const menuItem = await menuItemsApi.getById(i.itemId);
               
-              // Calculate new stock level after returning items
-              const newStockLevel = (menuItem.stock_quantity || 0) + i.quantity;
+              // Calculate new stock level by adding the returned quantity
+              const currentStockLevel = menuItem.stock_quantity || 0;
+              // Ensure quantity is a valid number
+              const quantityToAdd = i.quantity || 1; // Default to 1 if undefined or 0
+              const newStockLevel = currentStockLevel + quantityToAdd;
               
-              // Update stock level
-              return menuItemsApi.updateStock(i.itemId, {
+              console.log(`Returning item ${i.itemId} (${menuItem.name}) to inventory: Current stock: ${currentStockLevel}, Adding: ${quantityToAdd}, New stock: ${newStockLevel}`);
+              
+              // Update the stock level with the new total
+              const updateResult = await menuItemsApi.updateStock(i.itemId, {
                 stock_quantity: newStockLevel,
                 reason_type: 'return',
-                reason_details: `Items returned from edited Order #${order.id}`,
+                reason_details: `Items returned from refund of Order #${order.id}`,
               });
+              
+              console.log(`Inventory update successful for item ${i.itemId} (${menuItem.name}). New stock level: ${updateResult.stock_quantity}`);
+              return updateResult;
             } catch (err) {
               console.error(`Failed to update inventory for item ${i.itemId}:`, err);
+              // Show a toast notification to the user
+              toast.error(`Failed to return item to inventory. Please check the console for details.`);
               return Promise.reject(err);
             }
           });
@@ -2778,7 +2831,7 @@ export function AdminEditOrderModal({
                           0H6"
                       />
                     </svg>
-                    Process Additional Payment
+                    Process Additional Payment test
                   </button>
                 )}
 
@@ -3163,11 +3216,15 @@ export function AdminEditOrderModal({
       {showRefundModal && (
         <RefundModal
           isOpen={showRefundModal}
-          onClose={() => setShowRefundModal(false)}
+          onClose={() => {
+            setShowRefundModal(false);
+            setPreSelectedRefundItem(null);
+          }}
           orderId={order.id}
           maxRefundable={maxRefundable}
           orderItems={localItems}
           onRefundCreated={handleRefundCreated}
+          preSelectedItem={preSelectedRefundItem}
         />
       )}
 

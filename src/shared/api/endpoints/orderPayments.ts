@@ -9,11 +9,19 @@ interface RefundItem {
   price: number;
 }
 
+interface InventoryAction {
+  item_id: number;
+  quantity: number;
+  action: 'return_to_inventory' | 'mark_as_damaged';
+  reason?: string;
+}
+
 interface RefundRequest {
   amount: number;
   reason?: string;
   description?: string;
   refunded_items?: RefundItem[];
+  inventory_actions?: InventoryAction[];
 }
 
 interface AdditionalPaymentRequest {

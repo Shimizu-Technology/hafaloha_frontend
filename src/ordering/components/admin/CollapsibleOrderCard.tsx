@@ -193,6 +193,28 @@ function getTotalRefundedItemsCount(refundedItemsMap: Record<string, RefundInfo>
   ).length;
 }
 
+// Helper function to calculate the true original total from all items
+function calculateOriginalTotal(order: any): number {
+  // If order has an explicit original_total property, use it
+  if (order.original_total) {
+    return parseFloat(String(order.original_total));
+  }
+  
+  // Otherwise calculate from all items (including refunded ones)
+  let total = 0;
+  if (order.items && Array.isArray(order.items)) {
+    total = order.items.reduce((sum: number, item: any) => {
+      const price = parseFloat(String(item.price)) || 0;
+      // Use original quantity if available (for partially refunded items)
+      const originalQty = parseInt(String(item.originalQuantity || item.quantity), 10);
+      return sum + (price * originalQty);
+    }, 0);
+  }
+  
+  // Fallback to order.total if calculation fails
+  return total || parseFloat(String(order.total || 0));
+}
+
 // Helper function to detect if an order has refunds using multiple indicators
 function detectOrderHasRefunds(order: any): { 
   hasRefund: boolean; 
@@ -234,11 +256,9 @@ function detectOrderHasRefunds(order: any): {
     console.log("🔍 Using total_refunded property:", refundAmount);
   }
   
-  // Get original total
-  const originalTotal = order.original_total 
-    ? parseFloat(String(order.original_total)) 
-    : parseFloat(String(order.total || 0));
-  console.log("🔍 Original total:", originalTotal);
+  // Calculate the true original total from all items
+  const originalTotal = calculateOriginalTotal(order);
+  console.log("🔍 Original total (calculated from all items):", originalTotal);
   
   // Calculate net amount
   const netAmount = Math.max(0, originalTotal - refundAmount);
@@ -628,8 +648,8 @@ export function CollapsibleOrderCard({
     ? 'ring-2 ring-[#c1902f] ring-opacity-70 shadow-md'
     : '';
 
-  // Calculate the actual total based on the items in the order
-  const calculatedTotal = (order.items || []).reduce((sum: number, item: any) => {
+  // Calculate the actual total based on the current items in the order
+  const currentTotal = (order.items || []).reduce((sum: number, item: any) => {
     const price = parseFloat(String(item.price)) || 0;
     const qty = parseInt(String(item.quantity), 10) || 0;
     return sum + price * qty;
@@ -813,12 +833,12 @@ export function CollapsibleOrderCard({
                 <>
                   <div className="flex flex-col sm:flex-row items-end sm:items-center">
                     <div className="flex items-center mb-1 sm:mb-0">
-                      <span className="line-through text-gray-400 mr-2">
-                        ${originalTotal.toFixed(2)}
-                      </span>
-                      <span className="font-medium">
-                        ${netTotal.toFixed(2)}
-                      </span>
+                  <span className="line-through text-gray-400 mr-2">
+                    ${originalTotal.toFixed(2)}
+                  </span>
+                  <span className="font-medium">
+                    ${netTotal.toFixed(2)}
+                  </span>
                     </div>
                     <span 
                       className={`px-2 py-0.5 rounded-full text-xs font-medium sm:ml-2
