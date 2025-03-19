@@ -19,7 +19,7 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
       
       item.option_groups.forEach(group => {
         // For required groups with min_select = 1, pre-select the first option
-        if (group.required && group.min_select === 1 && group.max_select === 1 && group.options.length > 0) {
+        if (group.min_select > 0 && group.min_select === 1 && group.max_select === 1 && group.options.length > 0) {
           initialSelections[group.id.toString()] = [group.options[0]];
         } else {
           initialSelections[group.id.toString()] = [];
@@ -135,7 +135,7 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
               <h3 className="font-medium text-lg mb-2">
                 {group.name} 
                 <span className="text-sm font-normal text-gray-500 ml-2">
-                  {group.required ? '(Required)' : '(Optional)'} 
+                  {group.min_select > 0 ? '(Required)' : '(Optional)'} 
                   {group.max_select > 1 ? ` (Min ${group.min_select}, Max ${group.max_select})` : ''}
                 </span>
               </h3>

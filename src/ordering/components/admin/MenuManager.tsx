@@ -11,8 +11,11 @@ import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay'
 import { Tooltip } from '../../../shared/components/ui';
 import { deriveStockStatus, calculateAvailableQuantity } from '../../utils/inventoryUtils';
 
-// Import ItemInventoryModal
+// Import the Inventory Modal
 import ItemInventoryModal from './ItemInventoryModal';
+
+// Import the updated OptionGroupsModal (no "required" field)
+import OptionGroupsModal from './OptionGroupsModal';
 
 /**
  * Local form data for creating/updating a menu item.
@@ -46,21 +49,28 @@ interface MenuItemFormData {
   available_quantity?: number; // Computed: stock_quantity - damaged_quantity
 }
 
-/** Option groups (unchanged). */
+/**
+ * We removed 'required' from the OptionGroup model & UI, so the interface
+ * no longer has a `required` property. We rely on min_select > 0 to indicate "required".
+ */
 interface OptionGroup {
   id: number;
   name: string;
   min_select: number;
   max_select: number;
-  required: boolean;
   position: number;
   options: OptionRow[];
 }
+
 interface OptionRow {
   id: number;
   name: string;
   additional_price: number;
   position: number;
+  /**
+   * We now allow pre-selected options in the admin UI
+   */
+  is_preselected?: boolean;
 }
 
 /** Helper to format a date for display. */
@@ -84,7 +94,12 @@ interface MenuManagerProps {
   onInventoryModalClose?: () => void;
 }
 
-export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryForItem, onInventoryModalClose }: MenuManagerProps) {
+export function MenuManager({
+  restaurantId,
+  selectedMenuItemId,
+  openInventoryForItem,
+  onInventoryModalClose
+}: MenuManagerProps) {
   const {
     menus,
     menuItems,
@@ -119,7 +134,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
 
-  // For managing option groups and inventory
+  // For managing option groups
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [optionsModalItem, setOptionsModalItem] = useState<MenuItem | null>(null);
 
@@ -131,7 +146,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
   const [editItemPollingActive, setEditItemPollingActive] = useState(false);
   const [polledItemId, setPolledItemId] = useState<number | null>(null);
 
-  // On mount => fetch all items (admin) + categories + menus and start inventory polling
+  // On mount => fetch items (admin) + categories + menus and start inventory polling
   useEffect(() => {
     fetchAllMenuItemsForAdmin();
     fetchCategories();
@@ -144,25 +159,27 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     return () => {
       stopInventoryPolling();
     };
-  }, [fetchAllMenuItemsForAdmin, fetchCategories, fetchMenus, startInventoryPolling, stopInventoryPolling]);
+  }, [
+    fetchAllMenuItemsForAdmin,
+    fetchCategories,
+    fetchMenus,
+    startInventoryPolling,
+    stopInventoryPolling
+  ]);
   
-  // Handle selectedMenuItemId from props (for opening edit modal from notifications)
+  // Handle selectedMenuItemId from props (for opening edit modal from e.g. notifications)
   useEffect(() => {
     if (selectedMenuItemId) {
-      const item = menuItems.find(item => item.id === selectedMenuItemId);
-      if (item) {
-        handleEdit(item);
-      }
+      const item = menuItems.find((mi) => mi.id === selectedMenuItemId);
+      if (item) handleEdit(item);
     }
   }, [selectedMenuItemId, menuItems]);
   
   // Handle openInventoryForItem from props (for opening inventory modal from notifications)
   useEffect(() => {
     if (openInventoryForItem) {
-      const item = menuItems.find(item => item.id === openInventoryForItem);
-      if (item) {
-        handleManageInventory(item);
-      }
+      const item = menuItems.find((mi) => mi.id === openInventoryForItem);
+      if (item) handleManageInventory(item);
     }
   }, [openInventoryForItem, menuItems]);
 
@@ -170,7 +187,6 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
   useEffect(() => {
     if (currentMenuId && !selectedMenuId) {
       setSelectedMenuId(currentMenuId);
-      // Close the menu selector once we have a selected menu
       setMenuSelectorOpen(false);
     }
   }, [currentMenuId, selectedMenuId]);
@@ -191,20 +207,24 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
       list = list.filter(item => Number(item.menu_id) === selectedMenuId);
     }
 
-    // If a category is selected, only show items that have that category_id
+    // If a category is selected, only show items that have that category
     if (selectedCategory) {
-      list = list.filter((item) =>
-        item.category_ids?.includes(selectedCategory)
-      );
+      list = list.filter(item => item.category_ids?.includes(selectedCategory));
     }
     if (showFeaturedOnly) {
-      list = list.filter((item) => item.featured);
+      list = list.filter(item => item.featured);
     }
     if (showSeasonalOnly) {
-      list = list.filter((item) => item.seasonal);
+      list = list.filter(item => item.seasonal);
     }
     return list;
-  }, [menuItems, selectedMenuId, selectedCategory, showFeaturedOnly, showSeasonalOnly]);
+  }, [
+    menuItems,
+    selectedMenuId,
+    selectedCategory,
+    showFeaturedOnly,
+    showSeasonalOnly
+  ]);
 
   // Default form data for a new item
   const initialFormData: MenuItemFormData = {
@@ -231,25 +251,24 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     available_quantity: 0,
   };
 
-  /**
-   * Function to refresh data after inventory changes
-   */
+  /** Refresh data after inventory changes (e.g. from the Inventory Modal) */
   const refreshAfterInventoryChanges = () => {
     fetchAllMenuItemsForAdmin();
   };
 
-  /**
-   * Utility: enforce max 4 featured items
-   */
+  /** Utility: enforce max 4 featured items. */
   function canFeatureThisItem(formData: MenuItemFormData): boolean {
     if (!formData.featured) return true;
+
     const isCurrentlyFeatured = menuItems.find(
       (m) => Number(m.id) === formData.id
     )?.featured;
-    // If it was already featured, that's allowed
+
+    // If it was already featured, that remains allowed
     if (isCurrentlyFeatured) return true;
 
-    const currentlyFeaturedCount = menuItems.filter((m) => m.featured).length;
+    // Otherwise, count how many are currently featured
+    const currentlyFeaturedCount = menuItems.filter(m => m.featured).length;
     if (currentlyFeaturedCount >= 4) {
       toast.error('You can only have 4 featured items at a time.');
       return false;
@@ -257,9 +276,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     return true;
   }
 
-  /**
-   * Handle editing an existing item => fill form data
-   */
+  /** Handle editing an existing item => fill form data. */
   const handleEdit = (item: MenuItem) => {
     // Calculate available quantity
     const stockQty = item.stock_quantity || 0;
@@ -295,18 +312,15 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     });
     setIsEditing(true);
     
-    // Start polling for this specific item's inventory updates
+    // Start polling for this specific item's inventory updates if tracking is on
     if (item.enable_stock_tracking) {
       setPolledItemId(Number(item.id));
       setEditItemPollingActive(true);
-      // Use the menu store's polling function for just this item
       startInventoryPolling(item.id);
     }
   };
 
-  /**
-   * Handle adding a new item => blank form
-   */
+  /** Handle adding a new item => blank form. */
   const handleAdd = () => {
     setEditingItem({
       ...initialFormData,
@@ -315,18 +329,14 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     setIsEditing(true);
   };
 
-  /**
-   * Delete item
-   */
+  /** Delete item. */
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       await deleteMenuItem(id);
     }
   };
 
-  /**
-   * Manage option groups => show the modal
-   */
+  /** Manage option groups => show the modal. */
   const handleManageOptions = (item: MenuItem) => {
     setOptionsModalItem(item);
     setOptionsModalOpen(true);
@@ -336,11 +346,11 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     setOptionsModalItem(null);
   };
 
-  // Effect to update the editing item when menu items are refreshed
+  // Update the editingItem if inventory changed while the edit form is open
   useEffect(() => {
     if (isEditing && editingItem && editingItem.id && editItemPollingActive) {
-      const editingItemId = editingItem.id; // Get this once to avoid reference issues
-      const updatedItem = menuItems.find(item => Number(item.id) === editingItemId);
+      const editingItemId = editingItem.id;
+      const updatedItem = menuItems.find((mi) => Number(mi.id) === editingItemId);
       
       if (updatedItem) {
         const stockQty = updatedItem.stock_quantity || 0;
@@ -348,7 +358,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
         const availableQty = Math.max(0, stockQty - damagedQty);
         const threshold = updatedItem.low_stock_threshold || 10;
         
-        // Only update if the data actually changed to avoid infinite loops
+        // Only update if something actually changed
         if (
           stockQty !== editingItem.stock_quantity ||
           damagedQty !== editingItem.damaged_quantity ||
@@ -356,7 +366,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
           updatedItem.stock_status !== editingItem.stock_status ||
           !!updatedItem.enable_stock_tracking !== editingItem.enable_stock_tracking
         ) {
-          setEditingItem(prevItem => {
+          setEditingItem((prevItem) => {
             if (!prevItem) return prevItem;
             return {
               ...prevItem,
@@ -365,42 +375,37 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
               damaged_quantity: damagedQty,
               low_stock_threshold: threshold,
               available_quantity: availableQty,
-              stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'
+              stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock',
             };
           });
         }
       }
     }
-  }, [menuItems, isEditing, editItemPollingActive]);
+  }, [menuItems, isEditing, editItemPollingActive, editingItem]);
 
-  /**
-   * Manage inventory => show the modal
-   */
+  /** Manage inventory => show the modal. */
   const handleManageInventory = (item: MenuItem) => {
     setInventoryModalItem(item);
     setInventoryModalOpen(true);
   };
-  
   const handleCloseInventoryModal = () => {
     setInventoryModalOpen(false);
     const itemBeforeClosing = inventoryModalItem;
     setInventoryModalItem(null);
-    
-    // Call the callback to reset the openInventoryForItem state in the parent component
+
+    // If the parent component needs to reset e.g. "openInventoryForItem"
     if (onInventoryModalClose) {
       onInventoryModalClose();
     }
     
-    // Force a full refresh of menu items to get updated inventory and tracking status
+    // Force a refresh to get updated inventory/tracking data
     fetchAllMenuItemsForAdmin();
   };
 
   // Use our loading overlay hook
   const { withLoading, LoadingOverlayComponent } = useLoadingOverlay();
 
-  /**
-   * Toggles for featured + seasonal filters
-   */
+  /** Toggles for "Featured only" + "Seasonal only" filters. */
   function handleToggleFeatured(checked: boolean) {
     if (checked) setShowSeasonalOnly(false);
     setShowFeaturedOnly(checked);
@@ -410,16 +415,13 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     setShowSeasonalOnly(checked);
   }
 
-  // Handle setting a menu as active
+  /** Mark a menu as active. */
   const handleSetActiveMenu = async (id: number) => {
     await setActiveMenu(id);
-    // Refresh menu items after setting a menu as active
     await fetchAllMenuItemsForAdmin();
   };
 
-  /**
-   * Submit the form => create or update item in the store
-   */
+  /** Submit the form => create/update item. */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
@@ -427,7 +429,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
     // Enforce up to 4 featured
     if (!canFeatureThisItem(editingItem)) return;
     
-    // Validate that at least one category is selected
+    // Validate at least one category
     if (editingItem.category_ids.length === 0) {
       toast.error('Please select at least one category for this menu item.');
       return;
@@ -439,103 +441,98 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
       finalLabel = 'Limited Time';
     }
     
-    // Use utility function to determine stock status consistently
-    let derivedStockStatus = deriveStockStatus(editingItem);
-    
-    // Update the available_quantity in the editingItem
+    // Derive final stock status
+    let derivedStockStatus = deriveStockStatus(editingItem as any);
+
+    // Update the available_quantity if tracking is enabled
     if (editingItem.enable_stock_tracking) {
-      editingItem.available_quantity = calculateAvailableQuantity(editingItem);
+      editingItem.available_quantity = calculateAvailableQuantity(editingItem as any);
     }
 
     try {
       await withLoading(async () => {
-        // First handle the basic item data
         let updatedItem: any;
         
         if (editingItem.id) {
           // Updating existing item
           const { id, imageFile, ...rest } = editingItem;
-          if (id) {
-            const payload = { 
-              ...rest, 
-              promo_label: finalLabel,
-              stock_status: derivedStockStatus
-            };
-            updatedItem = await updateMenuItem(String(id), payload);
-            
-            // If there's a new image file, upload it separately using the dedicated endpoint
-            if (imageFile instanceof File) {
-              console.log("Uploading image file for menu item:", id);
-              await uploadMenuItemImage(String(id), imageFile);
-              
-              // Fetch the latest data to include the new image URL
-              updatedItem = await api.get(`/menu_items/${id}`);
-            }
-            
-            // Update the editing item with the latest data
-            if (updatedItem) {
-              setEditingItem({
-                id: Number(updatedItem.id),
-                name: updatedItem.name,
-                description: updatedItem.description,
-                price: updatedItem.price,
-                cost_to_make: updatedItem.cost_to_make ?? 0,
-                category_ids: updatedItem.category_ids || [],
-                image: updatedItem.image_url || updatedItem.image || '',
-                imageFile: null,
-                menu_id: (updatedItem as any).menu_id || selectedMenuId || 1,
-                advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
-                seasonal: !!updatedItem.seasonal,
-                available_from: updatedItem.available_from || null,
-                available_until: updatedItem.available_until || null,
-                promo_label: updatedItem.promo_label?.trim() || 'Limited Time',
-                featured: !!updatedItem.featured,
-                stock_status: updatedItem.stock_status === 'limited'
-                  ? 'low_stock'
-                  : (updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
-                status_note: updatedItem.status_note || '',
-              });
-            }
-          }
-        } else {
-          // Creating new
-          const { imageFile, id, ...rest } = editingItem;
           const payload = { 
             ...rest, 
             promo_label: finalLabel,
             stock_status: derivedStockStatus
           };
+          updatedItem = await updateMenuItem(String(id), payload);
+
+          // If there's a new image file, upload it now
+          if (imageFile instanceof File) {
+            await uploadMenuItemImage(String(id), imageFile);
+            // Fetch new data with updated image
+            updatedItem = await api.get(`/menu_items/${id}`);
+          }
+
+          // Update the local form state with the newly fetched data
+          if (updatedItem) {
+            setEditingItem({
+              id: Number(updatedItem.id),
+              name: updatedItem.name,
+              description: updatedItem.description,
+              price: updatedItem.price,
+              cost_to_make: updatedItem.cost_to_make ?? 0,
+              category_ids: updatedItem.category_ids || [],
+              image: updatedItem.image_url || updatedItem.image || '',
+              imageFile: null,
+              menu_id: updatedItem.menu_id || selectedMenuId || 1,
+              advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
+              seasonal: !!updatedItem.seasonal,
+              available_from: updatedItem.available_from || null,
+              available_until: updatedItem.available_until || null,
+              promo_label: updatedItem.promo_label?.trim() || 'Limited Time',
+              featured: !!updatedItem.featured,
+              stock_status:
+                updatedItem.stock_status === 'limited'
+                  ? 'low_stock'
+                  : (updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
+              status_note: updatedItem.status_note || '',
+              enable_stock_tracking: updatedItem.enable_stock_tracking,
+              stock_quantity: updatedItem.stock_quantity || 0,
+              damaged_quantity: updatedItem.damaged_quantity || 0,
+              low_stock_threshold: updatedItem.low_stock_threshold || 10,
+              available_quantity: Math.max(
+                0,
+                (updatedItem.stock_quantity || 0) - (updatedItem.damaged_quantity || 0)
+              ),
+            });
+          }
+        } else {
+          // Creating new
+          const { imageFile, ...rest } = editingItem;
+          const payload = {
+            ...rest,
+            promo_label: finalLabel,
+            stock_status: derivedStockStatus
+          };
           updatedItem = await addMenuItem(payload);
-          
-          // If there's a new image file and we have the new item ID, upload the image
+
+          // If there's a new image file, upload it
           if (updatedItem && updatedItem.id && imageFile instanceof File) {
-            console.log("Uploading image file for new menu item:", updatedItem.id);
             await uploadMenuItemImage(updatedItem.id, imageFile);
-            
-            // Fetch the latest data to include the new image URL
             updatedItem = await api.get(`/menu_items/${updatedItem.id}`);
           }
-          
-          // Close the form after adding a new item so the user can see it in the list
+
+          // Close the form after creating a new item
           setIsEditing(false);
           setEditingItem(null);
         }
       });
-      
-      // For updates, do NOT close automatically – user can keep editing if desired
-      // setIsEditing(false);
-      // setEditingItem(null);
     } catch (err) {
       console.error('Failed to save menu item:', err);
     } finally {
-      // Always refresh the menu items list after any changes
+      // Refresh items after any change
       fetchAllMenuItemsForAdmin();
     }
   };
 
-  /**
-   * Helper badge component for small labels.
-   */
+  /** Helper badge component for small labels. */
   function Badge({
     children,
     bgColor = 'bg-gray-500',
@@ -556,35 +553,36 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
 
   return (
     <div className="p-4">
-      {/* Loading overlay will be shown when isLoading is true */}
+      {/* Loading overlay when isLoading = true */}
       {LoadingOverlayComponent}
-      {/* Header section */}
+
+      {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold">Menu Management</h2>
         <p className="text-gray-600 text-sm">Manage menu items, categories, and options</p>
       </div>
 
-      {/* Menu Selection and Add Item - Responsive Layout */}
+      {/* Menu Selection + Add Item */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          {/* Menu Selection - Compact Dropdown */}
+          {/* Current Menu Selector */}
           <div className="flex flex-col sm:flex-row sm:items-center mb-4 sm:mb-0">
             <div className="relative inline-block w-full sm:w-64 z-10">
               <h3 className="text-sm font-medium text-gray-500 mb-1">Current Menu</h3>
               
-              <button 
+              <button
                 onClick={() => setMenuSelectorOpen(!menuSelectorOpen)}
-                className="w-full flex items-center justify-between bg-white text-gray-800 hover:bg-gray-50 
-                          px-3 py-2 rounded-md border border-gray-200 shadow-sm transition-all duration-150
-                          focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50"
+                className="w-full flex items-center justify-between bg-white text-gray-800 hover:bg-gray-50
+                           px-3 py-2 rounded-md border border-gray-200 shadow-sm transition-all duration-150
+                           focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50"
                 aria-expanded={menuSelectorOpen}
                 aria-controls="menu-selector-dropdown"
               >
                 <div className="flex items-center">
                   <BookOpen className="h-4 w-4 mr-2 text-[#c1902f]" />
                   <span className="text-sm font-medium truncate max-w-[120px]">
-                    {selectedMenuId 
-                      ? menus.find(m => m.id === selectedMenuId)?.name || 'Select Menu'
+                    {selectedMenuId
+                      ? menus.find((m) => m.id === selectedMenuId)?.name || 'Select Menu'
                       : 'Select Menu'}
                   </span>
                   {selectedMenuId && selectedMenuId === currentMenuId && (
@@ -593,10 +591,12 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                     </span>
                   )}
                 </div>
-                <svg 
-                  className={`h-4 w-4 text-gray-500 transition-transform duration-200 ease-in-out ${menuSelectorOpen ? 'transform rotate-180' : ''}`} 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
+                <svg
+                  className={`h-4 w-4 text-gray-500 transition-transform duration-200 ease-in-out ${
+                    menuSelectorOpen ? 'transform rotate-180' : ''
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
                   stroke="currentColor"
                   aria-hidden="true"
                 >
@@ -604,33 +604,36 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                 </svg>
               </button>
               
-              {/* Dropdown with animation */}
-              <div 
+              {/* Dropdown */}
+              <div
                 id="menu-selector-dropdown"
                 className={`absolute w-full mt-1 bg-white rounded-md shadow-lg border border-gray-200 overflow-hidden transition-all duration-200 ease-in-out
-                           ${menuSelectorOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}
+                            ${menuSelectorOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}
                 style={{ transformOrigin: 'top' }}
               >
                 <div className="py-1 max-h-60 overflow-y-auto">
-                  {menus.map(menu => (
+                  {menus.map((menu) => (
                     <button
                       key={menu.id}
                       onClick={async () => {
                         setSelectedMenuId(menu.id);
                         setMenuSelectorOpen(false);
-                        // Explicitly fetch menu items when menu changes
                         await fetchAllMenuItemsForAdmin();
                       }}
                       className={`
                         w-full text-left px-3 py-2 text-sm flex items-center justify-between
                         transition-colors duration-150
-                        ${selectedMenuId === menu.id 
-                          ? 'bg-[#c1902f] bg-opacity-10 text-[#c1902f]' 
+                        ${selectedMenuId === menu.id
+                          ? 'bg-[#c1902f] bg-opacity-10 text-[#c1902f]'
                           : 'text-gray-700 hover:bg-gray-50'}
                       `}
                     >
                       <div className="flex items-center">
-                        <BookOpen className={`h-4 w-4 mr-2 flex-shrink-0 ${selectedMenuId === menu.id ? 'text-[#c1902f]' : 'text-gray-400'}`} />
+                        <BookOpen
+                          className={`h-4 w-4 mr-2 flex-shrink-0 ${
+                            selectedMenuId === menu.id ? 'text-[#c1902f]' : 'text-gray-400'
+                          }`}
+                        />
                         <span className="truncate">{menu.name}</span>
                       </div>
                       {menu.id === currentMenuId && (
@@ -644,7 +647,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
               </div>
             </div>
             
-            {/* Set active menu button - shown next to dropdown on desktop, below on mobile */}
+            {/* Set Active Menu Button */}
             {selectedMenuId && selectedMenuId !== currentMenuId && (
               <button
                 onClick={() => handleSetActiveMenu(selectedMenuId)}
@@ -673,7 +676,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
       {/* Category Filter */}
       <div className="mb-3">
         <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
-          {/* "All Categories" */}
+          {/* 'All Categories' */}
           <button
             className={
               !selectedCategory
@@ -702,7 +705,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
         </div>
       </div>
 
-      {/* Additional Filters */}
+      {/* Additional Filters (Featured / Seasonal) */}
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <label className="inline-flex items-center space-x-2">
           <input
@@ -736,7 +739,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
         </div>
       ) : filteredItems.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredItems.map((item, index) => {
+          {filteredItems.map((item) => {
             const fromDate = formatDate(item.available_from);
             const untilDate = formatDate(item.available_until);
 
@@ -753,8 +756,8 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
             }
 
             return (
-              <div 
-                key={item.id} 
+              <div
+                key={item.id}
                 className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col animate-fadeIn"
               >
                 <img
@@ -768,27 +771,34 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                     <p className="text-sm text-gray-600">{item.description}</p>
 
                     <div className="mt-2 flex flex-wrap">
-                      {/* Stock/featured badges */}
+                      {/* Badges for stock/featured/seasonal/etc. */}
+                      {/* 1) If item is "out_of_stock" but not tracking, show "Out of Stock" */}
                       {item.stock_status === 'out_of_stock' && !item.enable_stock_tracking && (
                         <Badge bgColor="bg-gray-600">Out of Stock</Badge>
                       )}
+                      {/* 2) If item is "low_stock" but not tracking, show "Low Stock" */}
                       {item.stock_status === 'low_stock' && !item.enable_stock_tracking && (
                         <Badge bgColor="bg-orange-500">Low Stock</Badge>
                       )}
+                      {/* 3) If item requires 24hr notice */}
                       {(item.advance_notice_hours ?? 0) >= 24 && (
                         <Badge bgColor="bg-red-600">24hr Notice</Badge>
                       )}
+                      {/* 4) Seasonal items */}
                       {item.seasonal && (
                         <Badge bgColor="bg-red-500">
                           {item.promo_label?.trim() || 'Limited Time'}
                         </Badge>
                       )}
+                      {/* 5) Featured */}
                       {item.featured && (
                         <Badge bgColor="bg-yellow-500">Featured</Badge>
                       )}
+                      {/* 6) If inventory tracking is enabled */}
                       {item.enable_stock_tracking && (
                         <Badge bgColor="bg-blue-500">Inventory Tracked</Badge>
                       )}
+                      {/* 7) If tracking is enabled, show dynamic stock badges */}
                       {item.enable_stock_tracking && deriveStockStatus(item) === 'low_stock' && (
                         <Badge bgColor="bg-orange-500">
                           Low Stock ({calculateAvailableQuantity(item)} left)
@@ -799,17 +809,18 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                       )}
                     </div>
 
-                    {/* Optional note */}
+                    {/* Optional status note */}
                     {item.status_note?.trim() && (
                       <p className="text-xs text-gray-500 mt-1 italic">
                         {item.status_note}
                       </p>
                     )}
 
-                    {/* Show date range info if seasonal */}
+                    {/* Seasonal date range info */}
                     {dateInfo}
                   </div>
 
+                  {/* Bottom row with price + actions */}
                   <div className="mt-auto pt-4">
                     <div className="flex justify-between items-center">
                       <span className="text-base sm:text-lg font-semibold">
@@ -820,11 +831,12 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                       <button
                         onClick={() => handleEdit(item)}
                         className="p-2 text-gray-600 hover:text-[#c1902f]"
+                        title="Edit Item"
                       >
                         <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
 
-                      {/* NEW: Manage Inventory */}
+                      {/* Manage Inventory */}
                       <button
                         onClick={() => handleManageInventory(item)}
                         className="p-2 text-gray-600 hover:text-blue-600"
@@ -844,6 +856,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                           }
                         }}
                         className="p-2 text-gray-600 hover:text-red-600"
+                        title="Delete Item"
                       >
                         <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
@@ -855,16 +868,23 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
           })}
         </div>
       ) : (
+        // Empty state when there are no items for the current filters
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-lg shadow-md">
           <div className="bg-gray-100 rounded-full p-4 mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-12 w-12 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">No menu items found</h3>
           <p className="text-gray-500 max-w-md">
-            {selectedCategory 
-              ? "There are no items in this category for the current menu." 
+            {selectedCategory
+              ? "There are no items in this category for the current menu."
               : "The current menu doesn't have any items yet."}
           </p>
           {(showFeaturedOnly || showSeasonalOnly) && (
@@ -893,7 +913,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
               </h3>
               <button
                 onClick={() => {
-                  // Stop item-specific polling when closing the edit modal
+                  // Stop item-specific polling if we were doing so
                   if (editItemPollingActive) {
                     stopInventoryPolling();
                     setEditItemPollingActive(false);
@@ -914,7 +934,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
               <div>
                 <div className="flex items-center mb-2 border-b pb-2">
                   <h4 className="text-md font-semibold">Basic Info</h4>
-                  <Tooltip 
+                  <Tooltip
                     content="Enter the essential information about this menu item."
                     position="right"
                     icon
@@ -928,7 +948,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                     <label className="block text-sm font-medium text-gray-700">
                       Name <span className="text-red-500">*</span>
                     </label>
-                    <Tooltip 
+                    <Tooltip
                       content="The name of the dish as it will appear on the menu."
                       position="top"
                       icon
@@ -950,7 +970,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                     <label className="block text-sm font-medium text-gray-700">
                       Description
                     </label>
-                    <Tooltip 
+                    <Tooltip
                       content="A brief description of the dish, including key ingredients or preparation methods."
                       position="top"
                       icon
@@ -973,7 +993,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                     <label className="block text-sm font-medium text-gray-700">
                       Price
                     </label>
-                    <Tooltip 
+                    <Tooltip
                       content="The base price of the item in dollars. Additional charges may apply for options."
                       position="top"
                       icon
@@ -1001,7 +1021,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                     <label className="block text-sm font-medium text-gray-700">
                       Cost to Make
                     </label>
-                    <Tooltip 
+                    <Tooltip
                       content="The cost to produce this item. Used for profit calculations and reporting."
                       position="top"
                       icon
@@ -1027,8 +1047,8 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
               <div>
                 <div className="flex items-center mb-2 border-b pb-2">
                   <h4 className="text-md font-semibold">Categories</h4>
-                  <Tooltip 
-                    content="Assign this item to one or more menu categories. Items can appear in multiple sections of the menu."
+                  <Tooltip
+                    content="Assign this item to one or more categories. Items can appear in multiple sections."
                     position="right"
                     icon
                     iconClassName="ml-1 h-4 w-4"
@@ -1076,8 +1096,8 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
               <div>
                 <div className="flex items-center mb-2 border-b pb-2">
                   <h4 className="text-md font-semibold">Availability</h4>
-                  <Tooltip 
-                    content="Control when this item is available to customers and whether it requires advance notice."
+                  <Tooltip
+                    content="Control when this item is available and whether it requires advance notice."
                     position="right"
                     icon
                     iconClassName="ml-1 h-4 w-4"
@@ -1098,8 +1118,8 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                       />
                       <span>Requires 24-hour notice?</span>
                     </label>
-                    <Tooltip 
-                      content="Enable this for items that need to be prepared in advance, like special orders or catering."
+                    <Tooltip
+                      content="Enable for items needing at least 24hr preparation time."
                       position="top"
                       icon
                       iconClassName="ml-1 h-4 w-4"
@@ -1117,8 +1137,8 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                       />
                       <span>Featured?</span>
                     </label>
-                    <Tooltip 
-                      content="Featured items appear in the highlighted section of the menu. Limited to 4 items."
+                    <Tooltip
+                      content="Featured items appear in a highlighted section (limit 4)."
                       position="top"
                       icon
                       iconClassName="ml-1 h-4 w-4"
@@ -1154,15 +1174,15 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                       />
                       <span>Time-based availability? (Seasonal)</span>
                     </label>
-                    <Tooltip 
-                      content="Use for seasonal items or limited-time promotions that are only available during specific dates."
+                    <Tooltip
+                      content="Use for seasonal items or limited-time promotions."
                       position="top"
                       icon
                       iconClassName="ml-1 h-4 w-4"
                     />
                   </div>
                   <p className="text-xs text-gray-500">
-                    If checked, this item is only available between the specified start & end dates.
+                    If checked, item is only available between the specified dates.
                   </p>
                 </div>
 
@@ -1216,7 +1236,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                       setEditingItem({ ...editingItem, promo_label: e.target.value })
                     }
                     className="w-full px-4 py-2 border rounded-md"
-                    placeholder={'e.g. "Valentine\'s Special"'}
+                    placeholder="e.g. 'Valentine's Special'"
                   />
                 </div>
               </div>
@@ -1227,7 +1247,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                   <h4 className="text-md font-semibold">
                     Inventory Status
                   </h4>
-                  <Tooltip 
+                  <Tooltip
                     content="Manage the current availability of this item based on your inventory."
                     position="right"
                     icon
@@ -1236,49 +1256,45 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
                   {editingItem.enable_stock_tracking ? (
-                    // Inventory tracking is enabled - show automatic status
+                    // Inventory tracking is enabled - show auto status
                     <>
-                      {/* Inventory-Controlled Status */}
                       <div className="flex-1">
                         <div className="flex items-center mb-1">
                           <label className="block text-sm font-medium text-gray-700">
                             Inventory-Controlled Status
                           </label>
-                          <Tooltip 
-                            content="Status is automatically determined based on available inventory levels."
+                          <Tooltip
+                            content="This status is automatically determined by available inventory."
                             position="top"
                             icon
                             iconClassName="ml-1 h-4 w-4"
                           />
                         </div>
-                        
-                        {/* Display status based on inventory levels */}
                         <div className="py-2 px-3 border rounded-md bg-gray-50">
                           {(() => {
-                            // Use utility functions for consistent calculations
-                            const availableQty = calculateAvailableQuantity(editingItem);
+                            const availableQty = calculateAvailableQuantity(editingItem as any);
                             const threshold = editingItem.low_stock_threshold || 10;
-                            const status = deriveStockStatus(editingItem);
-                            
-                            // Determine status label and color
-                            let statusLabel = "In Stock";
-                            let statusColor = "bg-green-500";
-                            
+                            const status = deriveStockStatus(editingItem as any);
+
+                            let statusLabel = 'In Stock';
+                            let statusColor = 'bg-green-500';
+
                             if (status === 'out_of_stock') {
-                              statusLabel = "Out of Stock";
-                              statusColor = "bg-red-500";
+                              statusLabel = 'Out of Stock';
+                              statusColor = 'bg-red-500';
                             } else if (status === 'low_stock') {
-                              statusLabel = "Low Stock";
-                              statusColor = "bg-yellow-500";
+                              statusLabel = 'Low Stock';
+                              statusColor = 'bg-yellow-500';
                             }
-                            
+
                             return (
                               <>
                                 <div className="flex items-center">
-                                  <div className={`h-3 w-3 rounded-full mr-2 ${statusColor}`}></div>
+                                  <div
+                                    className={`h-3 w-3 rounded-full mr-2 ${statusColor}`}
+                                  />
                                   <span className="font-medium">{statusLabel}</span>
                                 </div>
-                                
                                 <div className="text-sm text-gray-600 mt-2">
                                   <div>Available: {availableQty} items</div>
                                   <div>Low Stock Threshold: {threshold} items</div>
@@ -1287,11 +1303,10 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                             );
                           })()}
                         </div>
-                        
                         <p className="text-xs text-gray-500 mt-1">
-                          Status is automatically determined by inventory levels.
+                          Status is determined by inventory levels.
                         </p>
-                        
+
                         <button
                           type="button"
                           onClick={() => {
@@ -1308,15 +1323,14 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                           Manage Inventory
                         </button>
                       </div>
-                      
                       {/* Status Note */}
                       <div className="flex-1">
                         <div className="flex items-center mb-1">
                           <label className="block text-sm font-medium text-gray-700">
                             Status Note (Optional)
                           </label>
-                          <Tooltip 
-                            content="Add a note to explain the current status, such as 'Temporarily using a different sauce' or 'Back in stock next week'."
+                          <Tooltip
+                            content="Add a note explaining the current status, e.g. supplier delay."
                             position="top"
                             icon
                             iconClassName="ml-1 h-4 w-4"
@@ -1329,21 +1343,20 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                           }
                           className="w-full px-4 py-2 border rounded-md"
                           rows={2}
-                          placeholder={'e.g. "Supplier delayed; we\'re using a temporary sauce."'}
+                          placeholder="e.g. 'Using a temporary sauce due to delay.'"
                         />
                       </div>
                     </>
                   ) : (
-                    // Manual status selection when inventory tracking is disabled
+                    // Manual status selection
                     <>
-                      {/* Stock Status */}
                       <div className="flex-1">
                         <div className="flex items-center mb-1">
                           <label className="block text-sm font-medium text-gray-700">
                             Inventory Status
                           </label>
-                          <Tooltip 
-                            content="Set the current availability status. 'Low Stock' shows a warning but still allows ordering. 'Out of Stock' disables ordering."
+                          <Tooltip
+                            content="Set the current availability if not tracking inventory."
                             position="top"
                             icon
                             iconClassName="ml-1 h-4 w-4"
@@ -1368,9 +1381,9 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                         </select>
                         <p className="text-xs text-gray-500 mt-1">
                           "Low Stock" shows a warning but still allows ordering.
-                          "Out of Stock" disables ordering.
+                          "Out of Stock" fully disables ordering.
                         </p>
-                        
+
                         <button
                           type="button"
                           onClick={() => {
@@ -1394,8 +1407,8 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                           <label className="block text-sm font-medium text-gray-700">
                             Status Note (Optional)
                           </label>
-                          <Tooltip 
-                            content="Add a note to explain the current status, such as 'Temporarily using a different sauce' or 'Back in stock next week'."
+                          <Tooltip
+                            content="Add a note explaining the current status, e.g. supplier delay."
                             position="top"
                             icon
                             iconClassName="ml-1 h-4 w-4"
@@ -1408,7 +1421,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                           }
                           className="w-full px-4 py-2 border rounded-md"
                           rows={2}
-                          placeholder={'e.g. "Supplier delayed; we\'re using a temporary sauce."'}
+                          placeholder="e.g. 'Using a temporary sauce due to delay.'"
                         />
                       </div>
                     </>
@@ -1420,7 +1433,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
               <div>
                 <div className="flex items-center mb-2 border-b pb-2">
                   <h4 className="text-md font-semibold">Images</h4>
-                  <Tooltip 
+                  <Tooltip
                     content="Upload an image of this menu item."
                     position="right"
                     icon
@@ -1432,8 +1445,8 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                     <label className="block text-sm font-medium text-gray-700">
                       Image Upload
                     </label>
-                    <Tooltip 
-                      content="Recommended size: 800x600 pixels. JPG or PNG format."
+                    <Tooltip
+                      content="Recommended size: ~800x600px, JPG or PNG."
                       position="top"
                       icon
                       iconClassName="ml-1 h-4 w-4"
@@ -1498,6 +1511,11 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
                 <button
                   type="button"
                   onClick={() => {
+                    if (editItemPollingActive) {
+                      stopInventoryPolling();
+                      setEditItemPollingActive(false);
+                      setPolledItemId(null);
+                    }
                     setIsEditing(false);
                     setEditingItem(null);
                   }}
@@ -1523,7 +1541,7 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
         <OptionGroupsModal item={optionsModalItem} onClose={handleCloseOptionsModal} />
       )}
 
-      {/* NEW: Inventory Modal */}
+      {/* Inventory Modal */}
       {inventoryModalOpen && inventoryModalItem && (
         <ItemInventoryModal
           open={inventoryModalOpen}
@@ -1531,29 +1549,28 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
           onClose={handleCloseInventoryModal}
           onSave={refreshAfterInventoryChanges}
           onEnableTrackingChange={(enabled) => {
-            // Immediately update the editing form if we're currently editing this item
-            if (editingItem && editingItem.id && inventoryModalItem.id === String(editingItem.id)) {
-              // Update the editing item's tracking status and associated fields
-              setEditingItem(prev => {
-                if (!prev) return prev;
-                
-                // Set stock status based on whether tracking is enabled and available quantity
-                let newStockStatus = prev.stock_status;
-                if (enabled) {
-                  const stockQty = inventoryModalItem.stock_quantity || 0;
-                  const damagedQty = inventoryModalItem.damaged_quantity || 0;
-                  const availableQty = Math.max(0, stockQty - damagedQty);
-                  const threshold = inventoryModalItem.low_stock_threshold || 10;
-                  
-                  if (availableQty <= 0) {
-                    newStockStatus = 'out_of_stock';
-                  } else if (availableQty <= threshold) {
-                    newStockStatus = 'low_stock';
-                  } else {
-                    newStockStatus = 'in_stock';
-                  }
+            // If we're currently editing the same item in the background, sync
+            if (
+              editingItem &&
+              editingItem.id &&
+              inventoryModalItem.id === String(editingItem.id)
+            ) {
+              let newStockStatus = editingItem.stock_status;
+              if (enabled) {
+                const stockQty = inventoryModalItem.stock_quantity || 0;
+                const damagedQty = inventoryModalItem.damaged_quantity || 0;
+                const availableQty = Math.max(0, stockQty - damagedQty);
+                const threshold = inventoryModalItem.low_stock_threshold || 10;
+                if (availableQty <= 0) {
+                  newStockStatus = 'out_of_stock';
+                } else if (availableQty <= threshold) {
+                  newStockStatus = 'low_stock';
+                } else {
+                  newStockStatus = 'in_stock';
                 }
-                
+              }
+              setEditingItem((prev) => {
+                if (!prev) return prev;
                 return {
                   ...prev,
                   enable_stock_tracking: enabled,
@@ -1564,516 +1581,6 @@ export function MenuManager({ restaurantId, selectedMenuItemId, openInventoryFor
           }}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * OptionGroupsModal (unchanged)
- */
-function OptionGroupsModal({
-  item,
-  onClose,
-}: {
-  item: MenuItem;
-  onClose: () => void;
-}) {
-  const [originalOptionGroups, setOriginalOptionGroups] = useState<OptionGroup[]>([]);
-  const [draftOptionGroups, setDraftOptionGroups] = useState<OptionGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupMin, setNewGroupMin] = useState(0);
-  const [newGroupMax, setNewGroupMax] = useState(1);
-  const [newGroupRequired, setNewGroupRequired] = useState(false);
-
-  const [tempIdCounter, setTempIdCounter] = useState(-1);
-
-  React.useEffect(() => {
-    fetchGroups();
-    // eslint-disable-next-line
-  }, [item.id]);
-
-  const fetchGroups = async () => {
-    setLoading(true);
-    try {
-      const data = await api.get(`/menu_items/${item.id}/option_groups`);
-      const sorted = (data as OptionGroup[]).map((g) => ({
-        ...g,
-        options: g.options.slice().sort((a, b) => (a.position || 0) - (b.position || 0)),
-      }));
-      sorted.sort((a, b) => (a.position || 0) - (b.position || 0));
-
-      setOriginalOptionGroups(sorted);
-      setDraftOptionGroups(JSON.parse(JSON.stringify(sorted)));
-    } catch (err) {
-      console.error(err);
-      setOriginalOptionGroups([]);
-      setDraftOptionGroups([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // -------------------------------------
-  // Local manipulations (no server calls)
-  // -------------------------------------
-
-  // Create local group
-  const handleCreateGroup = () => {
-    if (!newGroupName.trim()) return;
-    // Just place the new group at the end by position
-    const maxPos = draftOptionGroups.reduce(
-      (acc, g) => Math.max(acc, g.position || 0),
-      0
-    );
-    const newGroup: OptionGroup = {
-      id: tempIdCounter, // negative => local
-      name: newGroupName,
-      min_select: newGroupMin,
-      max_select: newGroupMax,
-      required: newGroupRequired,
-      position: maxPos + 1, // appended at the end
-      options: [],
-    };
-    setDraftOptionGroups((prev) => [...prev, newGroup]);
-
-    // Reset
-    setNewGroupName('');
-    setNewGroupMin(0);
-    setNewGroupMax(1);
-    setNewGroupRequired(false);
-    setTempIdCounter((prevId) => prevId - 1);
-  };
-
-  // Update local group
-  const handleLocalUpdateGroup = (
-    groupId: number,
-    changes: Partial<Omit<OptionGroup, 'options'>>
-  ) => {
-    setDraftOptionGroups((prev) =>
-      prev.map((g) => (g.id === groupId ? { ...g, ...changes } : g))
-    );
-  };
-
-  // Delete local group
-  const handleLocalDeleteGroup = (groupId: number) => {
-    if (!window.confirm('Delete this option group?')) return;
-    setDraftOptionGroups((prev) => prev.filter((g) => g.id !== groupId));
-  };
-
-  // Create local option
-  const handleLocalCreateOption = (groupId: number) => {
-    setDraftOptionGroups((prev) =>
-      prev.map((g) => {
-        if (g.id === groupId) {
-          const maxOptPos = g.options.reduce(
-            (acc, o) => Math.max(acc, o.position || 0),
-            0
-          );
-          const newOpt: OptionRow = {
-            id: tempIdCounter,
-            name: '',
-            additional_price: 0,
-            position: maxOptPos + 1, // appended at the end
-          };
-          return { ...g, options: [...g.options, newOpt] };
-        }
-        return g;
-      })
-    );
-    setTempIdCounter((prevId) => prevId - 1);
-  };
-
-  // Update local option
-  const handleLocalUpdateOption = (
-    groupId: number,
-    optionId: number,
-    changes: Partial<OptionRow>
-  ) => {
-    setDraftOptionGroups((prev) =>
-      prev.map((g) => {
-        if (g.id === groupId) {
-          return {
-            ...g,
-            options: g.options.map((o) =>
-              o.id === optionId ? { ...o, ...changes } : o
-            ),
-          };
-        }
-        return g;
-      })
-    );
-  };
-
-  // Delete local option
-  const handleLocalDeleteOption = (groupId: number, optId: number) => {
-    if (!window.confirm('Delete this option?')) return;
-    setDraftOptionGroups((prev) =>
-      prev.map((g) => {
-        if (g.id === groupId) {
-          return { ...g, options: g.options.filter((o) => o.id !== optId) };
-        }
-        return g;
-      })
-    );
-  };
-
-  // -------------------------------------
-  // Save all changes at once
-  // -------------------------------------
-  const handleSaveAllChanges = async () => {
-    try {
-      // Compare draftOptionGroups vs originalOptionGroups
-      const draftGroupIds = draftOptionGroups.map((g) => g.id);
-      const originalGroupIds = originalOptionGroups.map((g) => g.id);
-
-      // Groups to delete
-      const groupsToDelete = originalOptionGroups.filter(
-        (og) => !draftGroupIds.includes(og.id)
-      );
-      // Groups to create
-      const groupsToCreate = draftOptionGroups.filter((dg) => dg.id < 0);
-      // Groups to update
-      const groupsToUpdate = draftOptionGroups.filter(
-        (dg) => dg.id > 0 && originalGroupIds.includes(dg.id)
-      );
-
-      // Delete removed groups
-      for (const gDel of groupsToDelete) {
-        await api.delete(`/option_groups/${gDel.id}`);
-      }
-
-      // Create new groups
-      const newGroupIdMap: Record<number, number> = {};
-      for (const gNew of groupsToCreate) {
-        const created: any = await api.post(`/menu_items/${item.id}/option_groups`, {
-          name: gNew.name,
-          min_select: gNew.min_select,
-          max_select: gNew.max_select,
-          required: gNew.required,
-          position: gNew.position,
-        });
-        newGroupIdMap[gNew.id] = created.id; // negative => real ID
-      }
-
-      // Update existing groups
-      for (const gUpd of groupsToUpdate) {
-        await api.patch(`/option_groups/${gUpd.id}`, {
-          name: gUpd.name,
-          min_select: gUpd.min_select,
-          max_select: gUpd.max_select,
-          required: gUpd.required,
-          position: gUpd.position,
-        });
-      }
-
-      // Now handle options
-      for (const draftGroup of draftOptionGroups) {
-        let realGroupId = draftGroup.id;
-        if (realGroupId < 0 && newGroupIdMap[realGroupId]) {
-          realGroupId = newGroupIdMap[realGroupId];
-        }
-        const origGroup = originalOptionGroups.find((og) => og.id === draftGroup.id);
-        const origOptions = origGroup?.options || [];
-
-        const draftOptIds = draftGroup.options.map((o) => o.id);
-        const origOptIds = origOptions.map((o) => o.id);
-
-        // Options to delete
-        const optsToDelete = origOptions.filter((o) => !draftOptIds.includes(o.id));
-        // Options to create
-        const optsToCreate = draftGroup.options.filter((o) => o.id < 0);
-        // Options to update
-        const optsToUpdate = draftGroup.options.filter(
-          (o) => o.id > 0 && origOptIds.includes(o.id)
-        );
-
-        // Delete
-        for (const oDel of optsToDelete) {
-          await api.delete(`/options/${oDel.id}`);
-        }
-        // Create
-        for (const oNew of optsToCreate) {
-          await api.post(`/option_groups/${realGroupId}/options`, {
-            name: oNew.name,
-            additional_price: oNew.additional_price,
-            position: oNew.position,
-          });
-        }
-        // Update
-        for (const oUpd of optsToUpdate) {
-          await api.patch(`/options/${oUpd.id}`, {
-            name: oUpd.name,
-            additional_price: oUpd.additional_price,
-            position: oUpd.position,
-          });
-        }
-      }
-
-      // Refresh from server
-      await fetchGroups();
-
-      // Close
-      onClose();
-    } catch (err) {
-      console.error(err);
-      alert('Something went wrong saving changes.');
-    }
-  };
-
-  // If user closes without saving, we discard local changes
-  const handleClose = () => {
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn transition-all duration-300">
-      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 animate-slideUp transform-gpu will-change-transform">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">
-            Manage Option Groups for: {item.name}
-          </h2>
-          <button onClick={handleClose} className="text-gray-500 hover:text-gray-700">
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="space-y-6 animate-pulse">
-            {/* Skeleton for "Add Option Group" section */}
-            <div className="border-b pb-4 mb-4">
-              <div className="h-6 w-48 bg-gray-200 rounded mb-4"></div>
-              <div className="flex flex-wrap gap-2">
-                <div className="h-9 w-40 bg-gray-200 rounded"></div>
-                <div className="h-9 w-20 bg-gray-200 rounded"></div>
-                <div className="h-9 w-20 bg-gray-200 rounded"></div>
-                <div className="h-9 w-24 bg-gray-200 rounded"></div>
-                <div className="h-9 w-32 bg-gray-200 rounded"></div>
-              </div>
-            </div>
-            
-            {/* Skeleton for option groups */}
-            {[1, 2].map((i) => (
-              <div key={i} className="border rounded-md p-4 mb-4">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="w-full">
-                    <div className="h-7 w-48 bg-gray-200 rounded mb-2"></div>
-                    <div className="flex space-x-4">
-                      <div className="h-5 w-24 bg-gray-200 rounded"></div>
-                      <div className="h-5 w-24 bg-gray-200 rounded"></div>
-                      <div className="h-5 w-32 bg-gray-200 rounded"></div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-4 ml-2">
-                  <div className="h-8 w-28 bg-gray-200 rounded mb-4"></div>
-                  {[1, 2, 3].map((j) => (
-                    <div key={j} className="flex items-center justify-between mt-2">
-                      <div className="h-6 w-48 bg-gray-200 rounded"></div>
-                      <div className="h-6 w-24 bg-gray-200 rounded"></div>
-                      <div className="h-6 w-8 bg-gray-200 rounded"></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <>
-            {/* Create Group */}
-            <div className="border-b pb-4 mb-4">
-              <h3 className="font-semibold mb-2">Add Option Group</h3>
-              <div className="flex flex-wrap items-center space-x-2 space-y-2">
-                <input
-                  type="text"
-                  className="border p-1 rounded text-sm"
-                  placeholder="Group Name"
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                />
-                <div className="flex items-center space-x-1 text-xs">
-                  <span>Min:</span>
-                  <input
-                    type="number"
-                    className="border p-1 w-14 rounded"
-                    value={newGroupMin}
-                    onChange={(e) => setNewGroupMin(parseInt(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="flex items-center space-x-1 text-xs">
-                  <span>Max:</span>
-                  <input
-                    type="number"
-                    className="border p-1 w-14 rounded"
-                    value={newGroupMax}
-                    onChange={(e) => setNewGroupMax(parseInt(e.target.value) || 0)}
-                  />
-                </div>
-                <label className="flex items-center space-x-1 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={newGroupRequired}
-                    onChange={(e) => setNewGroupRequired(e.target.checked)}
-                  />
-                  <span>Required?</span>
-                </label>
-                <button
-                  onClick={handleCreateGroup}
-                  className="px-2 py-1 bg-[#c1902f] text-white text-sm rounded hover:bg-[#d4a43f]"
-                >
-                  + Create Group
-                </button>
-              </div>
-            </div>
-
-            {draftOptionGroups.length === 0 && (
-              <p className="text-sm text-gray-500">No Option Groups yet.</p>
-            )}
-
-            {/* Existing Groups */}
-            {draftOptionGroups.map((group) => (
-              <div key={group.id} className="border rounded-md p-4 mb-4">
-                {/* Group header */}
-                <div className="flex justify-between items-center">
-                  <div>
-                    <input
-                      type="text"
-                      className="text-lg font-semibold border-b focus:outline-none"
-                      value={group.name}
-                      onChange={(e) =>
-                        handleLocalUpdateGroup(group.id, { name: e.target.value })
-                      }
-                    />
-                    <div className="text-xs text-gray-500 mt-1 flex items-center space-x-3">
-                      {/* Min & Max & Required */}
-                      <div className="flex items-center">
-                        <span>Min:</span>
-                        <input
-                          type="number"
-                          className="w-14 ml-1 border p-1 rounded text-xs"
-                          value={group.min_select}
-                          onChange={(e) =>
-                            handleLocalUpdateGroup(group.id, {
-                              min_select: parseInt(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center">
-                        <span>Max:</span>
-                        <input
-                          type="number"
-                          className="w-14 ml-1 border p-1 rounded text-xs"
-                          value={group.max_select}
-                          onChange={(e) =>
-                            handleLocalUpdateGroup(group.id, {
-                              max_select: parseInt(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </div>
-                      <label className="flex items-center space-x-1">
-                        <input
-                          type="checkbox"
-                          checked={group.required}
-                          onChange={(e) =>
-                            handleLocalUpdateGroup(group.id, {
-                              required: e.target.checked,
-                            })
-                          }
-                        />
-                        <span>Required?</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleLocalDeleteGroup(group.id)}
-                    className="p-2 text-gray-600 hover:text-red-600"
-                    title="Delete this group"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                </div>
-
-                {/* Options */}
-                <div className="mt-4 ml-2">
-                  <button
-                    onClick={() => handleLocalCreateOption(group.id)}
-                    className="flex items-center px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded"
-                  >
-                    + Add Option
-                  </button>
-
-                  {group.options.length === 0 && (
-                    <p className="text-sm text-gray-400 mt-2">No options yet.</p>
-                  )}
-
-                  {group.options.map((opt) => (
-                    <div
-                      key={opt.id}
-                      className="flex items-center justify-between mt-2"
-                    >
-                      {/* Option name */}
-                      <input
-                        type="text"
-                        value={opt.name}
-                        onChange={(e) =>
-                          handleLocalUpdateOption(group.id, opt.id, {
-                            name: e.target.value,
-                          })
-                        }
-                        className="border-b text-sm flex-1 mr-2 focus:outline-none"
-                      />
-                      {/* Additional price */}
-                      <span className="mr-2 text-sm text-gray-600">
-                        $
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={opt.additional_price}
-                          onChange={(e) =>
-                            handleLocalUpdateOption(group.id, opt.id, {
-                              additional_price: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                          className="w-16 ml-1 border-b focus:outline-none text-sm"
-                        />
-                      </span>
-                      {/* Delete option */}
-                      <button
-                        onClick={() => handleLocalDeleteOption(group.id, opt.id)}
-                        className="p-1 text-gray-600 hover:text-red-600"
-                        title="Delete Option"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </>
-        )}
-
-        <div className="mt-4 flex justify-end space-x-2">
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 border rounded-md hover:bg-gray-50 transition-colors duration-200"
-          >
-            Close (Discard)
-          </button>
-          <button
-            onClick={handleSaveAllChanges}
-            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f] transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Save className="h-5 w-5 mr-2 inline" />
-            Save Changes
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

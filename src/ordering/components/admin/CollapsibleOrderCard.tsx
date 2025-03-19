@@ -1016,12 +1016,25 @@ export function CollapsibleOrderCard({
                               </div>
                             ))
                           ) : (
-                            // object format
+                            // object format with improved styling
                             Object.entries(item.customizations).map(
                               ([group, options]: [string, any], cidx: number) => (
-                                <div key={`custom-${index}-${cidx}`}>
-                                  <span className="font-medium">{group}:</span>{' '}
-                                  {Array.isArray(options) ? options.join(', ') : options}
+                                <div key={`custom-${index}-${cidx}`} className="mb-1 last:mb-0">
+                                  <span className="font-medium text-gray-700">{group}:</span>{' '}
+                                  <span className="text-gray-800">
+                                    {Array.isArray(options) ? (
+                                      options.map((option: string, optIdx: number) => (
+                                        <span key={`option-${index}-${cidx}-${optIdx}`} className="inline-flex items-center">
+                                          <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md mr-1 mb-1 inline-block">
+                                            {option}
+                                          </span>
+                                          {optIdx < options.length - 1 && ' '}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span>{options}</span>
+                                    )}
+                                  </span>
                                 </div>
                               )
                             )

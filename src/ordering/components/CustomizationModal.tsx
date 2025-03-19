@@ -1,5 +1,5 @@
 // src/ordering/components/CustomizationModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
 import type { MenuItem, OptionGroup, MenuOption } from '../types/menu';
@@ -15,60 +15,313 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
   // 1) Track user selections: selections[groupId] = array of optionIds
   const [selections, setSelections] = useState<Record<number, number[]>>({});
   const [quantity, setQuantity] = useState(1);
+  
+  // Force re-render when selections change to update price calculations
+  const [, forceUpdate] = useState({});
 
   // Safely handle no option_groups
   const optionGroups = item.option_groups || [];
+
+  // Debug: Log option groups and their options to see price values
+  useEffect(() => {
+    console.log('Option groups:', optionGroups);
+    optionGroups.forEach(group => {
+      console.log(`Group ${group.name} options:`, group.options);
+    });
+  }, [optionGroups]);
+
+  // Initialize selections with pre-selected options
+  useEffect(() => {
+    const initialSelections: Record<number, number[]> = {};
+    
+    optionGroups.forEach(group => {
+      const preselectedOptions = group.options
+        .filter(opt => opt.is_preselected)
+        .map(opt => opt.id);
+      
+      if (preselectedOptions.length > 0) {
+        // Only add preselected options up to max_select
+        initialSelections[group.id] = preselectedOptions.slice(0, group.max_select);
+      } else {
+        initialSelections[group.id] = [];
+      }
+    });
+    
+    setSelections(initialSelections);
+  }, [optionGroups]);
 
   // Toggle an option in a group, respecting max_select
   function handleOptionToggle(group: OptionGroup, opt: MenuOption) {
     setSelections((prev) => {
       const current = prev[group.id] || [];
+      let newSelections;
+      
       if (current.includes(opt.id)) {
         // Remove this opt.id
-        return {
+        newSelections = {
           ...prev,
           [group.id]: current.filter((id) => id !== opt.id),
         };
-      }
-      // If we are at max => remove the first selected
-      if (current.length >= group.max_select) {
-        return {
+      } else if (current.length >= group.max_select) {
+        // If we are at max => remove the first selected
+        newSelections = {
           ...prev,
           [group.id]: [...current.slice(1), opt.id],
         };
+      } else {
+        // Otherwise, just add it
+        newSelections = {
+          ...prev,
+          [group.id]: [...current, opt.id],
+        };
       }
-      // Otherwise, just add it
-      return {
-        ...prev,
-        [group.id]: [...current, opt.id],
-      };
+      
+      // Force a re-render to update price calculations
+      setTimeout(() => forceUpdate({}), 0);
+      
+      return newSelections;
     });
   }
 
-  // Sum up the additional price across all selected options
-  function getAdditionalPrice(): number {
-    let sum = 0;
+  // Get detailed price breakdown for each option group
+  function getPriceBreakdown(): { groupName: string; options: { name: string; price: number }[] }[] {
+    const breakdown: { groupName: string; options: { name: string; price: number }[] }[] = [];
+    
     for (const group of optionGroups) {
       const chosenIds = selections[group.id] || [];
-      for (const optId of chosenIds) {
-        // find the Option
-        const opt = group.options.find((o) => o.id === optId);
-        if (opt) {
-          // Use "additional_price" from the server, default to 0 if missing
-          const extra = opt.additional_price ?? 0;
-          sum += extra;
+      
+      // Skip if no selections
+      if (chosenIds.length === 0) continue;
+      
+      // Get the free option count for this group
+      const freeCount = group.free_option_count || 0;
+      
+      // If we have more selections than free options, calculate additional price
+      if (chosenIds.length > freeCount) {
+        // Get all selected options with their details
+        const selectedOptions = chosenIds
+          .map(id => {
+            const option = group.options.find(o => o.id === id);
+            // Debug: Log the option and its price
+            console.log('Option found:', option);
+            
+            // Try different ways to access the price
+            const price = option ? 
+              (typeof option.additional_price === 'number' ? option.additional_price : 
+               typeof option.additional_price_float === 'number' ? option.additional_price_float : 
+               typeof (option as any).additional_price_float === 'number' ? (option as any).additional_price_float : 
+               2.0) : 0;
+            
+            console.log(`Option ${option?.name} price:`, {
+              additional_price: option?.additional_price,
+              additional_price_float: (option as any).additional_price_float,
+              computed_price: price
+            });
+            
+            return option ? {
+              id,
+              name: option.name,
+              price: price
+            } : null;
+          })
+          .filter(Boolean) as { id: number; name: string; price: number }[];
+        
+        // Sort by price (highest first) to be customer-friendly
+        selectedOptions.sort((a, b) => b.price - a.price);
+        
+        // Determine which options are paid (options beyond the free count)
+        const paidOptions = selectedOptions.slice(freeCount)
+          .map(opt => ({ name: opt.name, price: opt.price }));
+        
+        if (paidOptions.length > 0) {
+          breakdown.push({
+            groupName: group.name,
+            options: paidOptions
+          });
         }
       }
     }
-    return sum;
+    
+    return breakdown;
   }
 
-  const basePrice = item.price; // item.price is presumably numeric already
+  // Sum up the additional price across all selected options, accounting for free options
+  function getAdditionalPrice(): number {
+    let sum = 0;
+    
+    for (const group of optionGroups) {
+      const chosenIds = selections[group.id] || [];
+      
+      // Skip if no selections
+      if (chosenIds.length === 0) continue;
+      
+      // Get the free option count for this group
+      const freeCount = group.free_option_count || 0;
+      
+      // If we have more selections than free options, calculate additional price
+      if (chosenIds.length > freeCount) {
+        // Get all selected options with their prices
+        const selectedOptions = chosenIds
+          .map(id => {
+            const option = group.options.find(o => o.id === id);
+            
+            // Try different ways to access the price
+            const price = option ? 
+              (typeof option.additional_price === 'number' ? option.additional_price : 
+               typeof option.additional_price_float === 'number' ? option.additional_price_float : 
+               typeof (option as any).additional_price_float === 'number' ? (option as any).additional_price_float : 
+               2.0) : 0;
+            
+            return option ? {
+              id,
+              name: option.name,
+              price: price
+            } : null;
+          })
+          .filter(Boolean) as { id: number; name: string; price: number }[];
+        
+        // Sort by price (highest first) to be customer-friendly
+        selectedOptions.sort((a, b) => b.price - a.price);
+        
+        // Apply charges only to options beyond the free count
+        const paidOptions = selectedOptions.slice(freeCount);
+        
+        for (const opt of paidOptions) {
+          sum += opt.price;
+          console.log(`Adding price ${opt.price} for ${opt.name}, new sum: ${sum}`);
+        }
+      }
+    }
+    
+    return sum;
+  }
+  
+  // Determine if an option would be free based on current selections
+  function isOptionFree(group: OptionGroup, optId: number): boolean {
+    const chosenIds = selections[group.id] || [];
+    const freeCount = group.free_option_count || 0;
+    
+    // If no free options available, nothing is free
+    if (freeCount === 0) return false;
+    
+    // If option is not selected, check if it would be free if selected
+    if (!chosenIds.includes(optId)) {
+      // If we have fewer selections than free options, this option would be free
+      return chosenIds.length < freeCount;
+    }
+    
+    // If option is already selected, we need to determine if it's one of the free ones
+    // Get all selected options with their prices
+    const selectedOptions = chosenIds
+      .map(id => {
+        const option = group.options.find(o => o.id === id);
+        
+        // Try different ways to access the price
+        const price = option ? 
+          (typeof option.additional_price === 'number' ? option.additional_price : 
+           typeof option.additional_price_float === 'number' ? option.additional_price_float : 
+           typeof (option as any).additional_price_float === 'number' ? (option as any).additional_price_float : 
+           2.0) : 0;
+        
+        return option ? {
+          id,
+          price: price
+        } : null;
+      })
+      .filter(Boolean) as { id: number, price: number }[];
+    
+    // Sort by price (highest first) to be customer-friendly
+    selectedOptions.sort((a, b) => b.price - a.price);
+    
+    // Get the IDs of the free options (the first 'freeCount' options after sorting)
+    const freeOptionIds = selectedOptions.slice(0, freeCount).map(o => o.id);
+    
+    // Check if this option is in the free list
+    return freeOptionIds.includes(optId);
+  }
+
+  // Check if all required groups have the minimum number of selections
+  function validateSelections(): boolean {
+    for (const group of optionGroups) {
+      // If min_select > 0, the group is required
+      if (group.min_select > 0) {
+        const selectedCount = (selections[group.id] || []).length;
+        if (selectedCount < group.min_select) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // Calculate prices
+  const basePrice = item.price;
   const addlPrice = getAdditionalPrice();
   const totalItemPrice = (basePrice + addlPrice) * quantity;
+  const isValid = validateSelections();
+  const priceBreakdown = getPriceBreakdown();
 
-    // On "Add to Cart": build a customizations object => groupName => [optionName, ...]
+  // Get paid options count per group
+  const paidOptionsByGroup = Object.entries(selections).map(([groupId, selectedIds]) => {
+    const group = optionGroups.find(g => g.id === Number(groupId));
+    if (!group) return null;
+    
+    const freeCount = group.free_option_count || 0;
+    const paidCount = Math.max(0, selectedIds.length - freeCount);
+    
+    if (paidCount <= 0) return null;
+    
+    // Calculate total price for this group's paid options
+    const selectedOptions = selectedIds
+      .map(id => {
+        const option = group.options.find(o => o.id === id);
+        
+        // Try different ways to access the price
+        const price = option ? 
+          (typeof option.additional_price === 'number' ? option.additional_price : 
+           typeof option.additional_price_float === 'number' ? option.additional_price_float : 
+           typeof (option as any).additional_price_float === 'number' ? (option as any).additional_price_float : 
+           2.0) : 0;
+        
+        return option ? {
+          id,
+          name: option.name,
+          price: price
+        } : null;
+      })
+      .filter(Boolean) as { id: number; name: string; price: number }[];
+    
+    // Sort by price (highest first)
+    selectedOptions.sort((a, b) => b.price - a.price);
+    
+    // Get paid options
+    const paidOptions = selectedOptions.slice(freeCount);
+    
+    // Calculate total price
+    const totalPrice = paidOptions.reduce((sum, opt) => sum + opt.price, 0);
+    
+    return {
+      groupId: Number(groupId),
+      groupName: group.name,
+      paidCount,
+      totalPrice,
+      paidOptions
+    };
+  }).filter(Boolean) as {
+    groupId: number;
+    groupName: string;
+    paidCount: number;
+    totalPrice: number;
+    paidOptions: { id: number; name: string; price: number }[];
+  }[];
+
+  // On "Add to Cart": build a customizations object => groupName => [optionName, ...]
   function handleAddToCart() {
+    if (!isValid) {
+      alert("Please make all required selections before adding to cart.");
+      return;
+    }
+
     const finalCustomizations: Record<string, string[]> = {};
 
     // For each group => collect the chosen names
@@ -124,19 +377,67 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
         ) : (
           optionGroups.map((group) => {
             const groupId = group.id;
+            const selectedCount = (selections[groupId] || []).length;
+            const isRequired = group.min_select > 0;
+            const needsMoreSelections = selectedCount < group.min_select;
+            const freeCount = group.free_option_count || 0;
+            const hasExceededFreeCount = selectedCount > freeCount;
+            
             return (
               <div key={groupId} className="mb-6">
-                <h4 className="font-medium text-gray-700">
+                <h4 className="font-medium text-gray-700 flex items-center flex-wrap">
                   {group.name}{' '}
-                  <span className="text-sm text-gray-500">
-                    (Min {group.min_select}, Max {group.max_select})
+                  <span className="text-sm ml-2">
+                    {isRequired ? (
+                      <span className={`${needsMoreSelections ? 'text-red-500' : 'text-green-600'} font-semibold`}>
+                        (Required: {selectedCount}/{group.min_select})
+                      </span>
+                    ) : (
+                      <span className="text-gray-500">
+                        (Select up to {group.max_select}
+                        {group.free_option_count > 0 && 
+                          `, ${group.free_option_count} free`}
+                        )
+                      </span>
+                    )}
                   </span>
                 </h4>
+                {group.free_option_count > 0 && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    First {group.free_option_count} selection{group.free_option_count !== 1 ? 's' : ''} free, additional selections will be charged.
+                    {hasExceededFreeCount && (
+                      <span className="text-orange-500 font-medium"> You have {selectedCount - freeCount} paid selection{selectedCount - freeCount !== 1 ? 's' : ''}.</span>
+                    )}
+                  </p>
+                )}
                 <div className="mt-2 space-y-2">
                   {group.options.map((opt) => {
                     const selected = selections[groupId]?.includes(opt.id);
-                    // Coerce to number
-                    const extraPrice = Number(opt.additional_price ?? 0);
+                    
+                    // Try different ways to access the price
+                    const extraPrice = typeof opt.additional_price === 'number' ? opt.additional_price : 
+                                      typeof opt.additional_price_float === 'number' ? opt.additional_price_float : 
+                                      typeof (opt as any).additional_price_float === 'number' ? (opt as any).additional_price_float : 
+                                      2.0;
+                    
+                    const isFree = isOptionFree(group, opt.id);
+                    
+                    // Determine what price indicator to show
+                    let priceIndicator = null;
+                    if (selected && isFree) {
+                      priceIndicator = (
+                        <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                          Free
+                        </span>
+                      );
+                    } else if (extraPrice > 0) {
+                      priceIndicator = (
+                        <span className="text-sm text-gray-500">
+                          +${extraPrice.toFixed(2)}
+                        </span>
+                      );
+                    }
+                    
                     return (
                       <button
                         key={opt.id}
@@ -150,33 +451,97 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                           }
                         `}
                       >
-                        {opt.name}{' '}
-                        {extraPrice > 0 && (
-                          <span className="ml-2 text-sm text-gray-500">
-                            +${extraPrice.toFixed(2)}
-                          </span>
-                        )}
+                        <div className="flex justify-between items-center w-full">
+                          <div>
+                            {opt.name}{' '}
+                            {opt.is_preselected && !selected && (
+                              <span className="ml-2 text-xs text-blue-500">
+                                (Recommended)
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center">
+                            {priceIndicator}
+                          </div>
+                        </div>
                       </button>
                     );
                   })}
                 </div>
+                {isRequired && needsMoreSelections && (
+                  <p className="text-red-500 text-sm mt-1">
+                    Please select at least {group.min_select} option{group.min_select > 1 ? 's' : ''}.
+                  </p>
+                )}
               </div>
             );
           })
         )}
 
+        {/* Price breakdown */}
+        <div className="border-t border-gray-200 pt-4 mb-4">
+          <h4 className="font-medium text-gray-700 mb-2">Price Breakdown</h4>
+          <div className="space-y-1 mb-3">
+            <div className="flex justify-between">
+              <span>Base price:</span>
+              <span>${basePrice.toFixed(2)}</span>
+            </div>
+            
+            {/* Detailed breakdown of paid options by group */}
+            {paidOptionsByGroup.length > 0 && (
+              <div className="mt-2">
+                {paidOptionsByGroup.map((group, idx) => (
+                  <div key={idx}>
+                    <div className="flex justify-between text-gray-600">
+                      <span>{group.groupName} paid options ({group.paidCount}):</span>
+                      <span>+${group.totalPrice.toFixed(2)}</span>
+                    </div>
+                    {group.paidOptions.map((opt, optIdx) => (
+                      <div key={optIdx} className="flex justify-between text-gray-600 text-sm pl-4">
+                        <span>{opt.name}:</span>
+                        <span>+${opt.price.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Only show additional options total if there are paid options */}
+            {addlPrice > 0 && (
+              <div className="flex justify-between text-gray-600 mt-2">
+                <span>Additional options total:</span>
+                <span>+${addlPrice.toFixed(2)}</span>
+              </div>
+            )}
+            
+            <div className="flex justify-between font-semibold border-t border-gray-200 pt-1 mt-1">
+              <span>Item total:</span>
+              <span>${(basePrice + addlPrice).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
         {/* Quantity & total row */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              onClick={() => {
+                setQuantity((q) => Math.max(1, q - 1));
+                // Force update to recalculate prices
+                forceUpdate({});
+              }}
               className="px-3 py-1 border rounded"
             >
               -
             </button>
             <span>{quantity}</span>
             <button
-              onClick={() => setQuantity((q) => q + 1)}
+              onClick={() => {
+                setQuantity((q) => q + 1);
+                // Force update to recalculate prices
+                forceUpdate({});
+              }}
               className="px-3 py-1 border rounded"
             >
               +
@@ -197,7 +562,12 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
           </button>
           <button
             onClick={handleAddToCart}
-            className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+            className={`px-4 py-2 text-white rounded-md ${
+              isValid 
+                ? 'bg-[#c1902f] hover:bg-[#d4a43f]' 
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
+            disabled={!isValid}
           >
             Add to Cart
           </button>

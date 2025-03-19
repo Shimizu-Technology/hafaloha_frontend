@@ -83,7 +83,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
       const initialOptions: Record<string, string[]> = {};
       item.option_groups.forEach(group => {
         // For required single-select groups, preselect the first option
-        if (group.required && group.max_select === 1) {
+        if (group.min_select > 0 && group.max_select === 1) {
           initialOptions[group.name] = [group.options[0]?.name || ''];
         } else {
           initialOptions[group.name] = [];
@@ -162,7 +162,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
     if (!selectedItem || !selectedItem.option_groups) return true;
     
     return selectedItem.option_groups.every(group => {
-      if (!group.required) return true;
+      if (!(group.min_select > 0)) return true;
       
       const selections = selectedOptions[group.name] || [];
       return selections.length > 0;
@@ -324,7 +324,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
             <div key={group.name} className="border-b border-gray-200 pb-4 last:border-b-0">
               <div className="flex justify-between items-center mb-2">
                 <h4 className="font-medium text-gray-900">{group.name}</h4>
-                {group.required && (
+                {group.min_select > 0 && (
                   <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
                     Required
                   </span>

@@ -10,7 +10,9 @@ export interface MenuOption {
   id: number;
   name: string;
   additional_price: number;
+  additional_price_float?: number; // Added this property to match the API response
   available: boolean;
+  is_preselected?: boolean;
 }
 
 export interface OptionGroup {
@@ -18,7 +20,7 @@ export interface OptionGroup {
   name: string;
   min_select: number;
   max_select: number;
-  required: boolean;
+  free_option_count: number;
   options: MenuOption[];
 }
 
