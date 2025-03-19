@@ -41,6 +41,9 @@ interface MenuItemFormData {
   stock_status: 'in_stock' | 'out_of_stock' | 'low_stock';
   status_note?: string | null;
   
+  // Day-specific availability (0-6, where 0 is Sunday)
+  available_days?: (number | string)[];
+  
   // Inventory tracking fields
   enable_stock_tracking?: boolean;
   stock_quantity?: number;
@@ -244,6 +247,7 @@ export function MenuManager({
     featured: false,
     stock_status: 'in_stock',
     status_note: '',
+    available_days: [],
     enable_stock_tracking: false,
     stock_quantity: 0,
     damaged_quantity: 0,
@@ -283,6 +287,16 @@ export function MenuManager({
     const damagedQty = item.damaged_quantity || 0;
     const availableQty = Math.max(0, stockQty - damagedQty);
     
+    // Log the available_days for debugging
+    console.log('Item available_days from API:', item.available_days);
+    
+    // Convert available_days to numbers if they're strings
+    const availableDays = item.available_days 
+      ? item.available_days.map(day => typeof day === 'string' ? Number(day) : day)
+      : [];
+    
+    console.log('Converted available_days to numbers:', availableDays);
+    
     setEditingItem({
       id: Number(item.id),
       name: item.name,
@@ -304,6 +318,7 @@ export function MenuManager({
           ? 'low_stock'
           : (item.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
       status_note: item.status_note || '',
+      available_days: availableDays,
       enable_stock_tracking: !!item.enable_stock_tracking,
       stock_quantity: stockQty,
       damaged_quantity: damagedQty,
@@ -444,10 +459,9 @@ export function MenuManager({
     // Derive final stock status
     let derivedStockStatus = deriveStockStatus(editingItem as any);
 
-    // Update the available_quantity if tracking is enabled
-    if (editingItem.enable_stock_tracking) {
-      editingItem.available_quantity = calculateAvailableQuantity(editingItem as any);
-    }
+    // Save the current available_days before submitting
+    const currentAvailableDays = editingItem.available_days || [];
+    console.log('Current available_days before submit:', currentAvailableDays);
 
     try {
       await withLoading(async () => {
@@ -455,11 +469,20 @@ export function MenuManager({
         
         if (editingItem.id) {
           // Updating existing item
-          const { id, imageFile, ...rest } = editingItem;
+          const { id, imageFile, available_quantity, ...rest } = editingItem;
+          
+          // Ensure available_days is an array of numbers
+          const submittedDays = Array.isArray(editingItem.available_days) 
+            ? editingItem.available_days.map(day => Number(day))
+            : [];
+            
+          console.log('Submitting available_days:', submittedDays);
+          
           const payload = { 
             ...rest, 
             promo_label: finalLabel,
-            stock_status: derivedStockStatus
+            stock_status: derivedStockStatus,
+            available_days: submittedDays
           };
           updatedItem = await updateMenuItem(String(id), payload);
 
@@ -469,6 +492,24 @@ export function MenuManager({
             // Fetch new data with updated image
             updatedItem = await api.get(`/menu_items/${id}`);
           }
+
+          // Process available_days from the API response
+          let processedDays: number[] = [];
+          
+          // First try to use the API response
+          if (updatedItem && updatedItem.available_days && Array.isArray(updatedItem.available_days)) {
+            // Ensure all values are numbers
+            processedDays = updatedItem.available_days.map((day: any) => Number(day));
+            console.log('Using available_days from API response:', processedDays);
+          } 
+          // If empty or missing, use our saved currentAvailableDays
+          else if (currentAvailableDays && currentAvailableDays.length > 0) {
+            processedDays = currentAvailableDays.map((day: any) => Number(day));
+            console.log('Restoring available_days from current state:', processedDays);
+          }
+          
+          // Log the processed days for debugging
+          console.log('Final processed available_days:', processedDays);
 
           // Update the local form state with the newly fetched data
           if (updatedItem) {
@@ -493,6 +534,7 @@ export function MenuManager({
                   ? 'low_stock'
                   : (updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'),
               status_note: updatedItem.status_note || '',
+              available_days: processedDays, // Use our processed array
               enable_stock_tracking: updatedItem.enable_stock_tracking,
               stock_quantity: updatedItem.stock_quantity || 0,
               damaged_quantity: updatedItem.damaged_quantity || 0,
@@ -502,14 +544,26 @@ export function MenuManager({
                 (updatedItem.stock_quantity || 0) - (updatedItem.damaged_quantity || 0)
               ),
             });
+            
+            // Log the available_days to help with debugging
+            console.log('Updated item available_days:', updatedItem.available_days);
           }
         } else {
           // Creating new
-          const { imageFile, ...rest } = editingItem;
+          const { imageFile, available_quantity, ...rest } = editingItem;
+          
+          // Ensure available_days is an array of numbers
+          const availableDays = Array.isArray(editingItem.available_days) 
+            ? editingItem.available_days.map(day => Number(day))
+            : [];
+            
+          console.log('Creating with available_days:', availableDays);
+          
           const payload = {
             ...rest,
             promo_label: finalLabel,
-            stock_status: derivedStockStatus
+            stock_status: derivedStockStatus,
+            available_days: availableDays
           };
           updatedItem = await addMenuItem(payload);
 
@@ -531,6 +585,33 @@ export function MenuManager({
       fetchAllMenuItemsForAdmin();
     }
   };
+
+  /** Helper to format available days for display. */
+  function formatAvailableDays(days?: (number | string)[]): string {
+    if (!days || days.length === 0) return 'Every day';
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // Convert all values to numbers for consistent handling
+    const daysAsNumbers = days.map(day => 
+      typeof day === 'string' ? parseInt(day, 10) : day
+    );
+    
+    if (daysAsNumbers.length === 1) {
+      return `${dayNames[daysAsNumbers[0]]}s only`;
+    } else if (daysAsNumbers.length === 7) {
+      return 'Every day';
+    } else if (daysAsNumbers.length > 3) {
+      // If more than 3 days, show which days it's NOT available
+      const excludedDays = dayNames
+        .filter((_, index) => !daysAsNumbers.includes(index))
+        .map(day => day.substring(0, 3));
+      return `Not available on ${excludedDays.join(', ')}`;
+    } else {
+      // Show the days it IS available
+      return daysAsNumbers.map(day => dayNames[day].substring(0, 3)).join(', ');
+    }
+  }
 
   /** Helper badge component for small labels. */
   function Badge({
@@ -806,6 +887,12 @@ export function MenuManager({
                       )}
                       {item.enable_stock_tracking && deriveStockStatus(item) === 'out_of_stock' && (
                         <Badge bgColor="bg-gray-600">Out of Stock</Badge>
+                      )}
+                      {/* 8) Day-specific availability */}
+                      {item.available_days && item.available_days.length > 0 && item.available_days.length < 7 && (
+                        <Badge bgColor="bg-purple-500">
+                          {formatAvailableDays(item.available_days)}
+                        </Badge>
                       )}
                     </div>
 
@@ -1238,6 +1325,63 @@ export function MenuManager({
                     className="w-full px-4 py-2 border rounded-md"
                     placeholder="e.g. 'Valentine's Special'"
                   />
+                </div>
+
+                {/* Day-specific availability */}
+                <div className="mt-4">
+                  <div className="flex items-center">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Day-Specific Availability
+                    </label>
+                    <Tooltip
+                      content="Restrict this item to specific days of the week."
+                      position="top"
+                      icon
+                      iconClassName="ml-1 h-4 w-4"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Select days when this item is available. Leave all unchecked to make available every day.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => (
+                      <label key={day} className="inline-flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={Array.isArray(editingItem.available_days) && 
+                            editingItem.available_days.map(day => Number(day)).includes(index)}
+                          onChange={(e) => {
+                            // Always convert to numbers to ensure consistent handling
+                            const currentDays = Array.isArray(editingItem.available_days) 
+                              ? editingItem.available_days.map(day => Number(day)) 
+                              : [];
+                            
+                            // Log the current days for debugging
+                            console.log('Current days before change:', currentDays);
+                            
+                            let newDays;
+                            if (e.target.checked) {
+                              // Add the day if checked
+                              newDays = [...currentDays, index];
+                            } else {
+                              // Remove the day if unchecked
+                              newDays = currentDays.filter(d => d !== index);
+                            }
+                            
+                            // Log the new days for debugging
+                            console.log('New days after change:', newDays);
+                            
+                            // Update the state with the new days
+                            setEditingItem({
+                              ...editingItem,
+                              available_days: newDays
+                            });
+                          }}
+                        />
+                        <span>{day}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
 

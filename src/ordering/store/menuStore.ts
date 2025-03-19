@@ -247,7 +247,15 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       // Add all other fields
       Object.entries(data).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          formData.append(`menu_item[${key}]`, String(value));
+          // Special handling for arrays
+          if (Array.isArray(value)) {
+            // For arrays like available_days, append each value individually
+            value.forEach((item, index) => {
+              formData.append(`menu_item[${key}][]`, String(item));
+            });
+          } else {
+            formData.append(`menu_item[${key}]`, String(value));
+          }
         }
       });
       
@@ -289,7 +297,15 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       // Add all other fields
       Object.entries(data).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          formData.append(`menu_item[${key}]`, String(value));
+          // Special handling for arrays
+          if (Array.isArray(value)) {
+            // For arrays like available_days, append each value individually
+            value.forEach((item, index) => {
+              formData.append(`menu_item[${key}][]`, String(item));
+            });
+          } else {
+            formData.append(`menu_item[${key}]`, String(value));
+          }
         }
       });
       

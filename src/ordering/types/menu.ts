@@ -74,6 +74,13 @@ export interface MenuItem {
   promo_label?: string | null;
   featured?: boolean;
   
+  /**
+   * Day-specific availability (0-6, where 0 is Sunday)
+   * Empty array means available on all days
+   * Note: The API may return these as strings, so the type allows both
+   */
+  available_days?: (number | string)[];
+  
   // Inventory status
   stock_status?: 'in_stock' | 'out_of_stock' | 'low_stock' | 'limited';
   status_note?: string | null;

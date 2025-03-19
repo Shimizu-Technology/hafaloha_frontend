@@ -7,6 +7,33 @@ import { CustomizationModal } from './CustomizationModal';
 import type { MenuItem as MenuItemType } from '../types/menu';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 
+// Helper function to format available days for display
+function formatAvailableDays(days?: (number | string)[]): string {
+  if (!days || days.length === 0) return 'Every day';
+  
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  
+  // Convert all values to numbers for consistent handling
+  const daysAsNumbers = days.map(day => 
+    typeof day === 'string' ? parseInt(day, 10) : day
+  );
+  
+  if (daysAsNumbers.length === 1) {
+    return `${dayNames[daysAsNumbers[0]]}s only`;
+  } else if (daysAsNumbers.length === 7) {
+    return 'Every day';
+  } else if (daysAsNumbers.length > 3) {
+    // If more than 3 days, show which days it's NOT available
+    const excludedDays = dayNames
+      .filter((_, index) => !daysAsNumbers.includes(index))
+      .map(day => day.substring(0, 3));
+    return `Not available on ${excludedDays.join(', ')}`;
+  } else {
+    // Show the days it IS available
+    return daysAsNumbers.map(day => dayNames[day].substring(0, 3)).join(', ');
+  }
+}
+
 interface MenuItemProps {
   item: MenuItemType;
   index?: number;
@@ -114,6 +141,12 @@ export function MenuItem({ item, index }: MenuItemProps) {
             {specialLabel && (
               <div className="mt-2 inline-block bg-red-500 text-white text-xs font-bold rounded-full px-2 py-1">
                 {specialLabel}
+              </div>
+            )}
+            {/* Day-specific availability */}
+            {item.available_days && item.available_days.length > 0 && item.available_days.length < 7 && (
+              <div className="mt-2 inline-block bg-purple-500 text-white text-xs font-bold rounded-full px-2 py-1 ml-1">
+                {formatAvailableDays(item.available_days)}
               </div>
             )}
             {formattedUntil && (

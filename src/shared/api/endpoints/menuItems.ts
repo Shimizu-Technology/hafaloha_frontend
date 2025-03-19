@@ -47,15 +47,22 @@ export const menuItemsApi = {
     Object.entries(data).forEach(([key, value]) => {
       if (key === 'imageFile' && value instanceof File) {
         formData.append('menu_item[image]', value);
-      } else if (key === 'category_ids' && Array.isArray(value)) {
-        // Handle category_ids array
-        value.forEach(id => {
-          formData.append('menu_item[category_ids][]', id.toString());
-        });
+      } else if ((key === 'category_ids' || key === 'available_days') && Array.isArray(value)) {
+        // Handle arrays like category_ids and available_days
+        if (value.length > 0) {
+          value.forEach(item => {
+            formData.append(`menu_item[${key}][]`, item.toString());
+          });
+        } else {
+          // For empty arrays, send an empty array parameter
+          formData.append(`menu_item[${key}][]`, '');
+        }
       } else if (value !== undefined && value !== null) {
         formData.append(`menu_item[${key}]`, value.toString());
       }
     });
+    
+    console.log('Creating menu item with data:', Object.fromEntries(formData.entries()));
     
     const response = await apiClient.post('/menu_items', formData, {
       headers: {
@@ -76,15 +83,22 @@ export const menuItemsApi = {
     Object.entries(data).forEach(([key, value]) => {
       if (key === 'imageFile' && value instanceof File) {
         formData.append('menu_item[image]', value);
-      } else if (key === 'category_ids' && Array.isArray(value)) {
-        // Handle category_ids array
-        value.forEach(id => {
-          formData.append('menu_item[category_ids][]', id.toString());
-        });
+      } else if ((key === 'category_ids' || key === 'available_days') && Array.isArray(value)) {
+        // Handle arrays like category_ids and available_days
+        if (value.length > 0) {
+          value.forEach(item => {
+            formData.append(`menu_item[${key}][]`, item.toString());
+          });
+        } else {
+          // For empty arrays, send an empty array parameter
+          formData.append(`menu_item[${key}][]`, '');
+        }
       } else if (value !== undefined && value !== null) {
         formData.append(`menu_item[${key}]`, value.toString());
       }
     });
+    
+    console.log('Sending data to API:', Object.fromEntries(formData.entries()));
     
     const response = await apiClient.patch(`/menu_items/${id}`, formData, {
       headers: {

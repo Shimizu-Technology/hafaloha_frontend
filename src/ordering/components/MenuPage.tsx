@@ -23,7 +23,7 @@ export function MenuPage() {
     fetchCategories();
   }, [fetchMenuItems, fetchCategories]);
 
-  // Combine filters: category, featured, seasonal
+  // Combine filters: category, featured, seasonal, day-specific availability
   const filteredItems = useMemo(() => {
     let list = menuItems;
 
@@ -39,6 +39,23 @@ export function MenuPage() {
     if (showSeasonalOnly) {
       list = list.filter((item) => item.seasonal);
     }
+
+    // Filter by day-specific availability
+    const currentDayOfWeek = new Date().getDay(); // 0 = Sunday, 1 = Monday, etc.
+    list = list.filter((item) => {
+      // If available_days is empty or not set, item is available every day
+      if (!item.available_days || item.available_days.length === 0) {
+        return true;
+      }
+      
+      // Otherwise, check if the current day is in the available_days array
+      // Convert all values to numbers for comparison since they might be stored as strings
+      const availableDaysAsNumbers = item.available_days.map(day => 
+        typeof day === 'string' ? parseInt(day, 10) : day
+      );
+      
+      return availableDaysAsNumbers.includes(currentDayOfWeek);
+    });
 
     return list;
   }, [menuItems, selectedCategoryId, showFeaturedOnly, showSeasonalOnly]);
