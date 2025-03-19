@@ -136,6 +136,7 @@ export function MenuManager({
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItemFormData | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // For managing option groups
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
@@ -297,6 +298,9 @@ export function MenuManager({
     
     console.log('Converted available_days to numbers:', availableDays);
     
+    // Reset unsaved changes flag when opening the edit modal
+    setHasUnsavedChanges(false);
+    
     setEditingItem({
       id: Number(item.id),
       name: item.name,
@@ -337,6 +341,8 @@ export function MenuManager({
 
   /** Handle adding a new item => blank form. */
   const handleAdd = () => {
+    // Reset unsaved changes flag when opening the edit modal
+    setHasUnsavedChanges(false);
     setEditingItem({
       ...initialFormData,
       menu_id: selectedMenuId || 1
@@ -547,6 +553,12 @@ export function MenuManager({
             
             // Log the available_days to help with debugging
             console.log('Updated item available_days:', updatedItem.available_days);
+            
+            // Show success toast for updated item
+            toast.success('Menu item updated successfully!');
+            
+            // Reset unsaved changes flag
+            setHasUnsavedChanges(false);
           }
         } else {
           // Creating new
@@ -573,9 +585,13 @@ export function MenuManager({
             updatedItem = await api.get(`/menu_items/${updatedItem.id}`);
           }
 
+          // Show success toast for new item
+          toast.success('Menu item created successfully!');
+          
           // Close the form after creating a new item
           setIsEditing(false);
           setEditingItem(null);
+          setHasUnsavedChanges(false);
         }
       });
     } catch (err) {
@@ -1013,6 +1029,13 @@ export function MenuManager({
               </h3>
               <button
                 onClick={() => {
+                  // Check for unsaved changes
+                  if (hasUnsavedChanges) {
+                    if (!window.confirm('You have unsaved changes. Are you sure you want to close?')) {
+                      return; // User canceled, don't close
+                    }
+                  }
+                  
                   // Stop item-specific polling if we were doing so
                   if (editItemPollingActive) {
                     stopInventoryPolling();
@@ -1021,6 +1044,7 @@ export function MenuManager({
                   }
                   setIsEditing(false);
                   setEditingItem(null);
+                  setHasUnsavedChanges(false);
                 }}
                 className="text-gray-500 hover:text-gray-700"
               >
@@ -1058,9 +1082,10 @@ export function MenuManager({
                   <input
                     type="text"
                     value={editingItem.name}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, name: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setHasUnsavedChanges(true);
+                      setEditingItem({ ...editingItem, name: e.target.value });
+                    }}
                     className="w-full px-4 py-2 border rounded-md"
                     required
                   />
@@ -1079,9 +1104,10 @@ export function MenuManager({
                   </div>
                   <textarea
                     value={editingItem.description}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, description: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setHasUnsavedChanges(true);
+                      setEditingItem({ ...editingItem, description: e.target.value });
+                    }}
                     className="w-full px-4 py-2 border rounded-md"
                     rows={2}
                   />
@@ -1104,12 +1130,13 @@ export function MenuManager({
                     type="number"
                     step="0.01"
                     value={editingItem.price}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setHasUnsavedChanges(true);
                       setEditingItem({
                         ...editingItem,
                         price: parseFloat(e.target.value) || 0,
-                      })
-                    }
+                      });
+                    }}
                     className="w-full px-4 py-2 border rounded-md"
                     required
                   />
@@ -1132,12 +1159,13 @@ export function MenuManager({
                     type="number"
                     step="0.01"
                     value={editingItem.cost_to_make}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setHasUnsavedChanges(true);
                       setEditingItem({
                         ...editingItem,
                         cost_to_make: parseFloat(e.target.value) || 0,
-                      })
-                    }
+                      });
+                    }}
                     className="w-full px-4 py-2 border rounded-md"
                   />
                 </div>
@@ -1668,6 +1696,13 @@ export function MenuManager({
                 <button
                   type="button"
                   onClick={() => {
+                    // Check for unsaved changes
+                    if (hasUnsavedChanges) {
+                      if (!window.confirm('You have unsaved changes. Are you sure you want to close?')) {
+                        return; // User canceled, don't close
+                      }
+                    }
+                    
                     if (editItemPollingActive) {
                       stopInventoryPolling();
                       setEditItemPollingActive(false);
@@ -1675,6 +1710,7 @@ export function MenuManager({
                     }
                     setIsEditing(false);
                     setEditingItem(null);
+                    setHasUnsavedChanges(false);
                   }}
                   className="px-4 py-2 border rounded-md hover:bg-gray-50"
                 >
