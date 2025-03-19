@@ -87,7 +87,7 @@ export function MenuPage() {
       {/* Horizontally scrollable categories */}
       <div className="mb-3">
         <div className="flex flex-nowrap space-x-3 overflow-x-auto py-2">
-          {/* “All Items” button */}
+          {/* "All Items" button */}
           <button
             className={`
               flex-shrink-0 px-4 py-2 rounded-md
@@ -117,6 +117,19 @@ export function MenuPage() {
           ))}
         </div>
       </div>
+      
+      {/* Category Description - Only shown when a category is selected */}
+      {selectedCategoryId && (
+        <div className="animate-fadeIn transition-all duration-300 mb-6">
+          {categories.find(cat => cat.id === selectedCategoryId)?.description && (
+            <div className="bg-white/80 backdrop-blur-sm border-l-2 border-[#c1902f]/70 rounded-lg px-4 py-3 sm:p-4 shadow-sm">
+              <p className="text-gray-600 font-normal leading-relaxed text-sm sm:text-base">
+                {categories.find(cat => cat.id === selectedCategoryId)?.description}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Featured/Seasonal checkboxes */}
       <div className="mb-6 flex flex-wrap items-center gap-4">

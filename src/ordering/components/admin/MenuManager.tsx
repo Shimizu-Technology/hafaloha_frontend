@@ -785,6 +785,19 @@ export function MenuManager({
           ))}
         </div>
       </div>
+      
+      {/* Category Description - Only shown when a category is selected */}
+      {selectedCategory && (
+        <div className="animate-fadeIn transition-all duration-300 mb-4">
+          {categories.find(cat => cat.id === selectedCategory)?.description && (
+            <div className="bg-white/80 backdrop-blur-sm border-l-2 border-[#c1902f]/70 rounded-lg px-4 py-3 sm:p-4 shadow-sm mb-4">
+              <p className="text-gray-600 font-normal leading-relaxed text-sm sm:text-base">
+                {categories.find(cat => cat.id === selectedCategory)?.description}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Additional Filters (Featured / Seasonal) */}
       <div className="mb-6 flex flex-wrap items-center gap-4">

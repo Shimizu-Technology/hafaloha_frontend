@@ -10,6 +10,7 @@ interface Category {
   id: number;
   name: string;
   position?: number; // stored in DB but hidden from the UI
+  description?: string;
 }
 
 interface CategoriesSettingsProps {
@@ -21,8 +22,9 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // For new category form (just name)
+  // For new category form
   const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
 
   // For editing an existing category (just name)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -52,11 +54,13 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
       const response = await api.post<Category>('/admin/categories', {
         category: {
           name: newName,
+          description: newDescription,
           position: 0,
         },
       });
       setCategories([...categories, response]);
       setNewName('');
+      setNewDescription('');
       toast.success('Created category');
     } catch (err: any) {
       toast.error(err.message || 'Failed to create category');
@@ -77,12 +81,12 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
   async function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!editingCategory) return;
-    const { id, name } = editingCategory;
+    const { id, name, description } = editingCategory;
     if (!name.trim()) return;
 
     try {
       const response = await api.patch<Category>(`/admin/categories/${id}`, {
-        category: { name, position: 0 },
+        category: { name, description, position: 0 },
       });
       setCategories(
         categories.map((c) => (c.id === response.id ? response : c))
@@ -114,14 +118,26 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
           <label className="text-sm font-medium text-gray-700 mb-1 block">
             New Category Name
           </label>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="border p-2 rounded flex-1"
-              placeholder="e.g. Beverages"
-            />
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className="border p-2 rounded w-full mb-3"
+            placeholder="e.g. Beverages"
+          />
+          
+          <label className="text-sm font-medium text-gray-700 mb-1 block">
+            Description (Optional)
+          </label>
+          <textarea
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            className="border p-2 rounded w-full mb-3"
+            placeholder="Brief description of this category"
+            rows={3}
+          />
+          
+          <div className="flex justify-end">
             <button
               type="submit"
               className="px-4 py-2 bg-[#c1902f] text-white rounded hover:bg-[#d4a43f]"
@@ -153,7 +169,7 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
           <table className="min-w-full text-sm text-gray-700">
             <thead className="bg-gray-50 text-gray-700">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Name</th>
+                <th className="px-4 py-3 text-left font-medium">Name & Description</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -166,6 +182,9 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
                   return (
                     <tr key={cat.id} className="border-b">
                       <td className="px-4 py-3">
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">
+                          Name
+                        </label>
                         <input
                           type="text"
                           value={editingCategory.name}
@@ -175,8 +194,24 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
                               name: e.target.value,
                             })
                           }
-                          className="border p-2 rounded w-full"
+                          className="border p-2 rounded w-full mb-2"
                           autoFocus
+                        />
+                        
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">
+                          Description (Optional)
+                        </label>
+                        <textarea
+                          value={editingCategory.description || ''}
+                          onChange={(e) =>
+                            setEditingCategory({
+                              ...editingCategory,
+                              description: e.target.value,
+                            })
+                          }
+                          className="border p-2 rounded w-full"
+                          placeholder="Category description"
+                          rows={3}
                         />
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -201,6 +236,9 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
                     <tr key={cat.id} className="border-b hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <span className="font-medium">{cat.name}</span>
+                        {cat.description && (
+                          <p className="text-sm text-gray-600 mt-1">{cat.description}</p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <button
