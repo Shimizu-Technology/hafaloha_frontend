@@ -550,24 +550,34 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 relative">
-      {/* Acknowledge All button - fixed at the bottom of the screen with improved visibility */}
-      {unacknowledgedOrders.length > 1 && (
-        <div className="fixed bottom-6 left-0 right-0 z-[9999] flex justify-center pointer-events-none">
-          <button
-            onClick={acknowledgeAllOrders}
-            disabled={isAcknowledgingAll}
-            className="bg-[#c1902f] hover:bg-[#d4a43f] text-white font-medium py-3 px-6 rounded-full shadow-xl flex items-center space-x-2 transition-all transform hover:scale-105 pointer-events-auto border-2 border-white"
-            style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
-          >
-            <CheckCircle className="h-5 w-5 mr-1" />
-            <span>
-              {isAcknowledgingAll 
-                ? 'Acknowledging...' 
-                : `Acknowledge All (${unacknowledgedOrders.length})`}
-            </span>
-          </button>
-        </div>
-      )}
+  {/* Acknowledge All button - enhanced for better visibility on all devices, especially iPad */}
+  {unacknowledgedOrders.length > 0 && (
+    <div className="fixed left-0 right-0 z-[9999] flex justify-center pointer-events-none"
+      style={{ 
+        bottom: 'env(safe-area-inset-bottom, 1.5rem)',
+        paddingBottom: '0.5rem'
+      }}
+    >
+      <button
+        onClick={acknowledgeAllOrders}
+        disabled={isAcknowledgingAll}
+        className="bg-[#c1902f] hover:bg-[#d4a43f] text-white font-medium py-3 px-6 md:py-4 md:px-8 rounded-full shadow-xl flex items-center space-x-2 transition-all transform hover:scale-105 pointer-events-auto border-2 border-white"
+        style={{ 
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          fontSize: 'clamp(0.875rem, 2vw, 1rem)'
+        }}
+      >
+        <CheckCircle className="h-5 w-5 md:h-6 md:w-6 mr-1" />
+        <span>
+          {isAcknowledgingAll 
+            ? 'Acknowledging...' 
+            : unacknowledgedOrders.length === 1 
+              ? 'Acknowledge Order' 
+              : `Acknowledge All (${unacknowledgedOrders.length})`}
+        </span>
+      </button>
+    </div>
+  )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
