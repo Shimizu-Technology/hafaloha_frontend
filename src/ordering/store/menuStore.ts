@@ -14,10 +14,6 @@ interface MenuState {
   loading: boolean;
   error: string | null;
   
-  // Inventory polling state
-  inventoryPolling: boolean;
-  inventoryPollingInterval: number | null;
-  
   // Actions
   fetchMenus: () => Promise<void>;
   fetchMenuItems: () => Promise<void>;
@@ -37,10 +33,6 @@ interface MenuState {
   showMenuItem: (id: number | string) => Promise<MenuItem | null>;
   toggleMenuItemVisibility: (id: number | string) => Promise<MenuItem | null>;
   
-  // Inventory polling actions
-  startInventoryPolling: (menuItemId?: number | string) => void;
-  stopInventoryPolling: () => void;
-  
   // Get individual menu item with fresh data
   getMenuItemById: (id: number | string) => Promise<MenuItem | null>;
 }
@@ -52,10 +44,6 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   categories: [],
   loading: false,
   error: null,
-  
-  // Inventory polling state
-  inventoryPolling: false,
-  inventoryPollingInterval: null,
 
   fetchMenus: async () => {
     set({ loading: true, error: null });
@@ -442,39 +430,5 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     }
   },
   
-  // Start polling for inventory updates
-  startInventoryPolling: (menuItemId?: number | string) => {
-    // First stop any existing polling
-    get().stopInventoryPolling();
-    
-    // Set polling flag to true
-    set({ inventoryPolling: true });
-    
-    // Start a new polling interval
-    const intervalId = window.setInterval(async () => {
-      // If we have a specific menu item ID, just fetch that one
-      if (menuItemId) {
-        await get().getMenuItemById(menuItemId);
-      } else {
-        // Otherwise refresh all menu items
-        await get().fetchAllMenuItemsForAdmin();
-      }
-    }, 10000); // Poll every 10 seconds
-    
-    // Store the interval ID so we can clear it later
-    set({ inventoryPollingInterval: intervalId });
-  },
-  
-  // Stop polling for inventory updates
-  stopInventoryPolling: () => {
-    const { inventoryPollingInterval } = get();
-    
-    if (inventoryPollingInterval !== null) {
-      window.clearInterval(inventoryPollingInterval);
-      set({ 
-        inventoryPollingInterval: null,
-        inventoryPolling: false
-      });
-    }
-  }
+  // No more polling functions - we're using WebSockets now
 }));

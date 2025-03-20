@@ -10,6 +10,7 @@ import { api, uploadMenuItemImage } from '../../lib/api';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { Tooltip } from '../../../shared/components/ui';
 import { deriveStockStatus, calculateAvailableQuantity } from '../../utils/inventoryUtils';
+import { eventService, EVENT_TYPES } from '../../services/eventService';
 
 // Import the Inventory Modal
 import ItemInventoryModal from './ItemInventoryModal';
@@ -113,9 +114,7 @@ export function MenuManager({
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
-    setActiveMenu,
-    startInventoryPolling,
-    stopInventoryPolling
+    setActiveMenu
   } = useMenuStore();
 
   const { categories, fetchCategories } = useCategoryStore();
@@ -149,30 +148,41 @@ export function MenuManager({
   const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [inventoryModalItem, setInventoryModalItem] = useState<MenuItem | null>(null);
   
-  // For item-specific polling when editing
-  const [editItemPollingActive, setEditItemPollingActive] = useState(false);
-  const [polledItemId, setPolledItemId] = useState<number | null>(null);
+  // For tracking the item being edited
+  const [editedItemId, setEditedItemId] = useState<string | null>(null);
 
-  // On mount => fetch items (admin) + categories + menus and start inventory polling
+  // On mount => fetch items (admin) + categories + menus and set up WebSocket
   useEffect(() => {
     fetchAllMenuItemsForAdmin();
     fetchCategories();
     fetchMenus();
     
-    // Start automatic polling for inventory updates 
-    startInventoryPolling();
+    // Set up WebSocket connection for inventory updates
+    if (restaurantId) {
+      eventService.subscribeToRestaurant(restaurantId);
+      
+      // Subscribe to inventory updates
+      const inventorySubscription = eventService.subscribe(EVENT_TYPES.INVENTORY_UPDATED, () => {
+        console.log('[MenuManager] Received inventory update via WebSocket');
+        fetchAllMenuItemsForAdmin();
+      });
+      
+      // Subscribe to menu item updates
+      const menuItemSubscription = eventService.subscribe(EVENT_TYPES.MENU_ITEM_UPDATED, () => {
+        console.log('[MenuManager] Received menu item update via WebSocket');
+        fetchAllMenuItemsForAdmin();
+      });
+      
+      // Clean up when the component unmounts
+      return () => {
+        inventorySubscription.unsubscribe();
+        menuItemSubscription.unsubscribe();
+        eventService.unsubscribe();
+      };
+    }
     
-    // Clean up when the component unmounts
-    return () => {
-      stopInventoryPolling();
-    };
-  }, [
-    fetchAllMenuItemsForAdmin,
-    fetchCategories,
-    fetchMenus,
-    startInventoryPolling,
-    stopInventoryPolling
-  ]);
+    return undefined;
+  }, [fetchAllMenuItemsForAdmin, fetchCategories, fetchMenus, restaurantId]);
   
   // Handle selectedMenuItemId from props (for opening edit modal from e.g. notifications)
   useEffect(() => {
@@ -344,12 +354,8 @@ export function MenuManager({
     });
     setIsEditing(true);
     
-    // Start polling for this specific item's inventory updates if tracking is on
-    if (item.enable_stock_tracking) {
-      setPolledItemId(Number(item.id));
-      setEditItemPollingActive(true);
-      startInventoryPolling(item.id);
-    }
+    // Track the item being edited
+    setEditedItemId(item.id);
   };
 
   /** Handle adding a new item => blank form. */
@@ -380,9 +386,57 @@ export function MenuManager({
     setOptionsModalItem(null);
   };
 
-  // Update the editingItem if inventory changed while the edit form is open
+  // Set up WebSocket subscription for the specific item being edited
   useEffect(() => {
-    if (isEditing && editingItem && editingItem.id && editItemPollingActive) {
+    if (isEditing && editingItem && editingItem.id && restaurantId) {
+      // Subscribe to inventory updates for this specific item
+      const inventorySubscription = eventService.subscribe(EVENT_TYPES.INVENTORY_UPDATED, (updatedItem) => {
+        // Only update if this is the item we're editing
+        if (updatedItem && updatedItem.id === editedItemId) {
+          console.log('[MenuManager] Received inventory update for edited item:', updatedItem.id);
+          
+          const stockQty = updatedItem.stock_quantity || 0;
+          const damagedQty = updatedItem.damaged_quantity || 0;
+          const availableQty = Math.max(0, stockQty - damagedQty);
+          const threshold = updatedItem.low_stock_threshold || 10;
+          
+          setEditingItem((prevItem) => {
+            if (!prevItem) return prevItem;
+            return {
+              ...prevItem,
+              enable_stock_tracking: !!updatedItem.enable_stock_tracking,
+              stock_quantity: stockQty,
+              damaged_quantity: damagedQty,
+              low_stock_threshold: threshold,
+              available_quantity: availableQty,
+              stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock',
+            };
+          });
+        }
+      });
+      
+      // Also listen for general menu item updates
+      const menuItemSubscription = eventService.subscribe(EVENT_TYPES.MENU_ITEM_UPDATED, (updatedItem) => {
+        if (updatedItem && updatedItem.id === editedItemId) {
+          console.log('[MenuManager] Received menu item update for edited item:', updatedItem.id);
+          
+          // Refresh the menu items to get the latest data
+          fetchAllMenuItemsForAdmin();
+        }
+      });
+      
+      return () => {
+        inventorySubscription.unsubscribe();
+        menuItemSubscription.unsubscribe();
+      };
+    }
+    
+    return undefined;
+  }, [isEditing, editingItem, editedItemId, restaurantId, fetchAllMenuItemsForAdmin]);
+  
+  // Update the editingItem if it changed in menuItems while the edit form is open
+  useEffect(() => {
+    if (isEditing && editingItem && editingItem.id) {
       const editingItemId = editingItem.id;
       const updatedItem = menuItems.find((mi) => Number(mi.id) === editingItemId);
       
@@ -415,7 +469,7 @@ export function MenuManager({
         }
       }
     }
-  }, [menuItems, isEditing, editItemPollingActive, editingItem]);
+  }, [menuItems, isEditing, editingItem]);
 
   /** Manage inventory => show the modal. */
   const handleManageInventory = (item: MenuItem) => {
@@ -1087,12 +1141,8 @@ export function MenuManager({
                     }
                   }
                   
-                  // Stop item-specific polling if we were doing so
-                  if (editItemPollingActive) {
-                    stopInventoryPolling();
-                    setEditItemPollingActive(false);
-                    setPolledItemId(null);
-                  }
+                  // Clear the edited item ID
+                  setEditedItemId(null);
                   setIsEditing(false);
                   setEditingItem(null);
                   setHasUnsavedChanges(false);
@@ -1754,11 +1804,8 @@ export function MenuManager({
                       }
                     }
                     
-                    if (editItemPollingActive) {
-                      stopInventoryPolling();
-                      setEditItemPollingActive(false);
-                      setPolledItemId(null);
-                    }
+                    // Clear the edited item ID
+                    setEditedItemId(null);
                     setIsEditing(false);
                     setEditingItem(null);
                     setHasUnsavedChanges(false);

@@ -30,6 +30,7 @@ import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
 import { MenuItem } from '../../types/menu';
 import { useMenuStore } from '../../store/menuStore';
 import { calculateAvailableQuantity } from '../../utils/inventoryUtils';
+import { eventService, EVENT_TYPES } from '../../services/eventService';
 
 type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise';
 
@@ -70,8 +71,7 @@ export function AdminDashboard() {
   // For order modal
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
-  // Constants for configuration
-  const POLLING_INTERVAL = 5000; // 5 seconds - could be moved to a config file or environment variable
+  // No longer need polling interval as we're using WebSockets
 
   // Polling for new orders
   const [lastOrderId, setLastOrderId] = useState<number>(() => {
@@ -295,22 +295,15 @@ export function AdminDashboard() {
     });
   };
 
-  // Add effect for stock notifications
+  // Fetch stock notifications on mount (initial data load)
   useEffect(() => {
     // Only run for admin users
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
       return;
     }
     
-    // Fetch stock notifications on component mount
+    // Fetch stock notifications on component mount (one-time initial load)
     fetchNotifications(24, 'low_stock');
-    
-    // Set up polling interval for stock notifications
-    const interval = setInterval(() => {
-      fetchNotifications(24, 'low_stock');
-    }, POLLING_INTERVAL * 2); // Poll at a slower rate than orders
-    
-    return () => clearInterval(interval);
   }, [fetchNotifications, user]);
   
   // Update stock alert count when notifications change
@@ -435,13 +428,14 @@ export function AdminDashboard() {
     });
   }, [menuItems, acknowledgedLowStockItems, user, calculateAvailableQuantity]);
 
+  // Set up WebSocket connection and handle initial data loading
   useEffect(() => {
-    // Only run polling for admin users
+    // Only run for admin users
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
       return;
     }
 
-    // Check for unacknowledged orders on mount
+    // Check for unacknowledged orders on mount (initial data load)
     const checkForUnacknowledgedOrders = async () => {
       try {
         console.log('[AdminDashboard] Checking for unacknowledged orders...');
@@ -477,76 +471,62 @@ export function AdminDashboard() {
     // Check for unacknowledged orders when component mounts
     checkForUnacknowledgedOrders();
 
-    // Set up polling with visibility detection
-    let pollingInterval: number | null = null;
-    
-    // Function to check for new orders
-    const checkForNewOrders = async () => {
-      try {
-        const url = `/orders/new_since/${lastOrderId}`;
-        const newOrders: Order[] = await api.get(url);
-
-        if (newOrders.length > 0) {
-          // Display notifications for new orders
-          newOrders.forEach((order) => {
-            displayOrderNotification(order);
-          });
-
-          const maxId = Math.max(...newOrders.map((o) => Number(o.id)));
-          setLastOrderId(maxId);
-          localStorage.setItem('adminLastOrderId', String(maxId));
-        }
-      } catch (err) {
-        console.error('[AdminDashboard] Failed to poll new orders:', err);
-        // Error is logged but polling continues
-      }
-    };
-    
-    // Function to start polling
-    const startPolling = () => {
-      // Clear any existing interval first
-      if (pollingInterval) clearInterval(pollingInterval);
+    // Set up WebSocket subscription
+    if (currentRestaurantId) {
+      console.log('[AdminDashboard] Setting up WebSocket connection for restaurant:', currentRestaurantId);
       
-      // Set up new interval
-      pollingInterval = setInterval(() => {
-        checkForNewOrders().catch(error => {
-          console.error('[AdminDashboard] Error checking for new orders:', error);
-          // Continue polling even if there's an error
-        });
-      }, POLLING_INTERVAL);
-    };
+      // Subscribe to restaurant events
+      eventService.subscribeToRestaurant(currentRestaurantId);
+      
+      // Subscribe to new orders
+      const orderCreatedSubscription = eventService.subscribe(EVENT_TYPES.ORDER_CREATED, (order: Order) => {
+        console.log('[AdminDashboard] WebSocket: New order received:', order.id);
+        
+        // Display notification for new order
+        displayOrderNotification(order);
+        
+        // Update lastOrderId if needed
+        if (Number(order.id) > lastOrderId) {
+          setLastOrderId(Number(order.id));
+          localStorage.setItem('adminLastOrderId', String(order.id));
+        }
+        
+        // Add to unacknowledged orders
+        setUnacknowledgedOrders(prev => [...prev, order]);
+      });
+      
+      // Subscribe to order updates
+      const orderUpdatedSubscription = eventService.subscribe(EVENT_TYPES.ORDER_UPDATED, (order: Order) => {
+        console.log(`[AdminDashboard] WebSocket: Order ${order.id} updated`);
+      });
+      
+      // Subscribe to order status changes
+      const orderStatusSubscription = eventService.subscribe(EVENT_TYPES.ORDER_STATUS_CHANGED, (data: { id: number, status: string, previous_status: string }) => {
+        console.log(`[AdminDashboard] WebSocket: Order ${data.id} status changed from ${data.previous_status} to ${data.status}`);
+      });
+      
+      // Subscribe to low stock alerts
+      const lowStockSubscription = eventService.subscribe(EVENT_TYPES.INVENTORY_LOW_STOCK, (item: MenuItem) => {
+        console.log(`[AdminDashboard] WebSocket: Low stock alert for ${item.name}`);
+        
+        // Display low stock notification
+        const availableQty = calculateAvailableQuantity(item);
+        const acknowledgedQty = acknowledgedLowStockItems[item.id];
+        
+        // Show notification if:
+        // 1. Item has never been acknowledged, or
+        // 2. Current quantity is lower than when it was last acknowledged
+        if (acknowledgedQty === undefined || availableQty < acknowledgedQty) {
+          displayLowStockNotification(item);
+        }
+      });
+    }
     
-    // Function to stop polling
-    const stopPolling = () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-      }
-    };
-    
-    // Start polling immediately
-    startPolling();
-    
-    // Set up visibility change detection to pause polling when tab is not visible
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        // When becoming visible again, check immediately then start polling
-        checkForNewOrders().catch(console.error);
-        startPolling();
-      }
-    };
-    
-    // Add visibility change listener
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Clean up on component unmount
+    // Clean up subscription on unmount
     return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      eventService.unsubscribe();
     };
-  }, [user, lastOrderId, activeTab]);
+  }, [user, currentRestaurantId, lastOrderId, acknowledgedLowStockItems]);
 
   return (
     <div className="min-h-screen bg-gray-50 relative">

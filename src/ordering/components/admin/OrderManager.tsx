@@ -1,6 +1,6 @@
 // src/ordering/components/admin/OrderManager.tsx
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 import { AdminEditOrderModal } from './AdminEditOrderModal';
@@ -17,6 +17,7 @@ import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
 import toast from 'react-hot-toast';
+import { eventService, EVENT_TYPES } from '../../services/eventService';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded' | 'partially_refunded';
 
@@ -86,8 +87,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 10;
 
-  // Auto-refresh interval in ms
-  const POLLING_INTERVAL = 30000; // 30 seconds
+  // No longer need polling interval as we're using WebSockets
 
   // Are we in the middle of refreshing data (quietly)?
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -106,79 +106,82 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [batchOrdersToCancel, setBatchOrdersToCancel] = useState<any[]>([]);
   const [isBatchCancel, setIsBatchCancel] = useState(false);
 
+  // Use a ref to track current order IDs to avoid dependency on orders state
+  const currentOrderIdsRef = useRef(new Set<string>());
+  
+  // Update the ref when orders change
+  useEffect(() => {
+    currentOrderIdsRef.current = new Set(orders.map((o) => o.id));
+  }, [orders]);
+
   // ----------------------------------
-  // Fetch orders on mount + Setup Polling
+  // Fetch orders on mount + Setup WebSocket
   // ----------------------------------
   useEffect(() => {
-    // 1) Initial fetch with full loading state
+    // Initial fetch with full loading state
     fetchOrders();
 
-    // 2) Track current order IDs to detect new ones
-    const currentOrderIds = new Set(orders.map((o) => o.id));
-    let pollingInterval: number | null = null;
-
-    // Start polling function
-    const startPolling = () => {
-      if (pollingInterval) clearInterval(pollingInterval);
-      pollingInterval = window.setInterval(() => {
-        fetchOrdersQuietly().then(() => {
-          const storeOrders = useOrderStore.getState().orders;
-          const newOrderIds = storeOrders
-            .filter((o) => !currentOrderIds.has(o.id))
-            .map((o) => o.id);
-
-          if (newOrderIds.length > 0) {
-            // Mark them as new
+    // Set up WebSocket connection if we have a restaurant ID
+    if (restaurantId) {
+      console.log('[OrderManager] Setting up WebSocket connection for restaurant:', restaurantId);
+      
+      // Subscribe to restaurant events
+      eventService.subscribeToRestaurant(restaurantId);
+      
+      // Subscribe to new orders
+      const orderCreatedSubscription = eventService.subscribe(EVENT_TYPES.ORDER_CREATED, (order: any) => {
+        console.log('[OrderManager] WebSocket: New order received:', order.id);
+        
+        // Only process if this is a new order we don't already know about
+        if (!currentOrderIdsRef.current.has(order.id)) {
+          // Mark as new (highlighted)
+          setNewOrders((prev) => {
+            const updated = new Set(prev);
+            updated.add(order.id);
+            return updated;
+          });
+          
+          // Clear highlight after 30s
+          setTimeout(() => {
             setNewOrders((prev) => {
               const updated = new Set(prev);
-              newOrderIds.forEach((id) => updated.add(id));
+              updated.delete(order.id);
               return updated;
             });
-
-            // Update the known IDs
-            newOrderIds.forEach((id) => currentOrderIds.add(id));
-
-            // Clear highlight after 30s
-            setTimeout(() => {
-              setNewOrders((prev) => {
-                const updated = new Set(prev);
-                newOrderIds.forEach((id) => updated.delete(id));
-                return updated;
-              });
-            }, 30000);
-          }
-        });
-      }, POLLING_INTERVAL);
-    };
-
-    // Stop polling function
-    const stopPolling = () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-      }
-    };
-
-    // Start polling now
-    startPolling();
-
-    // Pause polling if the tab is hidden
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        // Refresh once, then start again
+          }, 30000);
+          
+          // Refresh orders quietly to get the new order
+          fetchOrdersQuietly();
+        }
+      });
+      
+      // Subscribe to order updates
+      const orderUpdatedSubscription = eventService.subscribe(EVENT_TYPES.ORDER_UPDATED, (order: any) => {
+        console.log(`[OrderManager] WebSocket: Order ${order.id} updated`);
+        
+        // Refresh orders quietly to get the updated order
         fetchOrdersQuietly();
-        startPolling();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchOrders, fetchOrdersQuietly]);
+      });
+      
+      // Subscribe to order status changes
+      const orderStatusSubscription = eventService.subscribe(EVENT_TYPES.ORDER_STATUS_CHANGED, (data: any) => {
+        console.log(`[OrderManager] WebSocket: Order ${data.id} status changed from ${data.previous_status} to ${data.status}`);
+        
+        // Refresh orders quietly to get the updated status
+        fetchOrdersQuietly();
+      });
+      
+      // Clean up on unmount
+      return () => {
+        orderCreatedSubscription.unsubscribe();
+        orderUpdatedSubscription.unsubscribe();
+        orderStatusSubscription.unsubscribe();
+        eventService.unsubscribe();
+      };
+    }
+    
+    return undefined;
+  }, [fetchOrders, fetchOrdersQuietly, restaurantId]); // Removed orders from dependencies
 
   // ----------------------------------
   // Collapsible / Multi-select logic

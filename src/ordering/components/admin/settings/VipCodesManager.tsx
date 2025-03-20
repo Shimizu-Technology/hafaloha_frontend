@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
+import { eventService, EVENT_TYPES } from '../../../services/eventService';
 import { 
   getVipCodes, 
   generateIndividualCodes, 
@@ -116,29 +117,42 @@ export const VipCodesManager: React.FC = () => {
     await fetchVipCodes(false);
   };
   
-  // Function to poll for VIP code updates
-  const pollForVipCodeUpdates = () => {
-    // Poll every 3 seconds for 30 seconds (10 times)
-    let pollCount = 0;
-    const maxPolls = 10;
+  // Function to set up WebSocket subscription for VIP code updates
+  const setupWebSocketForVipCodeUpdates = () => {
+    if (!restaurant?.id) return;
     
-    const pollInterval = setInterval(async () => {
-      await refreshVipCodesSilently();
-      pollCount++;
-      
-      if (pollCount >= maxPolls) {
-        clearInterval(pollInterval);
-      }
-    }, 3000);
+    // Subscribe to restaurant events
+    eventService.subscribeToRestaurant(String(restaurant.id));
     
-    // Clear the interval when the component unmounts
-    return () => clearInterval(pollInterval);
+    // Subscribe to VIP code events
+    const vipCodeCreatedSubscription = eventService.subscribe('vip_code.created', () => {
+      console.log('[VipCodesManager] WebSocket: VIP code created');
+      refreshVipCodesSilently();
+    });
+    
+    const vipCodeUpdatedSubscription = eventService.subscribe('vip_code.updated', () => {
+      console.log('[VipCodesManager] WebSocket: VIP code updated');
+      refreshVipCodesSilently();
+    });
+    
+    // Clean up subscription on unmount
+    return () => {
+      vipCodeCreatedSubscription.unsubscribe();
+      vipCodeUpdatedSubscription.unsubscribe();
+      eventService.unsubscribe();
+    };
   };
   
-  // Fetch all VIP codes (including archived) on initial load
+  // Fetch all VIP codes and set up WebSocket subscription on initial load
   useEffect(() => {
     if (restaurant?.id) {
       fetchVipCodes();
+      
+      // Set up WebSocket subscription
+      const cleanup = setupWebSocketForVipCodeUpdates();
+      
+      // Clean up subscription on unmount
+      return cleanup;
     }
   }, [restaurant?.id]);
   
@@ -310,8 +324,8 @@ export const VipCodesManager: React.FC = () => {
       // Refresh the codes list silently to ensure we have the latest data without showing loading indicators
       await refreshVipCodesSilently();
       
-      // Start polling for updates
-      pollForVipCodeUpdates();
+      // Set up WebSocket subscription for updates
+      setupWebSocketForVipCodeUpdates();
     } catch (error) {
       console.error('Error generating VIP codes:', error);
       toast.error('Failed to generate VIP codes');

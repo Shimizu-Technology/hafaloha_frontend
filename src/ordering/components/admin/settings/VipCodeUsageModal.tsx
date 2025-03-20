@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { X, ShoppingBag, User, Calendar, DollarSign } from 'lucide-react';
 import { getCodeUsage } from '../../../../shared/api/endpoints/vipCodes';
-import { LoadingSpinner } from '../../../../shared/components/ui/LoadingSpinner';
+import { LoadingSpinner } from '../../../../shared/components/ui';
 
 interface VipCodeUsageModalProps {
   codeId: number;

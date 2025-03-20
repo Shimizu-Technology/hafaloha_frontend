@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRestaurantStore } from '../../store/restaurantStore';
+import { eventService, EVENT_TYPES } from '../../../ordering/services/eventService';
 
 interface RestaurantProviderProps {
   children: React.ReactNode;
@@ -14,14 +15,24 @@ export function RestaurantProvider({ children }: RestaurantProviderProps) {
     // Always fetch restaurant data to ensure it's up to date
     fetchRestaurant();
     
-    // Set up an interval to refresh restaurant data every 30 seconds
+    // Set up WebSocket subscription for restaurant updates
     // This ensures that any changes made in the admin panel are reflected throughout the app
-    const intervalId = setInterval(() => {
-      fetchRestaurant();
-    }, 30000);
+    const restaurantId = '1'; // Assuming the first restaurant (ID 1) is the main restaurant
     
-    // Clean up the interval when the component unmounts
-    return () => clearInterval(intervalId);
+    // Subscribe to restaurant events
+    eventService.subscribeToRestaurant(restaurantId);
+    
+    // Subscribe to restaurant updates
+    const restaurantUpdatedSubscription = eventService.subscribe(EVENT_TYPES.RESTAURANT_UPDATED, () => {
+      console.log('[RestaurantProvider] WebSocket: Restaurant updated');
+      fetchRestaurant();
+    });
+    
+    // Clean up the subscription when the component unmounts
+    return () => {
+      restaurantUpdatedSubscription.unsubscribe();
+      eventService.unsubscribe();
+    };
   }, [fetchRestaurant]);
   
   return <>{children}</>;

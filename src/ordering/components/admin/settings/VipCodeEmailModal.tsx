@@ -7,7 +7,7 @@ import {
   sendExistingVipCodes
 } from '../../../../shared/api/endpoints/vipCodes';
 import {
-  getVipCodes
+  getVipCodes as getEventVipCodes
 } from '../../../../shared/api/endpoints/specialEvents';
 
 interface VipAccessCode {
@@ -78,7 +78,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
     setFetchingCodes(true);
     try {
       console.log('Fetching VIP codes for event:', restaurant.current_event_id);
-      const codes = await getVipCodes(restaurant.current_event_id);
+      const codes = await getEventVipCodes(restaurant.current_event_id);
       console.log('Fetched codes:', codes.length);
       
       // Only show active codes

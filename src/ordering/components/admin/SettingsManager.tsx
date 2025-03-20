@@ -1,7 +1,7 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense, useEffect } from 'react';
-import { Store, List, Users, CreditCard, Book, Lock } from 'lucide-react';
+import { Store, List, Users, CreditCard, Book, Lock, Webhook } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
@@ -11,8 +11,9 @@ const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module 
 const PaymentSettings = lazy(() => import('./settings/PaymentSettings').then(module => ({ default: module.PaymentSettings })));
 const VipModeToggle = lazy(() => import('./settings/VipModeToggle').then(module => ({ default: module.VipModeToggle })));
 const VipCodesManager = lazy(() => import('./settings/VipCodesManager').then(module => ({ default: module.VipCodesManager })));
+const WebhookSettings = lazy(() => import('./settings/WebhookSettings'));
 
-type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments' | 'vip-access';
+type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments' | 'vip-access' | 'webhooks';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -21,7 +22,7 @@ interface SettingsManagerProps {
 export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => {
     const stored = localStorage.getItem('adminSettingsTab');
-    if (stored && ['restaurant', 'categories', 'menus', 'users', 'payments', 'vip-access'].includes(stored)) {
+    if (stored && ['restaurant', 'categories', 'menus', 'users', 'payments', 'vip-access', 'webhooks'].includes(stored)) {
       return stored as SettingsTab;
     }
     return 'restaurant';
@@ -39,6 +40,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'users', label: 'Users', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'vip-access', label: 'VIP Access', icon: Lock },
+    { id: 'webhooks', label: 'Webhooks', icon: Webhook },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -82,6 +84,12 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
           <div className="space-y-6">
             <VipModeToggle className="mb-6" />
             <VipCodesManager />
+          </div>
+        );
+      case 'webhooks':
+        return (
+          <div>
+            <WebhookSettings restaurantId={restaurantId} />
           </div>
         );
       default:
