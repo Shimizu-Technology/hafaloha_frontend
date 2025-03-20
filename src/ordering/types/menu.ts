@@ -92,6 +92,9 @@ export interface MenuItem {
   low_stock_threshold?: number;
   available_quantity?: number; // Computed: stock_quantity - damaged_quantity
   
+  // Visibility status
+  hidden?: boolean;
+  
   // Customizations for order items
   customizations?: Record<string, string[]> | any;
   

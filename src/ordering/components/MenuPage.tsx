@@ -23,9 +23,12 @@ export function MenuPage() {
     fetchCategories();
   }, [fetchMenuItems, fetchCategories]);
 
-  // Combine filters: category, featured, seasonal, day-specific availability
+  // Combine filters: category, featured, seasonal, day-specific availability, and hidden status
   const filteredItems = useMemo(() => {
     let list = menuItems;
+
+    // Filter out hidden items for customer-facing menu
+    list = list.filter((item) => !item.hidden);
 
     // If a category is selected, filter by that
     if (selectedCategoryId) {

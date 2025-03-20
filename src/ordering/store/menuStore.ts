@@ -32,6 +32,11 @@ interface MenuState {
   updateMenuItem: (id: number | string, data: any) => Promise<MenuItem | null>;
   deleteMenuItem: (id: number | string) => Promise<boolean>;
   
+  // Visibility actions
+  hideMenuItem: (id: number | string) => Promise<MenuItem | null>;
+  showMenuItem: (id: number | string) => Promise<MenuItem | null>;
+  toggleMenuItemVisibility: (id: number | string) => Promise<MenuItem | null>;
+  
   // Inventory polling actions
   startInventoryPolling: (menuItemId?: number | string) => void;
   stopInventoryPolling: () => void;
@@ -351,6 +356,68 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       set({ error: errorMessage, loading: false });
       return false;
     }
+  },
+  
+  // Visibility actions
+  hideMenuItem: async (id: number | string) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.patch(`/menu_items/${id}`, {
+        menu_item: { hidden: true }
+      });
+      
+      const updatedItem = {
+        ...response.data,
+        image: response.data.image_url || '/placeholder-food.jpg'
+      };
+      
+      set(state => ({
+        menuItems: state.menuItems.map(item => 
+          String(item.id) === String(id) ? updatedItem : item
+        ),
+        loading: false
+      }));
+      
+      return updatedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+  
+  showMenuItem: async (id: number | string) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.patch(`/menu_items/${id}`, {
+        menu_item: { hidden: false }
+      });
+      
+      const updatedItem = {
+        ...response.data,
+        image: response.data.image_url || '/placeholder-food.jpg'
+      };
+      
+      set(state => ({
+        menuItems: state.menuItems.map(item => 
+          String(item.id) === String(id) ? updatedItem : item
+        ),
+        loading: false
+      }));
+      
+      return updatedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+  
+  toggleMenuItemVisibility: async (id: number | string) => {
+    const item = get().menuItems.find(item => String(item.id) === String(id));
+    if (!item) return null;
+    
+    return item.hidden ? get().showMenuItem(id) : get().hideMenuItem(id);
   },
   
   // Get a single menu item by ID

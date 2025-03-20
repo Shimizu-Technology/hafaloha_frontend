@@ -1,7 +1,7 @@
 // src/ordering/components/admin/MenuManager.tsx
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, X, Save, BookOpen, Package } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, BookOpen, Package, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
@@ -132,6 +132,9 @@ export function MenuManager({
   // Additional filter checkboxes
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
   const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
+  
+  // Visibility filter - default to showing active (non-hidden) items
+  const [visibilityFilter, setVisibilityFilter] = useState<'active' | 'hidden' | 'all'>('active');
 
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -215,6 +218,15 @@ export function MenuManager({
     if (selectedCategory) {
       list = list.filter(item => item.category_ids?.includes(selectedCategory));
     }
+    
+    // Apply visibility filter
+    if (visibilityFilter === 'active') {
+      list = list.filter(item => !item.hidden);
+    } else if (visibilityFilter === 'hidden') {
+      list = list.filter(item => item.hidden);
+    }
+    // 'all' shows everything, so no filtering needed
+    
     if (showFeaturedOnly) {
       list = list.filter(item => item.featured);
     }
@@ -226,6 +238,7 @@ export function MenuManager({
     menuItems,
     selectedMenuId,
     selectedCategory,
+    visibilityFilter,
     showFeaturedOnly,
     showSeasonalOnly
   ]);
@@ -815,6 +828,27 @@ export function MenuManager({
         </div>
       )}
 
+      {/* Visibility Filter Tabs */}
+      <div className="mb-4">
+        <div className="inline-flex rounded-lg p-1 bg-gray-100 mb-4">
+          <button 
+            className={`px-4 py-2 rounded-md ${visibilityFilter === 'active' ? 'bg-white shadow-sm' : ''}`}
+            onClick={() => setVisibilityFilter('active')}>
+            Active Items
+          </button>
+          <button 
+            className={`px-4 py-2 rounded-md ${visibilityFilter === 'hidden' ? 'bg-white shadow-sm' : ''}`}
+            onClick={() => setVisibilityFilter('hidden')}>
+            Hidden Items
+          </button>
+          <button 
+            className={`px-4 py-2 rounded-md ${visibilityFilter === 'all' ? 'bg-white shadow-sm' : ''}`}
+            onClick={() => setVisibilityFilter('all')}>
+            All Items
+          </button>
+        </div>
+      </div>
+
       {/* Additional Filters (Featured / Seasonal) */}
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <label className="inline-flex items-center space-x-2">
@@ -882,6 +916,10 @@ export function MenuManager({
 
                     <div className="mt-2 flex flex-wrap">
                       {/* Badges for stock/featured/seasonal/etc. */}
+                      {/* Hidden badge */}
+                      {item.hidden && (
+                        <Badge bgColor="bg-gray-800">Hidden</Badge>
+                      )}
                       {/* 1) If item is "out_of_stock" but not tracking, show "Out of Stock" */}
                       {item.stock_status === 'out_of_stock' && !item.enable_stock_tracking && (
                         <Badge bgColor="bg-gray-600">Out of Stock</Badge>
@@ -959,6 +997,19 @@ export function MenuManager({
                         title="Manage Inventory"
                       >
                         <Package className="h-4 w-4 sm:h-5 sm:w-5" />
+                      </button>
+
+                      {/* Toggle Visibility */}
+                      <button
+                        onClick={() => {
+                          const { toggleMenuItemVisibility } = useMenuStore.getState();
+                          toggleMenuItemVisibility(item.id);
+                          toast.success(item.hidden ? 'Item is now visible on menu' : 'Item hidden from menu');
+                        }}
+                        className={`p-2 ${item.hidden ? 'text-gray-400 hover:text-blue-600' : 'text-blue-600 hover:text-blue-800'}`}
+                        title={item.hidden ? "Show on menu" : "Hide from menu"}
+                      >
+                        {item.hidden ? <EyeOff className="h-4 w-4 sm:h-5 sm:w-5" /> : <Eye className="h-4 w-4 sm:h-5 sm:w-5" />}
                       </button>
 
                       {/* Delete Item */}
