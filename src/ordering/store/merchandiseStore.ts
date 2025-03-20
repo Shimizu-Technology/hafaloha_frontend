@@ -1,493 +1,354 @@
+// src/ordering/store/merchandiseStore.ts
 import { create } from 'zustand';
-import { api } from '../lib/api';
+import { handleApiError } from '../../shared/utils/errorHandler';
+import { MerchandiseItem, MerchandiseVariant } from '../types/merchandise';
+import { apiClient } from '../../shared/api/apiClient';
+import { merchandiseItemsApi } from '../../shared/api/endpoints/merchandiseItems';
 
-export interface MerchandiseVariant {
-  id: number;
-  merchandise_item_id: number;
-  size: string;
-  color: string;
-  price_adjustment: number;
-  stock_quantity: number;
-  sku?: string;
-  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock';
-  low_stock_threshold?: number;
-  created_at?: string;
-  updated_at?: string;
-  stock_history?: StockHistoryEntry[];
-}
-
-export interface StockHistoryEntry {
-  id: number;
-  merchandise_variant_id: number;
-  previous_quantity: number;
-  new_quantity: number;
-  change_reason: string;
-  user_id: number;
-  user_name: string;
-  change_type: 'manual' | 'order' | 'return' | 'adjustment';
-  created_at: string;
-}
-
-export interface Category {
-  id: number;
-  name: string;
-  description?: string;
-  merchandise_collection_id: number;
-}
-
-export interface MerchandiseItem {
-  id: number;
-  name: string;
-  description: string;
-  base_price: number;
-  image_url: string;
-  second_image_url?: string; // For simplified model - front/back image approach
-  additional_images?: string[]; // Array of additional images (front, back, etc.) - legacy support
-  stock_status: 'in_stock' | 'low_stock' | 'out_of_stock';
-  merchandise_collection_id: number;
-  category_id?: number; // Added for category filtering
-  variants?: MerchandiseVariant[];
-  collection_name?: string; // Added for "All Items" view
-  created_at?: string;
-  updated_at?: string;
-  low_stock_threshold?: number; // Added for stock management
-  quantity?: number; // Used when adding to cart
-}
-
-export interface MerchandiseCollection {
-  id: number;
-  name: string;
-  description: string;
-  restaurant_id: number;
-  active: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
-
-interface MerchandiseStore {
-  collections: MerchandiseCollection[];
+interface MerchandiseState {
   merchandiseItems: MerchandiseItem[];
-  categories: Category[];
-  variants: MerchandiseVariant[];
+  categories: { id: number; name: string; description?: string }[];
+  collections: { id: number; name: string; active: boolean }[];
+  currentCollectionId: number | null;
   loading: boolean;
   error: string | null;
-
-  // Collection operations
-  fetchCollections: () => Promise<void>;
-  createCollection: (name: string, description: string, restaurantId: number) => Promise<MerchandiseCollection>;
-  updateCollection: (id: number, data: Partial<MerchandiseCollection>) => Promise<void>;
-  deleteCollection: (id: number) => Promise<void>;
-  setActiveCollection: (id: number) => Promise<void>;
-
-  // Category operations
-  fetchCategories: () => Promise<void>;
   
-  // Merchandise item operations
-  fetchMerchandiseItems: (params: { collection_id?: number, include_collection_names?: boolean }) => Promise<void>;
-  addMerchandiseItem: (item: Omit<MerchandiseItem, 'id'>) => Promise<MerchandiseItem>;
-  updateMerchandiseItem: (id: number, data: Partial<MerchandiseItem>) => Promise<void>;
-  deleteMerchandiseItem: (id: number) => Promise<void>;
-
-  // Variant operations
-  fetchVariants: (params: { include_stock_data?: boolean }) => Promise<void>;
-  fetchVariantHistory: (variantId: number) => Promise<void>;
-  addMerchandiseVariant: (variant: Omit<MerchandiseVariant, 'id'>) => Promise<MerchandiseVariant>;
-  updateVariant: (id: number, data: { stock_quantity?: number, adjustment_reason?: string, [key: string]: any }) => Promise<void>;
-  deleteMerchandiseVariant: (id: number) => Promise<void>;
-  batchCreateVariants: (itemId: number, variants: Omit<MerchandiseVariant, 'id' | 'merchandise_item_id'>[]) => Promise<MerchandiseVariant[]>;
+  // Inventory polling state
+  inventoryPolling: boolean;
+  inventoryPollingInterval: number | null;
+  
+  // Actions
+  fetchMerchandiseItems: () => Promise<void>;
+  fetchAllMerchandiseItemsForAdmin: () => Promise<void>;
+  fetchCategories: () => Promise<void>;
+  fetchCollections: () => Promise<void>;
+  addMerchandiseItem: (data: any) => Promise<MerchandiseItem | null>;
+  updateMerchandiseItem: (id: number | string, data: any) => Promise<MerchandiseItem | null>;
+  deleteMerchandiseItem: (id: number | string) => Promise<boolean>;
+  
+  // Visibility actions
+  hideMerchandiseItem: (id: number | string) => Promise<MerchandiseItem | null>;
+  showMerchandiseItem: (id: number | string) => Promise<MerchandiseItem | null>;
+  toggleMerchandiseItemVisibility: (id: number | string) => Promise<MerchandiseItem | null>;
+  
+  // Inventory polling actions
+  startInventoryPolling: (itemId?: number | string) => void;
+  stopInventoryPolling: () => void;
+  
+  // Get individual merchandise item with fresh data
+  getMerchandiseItemById: (id: number | string) => Promise<MerchandiseItem | null>;
+  
+  // Variant management
+  getVariants: (itemId: number | string) => Promise<MerchandiseVariant[]>;
+  updateVariantStock: (itemId: number | string, variantId: number | string, quantity: number, reason: string) => Promise<MerchandiseVariant | null>;
 }
 
-export const useMerchandiseStore = create<MerchandiseStore>((set, get) => ({
-  collections: [],
+export const useMerchandiseStore = create<MerchandiseState>((set, get) => ({
   merchandiseItems: [],
   categories: [],
-  variants: [],
+  collections: [],
+  currentCollectionId: null,
   loading: false,
   error: null,
+  
+  // Inventory polling state
+  inventoryPolling: false,
+  inventoryPollingInterval: null,
 
-  // Collection operations
-  fetchCollections: async () => {
+  fetchMerchandiseItems: async () => {
     set({ loading: true, error: null });
     try {
-      const collections = await api.get<MerchandiseCollection[]>('/merchandise_collections');
-      set({ collections, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error fetching collections:', err);
-    }
-  },
-
-  createCollection: async (name, description, restaurantId) => {
-    set({ loading: true, error: null });
-    try {
-      const payload = {
-        merchandise_collection: {
-          name,
-          description,
-          restaurant_id: restaurantId
-        }
-      };
-      const newCollection = await api.post<MerchandiseCollection>('/merchandise_collections', payload);
-      set((state) => ({
-        collections: [...state.collections, newCollection],
-        loading: false
-      }));
-      return newCollection;
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error creating collection:', err);
-      throw err;
-    }
-  },
-
-  updateCollection: async (id, data) => {
-    set({ loading: true, error: null });
-    try {
-      const payload = {
-        merchandise_collection: data
-      };
-      const updatedCollection = await api.patch<MerchandiseCollection>(`/merchandise_collections/${id}`, payload);
-      set((state) => ({
-        collections: state.collections.map(c => c.id === id ? updatedCollection : c),
-        loading: false
-      }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error updating collection:', err);
-      throw err;
-    }
-  },
-
-  deleteCollection: async (id) => {
-    set({ loading: true, error: null });
-    try {
-      await api.delete(`/merchandise_collections/${id}`);
-      set((state) => ({
-        collections: state.collections.filter(c => c.id !== id),
-        // If we're deleting a collection, also remove its items from the state
-        merchandiseItems: state.merchandiseItems.filter(item => item.merchandise_collection_id !== id),
-        loading: false
-      }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error deleting collection:', err);
-      throw err;
-    }
-  },
-
-  setActiveCollection: async (id) => {
-    set({ loading: true, error: null });
-    try {
-      await api.post(`/merchandise_collections/${id}/set_active`);
+      // Use the merchandiseItemsApi to get items with stock information
+      const items = await merchandiseItemsApi.getAll({ include_stock: true });
       
-      // Update local state to reflect the change
-      set((state) => ({
-        collections: state.collections.map(c => ({
-          ...c,
-          active: c.id === id
-        })),
-        loading: false
+      // Process the items to ensure image property is set
+      const processedItems = items.map((item: any) => ({
+        ...item,
+        // Ensure the image property is set for compatibility
+        image: item.image_url || '/placeholder-merchandise.jpg'
       }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error setting active collection:', err);
-      throw err;
-    }
-  },
-
-  // Merchandise item operations
-  fetchMerchandiseItems: async (params) => {
-    set({ loading: true, error: null });
-    try {
-      const queryParams = new URLSearchParams();
-      if (params.collection_id) {
-        queryParams.append('collection_id', params.collection_id.toString());
-      }
-      if (params.include_collection_names) {
-        queryParams.append('include_collection_names', 'true');
-      }
       
-      const url = `/merchandise_items?${queryParams.toString()}`;
-      const items = await api.get<MerchandiseItem[]>(url);
-      set({ merchandiseItems: items, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error fetching merchandise items:', err);
+      set({ merchandiseItems: processedItems, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
     }
   },
 
-  addMerchandiseItem: async (item) => {
+  fetchAllMerchandiseItemsForAdmin: async () => {
     set({ loading: true, error: null });
     try {
-      const payload = {
-        merchandise_item: item
-      };
-      const newItem = await api.post<MerchandiseItem>('/merchandise_items', payload);
-      set((state) => ({
-        merchandiseItems: [...state.merchandiseItems, newItem],
-        loading: false
-      }));
-      return newItem;
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error adding merchandise item:', err);
-      throw err;
-    }
-  },
-
-  updateMerchandiseItem: async (id, data) => {
-    set({ loading: true, error: null });
-    try {
-      const payload = {
-        merchandise_item: data
-      };
-      const updatedItem = await api.patch<MerchandiseItem>(`/merchandise_items/${id}`, payload);
-      set((state) => ({
-        merchandiseItems: state.merchandiseItems.map(item => 
-          item.id === id ? updatedItem : item
-        ),
-        loading: false
-      }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error updating merchandise item:', err);
-      throw err;
-    }
-  },
-
-  deleteMerchandiseItem: async (id) => {
-    set({ loading: true, error: null });
-    try {
-      await api.delete(`/merchandise_items/${id}`);
-      set((state) => ({
-        merchandiseItems: state.merchandiseItems.filter(item => item.id !== id),
-        loading: false
-      }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error deleting merchandise item:', err);
-      throw err;
-    }
-  },
-
-  // Variant operations
-  addMerchandiseVariant: async (variant) => {
-    set({ loading: true, error: null });
-    try {
-      const payload = {
-        merchandise_variant: variant
-      };
-      const newVariant = await api.post<MerchandiseVariant>('/merchandise_variants', payload);
-      
-      // Update the item with the new variant
-      set((state) => {
-        const updatedItems = state.merchandiseItems.map(item => {
-          if (item.id === variant.merchandise_item_id) {
-            return {
-              ...item,
-              variants: [...(item.variants || []), newVariant]
-            };
-          }
-          return item;
-        });
-        
-        return {
-          merchandiseItems: updatedItems,
-          loading: false
-        };
+      // Use the merchandiseItemsApi to get all items with stock information
+      const items = await merchandiseItemsApi.getAll({ 
+        admin: true, 
+        show_all: true,
+        include_stock: true 
       });
       
-      return newVariant;
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error adding variant:', err);
-      throw err;
+      // Process the items to ensure image property is set
+      const processedItems = items.map((item: any) => ({
+        ...item,
+        // Ensure the image property is set for compatibility
+        image: item.image_url || '/placeholder-merchandise.jpg'
+      }));
+      
+      set({ merchandiseItems: processedItems, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
     }
   },
 
-  // Category operations
   fetchCategories: async () => {
     set({ loading: true, error: null });
     try {
-      const categories = await api.get<Category[]>('/merchandise_categories');
-      set({ categories, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error fetching categories:', err);
+      const response = await apiClient.get('/categories');
+      set({ categories: response.data, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
     }
   },
 
-  // Variant operations with stock management
-  fetchVariants: async (params: { include_stock_data?: boolean }) => {
+  fetchCollections: async () => {
     set({ loading: true, error: null });
     try {
-      const queryParams = new URLSearchParams();
-      if (params.include_stock_data) {
-        queryParams.append('include_stock_data', 'true');
+      const response = await apiClient.get('/merchandise_collections');
+      const collections = response.data;
+      
+      // Find the current collection (if any)
+      const currentCollection = collections.find((c: any) => c.active);
+      const currentCollectionId = currentCollection ? currentCollection.id : null;
+      
+      set({ collections, currentCollectionId, loading: false });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+    }
+  },
+
+  addMerchandiseItem: async (data: any) => {
+    set({ loading: true, error: null });
+    try {
+      const newItem = await merchandiseItemsApi.create(data);
+      
+      // Add image property for compatibility
+      const processedItem = {
+        ...newItem,
+        image: newItem.image_url || '/placeholder-merchandise.jpg'
+      };
+      
+      set(state => ({
+        merchandiseItems: [...state.merchandiseItems, processedItem],
+        loading: false
+      }));
+      
+      return processedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+
+  updateMerchandiseItem: async (id: number | string, data: any) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedItem = await merchandiseItemsApi.update(id, data);
+      
+      // Add image property for compatibility
+      const processedItem = {
+        ...updatedItem,
+        image: updatedItem.image_url || '/placeholder-merchandise.jpg'
+      };
+      
+      set(state => ({
+        merchandiseItems: state.merchandiseItems.map(item => 
+          String(item.id) === String(id) ? processedItem : item
+        ),
+        loading: false
+      }));
+      
+      return processedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+
+  deleteMerchandiseItem: async (id: number | string) => {
+    set({ loading: true, error: null });
+    try {
+      await merchandiseItemsApi.delete(id);
+      
+      set(state => ({
+        merchandiseItems: state.merchandiseItems.filter(item => String(item.id) !== String(id)),
+        loading: false
+      }));
+      
+      return true;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return false;
+    }
+  },
+  
+  // Visibility actions
+  hideMerchandiseItem: async (id: number | string) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedItem = await merchandiseItemsApi.update(id, { hidden: true });
+      
+      // Add image property for compatibility
+      const processedItem = {
+        ...updatedItem,
+        image: updatedItem.image_url || '/placeholder-merchandise.jpg'
+      };
+      
+      set(state => ({
+        merchandiseItems: state.merchandiseItems.map(item => 
+          String(item.id) === String(id) ? processedItem : item
+        ),
+        loading: false
+      }));
+      
+      return processedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+  
+  showMerchandiseItem: async (id: number | string) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedItem = await merchandiseItemsApi.update(id, { hidden: false });
+      
+      // Add image property for compatibility
+      const processedItem = {
+        ...updatedItem,
+        image: updatedItem.image_url || '/placeholder-merchandise.jpg'
+      };
+      
+      set(state => ({
+        merchandiseItems: state.merchandiseItems.map(item => 
+          String(item.id) === String(id) ? processedItem : item
+        ),
+        loading: false
+      }));
+      
+      return processedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+  
+  toggleMerchandiseItemVisibility: async (id: number | string) => {
+    const item = get().merchandiseItems.find(item => String(item.id) === String(id));
+    if (!item) return null;
+    
+    return item.hidden ? get().showMerchandiseItem(id) : get().hideMerchandiseItem(id);
+  },
+  
+  // Get a single merchandise item by ID
+  getMerchandiseItemById: async (id: number | string) => {
+    try {
+      const item = await merchandiseItemsApi.getById(id);
+      
+      // Add image property for compatibility
+      const processedItem = {
+        ...item,
+        image: item.image_url || '/placeholder-merchandise.jpg'
+      };
+      
+      // Update this item in the store
+      set(state => ({
+        merchandiseItems: state.merchandiseItems.map(existingItem => 
+          String(existingItem.id) === String(id) 
+            ? processedItem
+            : existingItem
+        )
+      }));
+      
+      return processedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage });
+      return null;
+    }
+  },
+  
+  // Get variants for a merchandise item
+  getVariants: async (itemId: number | string) => {
+    try {
+      const variants = await merchandiseItemsApi.getVariants(itemId);
+      return variants;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage });
+      return [];
+    }
+  },
+  
+  // Update a variant's stock
+  updateVariantStock: async (itemId: number | string, variantId: number | string, quantity: number, reason: string) => {
+    try {
+      const updatedVariant = await merchandiseItemsApi.updateVariantStock(
+        itemId, 
+        variantId, 
+        quantity, 
+        reason
+      );
+      
+      // Refresh the parent item to update its stock status
+      await get().getMerchandiseItemById(itemId);
+      
+      return updatedVariant;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage });
+      return null;
+    }
+  },
+  
+  // Start polling for inventory updates
+  startInventoryPolling: (itemId?: number | string) => {
+    // First stop any existing polling
+    get().stopInventoryPolling();
+    
+    // Set polling flag to true
+    set({ inventoryPolling: true });
+    
+    // Start a new polling interval
+    const intervalId = window.setInterval(async () => {
+      // If we have a specific item ID, just fetch that one
+      if (itemId) {
+        await get().getMerchandiseItemById(itemId);
+      } else {
+        // Otherwise refresh all items
+        await get().fetchAllMerchandiseItemsForAdmin();
       }
-      
-      const url = `/merchandise_variants?${queryParams.toString()}`;
-      const variants = await api.get<MerchandiseVariant[]>(url);
-      set({ variants, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error fetching variants:', err);
-    }
+    }, 10000); // Poll every 10 seconds
+    
+    // Store the interval ID so we can clear it later
+    set({ inventoryPollingInterval: intervalId });
   },
-
-  fetchVariantHistory: async (variantId: number) => {
-    set({ loading: true, error: null });
-    try {
-      const url = `/merchandise_variants/${variantId}/history`;
-      const history = await api.get<StockHistoryEntry[]>(url);
-      
-      // Update the variant with its history
-      set((state) => {
-        const updatedVariants = state.variants.map(variant => {
-          if (variant.id === variantId) {
-            return {
-              ...variant,
-              stock_history: history
-            };
-          }
-          return variant;
-        });
-        
-        return {
-          variants: updatedVariants,
-          loading: false
-        };
+  
+  // Stop polling for inventory updates
+  stopInventoryPolling: () => {
+    const { inventoryPollingInterval } = get();
+    
+    if (inventoryPollingInterval !== null) {
+      window.clearInterval(inventoryPollingInterval);
+      set({ 
+        inventoryPollingInterval: null,
+        inventoryPolling: false
       });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error fetching variant history:', err);
-    }
-  },
-
-  updateVariant: async (id: number, data: { stock_quantity?: number, adjustment_reason?: string, [key: string]: any }) => {
-    set({ loading: true, error: null });
-    try {
-      const payload = {
-        merchandise_variant: data
-      };
-      const updatedVariant = await api.patch<MerchandiseVariant>(`/merchandise_variants/${id}`, payload);
-      
-      // Update variants list
-      set((state) => {
-        const updatedVariants = state.variants.map(variant => 
-          variant.id === id ? updatedVariant : variant
-        );
-        
-        return {
-          variants: updatedVariants,
-          loading: false
-        };
-      });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error updating variant:', err);
-      throw err;
-    }
-  },
-
-  updateMerchandiseVariant: async (id: number, data: Partial<MerchandiseVariant>) => {
-    set({ loading: true, error: null });
-    try {
-      const payload = {
-        merchandise_variant: data
-      };
-      const updatedVariant = await api.patch<MerchandiseVariant>(`/merchandise_variants/${id}`, payload);
-      
-      // Update the item with the updated variant
-      set((state) => {
-        const updatedItems = state.merchandiseItems.map(item => {
-          if (item.variants) {
-            const variantIndex = item.variants.findIndex(v => v.id === id);
-            if (variantIndex !== -1) {
-              const updatedVariants = [...item.variants];
-              updatedVariants[variantIndex] = updatedVariant;
-              return {
-                ...item,
-                variants: updatedVariants
-              };
-            }
-          }
-          return item;
-        });
-        
-        return {
-          merchandiseItems: updatedItems,
-          loading: false
-        };
-      });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error updating variant:', err);
-      throw err;
-    }
-  },
-
-  deleteMerchandiseVariant: async (id) => {
-    set({ loading: true, error: null });
-    try {
-      await api.delete(`/merchandise_variants/${id}`);
-      
-      // Remove the variant from the item
-      set((state) => {
-        const updatedItems = state.merchandiseItems.map(item => {
-          if (item.variants) {
-            return {
-              ...item,
-              variants: item.variants.filter(v => v.id !== id)
-            };
-          }
-          return item;
-        });
-        
-        return {
-          merchandiseItems: updatedItems,
-          loading: false
-        };
-      });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error deleting variant:', err);
-      throw err;
-    }
-  },
-
-  batchCreateVariants: async (itemId, variants) => {
-    set({ loading: true, error: null });
-    try {
-      const payload = {
-        merchandise_item_id: itemId,
-        variants: variants
-      };
-      const newVariants = await api.post<MerchandiseVariant[]>(`/merchandise_items/${itemId}/batch_create_variants`, payload);
-      
-      // Update the item with the new variants
-      set((state) => {
-        const updatedItems = state.merchandiseItems.map(item => {
-          if (item.id === itemId) {
-            return {
-              ...item,
-              variants: [...(item.variants || []), ...newVariants]
-            };
-          }
-          return item;
-        });
-        
-        return {
-          merchandiseItems: updatedItems,
-          loading: false
-        };
-      });
-      
-      return newVariants;
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-      console.error('Error batch creating variants:', err);
-      throw err;
     }
   }
 }));

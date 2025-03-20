@@ -1,4 +1,5 @@
-import { MerchandiseItem, MerchandiseVariant } from '../store/merchandiseStore';
+// src/ordering/utils/merchandiseUtils.ts
+import { MerchandiseItem, MerchandiseVariant } from '../types/merchandise';
 import { FilterOptions, ActiveFilters } from '../components/merchandise/FilterSidebar';
 
 /**
@@ -108,11 +109,11 @@ export const filterMerchandiseItems = (
       const hasMatchingVariant = item.variants.some(variant => {
         // Check size filter
         const matchesSize = activeFilters.sizes.length === 0 || 
-          activeFilters.sizes.includes(variant.size);
+          (variant.size && activeFilters.sizes.includes(variant.size));
         
         // Check color filter
         const matchesColor = activeFilters.colors.length === 0 ||
-          activeFilters.colors.includes(variant.color);
+          (variant.color && activeFilters.colors.includes(variant.color));
         
         return matchesSize && matchesColor;
       });
@@ -135,3 +136,54 @@ export const getDefaultActiveFilters = (): ActiveFilters => ({
   priceRange: null,
   availability: []
 });
+
+/**
+ * Get a specific variant based on selected size and color
+ * 
+ * @param item The merchandise item containing variants
+ * @param selectedSize The selected size (optional)
+ * @param selectedColor The selected color (optional)
+ * @returns The matching variant or null if no match is found
+ */
+export const getSelectedVariant = (
+  item: MerchandiseItem,
+  selectedSize: string | null,
+  selectedColor: string | null
+): MerchandiseVariant | null => {
+  // If no variants exist, return null
+  if (!item.variants || item.variants.length === 0) {
+    return null;
+  }
+  
+  // If neither size nor color is selected, return null
+  if (!selectedSize && !selectedColor) {
+    return null;
+  }
+  
+  // Find a variant that matches both the selected size and color
+  const matchingVariant = item.variants.find(variant => {
+    const sizeMatches = !selectedSize || variant.size === selectedSize;
+    const colorMatches = !selectedColor || variant.color === selectedColor;
+    return sizeMatches && colorMatches;
+  });
+  
+  return matchingVariant || null;
+};
+
+/**
+ * Calculate the final price for a merchandise item with optional variant
+ * 
+ * @param item The merchandise item
+ * @param variant Optional variant that may affect the price
+ * @returns The final price including any variant adjustments
+ */
+export const calculateFinalPrice = (
+  item: MerchandiseItem,
+  variant?: MerchandiseVariant | null
+): number => {
+  if (!variant) {
+    return item.base_price;
+  }
+  
+  return item.base_price + variant.price_adjustment;
+};

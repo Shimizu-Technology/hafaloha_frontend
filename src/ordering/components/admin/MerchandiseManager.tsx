@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/ordering/components/merchandise/MerchandiseManager.tsx
+import React, { useState, useEffect, FormEvent } from 'react';
 import { useMerchandiseStore } from '../../store/merchandiseStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRestaurantStore } from '../../../shared/store/restaurantStore';
@@ -15,8 +16,10 @@ import {
   Save,
   MinusCircle,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Package
 } from 'lucide-react';
+import MerchandiseInventoryModal from './MerchandiseInventoryModal';
 import { toast } from 'react-hot-toast';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { api } from '../../../shared/api/apiClient';
@@ -25,75 +28,137 @@ interface MerchandiseManagerProps {
   restaurantId?: string;
 }
 
-// Using both default and named export to support either import style
+// Types for collection form
+interface CollectionFormData {
+  id?: number;
+  name: string;
+  description: string;
+  active: boolean;
+  image_url?: string;
+  imageFile?: File | null;
+}
+
+// Types for item form
+interface VariantFormData {
+  id?: number;
+  size: string;
+  color: string;
+  price_adjustment: number;
+}
+
+interface ItemFormData {
+  id?: number;
+  name: string;
+  description: string;
+  base_price: number;
+  image_url?: string;
+  imageFile?: File | null;
+  second_image_url?: string;
+  secondImageFile?: File | null;
+  merchandise_collection_id: number;
+  variants: VariantFormData[];
+  is_one_size: boolean;
+  color: string;
+  
+  // Inventory fields
+  enable_stock_tracking?: boolean;
+  stock_status: 'in_stock' | 'out_of_stock' | 'low_stock';
+  status_note?: string | null;
+  stock_quantity?: number;
+  damaged_quantity?: number;
+  low_stock_threshold?: number;
+  available_quantity?: number; // Computed: stock_quantity - damaged_quantity
+}
+
 const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId }) => {
   const { user } = useAuthStore();
   const { restaurant } = useRestaurantStore();
+
+  // ----- Pull store actions and data -----
   const {
+    // Collections & items
     collections,
     merchandiseItems,
     loading,
     error,
+    // Store actions
     fetchCollections,
     fetchMerchandiseItems,
-    createCollection,
-    updateCollection,
-    deleteCollection,
-    setActiveCollection,
     addMerchandiseItem,
     updateMerchandiseItem,
     deleteMerchandiseItem
   } = useMerchandiseStore();
+  
+  // API functions for collection management
+  const createCollection = async (
+    name: string, 
+    description: string, 
+    restId: number, 
+    active: boolean
+  ) => {
+    try {
+      const response = await api.post('/merchandise_collections', {
+        merchandise_collection: {
+          name,
+          description,
+          restaurant_id: restId,
+          active
+        }
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to create collection:', error);
+      throw error;
+    }
+  };
+  
+  const updateCollection = async (id: number, data: any) => {
+    try {
+      // If you are uploading images, adapt to `api.upload(...)`
+      const response = await api.patch(`/merchandise_collections/${id}`, {
+        merchandise_collection: data
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to update collection:', error);
+      throw error;
+    }
+  };
+  
+  const deleteCollection = async (id: number) => {
+    try {
+      await api.delete(`/merchandise_collections/${id}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete collection:', error);
+      throw error;
+    }
+  };
+  
+  const setActiveCollection = async (id: number) => {
+    try {
+      const response = await api.patch(`/merchandise_collections/${id}/set_active`);
+      return response;
+    } catch (error) {
+      console.error('Failed to set active collection:', error);
+      throw error;
+    }
+  };
 
-  // ----------------------------
-  // Collection form state
-  // ----------------------------
-  interface CollectionFormData {
-    id?: number;
-    name: string;
-    description: string;
-    active: boolean;
-    image_url?: string;
-    imageFile?: File | null;
-  }
-
-  // ----------------------------
-  // Item form state
-  // ----------------------------
-  interface VariantFormData {
-    id?: number;
-    size: string;
-    color: string;
-    price_adjustment: number;
-    stock_quantity: number;       // Always a number
-    manage_quantity: boolean;     // New: if false => unlimited
-  }
-
-  interface ItemFormData {
-    id?: number;
-    name: string;
-    description: string;
-    base_price: number;
-    image_url?: string;
-    imageFile?: File | null;
-    second_image_url?: string;
-    secondImageFile?: File | null;
-    merchandise_collection_id: number;
-    variants: VariantFormData[];
-    is_one_size: boolean;
-    color: string;
-  }
-
-  // ----------------------------
-  // State for UI
-  // ----------------------------
+  // ---------- State for which collection is selected ----------
   const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
+
+  // ---------- Modals & toggles ----------
   const [isAddingCollection, setIsAddingCollection] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isEditingItem, setIsEditingItem] = useState(false);
   const [showCollectionSettings, setShowCollectionSettings] = useState(false);
-  const [isEditingCollection, setIsEditingCollection] = useState(false);
 
+  // ---------- Inventory modal ----------
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [selectedItemForInventory, setSelectedItemForInventory] = useState<any>(null);
+
+  // ---------- Collection form state ----------
   const [collectionFormData, setCollectionFormData] = useState<CollectionFormData>({
     name: '',
     description: '',
@@ -102,25 +167,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     imageFile: null
   });
 
-  // Available sizes for merchandise
-  const availableSizes = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "One Size"];
-
-  // Common colors for merchandise
-  const commonColors = [
-    "Black",
-    "White",
-    "Red",
-    "Blue",
-    "Green",
-    "Yellow",
-    "Purple",
-    "Orange",
-    "Pink",
-    "Gray",
-    "Brown",
-    "Navy"
-  ];
-
+  // ---------- Item form state ----------
   const [itemFormData, setItemFormData] = useState<ItemFormData>({
     name: '',
     description: '',
@@ -132,115 +179,159 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     merchandise_collection_id: 0,
     variants: [],
     is_one_size: false,
-    color: 'Black'
+    color: 'Black',
+    stock_status: 'in_stock',
+    status_note: '',
+    enable_stock_tracking: false
   });
 
-  // Use loading overlay hook
+  // ----- Available sizes for merchandise (customize as needed) -----
+  const availableSizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', 'One Size'];
+
+  // ----- Common colors for merchandise (customize as needed) -----
+  const commonColors = [
+    'Black',
+    'White',
+    'Red',
+    'Blue',
+    'Green',
+    'Yellow',
+    'Purple',
+    'Orange',
+    'Pink',
+    'Gray',
+    'Brown',
+    'Navy'
+  ];
+
+  // ----- Loading overlay hook -----
   const { withLoading, LoadingOverlayComponent } = useLoadingOverlay();
 
-  // ----------------------------
-  // Load collections on mount
-  // ----------------------------
+  // ================================
+  //         FETCH COLLECTIONS
+  // ================================
   useEffect(() => {
     fetchCollections();
   }, [fetchCollections]);
 
-  // ----------------------------
-  // Set selected collection
-  // ----------------------------
+  // ================================
+  // AUTO-SELECT ACTIVE COLLECTION
+  // ================================
   useEffect(() => {
     if (collections.length > 0) {
-      const activeCollection = collections.find((c) => c.active) || collections[0];
-      setSelectedCollectionId(activeCollection.id);
-      fetchMerchandiseItems({ collection_id: activeCollection.id });
+      const activeCol = collections.find((c) => c.active) || collections[0];
+      setSelectedCollectionId(activeCol.id);
+      // Retrieve all items, or optionally filter by that collection
+      fetchMerchandiseItems();
     }
   }, [collections, fetchMerchandiseItems]);
 
-  // ----------------------------
-  // Add new collection modal
-  // ----------------------------
-  const handleAddCollection = () => {
-    setCollectionFormData({
-      name: '',
-      description: '',
-      active: false,
-      image_url: '',
-      imageFile: null
-    });
-    setIsAddingCollection(true);
+  // ================================
+  //   HANDLE UPDATE COLLECTION
+  // ================================
+  const handleUpdateCollection = async (collectionId: number, data: FormData) => {
+    // If your API supports uploading images, adapt accordingly
+    try {
+      const updated = await api.patch(`/merchandise_collections/${collectionId}`, data);
+      if (updated) {
+        toast.success('Collection updated successfully');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to update collection:', error);
+      toast.error('Failed to update collection');
+      throw error;
+    }
   };
 
-  // ----------------------------
-  // Add item
-  // ----------------------------
-  const handleAddItem = () => {
-    if (selectedCollectionId === null) {
-      toast.error('Please select a collection first');
+  // ================================
+  //   SUBMIT (CREATE/UPDATE) COLLECTION
+  // ================================
+  const handleCollectionSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+
+    if (!collectionFormData.name.trim()) {
+      toast.error('Collection name is required.');
       return;
     }
 
-    // Default: manage_quantity = false => unlimited
-    setItemFormData({
-      name: '',
-      description: '',
-      base_price: 0,
-      image_url: '',
-      imageFile: null,
-      second_image_url: '',
-      secondImageFile: null,
-      merchandise_collection_id: selectedCollectionId,
-      variants: [
-        {
-          size: 'M',
-          color: 'Black',
-          price_adjustment: 0,
-          manage_quantity: false,    // Unchecked => unlimited
-          stock_quantity: 999999     // 999999 if not managing
+    try {
+      await withLoading(async () => {
+        // If the user hasn't selected or created a restaurant, default to 1
+        const restId = restaurant?.id || 1;
+
+        // Create FormData for image upload
+        const formData = new FormData();
+        formData.append('merchandise_collection[name]', collectionFormData.name);
+        formData.append('merchandise_collection[description]', collectionFormData.description);
+        formData.append(
+          'merchandise_collection[active]',
+          String(collectionFormData.active)
+        );
+        formData.append('merchandise_collection[restaurant_id]', String(restId));
+
+        if (collectionFormData.imageFile) {
+          formData.append('merchandise_collection[image]', collectionFormData.imageFile);
         }
-      ],
-      is_one_size: false,
-      color: 'Black'
-    });
-    setIsAddingItem(true);
-    setIsEditingItem(false);
+
+        if (collectionFormData.id) {
+          // -- Update existing collection --
+          await handleUpdateCollection(collectionFormData.id, formData);
+        } else {
+          // -- Create new collection --
+          const newCollection = await createCollection(
+            collectionFormData.name,
+            collectionFormData.description,
+            restId,
+            collectionFormData.active
+          );
+          if (newCollection) {
+            toast.success('Collection created successfully');
+          }
+        }
+
+        setIsAddingCollection(false);
+        await fetchCollections();
+      });
+    } catch (error) {
+      console.error('Failed to create/update collection:', error);
+      toast.error('Failed to save collection.');
+    }
   };
 
-  // ----------------------------
-  // Edit item
-  // ----------------------------
+  // ================================
+  //     EDIT EXISTING ITEM
+  // ================================
   const handleEditItem = (item: any) => {
-    // Determine if this is a one-size item
-    const isOneSize = item.variants?.length === 1 && item.variants[0].size === 'One Size';
+    // Check if it's truly one-size
+    const isOneSize =
+      item.variants?.length === 1 && item.variants[0].size === 'One Size';
 
-    // Find a default color from the variants
+    // Pick a default color from existing variants
     let defaultColor = 'Black';
     if (item.variants && item.variants.length > 0) {
       const colorCounts: Record<string, number> = {};
       item.variants.forEach((v: any) => {
-        colorCounts[v.color] = (colorCounts[v.color] || 0) + 1;
+        const c = v.color || 'Black';
+        colorCounts[c] = (colorCounts[c] || 0) + 1;
       });
       let maxCount = 0;
-      Object.entries(colorCounts).forEach(([color, count]) => {
+      for (const [c, count] of Object.entries(colorCounts)) {
         if (count > maxCount) {
-          maxCount = count as number;
-          defaultColor = color;
+          maxCount = count;
+          defaultColor = c;
         }
-      });
+      }
     }
 
-    const buildVariantForm = (v: any): VariantFormData => {
-      const qty = v.stock_quantity !== undefined ? v.stock_quantity : 999999;
-      // If stock_quantity < 999999, we consider that "managing" quantity
-      const isManaged = qty < 999999;
-      return {
-        id: v.id,
-        size: v.size,
-        color: v.color || defaultColor,
-        price_adjustment: v.price_adjustment || 0,
-        manage_quantity: isManaged,
-        stock_quantity: isManaged ? qty : 999999
-      };
-    };
+    // Build out the variant form data
+    const buildVariantForm = (v: any): VariantFormData => ({
+      id: v.id,
+      size: v.size,
+      color: v.color || defaultColor,
+      price_adjustment: v.price_adjustment || 0
+    });
 
     setItemFormData({
       id: item.id,
@@ -259,33 +350,38 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
               {
                 size: 'M',
                 color: defaultColor,
-                price_adjustment: 0,
-                manage_quantity: false,
-                stock_quantity: 999999
+                price_adjustment: 0
               }
             ],
       is_one_size: isOneSize,
-      color: defaultColor
+      color: defaultColor,
+      stock_status: item.stock_status || 'in_stock',
+      status_note: item.status_note || '',
+      enable_stock_tracking: !!item.enable_stock_tracking,
+      stock_quantity: item.stock_quantity || 0,
+      damaged_quantity: item.damaged_quantity || 0,
+      low_stock_threshold: item.low_stock_threshold || 5,
+      available_quantity: Math.max(0, (item.stock_quantity || 0) - (item.damaged_quantity || 0))
     });
+
     setIsAddingItem(true);
     setIsEditingItem(true);
   };
 
-  // ----------------------------
-  // Delete item
-  // ----------------------------
+  // ================================
+  //     DELETE ITEM
+  // ================================
   const handleDeleteItem = async (itemId: number) => {
-    if (window.confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
+    if (
+      window.confirm(
+        'Are you sure you want to delete this item? This action cannot be undone.'
+      )
+    ) {
       try {
         await withLoading(async () => {
           await deleteMerchandiseItem(itemId);
           toast.success('Item deleted successfully');
-
-          if (selectedCollectionId) {
-            await fetchMerchandiseItems({ collection_id: selectedCollectionId });
-          } else {
-            await fetchMerchandiseItems({ include_collection_names: true });
-          }
+          await fetchMerchandiseItems();
         });
       } catch (error) {
         console.error('Failed to delete item:', error);
@@ -294,82 +390,49 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     }
   };
 
-  // ----------------------------
-  // Submit collection
-  // ----------------------------
-  const handleCollectionSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!collectionFormData.name.trim()) {
-      toast.error('Collection name is required');
-      return;
-    }
-
-    try {
-      await withLoading(async () => {
-        const restId = restaurant?.id || 1;
-        const newCollection = await createCollection(
-          collectionFormData.name,
-          collectionFormData.description,
-          restId
-        );
-
-        if (newCollection) {
-          toast.success('Collection created successfully');
-          setIsAddingCollection(false);
-          await fetchCollections();
-        }
-      });
-    } catch (error) {
-      console.error('Failed to create collection:', error);
-      toast.error('Failed to create collection');
-    }
-  };
-
-  // -----------------------------------------------------
-  // Reorder variant methods
-  // -----------------------------------------------------
+  // =================================
+  //  MOVE VARIANTS UP/DOWN
+  // =================================
   const handleMoveVariantUp = (index: number) => {
     if (index === 0) return;
     const newVariants = [...itemFormData.variants];
-    [newVariants[index - 1], newVariants[index]] = [newVariants[index], newVariants[index - 1]];
+    [newVariants[index - 1], newVariants[index]] = [
+      newVariants[index],
+      newVariants[index - 1]
+    ];
     setItemFormData({ ...itemFormData, variants: newVariants });
   };
 
   const handleMoveVariantDown = (index: number) => {
     if (index === itemFormData.variants.length - 1) return;
     const newVariants = [...itemFormData.variants];
-    [newVariants[index + 1], newVariants[index]] = [newVariants[index], newVariants[index + 1]];
+    [newVariants[index], newVariants[index + 1]] = [
+      newVariants[index + 1],
+      newVariants[index]
+    ];
     setItemFormData({ ...itemFormData, variants: newVariants });
   };
 
-  // ----------------------------
-  // Add variant size
-  // ----------------------------
+  // =================================
+  //       ADD/REMOVE VARIANT
+  // =================================
   const handleAddSize = () => {
     const newVariants = [...itemFormData.variants];
-
-    // Find a size that's not already in use
+    // Find a size not in use
     const usedSizes = new Set(newVariants.map((v) => v.size));
-    const availableSize = availableSizes.find((s) => !usedSizes.has(s)) || 'M';
+    const freeSize = availableSizes.find((s) => !usedSizes.has(s)) || 'M';
 
     newVariants.push({
-      size: availableSize,
+      size: freeSize,
       color: itemFormData.color,
-      price_adjustment: 0,
-      manage_quantity: false,   // default to unlimited
-      stock_quantity: 999999
+      price_adjustment: 0
     });
-
     setItemFormData({ ...itemFormData, variants: newVariants });
   };
 
-  // ----------------------------
-  // Remove variant
-  // ----------------------------
   const handleRemoveSize = (index: number) => {
     if (itemFormData.variants.length <= 1) {
-      toast.error('Item must have at least one size');
+      toast.error('Item must have at least one size.');
       return;
     }
     const newVariants = [...itemFormData.variants];
@@ -377,11 +440,12 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     setItemFormData({ ...itemFormData, variants: newVariants });
   };
 
-  // ----------------------------
-  // One size toggle
-  // ----------------------------
+  // =================================
+  //   ONE-SIZE TOGGLE
+  // =================================
   const handleOneSizeToggle = (checked: boolean) => {
     if (checked) {
+      // Switch all variants to one single variant
       setItemFormData({
         ...itemFormData,
         is_one_size: true,
@@ -389,161 +453,182 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
           {
             size: 'One Size',
             color: itemFormData.color,
-            price_adjustment: 0,
-            manage_quantity: false,
-            stock_quantity: 999999
+            price_adjustment: 0
           }
         ]
       });
     } else {
+      // Revert to multiple sizes
       setItemFormData({
         ...itemFormData,
         is_one_size: false,
         variants: ['S', 'M', 'L', 'XL'].map((size) => ({
           size,
           color: itemFormData.color,
-          price_adjustment: 0,
-          manage_quantity: false,
-          stock_quantity: 999999
+          price_adjustment: 0
         }))
       });
     }
   };
 
-  // ----------------------------
-  // Color change (applies to all variants)
-  // ----------------------------
+  // =================================
+  //     CHANGE COLOR ACROSS VARIANTS
+  // =================================
   const handleColorChange = (color: string) => {
     const newVariants = itemFormData.variants.map((v) => ({ ...v, color }));
     setItemFormData({ ...itemFormData, color, variants: newVariants });
   };
 
-  // ----------------------------
-  // Handle variant field change
-  // ----------------------------
+  // =================================
+  //   HANDLE VARIANT FIELD CHANGES
+  // =================================
   const handleVariantChange = (index: number, field: string, value: any) => {
     const newVariants = [...itemFormData.variants];
     const variant = { ...newVariants[index] };
 
-    if (field === 'manage_quantity') {
-      // Toggling the "Manage Quantity?" checkbox
-      const checked = value as boolean;
-      variant.manage_quantity = checked;
-      // If they uncheck it => unlimited => stock_quantity=999999
-      if (!checked) {
-        variant.stock_quantity = 999999;
-      } else {
-        // If they check it => default to 0 or keep existing
-        if (variant.stock_quantity === 999999) {
-          variant.stock_quantity = 0; // or 10, up to you
-        }
+    switch (field) {
+      case 'price_adjustment': {
+        variant.price_adjustment = parseFloat(value) || 0;
+        break;
       }
-    } else if (field === 'stock_quantity') {
-      const parsed = parseInt(value, 10);
-      variant.stock_quantity = isNaN(parsed) ? 0 : parsed;
-    } else if (field === 'price_adjustment') {
-      variant.price_adjustment = parseFloat(value) || 0;
-    } else if (field === 'size') {
-      variant.size = value;
+      case 'size': {
+        variant.size = value;
+        break;
+      }
+      case 'color': {
+        variant.color = value;
+        break;
+      }
+      default:
+        break;
     }
+
     newVariants[index] = variant;
     setItemFormData({ ...itemFormData, variants: newVariants });
   };
 
-  // ----------------------------
-  // Submit item
-  // ----------------------------
-  const handleItemSubmit = async (e: React.FormEvent) => {
+  // =================================
+  //   SUBMIT (CREATE/UPDATE) ITEM
+  // =================================
+  const handleItemSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!itemFormData.name.trim()) {
-      toast.error('Item name is required');
+      toast.error('Item name is required.');
       return;
     }
     if (itemFormData.base_price <= 0) {
-      toast.error('Price must be greater than 0');
+      toast.error('Price must be greater than 0.');
       return;
     }
     if (itemFormData.variants.length === 0) {
-      toast.error('At least one size variant is required');
+      toast.error('At least one size variant is required.');
       return;
     }
 
     try {
       await withLoading(async () => {
-        // Prepare main item form
+        // Prepare the form data for the main item
         const formData = new FormData();
         formData.append('merchandise_item[name]', itemFormData.name);
         formData.append('merchandise_item[description]', itemFormData.description);
-        formData.append('merchandise_item[base_price]', itemFormData.base_price.toString());
+        formData.append(
+          'merchandise_item[base_price]',
+          itemFormData.base_price.toString()
+        );
         formData.append(
           'merchandise_item[merchandise_collection_id]',
           itemFormData.merchandise_collection_id.toString()
         );
+        
+        // Add inventory fields
+        formData.append(
+          'merchandise_item[stock_status]',
+          itemFormData.stock_status
+        );
+        formData.append(
+          'merchandise_item[enable_stock_tracking]',
+          String(!!itemFormData.enable_stock_tracking)
+        );
+        
+        if (itemFormData.status_note !== undefined) {
+          formData.append('merchandise_item[status_note]', itemFormData.status_note || '');
+        }
+        
+        if (itemFormData.low_stock_threshold !== undefined) {
+          formData.append(
+            'merchandise_item[low_stock_threshold]',
+            String(itemFormData.low_stock_threshold)
+          );
+        }
 
         if (itemFormData.imageFile) {
           formData.append('merchandise_item[image]', itemFormData.imageFile);
         }
         if (itemFormData.secondImageFile) {
-          formData.append('merchandise_item[second_image]', itemFormData.secondImageFile);
+          formData.append(
+            'merchandise_item[second_image]',
+            itemFormData.secondImageFile
+          );
         }
 
-        let savedItem: any;
+        let savedItem: any = null;
 
+        // ---------- UPDATE ----------
         if (isEditingItem && itemFormData.id) {
-          // Update existing item
           savedItem = await api.upload(
             `/merchandise_items/${itemFormData.id}`,
             formData,
             'PATCH'
           );
           if (savedItem) {
-            // Identify variants that remain
+            // Identify variants still in the form
             const existingVariantIds = new Set(
               itemFormData.variants.filter((v) => v.id).map((v) => v.id)
             );
+
             // Fetch all current variants from DB
             const currentVariants = await api.get(
               `/merchandise_variants?merchandise_item_id=${itemFormData.id}`
             );
             if (Array.isArray(currentVariants)) {
+              // Delete any that no longer exist in itemFormData
               const variantsToDelete = currentVariants.filter(
                 (v: any) => v.id && !existingVariantIds.has(v.id)
               );
-              // Delete removed
               for (const variant of variantsToDelete) {
                 if (variant && typeof variant.id === 'number') {
                   await api.delete(`/merchandise_variants/${variant.id}`);
                 }
               }
             }
-            // Update or create
+            // Update or create each variant
             for (const v of itemFormData.variants) {
               if (v.id) {
                 await api.patch(`/merchandise_variants/${v.id}`, {
                   merchandise_variant: {
                     size: v.size,
                     color: v.color,
-                    price_adjustment: v.price_adjustment,
-                    stock_quantity: v.stock_quantity
+                    price_adjustment: v.price_adjustment
                   }
                 });
               } else {
+                // Create new variant
                 await api.post('/merchandise_variants', {
                   merchandise_variant: {
                     merchandise_item_id: itemFormData.id,
                     size: v.size,
                     color: v.color,
-                    price_adjustment: v.price_adjustment,
-                    stock_quantity: v.stock_quantity
+                    price_adjustment: v.price_adjustment
                   }
                 });
               }
             }
+
             toast.success('Item updated successfully');
           }
         } else {
-          // Create new item
+          // ---------- CREATE ----------
           savedItem = await api.upload('/merchandise_items', formData);
           if (savedItem && typeof savedItem.id === 'number') {
             // Create all variants
@@ -553,8 +638,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                   merchandise_item_id: savedItem.id,
                   size: v.size,
                   color: v.color,
-                  price_adjustment: v.price_adjustment,
-                  stock_quantity: v.stock_quantity
+                  price_adjustment: v.price_adjustment
                 }
               });
             }
@@ -562,25 +646,21 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
           }
         }
 
-        // Done
         setIsAddingItem(false);
         setIsEditingItem(false);
 
-        if (selectedCollectionId) {
-          await fetchMerchandiseItems({ collection_id: selectedCollectionId });
-        } else {
-          await fetchMerchandiseItems({ include_collection_names: true });
-        }
+        // Refresh item list
+        await fetchMerchandiseItems();
       });
     } catch (error) {
       console.error('Failed to save item:', error);
-      toast.error('Failed to save item');
+      toast.error('Failed to save item.');
     }
   };
 
-  // ----------------------------
-  // Loading / Error states
-  // ----------------------------
+  // ======================================
+  //        RENDER LOADING/ERROR
+  // ======================================
   if (loading && collections.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -596,24 +676,32 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     );
   }
 
-  // ----------------------------
-  // JSX Output
-  // ----------------------------
+  // ======================================
+  //              RENDER
+  // ======================================
   return (
     <div className="p-4">
-      {/* Loading overlay */}
-      {LoadingOverlayComponent}
+      {LoadingOverlayComponent /* Global Loading Overlay */ }
 
-      {/* Header & Add Collection */}
+      {/* Page Header & "Add Collection" Button */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold">Merchandise Manager</h2>
           <p className="text-gray-600 text-sm">
-            Manage merchandise collections, items, colors, and sizes
+            Manage merchandise collections, items, colors, and sizes.
           </p>
         </div>
         <button
-          onClick={handleAddCollection}
+          onClick={() => {
+            setCollectionFormData({
+              name: '',
+              description: '',
+              active: false,
+              image_url: '',
+              imageFile: null
+            });
+            setIsAddingCollection(true);
+          }}
           className="bg-[#c1902f] text-white px-4 py-2 rounded-md flex items-center"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -626,40 +714,33 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
         <div className="mb-8">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px space-x-8 overflow-x-auto">
-              {/* All Items */}
+              {/* "All Items" pseudo-tab */}
               <button
                 onClick={() => {
                   setSelectedCollectionId(null);
-                  fetchMerchandiseItems({ include_collection_names: true });
+                  fetchMerchandiseItems();
                 }}
-                className={`
-                  whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center
-                  ${
-                    selectedCollectionId === null
-                      ? 'border-[#c1902f] text-[#c1902f]'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+                  selectedCollectionId === null
+                    ? 'border-[#c1902f] text-[#c1902f]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
               >
                 All Items
               </button>
 
-              {/* Individual Collections */}
               {collections.map((collection) => (
                 <button
                   key={collection.id}
                   onClick={() => {
                     setSelectedCollectionId(collection.id);
-                    fetchMerchandiseItems({ collection_id: collection.id });
+                    fetchMerchandiseItems();
                   }}
-                  className={`
-                    whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center
-                    ${
-                      selectedCollectionId === collection.id
-                        ? 'border-[#c1902f] text-[#c1902f]'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }
-                  `}
+                  className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+                    selectedCollectionId === collection.id
+                      ? 'border-[#c1902f] text-[#c1902f]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
                 >
                   {collection.name}
                   {collection.active && (
@@ -674,17 +755,21 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
         </div>
       ) : (
         <div className="text-center p-8 bg-gray-50 rounded-lg mb-8">
-          <p className="text-gray-500">No collections available. Create a collection to get started.</p>
+          <p className="text-gray-500">
+            No collections available. Create a collection to get started.
+          </p>
         </div>
       )}
 
-      {/* Add Collection Modal */}
+      {/* Add/Edit Collection Modal */}
       {isAddingCollection && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto p-6 animate-slideUp">
             {/* Modal Header */}
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold">Add New Collection</h3>
+              <h3 className="text-xl font-semibold">
+                {collectionFormData.id ? 'Edit Collection' : 'Add New Collection'}
+              </h3>
               <button
                 onClick={() => setIsAddingCollection(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -735,7 +820,10 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                 <textarea
                   value={collectionFormData.description}
                   onChange={(e) =>
-                    setCollectionFormData({ ...collectionFormData, description: e.target.value })
+                    setCollectionFormData({
+                      ...collectionFormData,
+                      description: e.target.value
+                    })
                   }
                   className="w-full px-4 py-2 border rounded-md"
                   rows={3}
@@ -750,7 +838,10 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                       type="checkbox"
                       checked={collectionFormData.active}
                       onChange={(e) =>
-                        setCollectionFormData({ ...collectionFormData, active: e.target.checked })
+                        setCollectionFormData({
+                          ...collectionFormData,
+                          active: e.target.checked
+                        })
                       }
                     />
                     <span>Set as active collection?</span>
@@ -763,6 +854,9 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                   />
                 </div>
               </div>
+
+              {/* (Optional) Collection Image logic here if your API supports it */}
+              {/* ... */}
 
               {/* Submit */}
               <div className="flex justify-end space-x-2 pt-6">
@@ -806,7 +900,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
             {/* Form */}
             <form onSubmit={handleItemSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left Column */}
+                {/* LEFT COLUMN */}
                 <div className="space-y-6">
                   {/* Item Name */}
                   <div>
@@ -931,7 +1025,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                   </div>
                 </div>
 
-                {/* Right Column */}
+                {/* RIGHT COLUMN */}
                 <div className="space-y-6">
                   {/* Main Image */}
                   <div>
@@ -1087,9 +1181,201 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                 </div>
               </div>
 
-              {/* Variants (Sizes & Inventory) */}
+              {/* Inventory Status */}
               <div className="mt-4">
-                <h4 className="font-semibold mb-2">Sizes & Inventory</h4>
+                <div className="flex items-center mb-2 border-b pb-2">
+                  <h4 className="text-md font-semibold">
+                    Inventory Status
+                  </h4>
+                  <Tooltip
+                    content="Manage the current availability of this item based on your inventory."
+                    position="right"
+                    icon
+                    iconClassName="ml-1 h-4 w-4"
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {itemFormData.enable_stock_tracking ? (
+                    // Inventory tracking is enabled - show auto status
+                    <>
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Inventory-Controlled Status
+                          </label>
+                          <Tooltip
+                            content="This status is automatically determined by available inventory."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        <div className="py-2 px-3 border rounded-md bg-gray-50">
+                          {(() => {
+                            const availableQty = itemFormData.available_quantity || 0;
+                            const threshold = itemFormData.low_stock_threshold || 5;
+                            const status = itemFormData.stock_status;
+
+                            let statusLabel = 'In Stock';
+                            let statusColor = 'bg-green-500';
+
+                            if (status === 'out_of_stock') {
+                              statusLabel = 'Out of Stock';
+                              statusColor = 'bg-red-500';
+                            } else if (status === 'low_stock') {
+                              statusLabel = 'Low Stock';
+                              statusColor = 'bg-yellow-500';
+                            }
+
+                            return (
+                              <>
+                                <div className="flex items-center">
+                                  <div
+                                    className={`h-3 w-3 rounded-full mr-2 ${statusColor}`}
+                                  />
+                                  <span className="font-medium">{statusLabel}</span>
+                                </div>
+                                <div className="text-sm text-gray-600 mt-2">
+                                  <div>Available: {availableQty} items</div>
+                                  <div>Low Stock Threshold: {threshold} items</div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Status is determined by inventory levels.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (itemFormData.id) {
+                              setSelectedItemForInventory({
+                                ...itemFormData,
+                                id: itemFormData.id.toString(),
+                              });
+                              setShowInventoryModal(true);
+                            }
+                          }}
+                          className="mt-2 text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                          disabled={!itemFormData.id}
+                        >
+                          <Package className="h-4 w-4 mr-1" />
+                          Manage Inventory
+                        </button>
+                      </div>
+                      {/* Status Note */}
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Status Note (Optional)
+                          </label>
+                          <Tooltip
+                            content="Add a note explaining the current status, e.g. supplier delay."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        <textarea
+                          value={itemFormData.status_note ?? ''}
+                          onChange={(e) =>
+                            setItemFormData({ ...itemFormData, status_note: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border rounded-md"
+                          rows={2}
+                          placeholder="e.g. 'Using a temporary material due to delay.'"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    // Manual status selection
+                    <>
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Inventory Status
+                          </label>
+                          <Tooltip
+                            content="Set the current availability if not tracking inventory."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        <select
+                          value={itemFormData.stock_status ?? 'in_stock'}
+                          onChange={(e) =>
+                            setItemFormData({
+                              ...itemFormData,
+                              stock_status: e.target.value as
+                                | 'in_stock'
+                                | 'out_of_stock'
+                                | 'low_stock',
+                            })
+                          }
+                          className="w-full px-4 py-2 border rounded-md"
+                        >
+                          <option value="in_stock">In Stock</option>
+                          <option value="out_of_stock">Out of Stock</option>
+                          <option value="low_stock">Low Stock</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          "Low Stock" shows a warning but still allows ordering.
+                          "Out of Stock" fully disables ordering.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (itemFormData.id) {
+                              setSelectedItemForInventory({
+                                ...itemFormData,
+                                id: itemFormData.id.toString(),
+                              });
+                              setShowInventoryModal(true);
+                            }
+                          }}
+                          className="mt-2 text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                          disabled={!itemFormData.id}
+                        >
+                          <Package className="h-4 w-4 mr-1" />
+                          Enable Inventory Tracking
+                        </button>
+                      </div>
+
+                      {/* Status Note */}
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Status Note (Optional)
+                          </label>
+                          <Tooltip
+                            content="Add a note explaining the current status, e.g. supplier delay."
+                            position="top"
+                            icon
+                            iconClassName="ml-1 h-4 w-4"
+                          />
+                        </div>
+                        <textarea
+                          value={itemFormData.status_note ?? ''}
+                          onChange={(e) =>
+                            setItemFormData({ ...itemFormData, status_note: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border rounded-md"
+                          rows={2}
+                          placeholder="e.g. 'Using a temporary material due to delay.'"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Variants Section */}
+              <div className="mt-4">
+                <h4 className="font-semibold mb-2">Sizes</h4>
                 {!itemFormData.is_one_size && (
                   <button
                     type="button"
@@ -1100,11 +1386,12 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                     Add Another Size
                   </button>
                 )}
+
                 <div className="space-y-3">
                   {itemFormData.variants.map((variant, index) => (
                     <div
                       key={index}
-                      className="grid grid-cols-1 sm:grid-cols-7 gap-4 bg-gray-50 p-3 rounded-md items-center"
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-3 rounded-md items-center"
                     >
                       {/* Size */}
                       <div>
@@ -1152,83 +1439,45 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                         </div>
                       </div>
 
-                      {/* Manage Quantity? checkbox */}
-                      <div className="flex items-center">
-                        <label className="inline-flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={variant.manage_quantity}
-                            onChange={(e) =>
-                              handleVariantChange(index, 'manage_quantity', e.target.checked)
-                            }
-                            className="rounded"
-                          />
-                          <span>Manage Qty?</span>
-                        </label>
+                      {/* Action Buttons */}
+                      <div className="flex justify-center space-x-2">
+                        {!itemFormData.is_one_size && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveVariantUp(index)}
+                              disabled={index === 0}
+                              className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm flex items-center disabled:opacity-50"
+                              title="Move Up"
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveVariantDown(index)}
+                              disabled={index === itemFormData.variants.length - 1}
+                              className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm flex items-center disabled:opacity-50"
+                              title="Move Down"
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSize(index)}
+                              className="px-2 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-sm flex items-center"
+                              title="Remove Size"
+                            >
+                              <MinusCircle className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
-
-                      {/* Stock Quantity (only if manage_quantity=true) */}
-                      {variant.manage_quantity ? (
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Quantity</label>
-                          <input
-                            type="number"
-                            min={0}
-                            className="w-full px-2 py-1 border rounded-md"
-                            value={variant.stock_quantity}
-                            onChange={(e) =>
-                              handleVariantChange(index, 'stock_quantity', e.target.value)
-                            }
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Quantity</label>
-                          <div className="text-gray-400 text-sm">Unlimited</div>
-                        </div>
-                      )}
-
-                      {/* Reorder Buttons (if multiple variants) */}
-                      {!itemFormData.is_one_size && (
-                        <div className="flex flex-row items-center space-x-1 justify-center">
-                          <button
-                            type="button"
-                            onClick={() => handleMoveVariantUp(index)}
-                            disabled={index === 0}
-                            className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm flex items-center disabled:opacity-50"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveVariantDown(index)}
-                            disabled={index === itemFormData.variants.length - 1}
-                            className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm flex items-center disabled:opacity-50"
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Remove Size Button */}
-                      {!itemFormData.is_one_size && (
-                        <div className="flex items-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSize(index)}
-                            className="inline-flex items-center px-3 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-sm"
-                          >
-                            <MinusCircle className="h-4 w-4 mr-1" />
-                            Remove
-                          </button>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Submit / Cancel */}
+              {/* Submit / Cancel Buttons */}
               <div className="flex justify-end space-x-2 pt-6">
                 <button
                   type="button"
@@ -1253,15 +1502,51 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
         </div>
       )}
 
-      {/* Items + Collection Settings */}
+      {/* Items & Collection Settings */}
       {selectedCollectionId !== undefined && (
         <>
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold">
-              {selectedCollectionId === null ? 'All Merchandise Items' : 'Collection Items'}
+              {selectedCollectionId === null
+                ? 'All Merchandise Items'
+                : 'Collection Items'}
             </h3>
             <button
-              onClick={handleAddItem}
+              onClick={() => {
+                if (selectedCollectionId === null) {
+                  toast.error('Please select a collection first.');
+                  return;
+                }
+                
+                // Default single variant
+                setItemFormData({
+                  name: '',
+                  description: '',
+                  base_price: 0,
+                  image_url: '',
+                  imageFile: null,
+                  second_image_url: '',
+                  secondImageFile: null,
+                  merchandise_collection_id: selectedCollectionId,
+                  variants: [
+                    {
+                      size: 'M',
+                      color: 'Black',
+                      price_adjustment: 0
+                    }
+                  ],
+                  is_one_size: false,
+                  color: 'Black',
+                  stock_status: 'in_stock',
+                  status_note: '',
+                  enable_stock_tracking: false,
+                  stock_quantity: 0,
+                  damaged_quantity: 0,
+                  low_stock_threshold: 5
+                });
+                setIsAddingItem(true);
+                setIsEditingItem(false);
+              }}
               className="bg-[#c1902f] text-white px-3 py-1.5 rounded-md flex items-center text-sm"
             >
               <Plus className="h-4 w-4 mr-1" />
@@ -1271,7 +1556,9 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
 
           {merchandiseItems.length === 0 ? (
             <div className="text-center p-8 bg-gray-50 rounded-lg mb-6">
-              <p className="text-gray-500">No items in this collection. Add an item to get started.</p>
+              <p className="text-gray-500">
+                No items in this collection. Add an item to get started.
+              </p>
             </div>
           ) : (
             <div className="space-y-4 mb-6">
@@ -1301,19 +1588,37 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                             </span>
                           )}
                         </h3>
-                        <span className="text-gray-600">${item.base_price.toFixed(2)}</span>
+                        <span className="text-gray-600">
+                          ${item.base_price.toFixed(2)}
+                        </span>
                       </div>
                     </div>
+
                     <div className="flex items-center space-x-2">
+                      {/* Manage Inventory */}
+                      <button
+                        onClick={() => {
+                          setSelectedItemForInventory(item);
+                          setShowInventoryModal(true);
+                        }}
+                        className="text-green-600 hover:text-green-800"
+                        title="Manage Inventory"
+                      >
+                        <Package className="h-5 w-5" />
+                      </button>
+                      {/* Edit Item */}
                       <button
                         onClick={() => handleEditItem(item)}
                         className="text-blue-600 hover:text-blue-800"
+                        title="Edit Item"
                       >
                         <Edit className="h-5 w-5" />
                       </button>
+                      {/* Delete Item */}
                       <button
                         onClick={() => handleDeleteItem(item.id)}
                         className="text-red-600 hover:text-red-800"
+                        title="Delete Item"
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
@@ -1324,7 +1629,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
             </div>
           )}
 
-          {/* Collection Settings */}
+          {/* Collection Settings (only if a specific collection is selected) */}
           {selectedCollectionId && (
             <div className="mb-8">
               <button
@@ -1332,7 +1637,9 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                 className="flex items-center justify-between w-full px-4 py-3 bg-white border border-gray-200 rounded-t-lg shadow-sm hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center">
-                  <h3 className="text-lg font-medium text-gray-900">Collection Settings</h3>
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Collection Settings
+                  </h3>
                   {collections.find((c) => c.id === selectedCollectionId)?.active && (
                     <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs">
                       Active
@@ -1349,12 +1656,12 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
               {showCollectionSettings && (
                 <div className="bg-white p-6 rounded-b-lg border border-gray-200 border-t-0 shadow-sm animate-fadeIn">
                   <div className="space-y-6">
-                    {/* Set as Active */}
+                    {/* Active Toggle */}
                     <div>
                       {collections.find((c) => c.id === selectedCollectionId)?.active ? (
                         <div className="flex items-center text-green-600">
                           <Check className="h-5 w-5 mr-2" />
-                          <span>This collection is currently active</span>
+                          <span>This collection is currently active.</span>
                         </div>
                       ) : (
                         <div>
@@ -1389,19 +1696,18 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                     </div>
 
                     <div className="flex flex-wrap gap-3">
-                      {/* Edit Collection */}
+                      {/* Edit Collection Button */}
                       <button
                         onClick={() => {
-                          const collection = collections.find(
-                            (c) => c.id === selectedCollectionId
-                          );
-                          if (collection) {
+                          const col = collections.find((c) => c.id === selectedCollectionId);
+                          if (col) {
+                            const extendedCol = col as any;
                             setCollectionFormData({
-                              id: collection.id,
-                              name: collection.name,
-                              description: collection.description,
-                              active: collection.active,
-                              image_url: '',
+                              id: col.id,
+                              name: col.name,
+                              description: extendedCol.description || '',
+                              active: col.active,
+                              image_url: extendedCol.image_url || '',
                               imageFile: null
                             });
                             setIsAddingCollection(true);
@@ -1413,35 +1719,34 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                         Edit Collection
                       </button>
 
-                      {/* Delete Collection */}
+                      {/* Delete Collection Button */}
                       <button
                         onClick={async () => {
                           if (
                             window.confirm(
-                              'Are you sure you want to delete this collection? This will also delete all items in this collection and cannot be undone.'
+                              'Are you sure you want to delete this collection? ' +
+                                'This will also delete all items in this collection and cannot be undone.'
                             )
                           ) {
                             try {
                               await withLoading(async () => {
-                                await deleteCollection(selectedCollectionId);
-                                toast.success('Collection deleted successfully');
+                                if (selectedCollectionId !== null) {
+                                  await deleteCollection(selectedCollectionId);
+                                  toast.success('Collection deleted successfully');
 
-                                // Reset collection selection
-                                if (collections.length > 1) {
-                                  const nextCollection = collections.find(
-                                    (c) => c.id !== selectedCollectionId
-                                  );
-                                  if (nextCollection) {
-                                    setSelectedCollectionId(nextCollection.id);
-                                    fetchMerchandiseItems({
-                                      collection_id: nextCollection.id
-                                    });
+                                  // Reset to a different collection or All Items
+                                  if (collections.length > 1) {
+                                    const nextCol = collections.find(
+                                      (c) => c.id !== selectedCollectionId
+                                    );
+                                    if (nextCol) {
+                                      setSelectedCollectionId(nextCol.id);
+                                      fetchMerchandiseItems();
+                                    }
+                                  } else {
+                                    setSelectedCollectionId(null);
+                                    fetchMerchandiseItems();
                                   }
-                                } else {
-                                  setSelectedCollectionId(null);
-                                  fetchMerchandiseItems({
-                                    include_collection_names: true
-                                  });
                                 }
                               });
                             } catch (err) {
@@ -1466,6 +1771,22 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
             </div>
           )}
         </>
+      )}
+
+      {/* Inventory Modal */}
+      {showInventoryModal && selectedItemForInventory && (
+        <MerchandiseInventoryModal
+          open={showInventoryModal}
+          onClose={() => {
+            setShowInventoryModal(false);
+            setSelectedItemForInventory(null);
+          }}
+          merchandiseItem={selectedItemForInventory}
+          onSave={async () => {
+            // Refresh after saving inventory changes
+            await fetchMerchandiseItems();
+          }}
+        />
       )}
     </div>
   );
