@@ -808,6 +808,8 @@ function PaymentPanel({
   const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
   const [paymentLinkSent, setPaymentLinkSent] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // For dynamic height adjustment
+  const [containerHeight, setContainerHeight] = useState<number | null>(null);
 
   // Payment processor config
   const stripeRef = useRef<StripeCheckoutRef>(null);
@@ -816,6 +818,20 @@ function PaymentPanel({
   const paymentGateway = restaurant?.admin_settings?.payment_gateway || {};
   const paymentProcessor = paymentGateway.payment_processor || 'paypal';
   const testMode = paymentGateway.test_mode !== false;
+  
+  // Handle resize when payment method changes or payment elements load
+  useEffect(() => {
+    const handleResize = () => {
+      setContainerHeight(window.innerHeight);
+    };
+    
+    // Call once when payment method changes
+    handleResize();
+    
+    // Also listen for window resize events
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [paymentMethod]);
 
   const handleCashPayment = () => {
     const mockTransactionId = `cash_${Date.now()}`;
@@ -868,9 +884,9 @@ function PaymentPanel({
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Scrollable content area */}
-      <div className="flex-1 overflow-y-auto p-4 pb-20">
+    <div className="flex flex-col">
+      {/* Scrollable content area with more padding for payment elements */}
+      <div className="overflow-y-auto p-4 pb-28">
         <h3 className="text-lg font-semibold mb-4 text-gray-800 sticky top-0 bg-white z-10 py-2">Payment</h3>
 
         {/* Payment Method Selection */}
@@ -1567,13 +1583,15 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           />
         )}
         {activeTab === 'payment' && (
-          <PaymentPanel
-            orderTotal={orderTotal}
-            onPaymentSuccess={handlePaymentSuccess}
-            onPaymentError={handlePaymentError}
-            onBack={() => setActiveTab('customer')}
-            isProcessing={paymentProcessing}
-          />
+          <div className="h-full overflow-hidden">
+            <PaymentPanel
+              orderTotal={orderTotal}
+              onPaymentSuccess={handlePaymentSuccess}
+              onPaymentError={handlePaymentError}
+              onBack={() => setActiveTab('customer')}
+              isProcessing={paymentProcessing}
+            />
+          </div>
         )}
       </div>
     );
@@ -1588,9 +1606,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           {/* Dimmed background */}
           <div className="absolute inset-0 bg-black bg-opacity-30 z-10"></div>
           {/* Payment Panel on top (z-20) */}
-          <div className="absolute inset-0 flex items-center justify-center z-20 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl overflow-hidden" style={{ maxHeight: '90vh' }}>
-              <div className="h-full max-h-[80vh] overflow-hidden flex flex-col">
+          <div className="absolute inset-0 flex items-start sm:items-center justify-center z-20 p-4 pt-8 sm:pt-4 md:p-6 lg:p-8 overflow-y-auto">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md sm:max-w-lg md:max-w-2xl my-auto sm:my-4 md:my-6">
+              <div className="flex flex-col">
                 <PaymentPanel
                   orderTotal={orderTotal}
                   onPaymentSuccess={handlePaymentSuccess}
