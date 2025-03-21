@@ -57,6 +57,8 @@ export function BulkInventoryActionDialog({
   const [orderPaymentInfo, setOrderPaymentInfo] = useState<OrderPaymentInfo[]>([]);
   const [selectedPaymentAction, setSelectedPaymentAction] = useState<PaymentAction>('refund');
   const [paymentReason, setPaymentReason] = useState('');
+  const [customPaymentReason, setCustomPaymentReason] = useState('');
+  const [isOtherReasonSelected, setIsOtherReasonSelected] = useState(false);
   const [isPaymentReasonDropdownOpen, setIsPaymentReasonDropdownOpen] = useState(false);
   
   // Refs for detecting outside clicks
@@ -242,13 +244,32 @@ export function BulkInventoryActionDialog({
     );
   };
 
-  // Handle payment reason change
+  // Handle payment reason change from dropdown
   const handlePaymentReasonChange = (reason: string) => {
     setPaymentReason(reason);
     
-    // Update all inventory actions with the new payment reason
+    // If "Other" is selected, set the flag and clear custom reason
+    if (reason === 'Other') {
+      setIsOtherReasonSelected(true);
+      setCustomPaymentReason('');
+    } else {
+      setIsOtherReasonSelected(false);
+      setCustomPaymentReason('');
+      
+      // Update all inventory actions with the new payment reason
+      setInventoryActions(prev => 
+        prev.map(item => ({ ...item, paymentReason: reason }))
+      );
+    }
+  };
+  
+  // Handle custom payment reason input
+  const handleCustomPaymentReasonChange = (customReason: string) => {
+    setCustomPaymentReason(customReason);
+    
+    // Update all inventory actions with the custom reason
     setInventoryActions(prev => 
-      prev.map(item => ({ ...item, paymentReason: reason }))
+      prev.map(item => ({ ...item, paymentReason: customReason }))
     );
   };
 
@@ -277,16 +298,21 @@ export function BulkInventoryActionDialog({
       return;
     }
 
-    if (!paymentReason && selectedPaymentAction !== 'no_action') {
-      alert('Please select a payment reason.');
-      return;
+    if (selectedPaymentAction !== 'no_action') {
+      if (isOtherReasonSelected && !customPaymentReason) {
+        alert('Please specify a reason.');
+        return;
+      } else if (!isOtherReasonSelected && !paymentReason) {
+        alert('Please select a payment reason.');
+        return;
+      }
     }
 
     // Update all inventory actions with the final payment information
     const finalActions = inventoryActions.map(action => ({
       ...action,
       paymentAction: selectedPaymentAction,
-      paymentReason: paymentReason
+      paymentReason: isOtherReasonSelected ? customPaymentReason : paymentReason
     }));
 
     onConfirm(finalActions);
@@ -529,14 +555,15 @@ export function BulkInventoryActionDialog({
                   )}
                 </div>
                 
-                {paymentReason === 'Other' && (
+                {isOtherReasonSelected && (
                   <div className="mt-3">
                     <input
                       type="text"
+                      value={customPaymentReason}
                       placeholder="Please specify reason"
                       className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full text-base py-3 border-gray-300 rounded-md"
                       style={{ fontSize: '16px' }} // Prevent iOS zoom
-                      onChange={(e) => handlePaymentReasonChange(e.target.value !== 'Other' ? e.target.value : 'Other')}
+                      onChange={(e) => handleCustomPaymentReasonChange(e.target.value)}
                     />
                   </div>
                 )}
