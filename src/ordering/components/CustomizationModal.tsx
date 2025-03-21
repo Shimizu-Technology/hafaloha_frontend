@@ -19,6 +19,9 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
   // Track which option group is expanded (accordion style)
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null);
   
+  // Track whether price breakdown is expanded or collapsed
+  const [isPriceBreakdownExpanded, setIsPriceBreakdownExpanded] = useState(false);
+  
   // Force re-render when selections change to update price calculations
   const [, forceUpdate] = useState({});
 
@@ -542,49 +545,85 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
 
         {/* Fixed Footer */}
         <div className="sticky bottom-0 bg-white rounded-b-lg border-t border-gray-200 p-6">
-          {/* Price breakdown */}
+          {/* Price breakdown - Collapsible */}
           <div className="mb-4">
-            <h4 className="font-medium text-gray-700 mb-2">Price Breakdown</h4>
-            <div className="space-y-1 mb-3">
-              <div className="flex justify-between">
-                <span>Base price:</span>
-                <span>${basePrice.toFixed(2)}</span>
-              </div>
-              
-              {/* Detailed breakdown of paid options by group - only shown when there are paid options */}
-              {paidOptionsByGroup.length > 0 && (
-                <div className="mt-2">
-                  {paidOptionsByGroup.map((group, idx) => (
-                    <div key={idx}>
-                      <div className="flex justify-between text-gray-600">
-                        <span>{group.groupName} paid options ({group.paidCount}):</span>
-                        <span>+${group.totalPrice.toFixed(2)}</span>
-                      </div>
-                      {group.paidOptions.map((opt, optIdx) => (
-                        <div key={optIdx} className="flex justify-between text-gray-600 text-sm pl-4">
-                          <span>{opt.name}:</span>
-                          <span>+${opt.price.toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  
-                  {/* Only show additional options total if there are paid options */}
-                  {addlPrice > 0 && (
-                    <div className="flex justify-between text-gray-600 mt-2">
-                      <span>Additional options total:</span>
-                      <span>+${addlPrice.toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* Item total with more spacing when no paid options */}
-              <div className={`flex justify-between font-semibold border-t border-gray-200 pt-1 ${paidOptionsByGroup.length === 0 ? 'mt-4' : 'mt-1'}`}>
-                <span>Item total:</span>
-                <span>${(basePrice + addlPrice).toFixed(2)}</span>
-              </div>
+            {/* Price breakdown header with toggle button */}
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="font-medium text-gray-700">Price Breakdown</h4>
+              <button 
+                onClick={() => setIsPriceBreakdownExpanded(!isPriceBreakdownExpanded)}
+                className="text-gray-500 hover:text-gray-700 flex items-center text-sm"
+              >
+                {isPriceBreakdownExpanded ? (
+                  <>
+                    <span className="mr-1">Hide details</span>
+                    <ChevronUp size={16} />
+                  </>
+                ) : (
+                  <>
+                    <span className="mr-1">View details</span>
+                    <ChevronDown size={16} />
+                  </>
+                )}
+              </button>
             </div>
+            
+            {/* Collapsed view - Summary only */}
+            {!isPriceBreakdownExpanded ? (
+              <div className="space-y-1 mb-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span>Base: ${basePrice.toFixed(2)}</span>
+                    {addlPrice > 0 && (
+                      <span className="ml-1">+ Add-ons: ${addlPrice.toFixed(2)}</span>
+                    )}
+                  </div>
+                  <span className="font-semibold">${(basePrice + addlPrice).toFixed(2)}</span>
+                </div>
+              </div>
+            ) : (
+              /* Expanded view - Full breakdown */
+              <div className="space-y-1 mb-3 animate-fadeIn">
+                <div className="flex justify-between">
+                  <span>Base price:</span>
+                  <span>${basePrice.toFixed(2)}</span>
+                </div>
+                
+                {/* Detailed breakdown of paid options by group - only shown when there are paid options */}
+                {paidOptionsByGroup.length > 0 && (
+                  <div className="mt-2">
+                    {paidOptionsByGroup.map((group, idx) => (
+                      <div key={idx}>
+                        <div className="flex justify-between text-gray-600">
+                          <span>{group.groupName} paid options ({group.paidCount}):</span>
+                          <span>+${group.totalPrice.toFixed(2)}</span>
+                        </div>
+                        {group.paidOptions.map((opt, optIdx) => (
+                          <div key={optIdx} className="flex justify-between text-gray-600 text-sm pl-4">
+                            <span>{opt.name}:</span>
+                            <span>+${opt.price.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                    
+                    {/* Only show additional options total if there are paid options */}
+                    {addlPrice > 0 && (
+                      <div className="flex justify-between text-gray-600 mt-2">
+                        <span>Additional options total:</span>
+                        <span>+${addlPrice.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Item total with more spacing when no paid options */}
+                <div className={`flex justify-between font-semibold border-t border-gray-200 pt-1 ${paidOptionsByGroup.length === 0 ? 'mt-4' : 'mt-1'}`}>
+                  <span>Item total:</span>
+                  <span>${(basePrice + addlPrice).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Quantity & total row */}
