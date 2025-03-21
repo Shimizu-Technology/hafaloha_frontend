@@ -309,12 +309,15 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
     // Calculate total price
     const totalPrice = paidOptions.reduce((sum, opt) => sum + opt.price, 0);
     
+    // Only include groups with a non-zero total price
+    if (totalPrice <= 0) return null;
+    
     return {
       groupId: Number(groupId),
       groupName: group.name,
       paidCount,
       totalPrice,
-      paidOptions
+      paidOptions: paidOptions.filter(opt => opt.price > 0) // Only include options with a price > 0
     };
   }).filter(Boolean) as {
     groupId: number;
@@ -548,7 +551,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                 <span>${basePrice.toFixed(2)}</span>
               </div>
               
-              {/* Detailed breakdown of paid options by group */}
+              {/* Detailed breakdown of paid options by group - only shown when there are paid options */}
               {paidOptionsByGroup.length > 0 && (
                 <div className="mt-2">
                   {paidOptionsByGroup.map((group, idx) => (
@@ -565,18 +568,19 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                       ))}
                     </div>
                   ))}
+                  
+                  {/* Only show additional options total if there are paid options */}
+                  {addlPrice > 0 && (
+                    <div className="flex justify-between text-gray-600 mt-2">
+                      <span>Additional options total:</span>
+                      <span>+${addlPrice.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
               )}
               
-              {/* Only show additional options total if there are paid options */}
-              {addlPrice > 0 && (
-                <div className="flex justify-between text-gray-600 mt-2">
-                  <span>Additional options total:</span>
-                  <span>+${addlPrice.toFixed(2)}</span>
-                </div>
-              )}
-              
-              <div className="flex justify-between font-semibold border-t border-gray-200 pt-1 mt-1">
+              {/* Item total with more spacing when no paid options */}
+              <div className={`flex justify-between font-semibold border-t border-gray-200 pt-1 ${paidOptionsByGroup.length === 0 ? 'mt-4' : 'mt-1'}`}>
                 <span>Item total:</span>
                 <span>${(basePrice + addlPrice).toFixed(2)}</span>
               </div>
