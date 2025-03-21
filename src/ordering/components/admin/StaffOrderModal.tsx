@@ -1732,14 +1732,16 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           <div className="absolute inset-0 bg-black bg-opacity-30 z-10"></div>
           {/* Payment Panel on top (z-20) */}
           <div className="absolute inset-0 flex items-center justify-center z-20 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-              <PaymentPanel
-                orderTotal={orderTotal}
-                onPaymentSuccess={handlePaymentSuccess}
-                onPaymentError={handlePaymentError}
-                onBack={() => setShowPaymentPanel(false)}
-                isProcessing={paymentProcessing}
-              />
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl overflow-hidden" style={{ maxHeight: '90vh' }}>
+              <div className="h-full max-h-[80vh] overflow-hidden flex flex-col">
+                <PaymentPanel
+                  orderTotal={orderTotal}
+                  onPaymentSuccess={handlePaymentSuccess}
+                  onPaymentError={handlePaymentError}
+                  onBack={() => setShowPaymentPanel(false)}
+                  isProcessing={paymentProcessing}
+                />
+              </div>
             </div>
           </div>
 
