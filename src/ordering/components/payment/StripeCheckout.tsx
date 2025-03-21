@@ -137,7 +137,11 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         variables: {
           colorPrimary: '#c1902f',
         },
-      }
+      },
+      // Disable save payment method option
+      paymentMethodCreation: 'manual',
+      // Minimize billing address collection
+      billingAddressCollection: 'never'
     });
     setElements(elementsInstance);
   }, [stripe, clientSecret, testMode]);
