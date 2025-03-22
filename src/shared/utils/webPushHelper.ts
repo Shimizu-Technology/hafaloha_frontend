@@ -24,15 +24,35 @@ export async function getNotificationPermissionStatus(): Promise<'granted' | 'de
 
 /**
  * Converts a base64 string to a Uint8Array
+ * This is used to convert the VAPID public key to the format required by the PushManager
  */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-  
-  const rawData = window.atob(base64);
-  return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+  try {
+    // Add padding if needed
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    
+    // Convert URL-safe base64 to regular base64
+    const base64 = (base64String + padding)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    
+    console.log('Converted base64:', base64);
+    
+    // Convert base64 to binary string
+    const rawData = window.atob(base64);
+    console.log('Raw data length:', rawData.length);
+    
+    // Convert binary string to Uint8Array
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    
+    return outputArray;
+  } catch (error) {
+    console.error('Error in urlBase64ToUint8Array:', error);
+    throw error;
+  }
 }
 
 /**
@@ -97,10 +117,14 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
       return false;
     }
     
+    console.log('Fetching VAPID public key for restaurant:', restaurantId);
+    
     // Get the VAPID public key from the server
     const response = await api.get<{ enabled: boolean; vapid_public_key?: string }>(
       `/push_subscriptions/vapid_public_key?restaurant_id=${restaurantId}`
     );
+    
+    console.log('VAPID response:', response);
     
     if (!response.enabled || !response.vapid_public_key) {
       console.error('Web push is not enabled or VAPID public key is missing');
@@ -108,18 +132,42 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
     }
     
     // Get the service worker registration
+    console.log('Getting service worker registration');
     const registration = await navigator.serviceWorker.ready;
+    console.log('Service worker registration:', registration);
     
-    // Subscribe to push notifications
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true, // Required for Chrome
-      applicationServerKey: urlBase64ToUint8Array(response.vapid_public_key)
-    });
-    
-    // Send the subscription to the server
-    await api.post(`/push_subscriptions?restaurant_id=${restaurantId}`, { subscription });
-    
-    return true;
+    try {
+      // Subscribe to push notifications
+      console.log('Subscribing to push notifications with key:', response.vapid_public_key);
+      const applicationServerKey = urlBase64ToUint8Array(response.vapid_public_key);
+      console.log('Application server key (Uint8Array):', applicationServerKey);
+      
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true, // Required for Chrome
+        applicationServerKey: applicationServerKey
+      });
+      
+      console.log('Push subscription created:', subscription);
+      
+      // Send the subscription to the server
+      console.log('Sending subscription to server');
+      await api.post(`/push_subscriptions?restaurant_id=${restaurantId}`, { subscription });
+      console.log('Subscription sent to server successfully');
+      
+      return true;
+    } catch (subscribeError) {
+      console.error('Error in pushManager.subscribe:', subscribeError);
+      
+      // Check if there's an existing subscription that might be causing issues
+      const existingSubscription = await registration.pushManager.getSubscription();
+      if (existingSubscription) {
+        console.log('Found existing subscription, attempting to unsubscribe first');
+        await existingSubscription.unsubscribe();
+        console.log('Unsubscribed from existing subscription, please try subscribing again');
+      }
+      
+      throw subscribeError;
+    }
   } catch (error) {
     console.error('Error subscribing to push notifications:', error);
     return false;
