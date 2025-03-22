@@ -156,10 +156,34 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
       
       // iOS Safari specific debugging
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      
       if (isIOS) {
         console.log('Running on iOS device');
         console.log('iOS version:', navigator.userAgent);
-        console.log('Is standalone (PWA)?:', window.matchMedia('(display-mode: standalone)').matches);
+        console.log('Is standalone (PWA)?:', isStandalone);
+        
+        // Check if iOS version is at least 16.4
+        const iosVersionMatch = navigator.userAgent.match(/OS (\d+)_(\d+)/);
+        let isIOSVersionSupported = false;
+        
+        if (iosVersionMatch) {
+          const majorVersion = parseInt(iosVersionMatch[1], 10);
+          const minorVersion = parseInt(iosVersionMatch[2], 10);
+          
+          console.log(`Detected iOS version: ${majorVersion}.${minorVersion}`);
+          
+          // iOS 16.4+ is required for web push
+          isIOSVersionSupported = (majorVersion > 16) || (majorVersion === 16 && minorVersion >= 4);
+          console.log('Is iOS version supported?', isIOSVersionSupported);
+        }
+        
+        // If not standalone or iOS version < 16.4, show warning
+        if (!isStandalone || !isIOSVersionSupported) {
+          console.warn('iOS device requirements not met for push notifications');
+          console.warn('Is standalone?', isStandalone);
+          console.warn('Is iOS version supported?', isIOSVersionSupported);
+        }
       }
       
       console.log('Calling pushManager.subscribe...');
@@ -185,8 +209,28 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
           console.error('Service worker is not activated');
           alert('Service worker is not activated. Please refresh the page and try again.');
         } else if (isIOS) {
-          console.error('iOS specific error. Make sure the app is installed as a PWA and running iOS 16.4+');
-          alert('Push notifications require iOS 16.4+ and the app must be installed to the home screen (Add to Home Screen).');
+          // Check if iOS version is at least 16.4
+          const iosVersionMatch = navigator.userAgent.match(/OS (\d+)_(\d+)/);
+          let isIOSVersionSupported = false;
+          
+          if (iosVersionMatch) {
+            const majorVersion = parseInt(iosVersionMatch[1], 10);
+            const minorVersion = parseInt(iosVersionMatch[2], 10);
+            isIOSVersionSupported = (majorVersion > 16) || (majorVersion === 16 && minorVersion >= 4);
+          }
+          
+          const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+          
+          if (!isStandalone) {
+            console.error('iOS app not installed to home screen');
+            alert('This app must be installed to your home screen (Add to Home Screen) to receive push notifications.');
+          } else if (!isIOSVersionSupported) {
+            console.error('iOS version not supported for push notifications');
+            alert('Push notifications require iOS 16.4 or later. Your device appears to be running an older version.');
+          } else {
+            console.error('Unknown iOS push notification error');
+            alert('There was an error setting up push notifications on your iOS device. This may be due to browser restrictions or network issues.');
+          }
         }
         
         throw subscribeSpecificError;
