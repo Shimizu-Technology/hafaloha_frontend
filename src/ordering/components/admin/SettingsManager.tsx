@@ -1,7 +1,7 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import React, { useState, lazy, Suspense, useEffect } from 'react';
-import { Store, List, Users, CreditCard, Book, Lock } from 'lucide-react';
+import { Store, List, Users, CreditCard, Book, Lock, Bell } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
@@ -9,10 +9,11 @@ const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').th
 const MenusSettings = lazy(() => import('./settings/MenusSettings').then(module => ({ default: module.MenusSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
 const PaymentSettings = lazy(() => import('./settings/PaymentSettings').then(module => ({ default: module.PaymentSettings })));
+const NotificationSettings = lazy(() => import('./settings/NotificationSettings').then(module => ({ default: module.NotificationSettings })));
 const VipModeToggle = lazy(() => import('./settings/VipModeToggle').then(module => ({ default: module.VipModeToggle })));
 const VipCodesManager = lazy(() => import('./settings/VipCodesManager').then(module => ({ default: module.VipCodesManager })));
 
-type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments' | 'vip-access';
+type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -21,7 +22,7 @@ interface SettingsManagerProps {
 export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => {
     const stored = localStorage.getItem('adminSettingsTab');
-    if (stored && ['restaurant', 'categories', 'menus', 'users', 'payments', 'vip-access'].includes(stored)) {
+    if (stored && ['restaurant', 'categories', 'menus', 'users', 'payments', 'notifications', 'vip-access'].includes(stored)) {
       return stored as SettingsTab;
     }
     return 'restaurant';
@@ -38,6 +39,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'menus', label: 'Menus', icon: Book },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'vip-access', label: 'VIP Access', icon: Lock },
   ];
 
@@ -75,6 +77,12 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         return (
           <div>
             <PaymentSettings />
+          </div>
+        );
+      case 'notifications':
+        return (
+          <div>
+            <NotificationSettings />
           </div>
         );
       case 'vip-access':

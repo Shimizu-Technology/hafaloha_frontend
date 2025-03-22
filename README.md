@@ -11,6 +11,7 @@ Frontend web application for the Hafaloha restaurant management system.
 - VIP code system for exclusive access
 - Merchandise store with variant support, categories, and filtering
 - Real-time notifications with enhanced delivery options
+- Push notifications via Pushover integration
 - Multi-language support (English, Japanese, Korean)
 - Responsive design for mobile and desktop
 - Inventory tracking system for menu items and merchandise
