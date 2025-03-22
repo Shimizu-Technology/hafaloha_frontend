@@ -581,6 +581,70 @@ export function NotificationSettings() {
         
         {settings.notification_channels.orders?.web_push && (
           <div className="space-y-4 mt-4">
+            {/* VAPID Keys */}
+            <div className="p-4 bg-gray-50 rounded-md">
+              <h4 className="font-medium mb-2">VAPID Keys</h4>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Public Key
+                  </label>
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      value={settings.web_push?.vapid_public_key || ''}
+                      readOnly
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Private Key
+                  </label>
+                  <div className="flex items-center">
+                    <input
+                      type="password"
+                      value={settings.web_push?.vapid_private_key || ''}
+                      readOnly
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const response: any = await api.post('/admin/generate_web_push_keys');
+                        if (response.status === 'success') {
+                          setSettings(prev => ({
+                            ...prev,
+                            web_push: {
+                              vapid_public_key: response.public_key,
+                              vapid_private_key: response.private_key
+                            }
+                          }));
+                          toast.success('VAPID keys generated successfully');
+                        } else {
+                          toast.error('Failed to generate VAPID keys');
+                        }
+                      } catch (error) {
+                        console.error('Failed to generate VAPID keys:', error);
+                        toast.error('Failed to generate VAPID keys');
+                      }
+                    }}
+                    className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    Generate New Keys
+                  </button>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Note: Generating new keys will invalidate existing subscriptions.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
             {/* Subscription status and buttons */}
             <div className="p-4 bg-gray-50 rounded-md">
               <h4 className="font-medium mb-2">Device Subscription Status</h4>

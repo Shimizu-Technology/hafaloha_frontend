@@ -28,9 +28,16 @@ The web push notification system consists of the following components:
 
 Web Push uses VAPID (Voluntary Application Server Identification) keys for authentication. Each restaurant has its own set of VAPID keys (public and private) stored in the `admin_settings` JSON field of the Restaurant model.
 
+### Setup Process
+
+1. Go to Admin Dashboard > Settings > Notification Settings
+2. Enable Web Push Notifications using the toggle
+3. Click the "Generate New Keys" button to generate VAPID keys
+4. Click "Save Settings" to save your changes
+
 ### Subscription Process
 
-1. The user enables web push notifications in the admin settings
+1. After setting up web push notifications, click "Subscribe this device" on each device where you want to receive notifications
 2. The browser requests permission to show notifications
 3. If granted, the browser registers with the push service (e.g., Apple Push Notification Service for Safari)
 4. The subscription details (endpoint, p256dh key, auth key) are sent to the server
