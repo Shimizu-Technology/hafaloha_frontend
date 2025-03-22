@@ -25,58 +25,55 @@ export async function getNotificationPermissionStatus(): Promise<'granted' | 'de
 /**
  * Converts a base64 string to a Uint8Array
  * This is used to convert the VAPID public key to the format required by the PushManager
+ * 
+ * This is a standard implementation that should work across all browsers
  */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  // First, log the input for debugging
+  console.log('Input VAPID public key:', base64String);
+  
   try {
-    console.log('Original VAPID public key:', base64String);
-    
     // Remove any whitespace
     const trimmedBase64 = base64String.trim();
+    console.log('Trimmed VAPID public key:', trimmedBase64);
     
     // Add padding if needed
     const padding = '='.repeat((4 - (trimmedBase64.length % 4)) % 4);
+    console.log('Padding added:', padding);
     
     // Convert URL-safe base64 to regular base64
     const base64 = (trimmedBase64 + padding)
       .replace(/-/g, '+')
       .replace(/_/g, '/');
+    console.log('Converted to standard base64:', base64);
     
-    console.log('Converted base64:', base64);
-    
+    // Convert base64 to binary string
+    let rawData;
     try {
-      // Convert base64 to binary string
-      const rawData = window.atob(base64);
-      console.log('Raw data length:', rawData.length);
-      
-      // Convert binary string to Uint8Array
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
-      
-      console.log('Uint8Array created successfully with length:', outputArray.length);
-      return outputArray;
-    } catch (atobError) {
-      console.error('Error in atob conversion:', atobError);
-      
-      // Try an alternative approach for browsers that might have issues with atob
-      console.log('Trying alternative approach...');
-      
-      // Convert base64 to binary using a different method
-      const binaryString = atob(base64);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      console.log('Alternative approach successful, array length:', bytes.length);
-      return bytes;
+      rawData = window.atob(base64);
+      console.log('Successfully decoded base64, length:', rawData.length);
+    } catch (e: any) {
+      console.error('Error decoding base64:', e);
+      throw new Error('Invalid base64 string: ' + (e.message || 'Unknown error'));
     }
+    
+    // Convert binary string to Uint8Array
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    
+    console.log('Final Uint8Array length:', outputArray.length);
+    console.log('First few bytes:', outputArray.slice(0, 5));
+    
+    return outputArray;
   } catch (error) {
     console.error('Error in urlBase64ToUint8Array:', error);
+    
+    // Show a user-friendly error message
     alert('Error processing the server key. Please try regenerating the VAPID keys in the admin settings.');
+    
+    // Re-throw the error for further handling
     throw error;
   }
 }
