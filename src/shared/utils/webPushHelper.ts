@@ -166,16 +166,20 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
         // Check if iOS version is at least 16.4
         const iosVersionMatch = navigator.userAgent.match(/OS (\d+)_(\d+)/);
         let isIOSVersionSupported = false;
+        let majorVersion = 0;
+        let minorVersion = 0;
         
         if (iosVersionMatch) {
-          const majorVersion = parseInt(iosVersionMatch[1], 10);
-          const minorVersion = parseInt(iosVersionMatch[2], 10);
+          majorVersion = parseInt(iosVersionMatch[1], 10);
+          minorVersion = parseInt(iosVersionMatch[2], 10);
           
           console.log(`Detected iOS version: ${majorVersion}.${minorVersion}`);
           
           // iOS 16.4+ is required for web push
           isIOSVersionSupported = (majorVersion > 16) || (majorVersion === 16 && minorVersion >= 4);
           console.log('Is iOS version supported?', isIOSVersionSupported);
+        } else {
+          console.warn('Could not detect iOS version from user agent:', navigator.userAgent);
         }
         
         // If not standalone or iOS version < 16.4, show warning
@@ -183,6 +187,15 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
           console.warn('iOS device requirements not met for push notifications');
           console.warn('Is standalone?', isStandalone);
           console.warn('Is iOS version supported?', isIOSVersionSupported);
+          
+          // Show appropriate warning
+          if (!isStandalone) {
+            alert('This app must be installed to your home screen (Add to Home Screen) to receive push notifications.');
+            return false;
+          } else if (!isIOSVersionSupported) {
+            alert(`Push notifications require iOS 16.4 or later. Your device appears to be running iOS ${majorVersion}.${minorVersion}.`);
+            return false;
+          }
         }
       }
       
