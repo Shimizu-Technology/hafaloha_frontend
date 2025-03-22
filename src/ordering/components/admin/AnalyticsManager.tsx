@@ -21,9 +21,18 @@ import {
   UserSignupItem,
   HeatmapDataPoint
 } from '../../../shared/api';
+import { 
+  staffDiscountsApi, 
+  StaffDiscountSummary, 
+  StaffDiscountByEmployee, 
+  StaffDiscountByBeneficiary, 
+  StaffDiscountByPaymentMethod 
+} from '../../../shared/api/endpoints/staffDiscounts';
 
 // ------------------- Types -------------------
 type SortColumn = 'user_name' | 'total_spent' | 'order_count';
+type EmployeeSortColumn = 'user_name' | 'discount_count' | 'total_discount_amount' | 'house_account_balance';
+type BeneficiarySortColumn = 'beneficiary_name' | 'discount_count' | 'total_discount_amount';
 type SortDirection = 'asc' | 'desc';
 
 // For date-range presets
@@ -124,6 +133,16 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   const [userSignups, setUserSignups] = useState<UserSignupItem[]>([]);
   const [activityHeatmap, setActivityHeatmap] = useState<HeatmapDataPoint[]>([]);
   const [dayNames, setDayNames] = useState<string[]>([]);
+  
+  // Staff Discount Analytics States
+  const [staffDiscountSummary, setStaffDiscountSummary] = useState<StaffDiscountSummary | null>(null);
+  const [staffDiscountByEmployee, setStaffDiscountByEmployee] = useState<StaffDiscountByEmployee[]>([]);
+  const [staffDiscountByBeneficiary, setStaffDiscountByBeneficiary] = useState<StaffDiscountByBeneficiary[]>([]);
+  const [staffDiscountByPaymentMethod, setStaffDiscountByPaymentMethod] = useState<StaffDiscountByPaymentMethod[]>([]);
+  const [employeeSortCol, setEmployeeSortCol] = useState<EmployeeSortColumn>('user_name');
+  const [employeeSortDir, setEmployeeSortDir] = useState<SortDirection>('asc');
+  const [beneficiarySortCol, setBeneficiarySortCol] = useState<BeneficiarySortColumn>('beneficiary_name');
+  const [beneficiarySortDir, setBeneficiarySortDir] = useState<SortDirection>('asc');
 
   // ----- 3) Derived: Guest vs Registered -----
   const guestRows = useMemo(() => {
@@ -135,6 +154,59 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     const regs = ordersData.filter((r) => r.user_id !== null);
     return sortReports(regs, regSortCol, regSortDir);
   }, [ordersData, regSortCol, regSortDir]);
+  
+  // Sorted Employee Discounts
+  const sortedEmployeeDiscounts = useMemo(() => {
+    const sorted = [...staffDiscountByEmployee];
+    sorted.sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
+
+      if (employeeSortCol === 'user_name') {
+        valA = a.user_name.toLowerCase();
+        valB = b.user_name.toLowerCase();
+      } else if (employeeSortCol === 'discount_count') {
+        valA = a.discount_count;
+        valB = b.discount_count;
+      } else if (employeeSortCol === 'total_discount_amount') {
+        valA = a.total_discount_amount;
+        valB = b.total_discount_amount;
+      } else if (employeeSortCol === 'house_account_balance') {
+        valA = a.house_account_balance;
+        valB = b.house_account_balance;
+      }
+
+      if (valA < valB) return employeeSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return employeeSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [staffDiscountByEmployee, employeeSortCol, employeeSortDir]);
+  
+  // Sorted Beneficiary Discounts
+  const sortedBeneficiaryDiscounts = useMemo(() => {
+    const sorted = [...staffDiscountByBeneficiary];
+    sorted.sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
+
+      if (beneficiarySortCol === 'beneficiary_name') {
+        valA = a.beneficiary_name.toLowerCase();
+        valB = b.beneficiary_name.toLowerCase();
+      } else if (beneficiarySortCol === 'discount_count') {
+        valA = a.discount_count;
+        valB = b.discount_count;
+      } else if (beneficiarySortCol === 'total_discount_amount') {
+        valA = a.total_discount_amount;
+        valB = b.total_discount_amount;
+      }
+
+      if (valA < valB) return beneficiarySortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return beneficiarySortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [staffDiscountByBeneficiary, beneficiarySortCol, beneficiarySortDir]);
 
   // ----- 4) Load Analytics -----
   async function loadAnalytics() {
@@ -163,6 +235,22 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       const heatmapRes = await getUserActivityHeatmap(startDate, endDate);
       setActivityHeatmap(heatmapRes.heatmap || []);
       setDayNames(heatmapRes.day_names || []);
+      
+      // 7) Staff Discount Summary
+      const discountSummaryRes = await staffDiscountsApi.getStaffDiscountSummary(startDate, endDate);
+      setStaffDiscountSummary(discountSummaryRes.summary);
+      
+      // 8) Staff Discount By Employee
+      const discountByEmployeeRes = await staffDiscountsApi.getStaffDiscountByEmployee(startDate, endDate);
+      setStaffDiscountByEmployee(discountByEmployeeRes.employees || []);
+      
+      // 9) Staff Discount By Beneficiary
+      const discountByBeneficiaryRes = await staffDiscountsApi.getStaffDiscountByBeneficiary(startDate, endDate);
+      setStaffDiscountByBeneficiary(discountByBeneficiaryRes.beneficiaries || []);
+      
+      // 10) Staff Discount By Payment Method
+      const discountByPaymentMethodRes = await staffDiscountsApi.getStaffDiscountByPaymentMethod(startDate, endDate);
+      setStaffDiscountByPaymentMethod(discountByPaymentMethodRes.payment_methods || []);
 
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -753,6 +841,375 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           </div>
         ) : (
           <p className="text-gray-500">No activity data in this range.</p>
+        )}
+      </div>
+      
+      {/* 
+        ============================================
+        (H) Staff Discount Analysis
+        ============================================
+      */}
+      <div className="bg-white rounded-lg shadow p-4 mt-4">
+        <h3 className="text-xl font-bold mb-4">Staff Discount Analysis</h3>
+        
+        {/* Staff Discount Summary Cards */}
+        {staffDiscountSummary ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <div className="text-sm text-blue-600 mb-1">Total Discounts</div>
+              <div className="text-2xl font-bold text-blue-800">{staffDiscountSummary.total_count}</div>
+              <div className="text-sm text-blue-600 mt-1">
+                ${staffDiscountSummary.total_discount_amount.toFixed(2)} saved
+              </div>
+            </div>
+            
+            <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+              <div className="text-sm text-green-600 mb-1">Avg. Discount</div>
+              <div className="text-2xl font-bold text-green-800">
+                {staffDiscountSummary.avg_discount_percentage.toFixed(1)}%
+              </div>
+              <div className="text-sm text-green-600 mt-1">
+                of total value
+              </div>
+            </div>
+            
+            <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
+              <div className="text-sm text-amber-600 mb-1">Working vs. Non-Working</div>
+              <div className="text-2xl font-bold text-amber-800">
+                {staffDiscountSummary.working_count} / {staffDiscountSummary.non_working_count}
+              </div>
+              <div className="text-sm text-amber-600 mt-1">
+                {((staffDiscountSummary.working_count / 
+                  (staffDiscountSummary.working_count + staffDiscountSummary.non_working_count)) * 
+                  100).toFixed(1)}% while working
+              </div>
+            </div>
+            
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+              <div className="text-sm text-purple-600 mb-1">Payment Method</div>
+              <div className="text-2xl font-bold text-purple-800">
+                {staffDiscountSummary.house_account_count} / {staffDiscountSummary.immediate_payment_count}
+              </div>
+              <div className="text-sm text-purple-600 mt-1">
+                House Account / Immediate
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-gray-500 mb-6">No staff discount data available for this period.</p>
+        )}
+        
+        {/* Payment Method Trend Chart */}
+        {staffDiscountByPaymentMethod.length > 0 && (
+          <div className="mb-8">
+            <h4 className="font-semibold text-lg mb-3">Payment Method Trend</h4>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart 
+                  data={staffDiscountByPaymentMethod} 
+                  margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" fontSize={12} />
+                  <YAxis fontSize={12} />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="immediate_payment"
+                    stroke="#8884d8"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                    name="Immediate Payment"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="house_account"
+                    stroke="#82ca9d"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                    name="House Account"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+        
+        {/* Staff Discount by Employee */}
+        <div className="mb-8">
+          <h4 className="font-semibold text-lg mb-3">Discount Usage by Employee</h4>
+          {sortedEmployeeDiscounts.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="table-auto w-full text-sm border border-gray-200">
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th
+                      className="px-4 py-2 text-left font-semibold cursor-pointer hover:bg-gray-200"
+                      onClick={() => {
+                        if (employeeSortCol === 'user_name') {
+                          setEmployeeSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setEmployeeSortCol('user_name');
+                          setEmployeeSortDir('asc');
+                        }
+                      }}
+                    >
+                      Employee
+                      {employeeSortCol === 'user_name' && (
+                        <span className="ml-1">
+                          {employeeSortDir === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-left font-semibold cursor-pointer hover:bg-gray-200"
+                      onClick={() => {
+                        if (employeeSortCol === 'discount_count') {
+                          setEmployeeSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setEmployeeSortCol('discount_count');
+                          setEmployeeSortDir('asc');
+                        }
+                      }}
+                    >
+                      # of Discounts
+                      {employeeSortCol === 'discount_count' && (
+                        <span className="ml-1">
+                          {employeeSortDir === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-left font-semibold cursor-pointer hover:bg-gray-200"
+                      onClick={() => {
+                        if (employeeSortCol === 'total_discount_amount') {
+                          setEmployeeSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setEmployeeSortCol('total_discount_amount');
+                          setEmployeeSortDir('asc');
+                        }
+                      }}
+                    >
+                      Total Discount
+                      {employeeSortCol === 'total_discount_amount' && (
+                        <span className="ml-1">
+                          {employeeSortDir === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-left font-semibold cursor-pointer hover:bg-gray-200"
+                      onClick={() => {
+                        if (employeeSortCol === 'house_account_balance') {
+                          setEmployeeSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setEmployeeSortCol('house_account_balance');
+                          setEmployeeSortDir('asc');
+                        }
+                      }}
+                    >
+                      House Account Balance
+                      {employeeSortCol === 'house_account_balance' && (
+                        <span className="ml-1">
+                          {employeeSortDir === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                    <th className="px-4 py-2 text-left font-semibold">
+                      Discount %
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedEmployeeDiscounts.map((employee, idx) => (
+                    <tr
+                      key={idx}
+                      className={`border-b last:border-b-0 hover:bg-gray-50 ${
+                        employee.house_account_balance > 300 ? 'bg-red-50' : ''
+                      }`}
+                    >
+                      <td className="px-4 py-2 font-medium">{employee.user_name}</td>
+                      <td className="px-4 py-2">{employee.discount_count}</td>
+                      <td className="px-4 py-2">${employee.total_discount_amount.toFixed(2)}</td>
+                      <td className={`px-4 py-2 font-medium ${
+                        employee.house_account_balance > 300 ? 'text-red-600' : ''
+                      }`}>
+                        ${employee.house_account_balance.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2">
+                        {employee.avg_discount_percentage.toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-500">No employee discount data for this period.</p>
+          )}
+        </div>
+        
+        {/* Staff Discount by Beneficiary */}
+        <div>
+          <h4 className="font-semibold text-lg mb-3">Discount Usage by Beneficiary</h4>
+          {sortedBeneficiaryDiscounts.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="table-auto w-full text-sm border border-gray-200">
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th
+                      className="px-4 py-2 text-left font-semibold cursor-pointer hover:bg-gray-200"
+                      onClick={() => {
+                        if (beneficiarySortCol === 'beneficiary_name') {
+                          setBeneficiarySortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setBeneficiarySortCol('beneficiary_name');
+                          setBeneficiarySortDir('asc');
+                        }
+                      }}
+                    >
+                      Beneficiary
+                      {beneficiarySortCol === 'beneficiary_name' && (
+                        <span className="ml-1">
+                          {beneficiarySortDir === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-left font-semibold cursor-pointer hover:bg-gray-200"
+                      onClick={() => {
+                        if (beneficiarySortCol === 'discount_count') {
+                          setBeneficiarySortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setBeneficiarySortCol('discount_count');
+                          setBeneficiarySortDir('asc');
+                        }
+                      }}
+                    >
+                      # of Discounts
+                      {beneficiarySortCol === 'discount_count' && (
+                        <span className="ml-1">
+                          {beneficiarySortDir === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-left font-semibold cursor-pointer hover:bg-gray-200"
+                      onClick={() => {
+                        if (beneficiarySortCol === 'total_discount_amount') {
+                          setBeneficiarySortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setBeneficiarySortCol('total_discount_amount');
+                          setBeneficiarySortDir('asc');
+                        }
+                      }}
+                    >
+                      Total Discount Amount
+                      {beneficiarySortCol === 'total_discount_amount' && (
+                        <span className="ml-1">
+                          {beneficiarySortDir === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedBeneficiaryDiscounts.map((beneficiary, idx) => (
+                    <tr
+                      key={idx}
+                      className="border-b last:border-b-0 hover:bg-gray-50"
+                    >
+                      <td className="px-4 py-2 font-medium">
+                        {beneficiary.beneficiary_name || 'Self (No Beneficiary)'}
+                      </td>
+                      <td className="px-4 py-2">{beneficiary.discount_count}</td>
+                      <td className="px-4 py-2">${beneficiary.total_discount_amount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-500">No beneficiary discount data for this period.</p>
+          )}
+        </div>
+        
+        {/* Export buttons */}
+        {(sortedEmployeeDiscounts.length > 0 || sortedBeneficiaryDiscounts.length > 0) && (
+          <div className="mt-6">
+            <button
+              onClick={() => {
+                // Export staff discount data to Excel
+                const wb = XLSX.utils.book_new();
+                
+                // Summary sheet
+                if (staffDiscountSummary) {
+                  const summaryData = [{
+                    Metric: 'Total Discounts',
+                    Value: staffDiscountSummary.total_count
+                  }, {
+                    Metric: 'Total Discount Amount',
+                    Value: `$${staffDiscountSummary.total_discount_amount.toFixed(2)}`
+                  }, {
+                    Metric: 'Average Discount Percentage',
+                    Value: `${staffDiscountSummary.avg_discount_percentage.toFixed(1)}%`
+                  }, {
+                    Metric: 'Working Discounts',
+                    Value: staffDiscountSummary.working_count
+                  }, {
+                    Metric: 'Non-Working Discounts',
+                    Value: staffDiscountSummary.non_working_count
+                  }, {
+                    Metric: 'House Account Usage',
+                    Value: staffDiscountSummary.house_account_count
+                  }, {
+                    Metric: 'Immediate Payment Usage',
+                    Value: staffDiscountSummary.immediate_payment_count
+                  }];
+                  
+                  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+                  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+                }
+                
+                // Employee sheet
+                if (sortedEmployeeDiscounts.length > 0) {
+                  const employeeData = sortedEmployeeDiscounts.map(e => ({
+                    Employee: e.user_name,
+                    'Discount Count': e.discount_count,
+                    'Discount Amount': `$${e.total_discount_amount.toFixed(2)}`,
+                    'Original Amount': `$${e.total_original_amount.toFixed(2)}`,
+                    'Average Discount': `${e.avg_discount_percentage.toFixed(1)}%`,
+                    'House Account Balance': `$${e.house_account_balance.toFixed(2)}`,
+                    'House Account Usage': `$${e.house_account_usage.toFixed(2)}`
+                  }));
+                  
+                  const employeeSheet = XLSX.utils.json_to_sheet(employeeData);
+                  XLSX.utils.book_append_sheet(wb, employeeSheet, 'By Employee');
+                }
+                
+                // Beneficiary sheet
+                if (sortedBeneficiaryDiscounts.length > 0) {
+                  const beneficiaryData = sortedBeneficiaryDiscounts.map(b => ({
+                    Beneficiary: b.beneficiary_name || 'Self (No Beneficiary)',
+                    'Discount Count': b.discount_count,
+                    'Discount Amount': `$${b.total_discount_amount.toFixed(2)}`
+                  }));
+                  
+                  const beneficiarySheet = XLSX.utils.json_to_sheet(beneficiaryData);
+                  XLSX.utils.book_append_sheet(wb, beneficiarySheet, 'By Beneficiary');
+                }
+                
+                // Write the Excel file
+                XLSX.writeFile(wb, `StaffDiscountReport_${startDate}_to_${endDate}.xlsx`);
+              }}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              Export Staff Discount Report
+            </button>
+          </div>
         )}
       </div>
     </div>

@@ -2,10 +2,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../lib/api';
-
 import type { Order, OrderItem } from '../types/order';
 
-// Define CartItem type since it's not exported from menu.ts
+/** CartItem for local cart usage. */
 export interface CartItem extends Omit<OrderItem, 'id'> {
   id: string;
   name: string;
@@ -14,11 +13,11 @@ export interface CartItem extends Omit<OrderItem, 'id'> {
   notes?: string;
   customizations?: any[];
   advance_notice_hours?: number;
-  image?: string; // Add image property
-  type?: 'food' | 'merchandise'; // Type of item
-  variant_id?: number; // For merchandise items with variants
-  size?: string; // For merchandise items
-  color?: string; // For merchandise items
+  image?: string;
+  type?: 'food' | 'merchandise';
+  variant_id?: number;
+  size?: string;
+  color?: string;
 }
 
 interface OrderStore {
@@ -39,7 +38,11 @@ interface OrderStore {
     contactEmail?: string,
     transactionId?: string,
     paymentMethod?: string,
-    vipCode?: string
+    vipCode?: string,
+    isStaffOrder?: boolean,
+    staffIsWorking?: boolean,
+    staffPaymentMethod?: string,
+    staffBeneficiaryId?: number | null
   ) => Promise<Order>;
 
   /** Update just status + optional pickupTime. */
@@ -50,7 +53,6 @@ interface OrderStore {
 
   /** For admin editing an entire order's data (items, total, instructions, etc.). */
   updateOrderData: (orderId: string, updatedOrder: any) => Promise<void>;
-
   getOrderHistory: (userId: number) => Order[];
 
   // CART
@@ -58,7 +60,6 @@ interface OrderStore {
   
   /** Utility function to generate a unique key for an item based on id and customizations */
   _getItemKey: (item: any) => string;
-  
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
   removeFromCart: (itemId: string) => void;
   setCartQuantity: (itemId: string, quantity: number) => void;
@@ -75,40 +76,38 @@ export const useOrderStore = create<OrderStore>()(
       loading: false,
       error: null,
 
-  // GET /orders - fetch all pages for user's order history
-  fetchOrders: async () => {
-    set({ loading: true, error: null });
-    try {
-      // Start with page 1
-      let currentPage = 1;
-      let allOrders: Order[] = [];
-      let hasMorePages = true;
-      
-      // Fetch all pages
-      while (hasMorePages) {
-        // Handle the paginated response format
-        const response = await api.get<{orders: Order[], total_count: number, page: number, per_page: number}>(`/orders?page=${currentPage}&per_page=10`);
-        
-        // Extract the orders array from the response
-        const pageOrders = response.orders || [];
-        allOrders = [...allOrders, ...pageOrders];
-        
-        // Calculate if there are more pages
-        const totalPages = Math.ceil(response.total_count / response.per_page);
-        hasMorePages = currentPage < totalPages;
-        currentPage++;
-        
-        // Safety check to prevent infinite loops
-        if (currentPage > 10) break;
-      }
-      
-      set({ orders: allOrders, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-    }
-  },
+      // ---------------------------------------------------------
+      // Fetch all orders with pagination
+      // ---------------------------------------------------------
+      fetchOrders: async () => {
+        set({ loading: true, error: null });
+        try {
+          let currentPage = 1;
+          let allOrders: Order[] = [];
+          let hasMorePages = true;
+          while (hasMorePages) {
+            const response = await api.get<{
+              orders: Order[];
+              total_count: number;
+              page: number;
+              per_page: number;
+            }>(`/orders?page=${currentPage}&per_page=10`);
+            const pageOrders = response.orders || [];
+            allOrders = [...allOrders, ...pageOrders];
+            const totalPages = Math.ceil(response.total_count / response.per_page);
+            hasMorePages = currentPage < totalPages;
+            currentPage++;
+            if (currentPage > 20) break; // safety
+          }
+          set({ orders: allOrders, loading: false });
+        } catch (err: any) {
+          set({ error: err.message, loading: false });
+        }
+      },
 
-      // GET /orders without showing loading state - fetch all pages
+      // ---------------------------------------------------------
+      // Fetch quietly (no loading state) 
+      // ---------------------------------------------------------
       fetchOrdersQuietly: async () => {
         try {
           // Start with page 1
@@ -118,10 +117,12 @@ export const useOrderStore = create<OrderStore>()(
           
           // Fetch all pages
           while (hasMorePages) {
-            // Handle the paginated response format
-            const response = await api.get<{orders: Order[], total_count: number, page: number, per_page: number}>(`/orders?page=${currentPage}&per_page=10`);
-            
-            // Extract the orders array from the response
+            const response = await api.get<{
+              orders: Order[];
+              total_count: number;
+              page: number;
+              per_page: number;
+            }>(`/orders?page=${currentPage}&per_page=10`);
             const pageOrders = response.orders || [];
             allOrders = [...allOrders, ...pageOrders];
             
@@ -129,9 +130,7 @@ export const useOrderStore = create<OrderStore>()(
             const totalPages = Math.ceil(response.total_count / response.per_page);
             hasMorePages = currentPage < totalPages;
             currentPage++;
-            
-            // Safety check to prevent infinite loops
-            if (currentPage > 10) break;
+            if (currentPage > 20) break;
           }
           
           // Only update orders, don't change loading state
@@ -143,7 +142,9 @@ export const useOrderStore = create<OrderStore>()(
         }
       },
 
-      // POST /orders - optimized for speed
+      // ---------------------------------------------------------
+      // Create Order with staff discount parameters included
+      // ---------------------------------------------------------
       addOrder: async (
         items,
         total,
@@ -153,15 +154,17 @@ export const useOrderStore = create<OrderStore>()(
         contactEmail,
         transactionId,
         paymentMethod = 'credit_card',
-        vipCode
+        vipCode,
+        isStaffOrder = false,
+        staffIsWorking = false,
+        staffPaymentMethod = 'immediate',
+        staffBeneficiaryId = null
       ) => {
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
         set({ error: null });
-        
         try {
-          // Create the payload more efficiently - avoid unnecessary data transformation
-          // Pre-allocate arrays with the right size for better performance
+          // Separate food vs merchandise
           const foodItems = [];
           const merchandiseItems = [];
           
@@ -176,7 +179,7 @@ export const useOrderStore = create<OrderStore>()(
                 variant_id: item.variant_id,
                 size: item.size,
                 color: item.color,
-                notes: item.notes,
+                notes: item.notes
               });
             } else {
               foodItems.push({
@@ -185,11 +188,11 @@ export const useOrderStore = create<OrderStore>()(
                 quantity: item.quantity,
                 price: item.price,
                 customizations: item.customizations,
-                notes: item.notes,
+                notes: item.notes
               });
             }
           }
-          
+
           const payload = {
             order: {
               items: foodItems,
@@ -202,13 +205,17 @@ export const useOrderStore = create<OrderStore>()(
               transaction_id: transactionId,
               payment_method: paymentMethod,
               vip_code: vipCode,
+
+              // Staff discount fields
+              is_staff_order: isStaffOrder,
+              staff_is_working: staffIsWorking,
+              staff_payment_method: staffPaymentMethod,
+              staff_beneficiary_id: staffBeneficiaryId
             },
           };
 
-          // Create a temporary order ID for optimistic updates
+          // Optimistic UI: create a temporary order
           const tempId = `temp-${Date.now()}`;
-          
-          // Create an optimistic order to update the UI immediately
           const optimisticOrder: Order = {
             id: tempId,
             status: 'pending',
@@ -216,25 +223,24 @@ export const useOrderStore = create<OrderStore>()(
             merchandise_items: merchandiseItems,
             total,
             special_instructions: specialInstructions,
-            contact_name: contactName,
-            contact_phone: contactPhone,
-            contact_email: contactEmail,
-            transaction_id: transactionId,
+            contact_name: contactName || '',
+            contact_phone: contactPhone || '',
+            contact_email: contactEmail || '',
+            transaction_id: transactionId || '',
             payment_method: paymentMethod,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
 
-          // Update the state optimistically
           set({
             orders: [...get().orders, optimisticOrder],
-            cartItems: [] // Clear cart right away for faster perceived performance
+            cartItems: [] // Clear the cart right away for fast UI
           });
 
-          // Make the API call
+          // Real API call
           const newOrder = await api.post<Order>('/orders', payload);
 
-          // Update the state with the real order, replacing the optimistic one
+          // Replace the optimistic order with the real one
           set({
             orders: get().orders.map(order => 
               order.id === tempId ? newOrder : order
@@ -244,12 +250,7 @@ export const useOrderStore = create<OrderStore>()(
           return newOrder;
         } catch (err: any) {
           set({ error: err.message });
-          
-          // Don't rethrow error - handle it gracefully to avoid blocking UI
-          // Clear loading state if there's an error
           console.error('Failed to create order:', err);
-          
-          // Return a partial order to allow the UI to continue
           return {
             id: `error-${Date.now()}`,
             status: 'error',
@@ -258,10 +259,9 @@ export const useOrderStore = create<OrderStore>()(
         }
       },
 
-      /**
-       * PATCH /orders/:id
-       * Optionally pass in `pickupTime` if we want to set `estimated_pickup_time` too.
-       */
+      // ---------------------------------------------------------
+      // Update order status
+      // ---------------------------------------------------------
       updateOrderStatus: async (orderId, status, pickupTime) => {
         set({ loading: true, error: null });
         try {
@@ -272,105 +272,58 @@ export const useOrderStore = create<OrderStore>()(
           const updatedOrder = await api.patch<Order>(`/orders/${orderId}`, {
             order: orderPayload,
           });
-          const updatedOrders = get().orders.map((o) =>
-            o.id === updatedOrder.id ? updatedOrder : o
-          );
+          const updatedOrders = get().orders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
           set({ orders: updatedOrders, loading: false });
         } catch (err: any) {
           set({ error: err.message, loading: false });
         }
       },
 
-      /**
-       * PATCH /orders/:id without showing loading state
-       * For smoother UI transitions when changing order status
-       */
+      // ---------------------------------------------------------
+      // Update order status quietly (no loading spinner)
+      // ---------------------------------------------------------
       updateOrderStatusQuietly: async (orderId, status, pickupTime) => {
-        // Don't set loading state
         set({ error: null });
-        
-        // Optimistically update the UI
-        const orderToUpdate = get().orders.find(o => o.id === orderId);
-        if (orderToUpdate) {
-          // Cast status to the correct type for Order
+        const existingOrder = get().orders.find(o => o.id === orderId);
+        if (existingOrder) {
           const typedStatus = status as Order['status'];
-          const optimisticOrder = { ...orderToUpdate, status: typedStatus };
-          
+          const optimisticOrder = { ...existingOrder, status: typedStatus };
           if (pickupTime) {
             (optimisticOrder as any).estimated_pickup_time = pickupTime;
-            (optimisticOrder as any).estimatedPickupTime = pickupTime;
           }
-          
-          const optimisticOrders = get().orders.map((o) =>
+          const optimisticOrders = get().orders.map(o =>
             o.id === orderId ? optimisticOrder : o
           );
-          
           set({ orders: optimisticOrders });
         }
-        
         try {
           const orderPayload: any = { status };
           if (pickupTime) {
             orderPayload.estimated_pickup_time = pickupTime;
           }
-          
-          // Make the API call
           const updatedOrder = await api.patch<Order>(`/orders/${orderId}`, {
             order: orderPayload,
           });
-          
-          // Update with the actual server response
-          const updatedOrders = get().orders.map((o) =>
+          const newOrders = get().orders.map(o =>
             o.id === updatedOrder.id ? updatedOrder : o
           );
-          
-          set({ orders: updatedOrders });
-          // Don't return the updatedOrder, just return void to match the interface
+          set({ orders: newOrders });
         } catch (err: any) {
-          // If there's an error, revert the optimistic update
           set({ error: err.message });
-          
-          // Refresh orders to ensure UI is in sync with server
-          try {
-            // Start with page 1
-            let currentPage = 1;
-            let allOrders: Order[] = [];
-            let hasMorePages = true;
-            
-            // Fetch all pages
-            while (hasMorePages) {
-              // Handle the paginated response format
-              const response = await api.get<{orders: Order[], total_count: number, page: number, per_page: number}>(`/orders?page=${currentPage}&per_page=10`);
-              
-              // Extract the orders array from the response
-              const pageOrders = response.orders || [];
-              allOrders = [...allOrders, ...pageOrders];
-              
-              // Calculate if there are more pages
-              const totalPages = Math.ceil(response.total_count / response.per_page);
-              hasMorePages = currentPage < totalPages;
-              currentPage++;
-              
-              // Safety check to prevent infinite loops
-              if (currentPage > 10) break;
-            }
-            
-            set({ orders: allOrders });
-          } catch (refreshErr: any) {
-            console.error('Error refreshing orders after failed update:', refreshErr);
-          }
-          
-          throw err;
+          // revert or re-fetch if needed
         }
       },
 
-      /** The new method: pass a whole updated order, we send it in a PATCH. */
+      // ---------------------------------------------------------
+      // Update entire order
+      // ---------------------------------------------------------
       updateOrderData: async (orderId, updatedOrder) => {
         set({ loading: true, error: null });
         try {
-          const payload = { order: updatedOrder };
-          const resp = await api.patch<Order>(`/orders/${orderId}`, payload);
-          const updatedOrders = get().orders.map((o) =>
+          const resp = await api.patch<Order>(`/orders/${orderId}`, {
+            order: updatedOrder
+          });
+          const updatedOrders = get().orders.map(o =>
             o.id === resp.id ? resp : o
           );
           set({ orders: updatedOrders, loading: false });
@@ -379,111 +332,88 @@ export const useOrderStore = create<OrderStore>()(
         }
       },
 
-      getOrderHistory: (userId) => {
-        // Filter orders by user ID if available
-        // Check both user_id (from API) and userId (camelCase version) for compatibility
-        return get().orders.filter((o) => 
-          (o as any).user_id === userId || (o as any).userId === userId
-        );
+      // ---------------------------------------------------------
+      // Return order history for a user
+      // ---------------------------------------------------------
+      getOrderHistory: (userId: number) => {
+        return get().orders.filter(o => (o as any).user_id === userId || (o as any).userId === userId);
       },
 
-      // CART -------------
+      // ---------------------------------------------------------
+      // CART
+      // ---------------------------------------------------------
       cartItems: [],
-      // Helper function to generate a unique key for cart items based on ID and customizations
-      // This allows distinguishing between same menu items with different customizations
       _getItemKey: (item: any): string => {
         let customizationsKey = '';
-        
         if (item.customizations) {
-          // Check if customizations is an array (which can be sorted directly)
           if (Array.isArray(item.customizations)) {
-            // If it's an array of customization objects with option_id and option_group_id
-            customizationsKey = JSON.stringify(item.customizations.sort((a: any, b: any) => 
-              // Sort by option_group_id first, then by option_id
-              a.option_group_id === b.option_group_id 
-                ? (a.option_id - b.option_id)
-                : (a.option_group_id - b.option_group_id)
-            ));
+            // Sort by group/option ID
+            customizationsKey = JSON.stringify(
+              item.customizations.sort((a: any, b: any) => {
+                if (a.option_group_id === b.option_group_id) {
+                  return a.option_id - b.option_id;
+                }
+                return a.option_group_id - b.option_group_id;
+              })
+            );
           } else {
-            // If it's an object where keys are group names and values are arrays of option names
-            // Convert to stable sortable string representation
+            // Object-based
             const sortedGroups = Object.keys(item.customizations).sort();
-            const sortedCustomizations = sortedGroups.map(groupName => {
+            const groupStrings = sortedGroups.map(groupName => {
               const options = item.customizations[groupName];
-              return `${groupName}:${Array.isArray(options) ? [...options].sort().join(',') : options}`;
+              return `${groupName}:${Array.isArray(options)
+                ? [...options].sort().join(',')
+                : options}`;
             });
-            customizationsKey = JSON.stringify(sortedCustomizations);
+            customizationsKey = JSON.stringify(groupStrings);
           }
         }
-        
         return `${item.id}-${customizationsKey}`;
       },
-      
+
       addToCart: (item, quantity = 1) => {
         set((state) => {
-          // Get the unique key for this item with its customizations
           const getItemKey = get()._getItemKey;
           const itemKey = getItemKey(item);
-          
-          // Find if this exact item (with same customizations) already exists
-          const existing = state.cartItems.find((ci) => getItemKey(ci) === itemKey);
-          
+          const existing = state.cartItems.find(ci => getItemKey(ci) === itemKey);
           if (existing) {
-            // Update quantity of existing item with same customizations
             return {
-              cartItems: state.cartItems.map((ci) =>
+              cartItems: state.cartItems.map(ci =>
                 getItemKey(ci) === itemKey
                   ? { ...ci, quantity: ci.quantity + quantity }
                   : ci
-              ),
-            };
-          } else {
-            // Add as a new item
-            return {
-              cartItems: [...state.cartItems, { ...item, quantity }],
+              )
             };
           }
+          return { cartItems: [...state.cartItems, { ...item, quantity }] };
         });
       },
+
       removeFromCart: (itemId) => {
         set((state) => {
-          // Generate a key using the composite approach or find by ID if it's already a generated key
-          // This handles both direct IDs and composite keys with customizations
-          const itemToRemove = state.cartItems.find(ci => 
+          const itemToRemove = state.cartItems.find(ci =>
             ci.id === itemId || get()._getItemKey(ci) === itemId
           );
-          
           if (!itemToRemove) return state;
-          
-          // Generate the full key for the item
           const fullKey = get()._getItemKey(itemToRemove);
-          
-          // Remove the item with the matching key
           return {
             cartItems: state.cartItems.filter(ci => get()._getItemKey(ci) !== fullKey)
           };
         });
       },
-      
+
       setCartQuantity: (itemId, quantity) => {
         if (quantity <= 0) {
-          // Use removeFromCart to ensure consistency
           get().removeFromCart(itemId);
         } else {
           set((state) => {
-            // Find the item either by its ID or its complete composite key
-            const itemToUpdate = state.cartItems.find(ci => 
+            const itemToUpdate = state.cartItems.find(ci =>
               ci.id === itemId || get()._getItemKey(ci) === itemId
             );
-            
             if (!itemToUpdate) return state;
-            
-            // Generate the full key for the item
             const fullKey = get()._getItemKey(itemToUpdate);
-            
-            // Update the quantity of the matching item
             return {
-              cartItems: state.cartItems.map(ci => 
+              cartItems: state.cartItems.map(ci =>
                 get()._getItemKey(ci) === fullKey
                   ? { ...ci, quantity }
                   : ci
@@ -492,24 +422,20 @@ export const useOrderStore = create<OrderStore>()(
           });
         }
       },
+
       clearCart: () => {
         set({ cartItems: [] });
       },
+
       setCartItemNotes: (itemId, notes) => {
         set((state) => {
-          // Find the item either by its ID or its complete composite key
-          const itemToUpdate = state.cartItems.find(ci => 
+          const itemToUpdate = state.cartItems.find(ci =>
             ci.id === itemId || get()._getItemKey(ci) === itemId
           );
-          
           if (!itemToUpdate) return state;
-          
-          // Generate the full key for the item
           const fullKey = get()._getItemKey(itemToUpdate);
-          
-          // Update the notes of the matching item
           return {
-            cartItems: state.cartItems.map(ci => 
+            cartItems: state.cartItems.map(ci =>
               get()._getItemKey(ci) === fullKey
                 ? { ...ci, notes }
                 : ci

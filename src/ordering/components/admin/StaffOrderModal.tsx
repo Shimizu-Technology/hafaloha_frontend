@@ -361,8 +361,8 @@ function OrderPanel({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Scrollable cart section */}
-      <div className="overflow-y-auto flex-1 p-4 pb-[150px]">
+      {/* Scrollable cart section - dynamic padding based on discount */}
+      <div className={`overflow-y-auto flex-1 p-4 ${isStaffOrder ? 'pb-[220px]' : 'pb-[150px]'}`}>
         <h3 className="text-lg font-semibold mb-4">Current Order</h3>
         {cartItems.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No items in the order yet</div>
@@ -642,6 +642,248 @@ function OrderPanel({
 }
 
 /** --------------------------------------------------------------------
+ * STAFF DISCOUNT MODAL
+ * (Separate modal for staff discount options)
+ * -------------------------------------------------------------------*/
+interface StaffDiscountModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  isStaffOrder: boolean;
+  setIsStaffOrder: (val: boolean) => void;
+  staffIsWorking: boolean;
+  setStaffIsWorking: (val: boolean) => void;
+  staffPaymentMethod: string;
+  setStaffPaymentMethod: (val: string) => void;
+  staffBeneficiaryId: number | null;
+  setStaffBeneficiaryId: (val: number | null) => void;
+  beneficiaries: StaffBeneficiary[];
+  userProfile: UserProfile | null;
+  isLoadingUserProfile: boolean;
+  calculatedDiscount: {
+    originalAmount: number;
+    discountAmount: number;
+    discountedAmount: number;
+  };
+  onApply: () => void;
+}
+
+function StaffDiscountModal({
+  isOpen,
+  onClose,
+  isStaffOrder,
+  setIsStaffOrder,
+  staffIsWorking,
+  setStaffIsWorking,
+  staffPaymentMethod,
+  setStaffPaymentMethod,
+  staffBeneficiaryId,
+  setStaffBeneficiaryId,
+  beneficiaries,
+  userProfile,
+  isLoadingUserProfile,
+  calculatedDiscount,
+  onApply
+}: StaffDiscountModalProps) {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 bg-black bg-opacity-50">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full h-full sm:h-auto sm:max-w-md sm:max-h-[90vh] overflow-auto">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
+          <h3 className="text-lg font-semibold text-gray-800">Staff Discount Options</h3>
+          <button 
+            onClick={onClose} 
+            className="text-gray-500 hover:text-gray-700 focus:outline-none rounded-full hover:bg-gray-100 p-1"
+            aria-label="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        {/* Content */}
+        <div className="p-6">
+          {/* Checkbox for enabling staff order */}
+          <div className="flex items-center mb-5">
+            <input
+              type="checkbox"
+              id="isStaffOrderModal"
+              checked={isStaffOrder}
+              onChange={e => setIsStaffOrder(e.target.checked)}
+              className="h-5 w-5 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+            />
+            <label htmlFor="isStaffOrderModal" className="ml-2 block text-base font-medium text-gray-700">
+              This is a staff order (applies discount)
+            </label>
+          </div>
+          
+          {/* Rest of the staff options (only shown if isStaffOrder is true) */}
+          {isStaffOrder && (
+            <div className="space-y-6 mt-4">
+              {/* Working Status */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Are you currently working?
+                </label>
+                <div className="flex space-x-6">
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="working-yes-modal"
+                      name="staffIsWorkingModal"
+                      checked={staffIsWorking}
+                      onChange={() => setStaffIsWorking(true)}
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
+                    />
+                    <label htmlFor="working-yes-modal" className="ml-2 block text-sm text-gray-700">
+                      Yes (50% discount)
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="working-no-modal"
+                      name="staffIsWorkingModal"
+                      checked={!staffIsWorking}
+                      onChange={() => setStaffIsWorking(false)}
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
+                    />
+                    <label htmlFor="working-no-modal" className="ml-2 block text-sm text-gray-700">
+                      No (30% discount)
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Method
+                </label>
+                <div className="flex space-x-6">
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="payment-immediate-modal"
+                      name="staffPaymentMethodModal"
+                      checked={staffPaymentMethod === 'immediate'}
+                      onChange={() => setStaffPaymentMethod('immediate')}
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
+                    />
+                    <label htmlFor="payment-immediate-modal" className="ml-2 block text-sm text-gray-700">
+                      Pay Now
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="payment-house-modal"
+                      name="staffPaymentMethodModal"
+                      checked={staffPaymentMethod === 'house_account'}
+                      onChange={() => setStaffPaymentMethod('house_account')}
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
+                    />
+                    <label htmlFor="payment-house-modal" className="ml-2 block text-sm text-gray-700">
+                      House Account (deduct from paycheck)
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Beneficiary Selector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  For whom is this order?
+                </label>
+                <select
+                  value={staffBeneficiaryId || ''}
+                  onChange={e => setStaffBeneficiaryId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none
+                           focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm shadow-sm"
+                >
+                  <option value="">Self</option>
+                  {beneficiaries.map(beneficiary => (
+                    <option key={beneficiary.id} value={beneficiary.id}>
+                      {beneficiary.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* House Account Balance */}
+              {staffPaymentMethod === 'house_account' && (
+                <div className="mt-2 p-4 bg-gray-50 border border-gray-200 rounded-md">
+                  <h5 className="text-sm font-medium text-gray-700 mb-2">House Account Balance</h5>
+                  {isLoadingUserProfile ? (
+                    <div className="animate-pulse h-5 w-24 bg-gray-200 rounded" />
+                  ) : userProfile ? (
+                    <p className="text-sm">
+                      Current Balance: <span className="font-semibold">${userProfile.house_account_balance.toFixed(2)}</span>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500">Unable to load balance</p>
+                  )}
+
+                  {calculatedDiscount.discountedAmount > 0 && (
+                    <p className="text-sm mt-2">
+                      After this order:{' '}
+                      <span className="font-semibold">
+                        $
+                        {(
+                          (userProfile?.house_account_balance || 0) +
+                          calculatedDiscount.discountedAmount
+                        ).toFixed(2)}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Footer with discount summary and actions */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 sticky bottom-0">
+          {isStaffOrder && (
+            <div className="mb-4">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">Original Total:</span>
+                <span className="text-gray-700">${calculatedDiscount.originalAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">Discount ({staffIsWorking ? '50%' : '30%'}):</span>
+                <span className="text-red-600">-${calculatedDiscount.discountAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center font-bold">
+                <span className="text-gray-700">Final Total:</span>
+                <span className="text-[#c1902f]">${calculatedDiscount.discountedAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex justify-end space-x-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onApply}
+              className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#a97c28]"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** --------------------------------------------------------------------
  * CUSTOMER INFO PANEL
  * (with scrollable content, pinned button at bottom)
  * -------------------------------------------------------------------*/
@@ -701,13 +943,15 @@ function CustomerInfoPanel({
 }: CustomerInfoPanelProps) {
   // This sample assumes staff can always see these options
   const isStaff = true;
+  const [showStaffDiscountModal, setShowStaffDiscountModal] = useState(false);
 
   return (
     <div className="flex flex-col h-full">
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <h3 className="text-lg font-semibold mb-4 text-gray-800">Customer Information</h3>
-        <div className="space-y-4">
+      {/* Scrollable content area */}
+      <div className="overflow-y-auto flex-1">
+        <div className="px-4 py-4 space-y-4 pb-16">
+          <h3 className="text-lg font-semibold text-gray-800 sticky top-0 bg-white z-10 py-2">Customer Information</h3>
+          
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
@@ -720,6 +964,7 @@ function CustomerInfoPanel({
               placeholder="Customer name"
             />
           </div>
+          
           {/* Phone */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
@@ -732,6 +977,7 @@ function CustomerInfoPanel({
               placeholder="+1671"
             />
           </div>
+          
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -744,6 +990,7 @@ function CustomerInfoPanel({
               placeholder="Email address"
             />
           </div>
+          
           {/* Special Instructions */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -759,20 +1006,72 @@ function CustomerInfoPanel({
             />
           </div>
 
-          {/* Staff Discount Options section temporarily disabled until feature is ready */}
+          {/* Staff Discount Options - Simplified */}
+          {isStaff && (
+            <div className="mt-2 border-t pt-4 border-gray-200">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="font-medium text-gray-800">Staff Discount Options</h4>
+                <button
+                  onClick={() => setShowStaffDiscountModal(true)}
+                  className="text-[#c1902f] text-sm font-medium hover:underline focus:outline-none"
+                >
+                  Configure
+                </button>
+              </div>
+              
+              {/* Simple status display */}
+              <div className="mt-2 text-sm text-gray-600">
+                {isStaffOrder ? (
+                  <div className="flex items-center">
+                    <svg className="h-4 w-4 text-green-500 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>
+                      Staff discount applied ({staffIsWorking ? "50" : "30"}%)
+                      {staffBeneficiaryId ? " for beneficiary" : ""}
+                      {staffPaymentMethod === 'house_account' ? ", using house account" : ""}
+                    </span>
+                  </div>
+                ) : (
+                  <span>No staff discount applied</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Bottom button: "Back to Order" */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="px-4 absolute bottom-4 left-0 right-0">
         <button
           onClick={onBack}
-          className="w-full py-3 text-gray-700 bg-gray-100 rounded-md font-medium hover:bg-gray-200
-                     focus:outline-none focus:ring-2 focus:ring-gray-300 shadow-sm transition-colors"
+          className="w-full py-2.5 text-sm font-medium bg-gray-50 border border-gray-300
+                     hover:bg-gray-100 rounded-md transition-colors flex items-center justify-center"
         >
           Back to Order
         </button>
       </div>
+
+      {/* Staff Discount Modal */}
+      {showStaffDiscountModal && (
+        <StaffDiscountModal
+          isOpen={showStaffDiscountModal}
+          onClose={() => setShowStaffDiscountModal(false)}
+          isStaffOrder={isStaffOrder}
+          setIsStaffOrder={setIsStaffOrder}
+          staffIsWorking={staffIsWorking}
+          setStaffIsWorking={setStaffIsWorking}
+          staffPaymentMethod={staffPaymentMethod}
+          setStaffPaymentMethod={setStaffPaymentMethod}
+          staffBeneficiaryId={staffBeneficiaryId}
+          setStaffBeneficiaryId={setStaffBeneficiaryId}
+          beneficiaries={beneficiaries}
+          userProfile={userProfile}
+          isLoadingUserProfile={isLoadingUserProfile}
+          calculatedDiscount={calculatedDiscount}
+          onApply={() => setShowStaffDiscountModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1191,6 +1490,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
 
   // Desktop "Add Customer Info" toggle
   const [showCustomerInfoDesktop, setShowCustomerInfoDesktop] = useState(false);
+  
+  // Staff discount modal for desktop layout
+  const [showStaffDiscountModal, setShowStaffDiscountModal] = useState(false);
 
   // Payment overlay for non-staff flow
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
@@ -1555,42 +1857,48 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           />
         )}
         {activeTab === 'customer' && (
-          <CustomerInfoPanel
-            contactName={contactName}
-            setContactName={setContactName}
-            contactPhone={contactPhone}
-            setContactPhone={setContactPhone}
-            contactEmail={contactEmail}
-            setContactEmail={setContactEmail}
-            specialInstructions={specialInstructions}
-            setSpecialInstructions={setSpecialInstructions}
-            isStaffOrder={isStaffOrder}
-            setIsStaffOrder={setIsStaffOrder}
-            staffIsWorking={staffIsWorking}
-            setStaffIsWorking={setStaffIsWorking}
-            staffPaymentMethod={staffPaymentMethod}
-            setStaffPaymentMethod={setStaffPaymentMethod}
-            staffBeneficiaryId={staffBeneficiaryId}
-            setStaffBeneficiaryId={setStaffBeneficiaryId}
-            beneficiaries={beneficiaries}
-            userProfile={userProfile}
-            isLoadingUserProfile={isLoadingUserProfile}
-            calculatedDiscount={calculatedDiscount}
-            handleSubmitOrder={handleSubmitOrder}
-            cartItems={cartItems}
-            orderLoading={orderLoading}
-            onBack={() => setActiveTab('order')}
-          />
+          <div className="h-full flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-hidden">
+              <CustomerInfoPanel
+                contactName={contactName}
+                setContactName={setContactName}
+                contactPhone={contactPhone}
+                setContactPhone={setContactPhone}
+                contactEmail={contactEmail}
+                setContactEmail={setContactEmail}
+                specialInstructions={specialInstructions}
+                setSpecialInstructions={setSpecialInstructions}
+                isStaffOrder={isStaffOrder}
+                setIsStaffOrder={setIsStaffOrder}
+                staffIsWorking={staffIsWorking}
+                setStaffIsWorking={setStaffIsWorking}
+                staffPaymentMethod={staffPaymentMethod}
+                setStaffPaymentMethod={setStaffPaymentMethod}
+                staffBeneficiaryId={staffBeneficiaryId}
+                setStaffBeneficiaryId={setStaffBeneficiaryId}
+                beneficiaries={beneficiaries}
+                userProfile={userProfile}
+                isLoadingUserProfile={isLoadingUserProfile}
+                calculatedDiscount={calculatedDiscount}
+                handleSubmitOrder={handleSubmitOrder}
+                cartItems={cartItems}
+                orderLoading={orderLoading}
+                onBack={() => setActiveTab('order')}
+              />
+            </div>
+          </div>
         )}
         {activeTab === 'payment' && (
-          <div className="h-full overflow-hidden">
-            <PaymentPanel
-              orderTotal={orderTotal}
-              onPaymentSuccess={handlePaymentSuccess}
-              onPaymentError={handlePaymentError}
-              onBack={() => setActiveTab('customer')}
-              isProcessing={paymentProcessing}
-            />
+          <div className="h-full flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-hidden">
+              <PaymentPanel
+                orderTotal={orderTotal}
+                onPaymentSuccess={handlePaymentSuccess}
+                onPaymentError={handlePaymentError}
+                onBack={() => setActiveTab('customer')}
+                isProcessing={paymentProcessing}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -1743,7 +2051,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
             staffIsWorking={staffIsWorking}
             calculatedDiscount={calculatedDiscount}
           />
-          <div className="absolute bottom-[150px] left-0 right-0 px-4">
+          {/* Fixed position Add Customer Info button or Customer Info panel - dynamic positioning based on discount */}
+          <div className={`absolute ${isStaffOrder ? 'bottom-[190px]' : 'bottom-[140px]'} left-0 right-0 px-4 z-10`}>
             {!showCustomerInfoDesktop ? (
               <button
                 onClick={() => setShowCustomerInfoDesktop(true)}
@@ -1753,33 +2062,107 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
                 Add Customer Info
               </button>
             ) : (
-              <div className="mt-4 border border-gray-200 rounded-md p-3 shadow-sm bg-gray-50">
-                <CustomerInfoPanel
-                  contactName={contactName}
-                  setContactName={setContactName}
-                  contactPhone={contactPhone}
-                  setContactPhone={setContactPhone}
-                  contactEmail={contactEmail}
-                  setContactEmail={setContactEmail}
-                  specialInstructions={specialInstructions}
-                  setSpecialInstructions={setSpecialInstructions}
-                  isStaffOrder={isStaffOrder}
-                  setIsStaffOrder={setIsStaffOrder}
-                  staffIsWorking={staffIsWorking}
-                  setStaffIsWorking={setStaffIsWorking}
-                  staffPaymentMethod={staffPaymentMethod}
-                  setStaffPaymentMethod={setStaffPaymentMethod}
-                  staffBeneficiaryId={staffBeneficiaryId}
-                  setStaffBeneficiaryId={setStaffBeneficiaryId}
-                  beneficiaries={beneficiaries}
-                  userProfile={userProfile}
-                  isLoadingUserProfile={isLoadingUserProfile}
-                  calculatedDiscount={calculatedDiscount}
-                  handleSubmitOrder={handleSubmitOrder}
-                  cartItems={cartItems}
-                  orderLoading={orderLoading}
-                  onBack={() => setShowCustomerInfoDesktop(false)}
-                />
+              <div>
+                <div className="border border-gray-200 rounded-md shadow-sm bg-gray-50 max-h-[450px] overflow-auto mb-4">
+                  <div className="px-4 py-4 pb-4 space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 sticky top-0 bg-gray-50 z-10 py-2">Customer Information</h3>
+                    
+                    {/* Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                      <input
+                        type="text"
+                        value={contactName}
+                        onChange={e => setContactName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none
+                                focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm shadow-sm"
+                        placeholder="Customer name"
+                      />
+                    </div>
+                    
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <input
+                        type="tel"
+                        value={contactPhone}
+                        onChange={e => setContactPhone(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none
+                                focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm shadow-sm"
+                        placeholder="+1671"
+                      />
+                    </div>
+                    
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={contactEmail}
+                        onChange={e => setContactEmail(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none
+                                focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm shadow-sm"
+                        placeholder="Email address"
+                      />
+                    </div>
+                    
+                    {/* Special Instructions */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Special Instructions
+                      </label>
+                      <textarea
+                        value={specialInstructions}
+                        onChange={e => setSpecialInstructions(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none
+                                focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm shadow-sm"
+                        placeholder="Special instructions or notes"
+                        rows={4}
+                      />
+                    </div>
+
+                    {/* Staff Discount Options - Simplified */}
+                    {isStaff && (
+                      <div className="mt-2 border-t pt-4 border-gray-200">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="font-medium text-gray-800">Staff Discount Options</h4>
+                          <button
+                            onClick={() => setShowStaffDiscountModal(true)}
+                            className="text-[#c1902f] text-sm font-medium hover:underline focus:outline-none"
+                          >
+                            Configure
+                          </button>
+                        </div>
+                        
+                        {/* Simple status display */}
+                        <div className="mt-2 text-sm text-gray-600">
+                          {isStaffOrder ? (
+                            <div className="flex items-center">
+                              <svg className="h-4 w-4 text-green-500 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>
+                                Staff discount applied ({staffIsWorking ? "50" : "30"}%)
+                                {staffBeneficiaryId ? " for beneficiary" : ""}
+                                {staffPaymentMethod === 'house_account' ? ", using house account" : ""}
+                              </span>
+                            </div>
+                          ) : (
+                            <span>No staff discount applied</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <button
+                  onClick={() => setShowCustomerInfoDesktop(false)}
+                  className="w-full py-2.5 text-sm font-medium bg-gray-50 border border-gray-300
+                    hover:bg-gray-100 rounded-md transition-colors flex items-center justify-center"
+                >
+                  Back to Order
+                </button>
               </div>
             )}
           </div>
@@ -1791,6 +2174,26 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   /** RENDER */
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4">
+      {/* Staff Discount Modal */}
+      {showStaffDiscountModal && (
+        <StaffDiscountModal
+          isOpen={showStaffDiscountModal}
+          onClose={() => setShowStaffDiscountModal(false)}
+          isStaffOrder={isStaffOrder}
+          setIsStaffOrder={setIsStaffOrder}
+          staffIsWorking={staffIsWorking}
+          setStaffIsWorking={setStaffIsWorking}
+          staffPaymentMethod={staffPaymentMethod}
+          setStaffPaymentMethod={setStaffPaymentMethod}
+          staffBeneficiaryId={staffBeneficiaryId}
+          setStaffBeneficiaryId={setStaffBeneficiaryId}
+          beneficiaries={beneficiaries}
+          userProfile={userProfile}
+          isLoadingUserProfile={isLoadingUserProfile}
+          calculatedDiscount={calculatedDiscount}
+          onApply={() => setShowStaffDiscountModal(false)}
+        />
+      )}
       <div
         className="bg-white rounded-lg shadow-xl
                    w-[95vw] max-w-[1100px]
