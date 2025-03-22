@@ -107,8 +107,26 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
     try {
       // Subscribe to push notifications
       console.log('Subscribing to push notifications with key:', response.vapid_public_key);
+      
+      // Log the VAPID key details
+      console.log('VAPID key length:', response.vapid_public_key.length);
+      console.log('VAPID key first 10 chars:', response.vapid_public_key.substring(0, 10));
+      console.log('VAPID key last 10 chars:', response.vapid_public_key.substring(response.vapid_public_key.length - 10));
+      
+      // Convert the VAPID key to a Uint8Array
       const applicationServerKey = urlBase64ToUint8Array(response.vapid_public_key);
+      
+      // Log the application server key details
       console.log('Application server key (Uint8Array):', applicationServerKey);
+      console.log('Application server key length:', applicationServerKey.length);
+      console.log('Application server key first 5 bytes:', Array.from(applicationServerKey.slice(0, 5)));
+      
+      // Validate the application server key
+      if (applicationServerKey.length < 16) {
+        console.error('Application server key is too short. Expected at least 16 bytes, got', applicationServerKey.length);
+        alert('Invalid server key format. Please regenerate your VAPID keys in the admin settings.');
+        return false;
+      }
       
       // Check if there's an existing subscription that might be causing issues
       const existingSubscription = await registration.pushManager.getSubscription();
