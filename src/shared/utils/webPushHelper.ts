@@ -1,5 +1,6 @@
 // src/shared/utils/webPushHelper.ts
 import { api } from '../api/apiClient';
+import { useRestaurantStore } from '../store/restaurantStore';
 
 /**
  * Checks if push notifications are supported by the browser
@@ -87,8 +88,19 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
       return false;
     }
     
+    // Get the restaurant ID from the store
+    const restaurant = useRestaurantStore.getState().restaurant;
+    const restaurantId = restaurant?.id;
+    
+    if (!restaurantId) {
+      console.error('Restaurant ID not found');
+      return false;
+    }
+    
     // Get the VAPID public key from the server
-    const response = await api.get<{ enabled: boolean; vapid_public_key?: string }>('/push_subscriptions/vapid_public_key');
+    const response = await api.get<{ enabled: boolean; vapid_public_key?: string }>(
+      `/push_subscriptions/vapid_public_key?restaurant_id=${restaurantId}`
+    );
     
     if (!response.enabled || !response.vapid_public_key) {
       console.error('Web push is not enabled or VAPID public key is missing');
@@ -105,7 +117,7 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
     });
     
     // Send the subscription to the server
-    await api.post('/push_subscriptions', { subscription });
+    await api.post(`/push_subscriptions?restaurant_id=${restaurantId}`, { subscription });
     
     return true;
   } catch (error) {
@@ -125,6 +137,15 @@ export async function unsubscribeFromPushNotifications(): Promise<boolean> {
       return false;
     }
     
+    // Get the restaurant ID from the store
+    const restaurant = useRestaurantStore.getState().restaurant;
+    const restaurantId = restaurant?.id;
+    
+    if (!restaurantId) {
+      console.error('Restaurant ID not found');
+      return false;
+    }
+    
     // Get the service worker registration
     const registration = await navigator.serviceWorker.ready;
     
@@ -141,7 +162,7 @@ export async function unsubscribeFromPushNotifications(): Promise<boolean> {
     
     if (unsubscribed) {
       // Notify the server
-      await api.post('/push_subscriptions/unsubscribe', { 
+      await api.post(`/push_subscriptions/unsubscribe?restaurant_id=${restaurantId}`, { 
         subscription: {
           endpoint: subscription.endpoint
         }
