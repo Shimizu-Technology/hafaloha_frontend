@@ -1,7 +1,7 @@
 // src/shared/utils/webPushHelper.ts
 import { api } from '../api/apiClient';
 import { useRestaurantStore } from '../store/restaurantStore';
-import { urlBase64ToUint8Array } from './vapidHelper';
+import { urlBase64ToUint8Array } from './webPushUtils';
 
 /**
  * Checks if push notifications are supported by the browser
