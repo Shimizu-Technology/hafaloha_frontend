@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { api } from '../../../../shared/api/apiClient';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { Bell, MessageSquare, BellRing, Globe } from 'lucide-react';
+import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { 
   isPushNotificationSupported, 
   getNotificationPermissionStatus,
@@ -616,7 +617,17 @@ export function NotificationSettings() {
                     type="button"
                     onClick={async () => {
                       try {
-                        const response: any = await api.post('/admin/generate_web_push_keys');
+                        // Get the restaurant ID from the store
+                        const restaurant = useRestaurantStore.getState().restaurant;
+                        const restaurantId = restaurant?.id;
+                        
+                        if (!restaurantId) {
+                          console.error('Restaurant ID not found');
+                          toast.error('Restaurant ID not found');
+                          return;
+                        }
+                        
+                        const response: any = await api.post(`/admin/generate_web_push_keys?restaurant_id=${restaurantId}`);
                         if (response.status === 'success') {
                           setSettings(prev => ({
                             ...prev,
