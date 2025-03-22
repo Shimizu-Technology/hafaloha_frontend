@@ -2,7 +2,14 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../../../../shared/api/apiClient';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
-import { Bell, MessageSquare, BellRing } from 'lucide-react';
+import { Bell, MessageSquare, BellRing, Globe } from 'lucide-react';
+import { 
+  isPushNotificationSupported, 
+  getNotificationPermissionStatus,
+  subscribeToPushNotifications, 
+  unsubscribeFromPushNotifications, 
+  getPushSubscriptionStatus 
+} from '../../../../shared/utils/webPushHelper';
 
 // Simple Switch component
 const Switch: React.FC<{
@@ -39,6 +46,7 @@ interface NotificationSettings {
       sms?: boolean;
       email?: boolean;
       pushover?: boolean;
+      web_push?: boolean;
     };
   };
   
@@ -48,6 +56,12 @@ interface NotificationSettings {
     group_key?: string;
     app_token?: string;
   };
+  
+  // Web Push settings
+  web_push?: {
+    vapid_public_key?: string;
+    vapid_private_key?: string;
+  };
 }
 
 export function NotificationSettings() {
@@ -55,21 +69,82 @@ export function NotificationSettings() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [unsubscribing, setUnsubscribing] = useState(false);
+  const [pushStatus, setPushStatus] = useState<'granted' | 'denied' | 'default' | 'not-supported' | 'not-subscribed' | 'loading'>('loading');
   const [settings, setSettings] = useState<NotificationSettings>({
     sms_sender_id: '',
     notification_channels: {
       orders: {
         sms: true,
         email: true,
-        pushover: false
+        pushover: false,
+        web_push: false
       }
     },
     pushover: {
       user_key: '',
       group_key: '',
       app_token: ''
+    },
+    web_push: {
+      vapid_public_key: '',
+      vapid_private_key: ''
     }
   });
+
+  // Check push subscription status
+  useEffect(() => {
+    async function checkPushStatus() {
+      if (settings.notification_channels.orders?.web_push) {
+        setPushStatus('loading');
+        const status = await getPushSubscriptionStatus();
+        setPushStatus(status);
+      }
+    }
+    
+    if (!loading) {
+      checkPushStatus();
+    }
+  }, [settings.notification_channels.orders?.web_push, loading]);
+
+  // Handle subscribing to push notifications
+  const handleSubscribeToPush = async () => {
+    try {
+      setSubscribing(true);
+      const success = await subscribeToPushNotifications();
+      if (success) {
+        toast.success('Successfully subscribed to push notifications');
+        setPushStatus('granted');
+      } else {
+        toast.error('Failed to subscribe to push notifications');
+      }
+    } catch (error) {
+      console.error('Error subscribing to push notifications:', error);
+      toast.error('Failed to subscribe to push notifications');
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
+  // Handle unsubscribing from push notifications
+  const handleUnsubscribeFromPush = async () => {
+    try {
+      setUnsubscribing(true);
+      const success = await unsubscribeFromPushNotifications();
+      if (success) {
+        toast.success('Successfully unsubscribed from push notifications');
+        setPushStatus('not-subscribed');
+      } else {
+        toast.error('Failed to unsubscribe from push notifications');
+      }
+    } catch (error) {
+      console.error('Error unsubscribing from push notifications:', error);
+      toast.error('Failed to unsubscribe from push notifications');
+    } finally {
+      setUnsubscribing(false);
+    }
+  };
 
   // Fetch current settings
   useEffect(() => {
@@ -88,13 +163,18 @@ export function NotificationSettings() {
             orders: {
               sms: true,
               email: true,
-              pushover: false
+              pushover: false,
+              web_push: false
             }
           },
           pushover: {
             user_key: '',
             group_key: '',
             app_token: ''
+          },
+          web_push: {
+            vapid_public_key: adminSettings.web_push?.vapid_public_key || '',
+            vapid_private_key: adminSettings.web_push?.vapid_private_key || ''
           }
         };
         
@@ -156,7 +236,7 @@ export function NotificationSettings() {
   };
 
   // Handle notification channel toggle
-  const handleChannelToggle = (channel: 'sms' | 'email' | 'pushover', enabled: boolean) => {
+  const handleChannelToggle = (channel: 'sms' | 'email' | 'pushover' | 'web_push', enabled: boolean) => {
     setSettings(prev => ({
       ...prev,
       notification_channels: {
@@ -188,7 +268,9 @@ export function NotificationSettings() {
             // Update notification channels
             notification_channels: settings.notification_channels,
             // Update Pushover settings
-            pushover: settings.pushover
+            pushover: settings.pushover,
+            // Update Web Push settings
+            web_push: settings.web_push
           }
         }
       };
@@ -474,6 +556,111 @@ export function NotificationSettings() {
                 <li>For group notifications, create a group in Pushover and use the Group Key instead</li>
                 <li>Click "Validate Key" to ensure your key is valid</li>
                 <li>Click "Send Test Notification" to test the integration</li>
+              </ol>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Web Push Notifications */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h3 className="text-lg font-medium">Web Push Notifications</h3>
+            <p className="text-sm text-gray-500">
+              Enable browser notifications for orders directly in the web browser
+            </p>
+          </div>
+          <Switch 
+            checked={settings.notification_channels.orders?.web_push === true}
+            onChange={(enabled) => handleChannelToggle('web_push', enabled)}
+          >
+            <span className="sr-only">Enable Web Push notifications</span>
+          </Switch>
+        </div>
+        
+        {settings.notification_channels.orders?.web_push && (
+          <div className="space-y-4 mt-4">
+            {/* Subscription status and buttons */}
+            <div className="p-4 bg-gray-50 rounded-md">
+              <h4 className="font-medium mb-2">Device Subscription Status</h4>
+              
+              {!isPushNotificationSupported() ? (
+                <p className="text-sm text-red-600">
+                  Your browser doesn't support push notifications.
+                </p>
+              ) : pushStatus === 'loading' ? (
+                <p className="text-sm text-gray-500">
+                  Checking subscription status...
+                </p>
+              ) : pushStatus === 'denied' ? (
+                <p className="text-sm text-red-600">
+                  Notifications are blocked for this site. Please enable notifications in your browser settings.
+                </p>
+              ) : pushStatus === 'not-supported' ? (
+                <p className="text-sm text-red-600">
+                  Your browser doesn't support push notifications.
+                </p>
+              ) : pushStatus === 'granted' ? (
+                <div>
+                  <p className="text-sm text-green-600 mb-2">
+                    This device is subscribed to notifications.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleUnsubscribeFromPush}
+                    disabled={unsubscribing}
+                    className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                  >
+                    {unsubscribing ? (
+                      <>
+                        <span className="inline-block mr-2">
+                          <LoadingSpinner showText={false} className="h-3 w-3" />
+                        </span>
+                        Unsubscribing...
+                      </>
+                    ) : (
+                      'Unsubscribe this device'
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    This device is not subscribed to notifications.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSubscribeToPush}
+                    disabled={subscribing}
+                    className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    {subscribing ? (
+                      <>
+                        <span className="inline-block mr-2">
+                          <LoadingSpinner showText={false} className="h-3 w-3" />
+                        </span>
+                        Subscribing...
+                      </>
+                    ) : (
+                      'Subscribe this device'
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Help Text */}
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-md">
+              <p className="text-sm text-blue-700">
+                <strong>How Web Push Notifications Work:</strong>
+              </p>
+              <ol className="text-sm text-blue-700 list-decimal pl-5 mt-2">
+                <li>Enable Web Push using the toggle above</li>
+                <li>Click "Subscribe this device" on each device where you want to receive notifications</li>
+                <li>For iPads, you must add the site to your home screen in Safari first</li>
+                <li>New order notifications will appear as desktop/mobile notifications, even when the browser is closed</li>
+                <li>Clicking on a notification will take you directly to the order</li>
               </ol>
             </div>
           </div>

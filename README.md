@@ -41,6 +41,11 @@ Frontend web application for the Hafaloha restaurant management system.
 
 - [VIP Code System](docs/vip_code_system.md) - Exclusive access management
 
+### Notifications
+
+- [Pushover Integration](docs/pushover_integration.md) - Real-time push notifications via Pushover
+- [Web Push Integration](docs/web_push_integration.md) - Browser-based push notifications for PWA
+
 ## Tech Stack
 
 - React 18
