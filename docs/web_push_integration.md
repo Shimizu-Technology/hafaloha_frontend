@@ -1,176 +1,168 @@
 # Web Push Notifications Integration Guide
 
-This document explains how web push notifications are implemented in the Hafaloha application.
+This document provides guidance on how to use web push notifications in the Hafaloha application.
 
 ## Overview
 
 Web push notifications allow the application to send notifications to users even when they are not actively using the application. This is particularly useful for notifying restaurant staff about new orders.
 
-The implementation uses the Web Push API, which is supported by most modern browsers. On iOS devices (iPad/iPhone), web push notifications are supported in iOS 16.4+ when the web app is installed as a PWA (Progressive Web App).
+## Requirements
 
-## Architecture
+- **Browser Support**: Web push notifications are supported in most modern browsers, including Chrome, Firefox, Edge, and Safari (iOS 16.4+ only).
+- **HTTPS**: Web push notifications require HTTPS in production.
+- **Service Worker**: A service worker is required to handle push notifications.
+- **VAPID Keys**: VAPID (Voluntary Application Server Identification) keys are required to authenticate the push service.
 
-The web push notification system consists of the following components:
+## iOS Limitations
 
-1. **Frontend (React)**
-   - Service Worker: Handles receiving push notifications and displaying them to the user
-   - Web Push Helper: Provides utility functions for subscribing to and managing push notifications
-   - Notification Settings UI: Allows administrators to enable/disable web push notifications and manage subscriptions
+Web push notifications on iOS have several limitations:
 
-2. **Backend (Rails)**
-   - Push Subscriptions Controller: Manages push subscription endpoints
-   - Web Push Notification Job: Sends push notifications to subscribed devices
-   - Restaurant Model: Stores VAPID keys and notification settings
+1. **iOS Version**: Web push notifications are only supported on iOS 16.4 and later.
+2. **PWA Installation**: The web app must be installed to the home screen (Add to Home Screen) to receive push notifications.
+3. **Browser Support**: 
+   - Safari: Supported since iOS 16.4
+   - Chrome: Supported since version 113 on iOS 16.4+
+   - Firefox and other browsers: May have limited or no support
+4. **Home Screen Requirement**: The web app must be launched from the home screen icon, not directly from the browser.
 
-## How It Works
+## Known Issues
 
-### VAPID Keys
+### iOS Push Notification Subscription Failures
 
-Web Push uses VAPID (Voluntary Application Server Identification) keys for authentication. Each restaurant has its own set of VAPID keys (public and private) stored in the `admin_settings` JSON field of the Restaurant model.
+If you're experiencing issues subscribing to push notifications on iOS, here are some common causes and solutions:
 
-### Setup Process
+1. **iOS Version**: Ensure you're using iOS 16.4 or later. You can check your iOS version in Settings > General > About.
+2. **PWA Installation**: Make sure the app is installed to your home screen. In Safari, tap the Share button and select "Add to Home Screen".
+3. **Launch from Home Screen**: After installing, close Safari and launch the app from the home screen icon.
+4. **Notification Permission**: When prompted, allow notifications for the app.
+5. **Browser Limitations**: If you're using Chrome, Firefox, or another browser on iOS, switch to Safari as these browsers don't support web push on iOS.
+
+### Chrome on Android
+
+Chrome on Android supports web push notifications, but there are some considerations:
+
+1. **Battery Optimization**: Android may restrict background processes for battery optimization, which can affect push notification delivery.
+2. **PWA Installation**: Installing the app as a PWA can improve notification reliability.
+
+## Setup Instructions
+
+### For Administrators
 
 1. Go to Admin Dashboard > Settings > Notification Settings
 2. Enable Web Push Notifications using the toggle
-3. Click the "Generate New Keys" button to generate VAPID keys
+3. Click "Generate New Keys" to generate VAPID keys
 4. Click "Save Settings" to save your changes
 
-### Subscription Process
+### For Users
 
-1. After setting up web push notifications, click "Subscribe this device" on each device where you want to receive notifications
-2. The browser requests permission to show notifications
-3. If granted, the browser registers with the push service (e.g., Apple Push Notification Service for Safari)
-4. The subscription details (endpoint, p256dh key, auth key) are sent to the server
-5. The server stores the subscription in the database
-
-### Sending Notifications
-
-1. When a new order is created, the `send_web_push_notification_job` is triggered
-2. The job retrieves all active subscriptions for the restaurant
-3. For each subscription, it sends a push message using the webpush gem
-4. The push service delivers the message to the browser
-5. The service worker receives the push event and displays a notification
-
-## Implementation Details
-
-### Frontend
-
-#### Service Worker (public/service-worker.js)
-
-The service worker handles push events and displays notifications:
-
-```javascript
-self.addEventListener('push', event => {
-  // Parse the data from the push event
-  const data = event.data.json();
-  
-  // Show a notification
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon || '/icons/icon-192.png',
-      // ...other options
-    })
-  );
-});
-
-// Handle notification clicks
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-  
-  // Open or focus the app when the notification is clicked
-  event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(clientList => {
-      // ...
-    })
-  );
-});
-```
-
-#### Web Push Helper (src/shared/utils/webPushHelper.ts)
-
-Provides utility functions for managing push notifications:
-
-- `isPushNotificationSupported()`: Checks if the browser supports push notifications
-- `getNotificationPermissionStatus()`: Gets the current permission status
-- `subscribeToPushNotifications()`: Subscribes the current device to push notifications
-- `unsubscribeFromPushNotifications()`: Unsubscribes the current device
-
-### Backend
-
-#### Push Subscriptions Controller
-
-Handles API endpoints for managing push subscriptions:
-
-- `GET /push_subscriptions/vapid_public_key`: Returns the VAPID public key for the restaurant
-- `POST /push_subscriptions`: Creates a new push subscription
-- `POST /push_subscriptions/unsubscribe`: Unsubscribes a device
-- `GET /push_subscriptions`: Lists all subscriptions (admin only)
-- `DELETE /push_subscriptions/:id`: Deletes a subscription (admin only)
-
-#### Web Push Notification Job
-
-Sends push notifications to subscribed devices:
-
-```ruby
-def perform(restaurant_id, payload)
-  restaurant = Restaurant.find(restaurant_id)
-  return unless restaurant.web_push_enabled?
-  
-  vapid_keys = restaurant.web_push_vapid_keys
-  subscriptions = restaurant.push_subscriptions.active
-  
-  subscriptions.each do |subscription|
-    begin
-      Webpush.payload_send(
-        message: payload.to_json,
-        endpoint: subscription.endpoint,
-        p256dh: subscription.p256dh_key,
-        auth: subscription.auth_key,
-        vapid: {
-          subject: "mailto:#{restaurant.contact_email || 'notifications@hafaloha.com'}",
-          public_key: vapid_keys[:public_key],
-          private_key: vapid_keys[:private_key]
-        }
-      )
-    rescue Webpush::InvalidSubscription
-      subscription.deactivate!
-    rescue => e
-      Rails.logger.error("Failed to send push notification: #{e.message}")
-    end
-  end
-end
-```
-
-## iOS/iPad Specific Considerations
-
-For iOS devices (iPad/iPhone), web push notifications are only supported when:
-
-1. The device is running iOS 16.4 or later
-2. The web app is installed as a PWA (Add to Home Screen)
-3. The user has granted notification permission
+1. Visit the Hafaloha website in a supported browser
+2. For iOS: Use Safari and add the site to your home screen
+3. Click "Subscribe this device" to enable push notifications
+4. Allow notifications when prompted
 
 ## Troubleshooting
 
-### Common Issues
+### Notifications Not Showing
 
-1. **Notification permission denied**: The user must grant notification permission in the browser settings
-2. **Service worker not registered**: Check if the service worker is properly registered in the browser
-3. **Invalid VAPID keys**: Ensure the VAPID keys are properly generated and stored
-4. **Subscription failed**: Check browser console for detailed error messages
+1. **Check Browser Support**: Ensure you're using a supported browser.
+2. **Check Permissions**: Make sure notifications are allowed for the site.
+3. **Check Service Worker**: Ensure the service worker is registered and active.
+4. **Check Subscription**: Verify that the device is subscribed to push notifications.
 
-### Debugging
+### iOS-Specific Issues
 
-To debug push notification issues:
+1. **"Failed to subscribe to push notifications" Error**:
+   - Make sure the app is installed to your home screen
+   - Launch the app from the home screen icon, not from the browser
+   - Check if your iOS version is 16.4 or later
+   - For Chrome on iOS, ensure you're using version 113 or later
 
-1. Check browser console for error messages
-2. Verify that the service worker is registered and active
-3. Check that the VAPID keys are properly configured
-4. Verify that the subscription is stored in the database
-5. Check server logs for errors when sending notifications
+2. **"There was an error setting up push notifications on your iOS device" Error**:
+   - This is a generic error that can occur for various reasons
+   - Try refreshing the page and subscribing again
+   - Try uninstalling and reinstalling the PWA
+   - Check if your iOS version is 16.4 or later
+
+## Common Pitfalls and Solutions
+
+### Service Worker Configuration
+
+1. **Event Handling**: It's crucial that your service worker's push event listener properly handles incoming push events. Always use `event.waitUntil()` to ensure the notification is displayed before the event terminates:
+
+```javascript
+self.addEventListener('push', function(e) {
+  e.waitUntil(
+    self.registration.showNotification(e.data.title, e.data)
+  );
+});
+```
+
+2. **Service Worker Registration**: Verify that your service worker is correctly registered and active. Without an active service worker, push notifications cannot function.
+
+### Subscription Management
+
+1. **Multiple Devices**: Users accessing your application from multiple devices or browsers can lead to multiple subscriptions. Implement a mechanism to manage these subscriptions effectively, possibly by associating each subscription with a user identifier in your backend. This ensures that notifications are sent to all relevant devices.
+
+2. **Subscription Expiry**: Subscriptions can expire or become invalid over time. Implement proper error handling to detect and remove invalid subscriptions.
+
+### Backend Integration
+
+1. **VAPID Keys**: Ensure that your Rails backend is configured with the correct VAPID keys and that these keys are also used in your React frontend during the subscription process.
+
+2. **Payload Encryption**: The payload sent from your backend must be properly encrypted using the subscription's public key. Libraries like web-push for Ruby can handle this encryption.
+
+### Cross-Browser Compatibility
+
+1. **Feature Detection**: Not all browsers support the Push API. Implement feature detection in your application to handle cases where the Push API is unavailable gracefully:
+
+```javascript
+if ('PushManager' in window) {
+  // Push is supported
+} else {
+  // Fallback or notify the user
+}
+```
+
+2. **Browser-Specific Behavior**: Be aware of differences in how browsers handle push notifications. For example, Chrome and Firefox might support features that Safari does not.
+
+### Error Handling and Logging
+
+1. **Verbose Logging**: Implement comprehensive logging on both the client and server sides to capture errors during the subscription process. This can provide insights into where the process might be failing.
+
+2. **User Feedback**: Provide users with clear feedback if the subscription process fails, including possible reasons and steps to resolve the issue.
+
+### Testing and Debugging
+
+1. **Development Environment**: Ensure that your development environment closely mirrors production, especially concerning HTTPS, as service workers and push notifications require secure contexts.
+
+2. **Real Device Testing**: Test the subscription process on actual devices, particularly those that users commonly use, to identify device-specific issues.
+
+## Technical Implementation
+
+The web push notification system consists of several components:
+
+1. **Frontend**:
+   - `webPushHelper.ts`: Utility functions for subscribing to push notifications
+   - `serviceWorkerRegistration.ts`: Service worker registration
+   - `service-worker.js`: Service worker implementation that handles push events
+
+2. **Backend**:
+   - `PushSubscriptionsController`: Manages push subscriptions
+   - `Restaurant` model: Stores VAPID keys and push notification settings
+   - `SendWebPushNotificationJob`: Background job for sending push notifications
+
+## Testing
+
+To test web push notifications:
+
+1. Enable web push notifications in the admin settings
+2. Subscribe a device to push notifications
+3. Create a new order
+4. Verify that a push notification is received on the subscribed device
 
 ## References
 
-- [Web Push API Documentation](https://developer.mozilla.org/en-US/docs/Web/API/Push_API)
-- [Service Worker API Documentation](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API)
-- [Webpush Gem Documentation](https://github.com/zaru/webpush)
+- [Web Push Notifications: Timely, Relevant, and Precise](https://developers.google.com/web/fundamentals/push-notifications)
+- [Using the Push API](https://developer.mozilla.org/en-US/docs/Web/API/Push_API/Using_the_Push_API)
+- [Web Push Protocol](https://datatracker.ietf.org/doc/html/rfc8030)
+- [VAPID Protocol](https://datatracker.ietf.org/doc/html/draft-thomson-webpush-vapid-02)

@@ -154,9 +154,20 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
         }
       }
       
-      // iOS Safari specific debugging
+      // Browser and device detection
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      const isChromeOnIOS = isIOS && /CriOS/.test(navigator.userAgent);
+      const isFirefoxOnIOS = isIOS && /FxiOS/.test(navigator.userAgent);
+      const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+      
+      console.log('Browser detection:');
+      console.log('- isIOS:', isIOS);
+      console.log('- isStandalone:', isStandalone);
+      console.log('- isChromeOnIOS:', isChromeOnIOS);
+      console.log('- isFirefoxOnIOS:', isFirefoxOnIOS);
+      console.log('- isSafari:', isSafari);
+      console.log('- User Agent:', navigator.userAgent);
       
       if (isIOS) {
         console.log('Running on iOS device');
@@ -181,6 +192,8 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
         } else {
           console.warn('Could not detect iOS version from user agent:', navigator.userAgent);
         }
+        
+        // No longer need to check for Safari specifically since Chrome 113+ also supports push on iOS
         
         // If not standalone or iOS version < 16.4, show warning
         if (!isStandalone || !isIOSVersionSupported) {
