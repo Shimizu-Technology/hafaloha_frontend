@@ -85,6 +85,65 @@ Chrome on Android supports web push notifications, but there are some considerat
 
 ## Common Pitfalls and Solutions
 
+### VAPID Key Format Issue
+
+One of the most challenging issues with web push notifications is the format of VAPID keys. There are two different formats that need to be considered:
+
+1. **Server-side VAPID key format**: The format used by the server to sign push messages
+2. **Browser-side applicationServerKey format**: The format expected by browsers when subscribing to push notifications
+
+The key difference is that browsers expect the applicationServerKey to include an uncompressed point format indicator byte (0x04) at the beginning, while the server-generated VAPID keys typically don't include this byte.
+
+#### Symptoms of VAPID Key Format Issues
+
+If you encounter the following error when trying to subscribe to push notifications:
+
+```
+InvalidAccessError: Failed to execute 'subscribe' on 'PushManager': The provided applicationServerKey is not valid.
+```
+
+This is likely due to a VAPID key format issue.
+
+#### Our Solution
+
+We implemented a solution in `webPushUtils.js` that:
+
+1. Detects when a key is in the server format (86 characters, no 'B' prefix)
+2. Adds the missing 0x04 byte to convert it to the browser-expected format
+3. Properly handles the conversion to the Uint8Array format required by PushManager.subscribe()
+
+```javascript
+// Add the uncompressed point format indicator byte (0x04)
+// This is required for the applicationServerKey to be valid
+if (base64String.length === 86 && !base64String.startsWith('B')) {
+  // First, decode the base64 string to get the raw bytes
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  
+  const rawData = atob(base64);
+  
+  // Create a new Uint8Array with space for the indicator byte
+  const outputArray = new Uint8Array(rawData.length + 1);
+  
+  // Set the first byte to 0x04 (uncompressed point format)
+  outputArray[0] = 4;
+  
+  // Copy the rest of the bytes
+  for (let i = 0; i < rawData.length; i++) {
+    outputArray[i + 1] = rawData.charCodeAt(i);
+  }
+  
+  return outputArray;
+}
+```
+
+This approach is more flexible than modifying the backend, as it:
+- Doesn't require changes to the database schema
+- Works with existing VAPID keys
+- Handles different key formats gracefully
+
 ### Service Worker Configuration
 
 1. **Event Handling**: It's crucial that your service worker's push event listener properly handles incoming push events. Always use `event.waitUntil()` to ensure the notification is displayed before the event terminates:
