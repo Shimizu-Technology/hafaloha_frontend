@@ -3,6 +3,9 @@
 
 const CACHE_NAME = 'hafaloha-cache-v1';
 const OFFLINE_URL = '/offline.html';
+const VERSION = '1.0.1'; // Increment this when you update the service worker
+
+console.log(`[Service Worker] Initializing service worker version ${VERSION}`);
 
 // Files to cache for offline use
 const urlsToCache = [
@@ -16,16 +19,20 @@ const urlsToCache = [
 
 // Install event - cache assets for offline use
 self.addEventListener('install', event => {
-  console.log('[Service Worker] Installing Service Worker...');
+  console.log(`[Service Worker] Installing Service Worker version ${VERSION}...`);
   
   // Skip waiting to ensure the new service worker activates immediately
   self.skipWaiting();
+  console.log('[Service Worker] Skip waiting called');
   
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('[Service Worker] Caching app shell');
         return cache.addAll(urlsToCache);
+      })
+      .then(() => {
+        console.log('[Service Worker] App shell cached successfully');
       })
       .catch(error => {
         console.error('[Service Worker] Cache install error:', error);
@@ -35,14 +42,21 @@ self.addEventListener('install', event => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', event => {
-  console.log('[Service Worker] Activating Service Worker...');
+  console.log(`[Service Worker] Activating Service Worker version ${VERSION}...`);
   
   // Claim clients to ensure the service worker controls all clients immediately
-  event.waitUntil(self.clients.claim());
+  const claimPromise = self.clients.claim()
+    .then(() => {
+      console.log('[Service Worker] Clients claimed successfully');
+    })
+    .catch(error => {
+      console.error('[Service Worker] Error claiming clients:', error);
+    });
   
   // Clean up old caches
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
+  const cleanCachesPromise = caches.keys()
+    .then(cacheNames => {
+      console.log('[Service Worker] Found caches:', cacheNames);
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
@@ -52,7 +66,18 @@ self.addEventListener('activate', event => {
         })
       );
     })
-  );
+    .then(() => {
+      console.log('[Service Worker] Cache cleanup completed');
+    })
+    .catch(error => {
+      console.error('[Service Worker] Error cleaning caches:', error);
+    });
+  
+  // Wait for both operations to complete
+  event.waitUntil(Promise.all([claimPromise, cleanCachesPromise]));
+  
+  // Log that we're ready to handle push events
+  console.log('[Service Worker] Ready to handle push events');
 });
 
 // Fetch event - serve from cache if available, otherwise fetch from network

@@ -142,31 +142,75 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
       const applicationServerKey = urlBase64ToUint8Array(response.vapid_public_key);
       console.log('Application server key (Uint8Array):', applicationServerKey);
       
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true, // Required for Chrome
-        applicationServerKey: applicationServerKey
-      });
-      
-      console.log('Push subscription created:', subscription);
-      
-      // Send the subscription to the server
-      console.log('Sending subscription to server');
-      await api.post(`/push_subscriptions?restaurant_id=${restaurantId}`, { subscription });
-      console.log('Subscription sent to server successfully');
-      
-      return true;
-    } catch (subscribeError) {
-      console.error('Error in pushManager.subscribe:', subscribeError);
-      
       // Check if there's an existing subscription that might be causing issues
       const existingSubscription = await registration.pushManager.getSubscription();
       if (existingSubscription) {
         console.log('Found existing subscription, attempting to unsubscribe first');
-        await existingSubscription.unsubscribe();
-        console.log('Unsubscribed from existing subscription, please try subscribing again');
+        try {
+          await existingSubscription.unsubscribe();
+          console.log('Unsubscribed from existing subscription');
+        } catch (unsubError) {
+          console.error('Error unsubscribing from existing subscription:', unsubError);
+        }
       }
       
-      throw subscribeError;
+      // iOS Safari specific debugging
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      if (isIOS) {
+        console.log('Running on iOS device');
+        console.log('iOS version:', navigator.userAgent);
+        console.log('Is standalone (PWA)?:', window.matchMedia('(display-mode: standalone)').matches);
+      }
+      
+      console.log('Calling pushManager.subscribe...');
+      let subscription;
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true, // Required for Chrome
+          applicationServerKey: applicationServerKey
+        });
+        console.log('Push subscription created successfully:', subscription);
+      } catch (subscribeSpecificError: any) {
+        console.error('Specific error in pushManager.subscribe:', subscribeSpecificError);
+        console.error('Error name:', subscribeSpecificError.name);
+        console.error('Error message:', subscribeSpecificError.message);
+        
+        if (subscribeSpecificError.name === 'NotAllowedError') {
+          console.error('Permission denied for push notifications');
+          alert('Permission denied for push notifications. Please check your browser settings.');
+        } else if (subscribeSpecificError.name === 'AbortError') {
+          console.error('Push subscription was aborted');
+          alert('Push subscription was aborted. This may be due to a network issue or browser restriction.');
+        } else if (subscribeSpecificError.name === 'InvalidStateError') {
+          console.error('Service worker is not activated');
+          alert('Service worker is not activated. Please refresh the page and try again.');
+        } else if (isIOS) {
+          console.error('iOS specific error. Make sure the app is installed as a PWA and running iOS 16.4+');
+          alert('Push notifications require iOS 16.4+ and the app must be installed to the home screen (Add to Home Screen).');
+        }
+        
+        throw subscribeSpecificError;
+      }
+      
+      if (!subscription) {
+        console.error('Subscription is null after pushManager.subscribe');
+        return false;
+      }
+      
+      // Send the subscription to the server
+      console.log('Sending subscription to server');
+      try {
+        await api.post(`/push_subscriptions?restaurant_id=${restaurantId}`, { subscription });
+        console.log('Subscription sent to server successfully');
+      } catch (apiError) {
+        console.error('Error sending subscription to server:', apiError);
+        // Continue anyway, as the subscription was created successfully
+      }
+      
+      return true;
+    } catch (subscribeError) {
+      console.error('Error in subscribeToPushNotifications:', subscribeError);
+      return false;
     }
   } catch (error) {
     console.error('Error subscribing to push notifications:', error);
