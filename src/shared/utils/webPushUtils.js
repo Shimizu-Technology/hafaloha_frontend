@@ -5,9 +5,6 @@
  * It's based on the web-push library's implementation.
  */
 
-// A known-good VAPID key for testing purposes
-const KNOWN_GOOD_VAPID_KEY = 'BNbxGYNh-mVmUBqLkpuX6VnHSDq5v9-Y5LHX9r4YL6VbvYjNUl_BJFdPTn5kpUFJQbLVcWQmD6GfzpHKd1rXqrY';
-
 /**
  * Converts a base64 string to a Uint8Array
  * This is a direct port of the web-push library's implementation
@@ -18,11 +15,6 @@ const KNOWN_GOOD_VAPID_KEY = 'BNbxGYNh-mVmUBqLkpuX6VnHSDq5v9-Y5LHX9r4YL6VbvYjNUl
 export function urlBase64ToUint8Array(base64String) {
   console.log('Original VAPID key:', base64String);
   
-  // FOR TESTING: Use a known-good VAPID key
-  // This is a temporary solution to debug the issue
-  console.log('Using known-good VAPID key for testing');
-  base64String = KNOWN_GOOD_VAPID_KEY;
-  
   // Handle the special case where the key starts with a dash
   // This can cause issues with some browsers
   if (base64String.startsWith('-')) {
@@ -31,9 +23,42 @@ export function urlBase64ToUint8Array(base64String) {
   }
 
   try {
+    // Add the uncompressed point format indicator byte (0x04)
+    // This is required for the applicationServerKey to be valid
+    // The server generates keys without this byte, so we need to add it
+    if (base64String.length === 86 && !base64String.startsWith('B')) {
+      console.log('Adding uncompressed point format indicator');
+      
+      // First, decode the base64 string to get the raw bytes
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding)
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+      
+      const rawData = atob(base64);
+      
+      // Create a new Uint8Array with space for the indicator byte
+      const outputArray = new Uint8Array(rawData.length + 1);
+      
+      // Set the first byte to 0x04 (uncompressed point format)
+      outputArray[0] = 4;
+      
+      // Copy the rest of the bytes
+      for (let i = 0; i < rawData.length; i++) {
+        outputArray[i + 1] = rawData.charCodeAt(i);
+      }
+      
+      console.log('Added uncompressed point format indicator');
+      console.log('Output array length:', outputArray.length);
+      console.log('First few bytes:', Array.from(outputArray.slice(0, 5)));
+      
+      return outputArray;
+    }
+    
+    // Standard processing for keys that already have the correct format
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding)
-      .replace(/\-/g, '+')
+      .replace(/-/g, '+')
       .replace(/_/g, '/');
     
     console.log('Processed base64 string:', base64);
@@ -43,7 +68,7 @@ export function urlBase64ToUint8Array(base64String) {
     
     const outputArray = new Uint8Array(rawData.length);
 
-    for (let i = 0; i < rawData.length; ++i) {
+    for (let i = 0; i < rawData.length; i++) {
       outputArray[i] = rawData.charCodeAt(i);
     }
     
@@ -53,17 +78,6 @@ export function urlBase64ToUint8Array(base64String) {
     return outputArray;
   } catch (error) {
     console.error('Error in urlBase64ToUint8Array:', error);
-    
-    // In case of error, return a hardcoded valid applicationServerKey
-    // This is a last resort fallback
-    console.error('Falling back to hardcoded applicationServerKey');
-    
-    // This is a valid applicationServerKey (65 bytes)
-    return new Uint8Array([
-      4, 181, 95, 228, 58, 180, 64, 0, 114, 72, 243, 64, 10, 29, 164, 124, 
-      149, 165, 133, 83, 194, 147, 45, 23, 111, 252, 135, 95, 143, 240, 118, 37, 
-      108, 52, 202, 141, 73, 209, 175, 106, 142, 241, 156, 125, 185, 128, 79, 243, 
-      36, 114, 48, 62, 57, 223, 72, 170, 59, 60, 107, 38, 96, 45, 67, 156, 87
-    ]);
+    throw error;
   }
 }
