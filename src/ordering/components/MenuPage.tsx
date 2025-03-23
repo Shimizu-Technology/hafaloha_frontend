@@ -1,6 +1,6 @@
 // src/ordering/components/MenuPage.tsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
@@ -166,7 +166,13 @@ export function MenuPage() {
             {filteredItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                 {filteredItems.map((item, index) => (
-                  <MenuItem key={item.id} item={item} />
+                  <MenuItem 
+                    key={item.id} 
+                    item={item} 
+                    index={index}
+                    // Prioritize loading for above-the-fold content (first 6 items)
+                    loading={index < 6 ? "eager" : "lazy"}
+                  />
                 ))}
               </div>
             ) : (

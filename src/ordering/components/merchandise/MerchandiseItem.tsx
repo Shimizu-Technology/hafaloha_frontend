@@ -1,15 +1,18 @@
 // src/ordering/components/merchandise/MerchandiseItem.tsx
 import React, { useState } from 'react';
 import { useOrderStore } from '../../store/orderStore';
+import { CachedImage } from '../../../shared/components/ui/CachedImage';
 import { MerchandiseItem as MerchandiseItemType } from '../../types/merchandise';
 import { MerchandisePreviewModal } from './MerchandisePreviewModal';
 import { calculateFinalPrice } from '../../utils/merchandiseUtils';
 
 interface MerchandiseItemProps {
   item: MerchandiseItemType;
+  index?: number;
+  loading?: 'lazy' | 'eager';
 }
 
-export function MerchandiseItem({ item }: MerchandiseItemProps) {
+export function MerchandiseItem({ item, index, loading = 'lazy' }: MerchandiseItemProps) {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const addToCart = useOrderStore((state) => state.addToCart);
@@ -64,10 +67,13 @@ export function MerchandiseItem({ item }: MerchandiseItemProps) {
       >
         {/* Image with hover effect */}
         <div className="relative aspect-square overflow-hidden bg-gray-100">
-          <img
+          <CachedImage
             src={isHovered && item.second_image_url ? item.second_image_url : item.image_url}
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading={loading}
+            width={400}
+            height={400}
           />
           
           {/* Stock status badge */}
