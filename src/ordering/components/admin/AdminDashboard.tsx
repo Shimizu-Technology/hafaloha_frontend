@@ -22,8 +22,8 @@ import {
   Bell,
   Package
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
+import toastUtils from '../../../shared/utils/toastUtils';
 import { useAuthStore } from '../../store/authStore';
 import useNotificationStore from '../../store/notificationStore';
 import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
@@ -126,7 +126,7 @@ export function AdminDashboard() {
       
       // Clear toast notifications for all unacknowledged orders
       ordersToAcknowledge.forEach(order => {
-        toast.remove(`new_order_${order.id}`);
+        toastUtils.dismiss(`new_order_${order.id}`);
       });
       
       // Acknowledge each order
@@ -138,10 +138,10 @@ export function AdminDashboard() {
       setUnacknowledgedOrders([]);
       
       // Show success toast
-      toast.success(`${ordersToAcknowledge.length} orders acknowledged`);
+      toastUtils.success(`${ordersToAcknowledge.length} orders acknowledged`);
     } catch (err) {
       console.error('[AdminDashboard] Failed to acknowledge all orders:', err);
-      toast.error('Failed to acknowledge all orders');
+      toastUtils.error('Failed to acknowledge all orders');
     } finally {
       setIsAcknowledgingAll(false);
     }
@@ -183,7 +183,7 @@ export function AdminDashboard() {
       return `${items[0].name} and ${items.length - 1} more`;
     };
     
-    toast.custom((t) => (
+    toastUtils.custom((t) => (
       <div
         className={`relative bg-white rounded-xl shadow-lg p-4 max-w-sm border border-gray-100 animate-slideUp transition-all duration-300 ${t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
         style={{ minWidth: '280px', maxWidth: '95vw' }}
@@ -192,7 +192,7 @@ export function AdminDashboard() {
         <button
           onClick={() => {
             // Only remove this specific toast
-            toast.remove(`new_order_${order.id}`);
+            toastUtils.dismiss(`new_order_${order.id}`);
             
             // Acknowledge the order when dismissed
             acknowledgeOrder(Number(order.id));
@@ -252,7 +252,7 @@ export function AdminDashboard() {
           <button
             onClick={() => {
               // Only remove this specific toast
-              toast.remove(`new_order_${order.id}`);
+              toastUtils.dismiss(`new_order_${order.id}`);
               
               // Acknowledge the order when viewing it
               acknowledgeOrder(Number(order.id));
@@ -278,7 +278,7 @@ export function AdminDashboard() {
           <button
             onClick={() => {
               // Only remove this specific toast
-              toast.remove(`new_order_${order.id}`);
+              toastUtils.dismiss(`new_order_${order.id}`);
               
               // Acknowledge the order when dismissed
               acknowledgeOrder(Number(order.id));
@@ -330,7 +330,7 @@ export function AdminDashboard() {
   const displayLowStockNotification = (item: MenuItem) => {
     const availableQty = calculateAvailableQuantity(item);
     
-    toast.custom((t) => (
+    toastUtils.custom((t) => (
       <div
         className={`relative bg-white rounded-xl shadow-md border border-gray-100 animate-slideUp transition-all duration-300 ${t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
         style={{ minWidth: '280px', maxWidth: '95vw' }}
@@ -338,7 +338,7 @@ export function AdminDashboard() {
         {/* Close button */}
         <button
           onClick={() => {
-            toast.remove(`low_stock_${item.id}`);
+            toastUtils.dismiss(`low_stock_${item.id}`);
             acknowledgeLowStockItem(item.id, availableQty);
           }}
           className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 transition-colors"
@@ -363,7 +363,7 @@ export function AdminDashboard() {
         <div className="p-4 pt-2 flex space-x-2">
           <button
             onClick={() => {
-              toast.remove(`low_stock_${item.id}`);
+              toastUtils.dismiss(`low_stock_${item.id}`);
               acknowledgeLowStockItem(item.id, availableQty);
               setActiveTab('menu');
               setOpenInventoryForItem(item.id);
@@ -374,7 +374,7 @@ export function AdminDashboard() {
           </button>
           <button
             onClick={() => {
-              toast.remove(`low_stock_${item.id}`);
+              toastUtils.dismiss(`low_stock_${item.id}`);
               acknowledgeLowStockItem(item.id, availableQty);
             }}
             className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-200 transition-colors"

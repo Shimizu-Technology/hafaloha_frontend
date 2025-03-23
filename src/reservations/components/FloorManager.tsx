@@ -5,7 +5,7 @@ import {
   Edit2, LayoutDashboard, Minus, Maximize, Plus as LucidePlus, Settings,
 } from 'lucide-react';
 
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { formatPhoneNumber } from '../../shared/utils/formatters';
@@ -220,7 +220,7 @@ export default function FloorManager({
       }
     } catch (err) {
       console.error('[FloorManager] initLoad error:', err);
-      toast.error('Failed to load initial data.');
+      toastUtils.error('Failed to load initial data.');
       setLayout(null);
       setSelectedLayoutId(null);
     } finally {
@@ -242,7 +242,7 @@ export default function FloorManager({
       setDateSeatAllocations(seatAllocs);
     } catch (err) {
       console.error('[FloorManager] fetchSeatAllocsForDate error:', err);
-      toast.error('Failed to load seat allocations.');
+      toastUtils.error('Failed to load seat allocations.');
       setDateSeatAllocations([]);
     } finally {
       setLoading(false);
@@ -258,7 +258,7 @@ export default function FloorManager({
       await fetchSeatAllocsForDate(id, date);
     } catch (err) {
       console.error('[FloorManager] handleSelectLayout error:', err);
-      toast.error('Failed to load selected layout.');
+      toastUtils.error('Failed to load selected layout.');
       setLayout(null);
       setDateSeatAllocations([]);
     } finally {
@@ -390,7 +390,7 @@ export default function FloorManager({
   async function handleSeatNow() {
     if (!seatWizard.active || !seatWizard.occupantId) return;
     if (seatWizard.selectedSeatIds.length !== seatWizard.occupantPartySize) {
-      toast.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
+      toastUtils.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
       return;
     }
     const { start, end } = getSeatWizardStartEnd();
@@ -402,16 +402,16 @@ export default function FloorManager({
         start_time:    start.toISOString(),
         end_time:      end.toISOString(),
       });
-      toast.success('Seats assigned successfully!');
+      toastUtils.success('Seats assigned successfully!');
       handleCancelWizard();
       await refreshLayout();
     } catch (err: any) {
       console.error('[FloorManager] handleSeatNow error:', err);
       if (err.response?.status === 422) {
-        toast.error('Some seats are already taken. Please choose different seats.');
+        toastUtils.error('Some seats are already taken. Please choose different seats.');
         await refreshLayout();
       } else {
-        toast.error('An error occurred while seating. Check console.');
+        toastUtils.error('An error occurred while seating. Check console.');
       }
     }
   }
@@ -419,7 +419,7 @@ export default function FloorManager({
   async function handleReserveSeats() {
     if (!seatWizard.active || !seatWizard.occupantId) return;
     if (seatWizard.selectedSeatIds.length !== seatWizard.occupantPartySize) {
-      toast.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
+      toastUtils.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
       return;
     }
     const { start, end } = getSeatWizardStartEnd();
@@ -431,16 +431,16 @@ export default function FloorManager({
         start_time:    start.toISOString(),
         end_time:      end.toISOString(),
       });
-      toast.success('Seats reserved successfully!');
+      toastUtils.success('Seats reserved successfully!');
       handleCancelWizard();
       await refreshLayout();
     } catch (err: any) {
       console.error('[FloorManager] handleReserveSeats error:', err);
       if (err.response?.status === 422) {
-        toast.error('Some seats are already reserved. Please choose different seats.');
+        toastUtils.error('Some seats are already reserved. Please choose different seats.');
         await refreshLayout();
       } else {
-        toast.error('An error occurred while reserving seats. Check console.');
+        toastUtils.error('An error occurred while reserving seats. Check console.');
       }
     }
   }
@@ -468,45 +468,45 @@ export default function FloorManager({
       finish: async () => {
         try {
           await seatAllocationFinish({ occupant_type: occupantType, occupant_id: occupantId });
-          toast.success('Seat finished (freed).');
+          toastUtils.success('Seat finished (freed).');
           closeSeatDialog();
           await refreshLayout();
         } catch (err) {
           console.error('[FloorManager] handleFinishOccupant error:', err);
-          toast.error('Failed to free seat. Check console.');
+          toastUtils.error('Failed to free seat. Check console.');
         }
       },
       noShow: async () => {
         try {
           await seatAllocationNoShow({ occupant_type: occupantType, occupant_id: occupantId });
-          toast.success('Marked as no-show.');
+          toastUtils.success('Marked as no-show.');
           closeSeatDialog();
           await refreshLayout();
         } catch (err) {
           console.error('[FloorManager] handleNoShow error:', err);
-          toast.error('Failed to mark no-show. Check console.');
+          toastUtils.error('Failed to mark no-show. Check console.');
         }
       },
       arrive: async () => {
         try {
           await seatAllocationArrive({ occupant_type: occupantType, occupant_id: occupantId });
-          toast.success('Occupant arrived and seated!');
+          toastUtils.success('Occupant arrived and seated!');
           closeSeatDialog();
           await refreshLayout();
         } catch (err) {
           console.error('[FloorManager] handleArriveOccupant error:', err);
-          toast.error('Failed to seat occupant. Check console.');
+          toastUtils.error('Failed to seat occupant. Check console.');
         }
       },
       cancel: async () => {
         try {
           await seatAllocationCancel({ occupant_type: occupantType, occupant_id: occupantId });
-          toast.success('Reservation canceled, seat freed.');
+          toastUtils.success('Reservation canceled, seat freed.');
           closeSeatDialog();
           await refreshLayout();
         } catch (err) {
           console.error('[FloorManager] handleCancelOccupant error:', err);
-          toast.error('Failed to cancel occupant. Check console.');
+          toastUtils.error('Failed to cancel occupant. Check console.');
         }
       },
     };
@@ -515,12 +515,12 @@ export default function FloorManager({
   async function handleDeleteReservation(id: number) {
     try {
       await deleteReservation(id);
-      toast.success('Reservation deleted.');
+      toastUtils.success('Reservation deleted.');
       setSelectedReservation(null);
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleDeleteReservation error:', err);
-      toast.error('Delete reservation failed. Check console.');
+      toastUtils.error('Delete reservation failed. Check console.');
     }
   }
   async function handleEditReservation(updated: Reservation) {
@@ -536,12 +536,12 @@ export default function FloorManager({
         patchData.seat_preferences = updated.seat_preferences;
       }
       await updateReservation(updated.id, patchData);
-      toast.success('Reservation updated.');
+      toastUtils.success('Reservation updated.');
       setSelectedReservation(null);
       await refreshLayout();
     } catch (err) {
       console.error('[FloorManager] handleEditReservation error:', err);
-      toast.error('Update reservation failed. Check console.');
+      toastUtils.error('Update reservation failed. Check console.');
     }
   }
 
@@ -580,12 +580,12 @@ export default function FloorManager({
   ) {
     if (seatWizard.active) {
       if (seat.occupant_status !== 'free') {
-        toast.error(`Seat ${seat.label} is not free. It's occupied or reserved.`);
+        toastUtils.error(`Seat ${seat.label} is not free. It's occupied or reserved.`);
         return;
       }
       const alreadySelected = seatWizard.selectedSeatIds.includes(seat.id);
       if (!alreadySelected && seatWizard.selectedSeatIds.length >= seatWizard.occupantPartySize) {
-        toast.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
+        toastUtils.error(`Need exactly ${seatWizard.occupantPartySize} seat(s).`);
         return;
       }
       toggleSelectedSeat(seat.id);
@@ -789,7 +789,7 @@ export default function FloorManager({
                                 try {
                                   // Use occupant's start_time, if any
                                   if (!seatWizard.reservationData?.start_time) {
-                                    toast.error('No reservation start_time available.');
+                                    toastUtils.error('No reservation start_time available.');
                                     return;
                                   }
                                   await seatAllocationReserve({
@@ -799,16 +799,16 @@ export default function FloorManager({
                                     start_time:    seatWizard.reservationData.start_time,
                                   });
                                   await updateReservation(seatWizard.reservationData.id, { status: 'reserved' });
-                                  toast.success(`Assigned seats: ${prefSet.join(', ')}`);
+                                  toastUtils.success(`Assigned seats: ${prefSet.join(', ')}`);
                                   handleCancelWizard();
                                   await refreshLayout();
                                 } catch (err: any) {
                                   console.error('Assign from preference error:', err);
                                   if (err.response?.status === 422) {
-                                    toast.error('Some seats are already taken.');
+                                    toastUtils.error('Some seats are already taken.');
                                     await refreshLayout();
                                   } else {
-                                    toast.error('Failed to assign seats from preference.');
+                                    toastUtils.error('Failed to assign seats from preference.');
                                   }
                                 }
                               }}

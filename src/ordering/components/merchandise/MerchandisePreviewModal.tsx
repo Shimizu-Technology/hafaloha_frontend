@@ -1,6 +1,7 @@
 // src/ordering/components/merchandise/MerchandisePreviewModal.tsx
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
+import toastUtils from '../../../shared/utils/toastUtils';
 import { useOrderStore } from '../../store/orderStore';
 import { MerchandiseItem, MerchandiseVariant } from '../../types/merchandise';
 import { getSelectedVariant, calculateFinalPrice } from '../../utils/merchandiseUtils';
@@ -67,19 +68,19 @@ export function MerchandisePreviewModal({ item, onClose }: MerchandisePreviewMod
   // Handle add to cart
   const handleAddToCart = () => {
     if (isOutOfStock) {
-      alert('Sorry, this item is out of stock.');
+      toastUtils.error('Sorry, this item is out of stock.');
       return;
     }
     
     // Check if we need a variant selection but none is selected
     if (item.variants.length > 0 && !selectedVariant) {
       if (availableSizes.length > 0 && !selectedSize) {
-        alert('Please select a size.');
+        toastUtils.error('Please select a size.');
         return;
       }
       
       if (availableColors.length > 0 && !selectedColor) {
-        alert('Please select a color.');
+        toastUtils.error('Please select a color.');
         return;
       }
     }

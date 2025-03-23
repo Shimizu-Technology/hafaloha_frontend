@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../../shared/auth';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 import { api } from '../../shared/api';
 import { Tooltip } from '../../shared/components/ui';
 import { formatPhoneNumber } from '../../shared/utils/formatters';
@@ -294,7 +294,7 @@ export default function ReservationForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!formData.date || !formData.time) {
-      toast.error('Please pick a date and time.');
+      toastUtils.error('Please pick a date and time.');
       return;
     }
 
@@ -309,7 +309,7 @@ export default function ReservationForm({
     const contactEmail = formData.email.trim() || user?.email || '';
 
     if (!contactFirstName) {
-      toast.error('First name is required.');
+      toastUtils.error('First name is required.');
       return;
     }
 
@@ -330,7 +330,7 @@ export default function ReservationForm({
         restaurant_id: 1,
         duration_minutes: duration,
       });
-      toast.success('Reservation created successfully!');
+      toastUtils.success('Reservation created successfully!');
 
       // Build data for the Confirmation UI
       const confirmData: ConfirmationData = {
@@ -348,7 +348,7 @@ export default function ReservationForm({
       onToggleConfirmation?.(true);
     } catch (err) {
       console.error('Error creating reservation:', err);
-      toast.error('Failed to create reservation. Please try again.');
+      toastUtils.error('Failed to create reservation. Please try again.');
     }
   }
 

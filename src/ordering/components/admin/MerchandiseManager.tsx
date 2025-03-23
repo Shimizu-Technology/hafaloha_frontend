@@ -20,7 +20,7 @@ import {
   Package
 } from 'lucide-react';
 import MerchandiseInventoryModal from './MerchandiseInventoryModal';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { api } from '../../../shared/api/apiClient';
 
@@ -234,13 +234,13 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     try {
       const updated = await api.patch(`/merchandise_collections/${collectionId}`, data);
       if (updated) {
-        toast.success('Collection updated successfully');
+        toastUtils.success('Collection updated successfully');
         return true;
       }
       return false;
     } catch (error) {
       console.error('Failed to update collection:', error);
-      toast.error('Failed to update collection');
+      toastUtils.error('Failed to update collection');
       throw error;
     }
   };
@@ -252,7 +252,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     e.preventDefault();
 
     if (!collectionFormData.name.trim()) {
-      toast.error('Collection name is required.');
+      toastUtils.error('Collection name is required.');
       return;
     }
 
@@ -287,7 +287,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
             collectionFormData.active
           );
           if (newCollection) {
-            toast.success('Collection created successfully');
+            toastUtils.success('Collection created successfully');
           }
         }
 
@@ -296,7 +296,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
       });
     } catch (error) {
       console.error('Failed to create/update collection:', error);
-      toast.error('Failed to save collection.');
+      toastUtils.error('Failed to save collection.');
     }
   };
 
@@ -380,12 +380,12 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
       try {
         await withLoading(async () => {
           await deleteMerchandiseItem(itemId);
-          toast.success('Item deleted successfully');
+          toastUtils.success('Item deleted successfully');
           await fetchMerchandiseItems();
         });
       } catch (error) {
         console.error('Failed to delete item:', error);
-        toast.error('Failed to delete item');
+        toastUtils.error('Failed to delete item');
       }
     }
   };
@@ -432,7 +432,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
 
   const handleRemoveSize = (index: number) => {
     if (itemFormData.variants.length <= 1) {
-      toast.error('Item must have at least one size.');
+      toastUtils.error('Item must have at least one size.');
       return;
     }
     const newVariants = [...itemFormData.variants];
@@ -514,15 +514,15 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
     e.preventDefault();
 
     if (!itemFormData.name.trim()) {
-      toast.error('Item name is required.');
+      toastUtils.error('Item name is required.');
       return;
     }
     if (itemFormData.base_price <= 0) {
-      toast.error('Price must be greater than 0.');
+      toastUtils.error('Price must be greater than 0.');
       return;
     }
     if (itemFormData.variants.length === 0) {
-      toast.error('At least one size variant is required.');
+      toastUtils.error('At least one size variant is required.');
       return;
     }
 
@@ -625,7 +625,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
               }
             }
 
-            toast.success('Item updated successfully');
+            toastUtils.success('Item updated successfully');
           }
         } else {
           // ---------- CREATE ----------
@@ -642,7 +642,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                 }
               });
             }
-            toast.success('Item created successfully');
+            toastUtils.success('Item created successfully');
           }
         }
 
@@ -654,7 +654,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
       });
     } catch (error) {
       console.error('Failed to save item:', error);
-      toast.error('Failed to save item.');
+      toastUtils.error('Failed to save item.');
     }
   };
 
@@ -1514,7 +1514,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
             <button
               onClick={() => {
                 if (selectedCollectionId === null) {
-                  toast.error('Please select a collection first.');
+                  toastUtils.error('Please select a collection first.');
                   return;
                 }
                 
@@ -1675,11 +1675,11 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                                 try {
                                   await withLoading(async () => {
                                     await setActiveCollection(selectedCollectionId);
-                                    toast.success('Collection set as active successfully');
+                                    toastUtils.success('Collection set as active successfully');
                                   });
                                 } catch (err) {
                                   console.error('Failed to set collection as active:', err);
-                                  toast.error('Failed to set collection as active');
+                                  toastUtils.error('Failed to set collection as active');
                                 }
                               }
                             }}
@@ -1732,7 +1732,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                               await withLoading(async () => {
                                 if (selectedCollectionId !== null) {
                                   await deleteCollection(selectedCollectionId);
-                                  toast.success('Collection deleted successfully');
+                                  toastUtils.success('Collection deleted successfully');
 
                                   // Reset to a different collection or All Items
                                   if (collections.length > 1) {
@@ -1751,7 +1751,7 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                               });
                             } catch (err) {
                               console.error('Failed to delete collection:', err);
-                              toast.error('Failed to delete collection');
+                              toastUtils.error('Failed to delete collection');
                             }
                           }
                         }}

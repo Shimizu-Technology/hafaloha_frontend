@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Phone, User } from 'lucide-react';
-import toast from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 
 import { useAuthStore } from '../store/authStore';
 import { usePromoStore } from '../store/promoStore';
@@ -113,13 +113,13 @@ export function CheckoutPage() {
         const discountedTotal = await applyDiscount(rawTotal, formData.promoCode);
         setFinalTotal(discountedTotal);
         setAppliedPromo(formData.promoCode);
-        toast.success(`Promo code ${formData.promoCode} applied!`);
+        toastUtils.success(`Promo code ${formData.promoCode} applied!`);
       } catch (error) {
         console.error('Error applying discount:', error);
-        toast.error('Failed to apply promo code. Please try again.');
+        toastUtils.error('Failed to apply promo code. Please try again.');
       }
     } else {
-      toast.error('Invalid or expired promo code');
+      toastUtils.error('Invalid or expired promo code');
     }
   }
 
@@ -145,7 +145,7 @@ export function CheckoutPage() {
   // Handler for payment errors
   const handlePaymentError = (error: Error) => {
     console.error('Payment failed:', error);
-    toast.error(`Payment failed: ${error.message}`);
+    toastUtils.error(`Payment failed: ${error.message}`);
     setPaymentProcessing(false);
     setIsSubmitting(false);
   };
@@ -159,7 +159,7 @@ export function CheckoutPage() {
 
       const finalPhone = formData.phone.trim();
       if (!isValidPhone(finalPhone)) {
-        toast.error(
+        toastUtils.error(
           'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
         );
         setIsSubmitting(false);
@@ -180,7 +180,7 @@ export function CheckoutPage() {
         formData.vipCode
       );
 
-      toast.success('Order placed successfully!');
+      toastUtils.success('Order placed successfully!');
 
       const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
       navigate('/order-confirmation', {
@@ -193,7 +193,7 @@ export function CheckoutPage() {
       });
     } catch (err: any) {
       console.error('Failed to create order:', err);
-      toast.error('Failed to place order. Please try again.');
+      toastUtils.error('Failed to place order. Please try again.');
       setIsSubmitting(false);
     }
   }
@@ -207,29 +207,30 @@ export function CheckoutPage() {
     try {
       // Check for VIP-only mode and attempt to validate code if not already validated
       if (restaurant?.vip_only_checkout && !vipCodeValid && formData.vipCode.trim()) {
+        let validationToast = null;
         try {
-          toast.loading('Validating VIP code...');
+          validationToast = toastUtils.loading('Validating VIP code...');
           const validationResult = await validateVipCode(restaurant.id, formData.vipCode);
-          toast.dismiss();
+          validationToast.dismiss();
           
           if (!validationResult.valid) {
-            toast.error(validationResult.message || 'Invalid VIP code');
+            toastUtils.error(validationResult.message || 'Invalid VIP code');
             setIsSubmitting(false);
             return;
           }
           
           // Code is valid, update state and continue
           setVipCodeValid(true);
-          toast.success('VIP code validated successfully!');
+          toastUtils.success('VIP code validated successfully!');
         } catch (error) {
-          toast.dismiss();
-          toast.error('Failed to validate VIP code');
+          if (validationToast) validationToast.dismiss();
+          toastUtils.error('Failed to validate VIP code');
           setIsSubmitting(false);
           return;
         }
       } else if (restaurant?.vip_only_checkout && !vipCodeValid) {
         // No VIP code entered
-        toast.error('Please enter a valid VIP code to continue');
+        toastUtils.error('Please enter a valid VIP code to continue');
         setIsSubmitting(false);
         return;
       }
@@ -262,14 +263,14 @@ export function CheckoutPage() {
         }
       } else {
         // No payment processor available
-        toast.error('Payment processing is not available');
+        toastUtils.error('Payment processing is not available');
         setPaymentProcessing(false);
         setIsSubmitting(false);
       }
       
     } catch (err: any) {
       console.error('Failed during checkout process:', err);
-      toast.error('Failed to process checkout. Please try again.');
+      toastUtils.error('Failed to process checkout. Please try again.');
       setIsSubmitting(false);
     }
   }

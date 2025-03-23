@@ -4,7 +4,7 @@ import NotificationCard from './NotificationCard';
 import useNotificationStore from '../../../ordering/store/notificationStore';
 import { Notification } from '../../../shared/api/endpoints/notifications';
 import { AlertCircle, CheckCircle, X } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../utils/toastUtils';
 
 interface NotificationContainerProps {
   notificationType?: string;
@@ -109,13 +109,13 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
   const handleAction = async (notification: Notification, actionType: string, params: Record<string, any>) => {
     try {
       await takeAction(notification.id, actionType, params);
-      toast.success('Action completed successfully');
+      toastUtils.success('Action completed successfully');
       
       // Refresh notifications
       fetchNotifications(defaultHours, notificationType);
     } catch (error) {
       console.error('Failed to take action:', error);
-      toast.error('Failed to complete action');
+      toastUtils.error('Failed to complete action');
     }
   };
   

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import toast from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
 import { useRestaurantStore } from '../../../shared/store/restaurantStore';
@@ -523,7 +523,7 @@ function OrderPanel({
                               const cartQuantity = cartItem ? cartItem.quantity : 0;
                               const effectiveQuantity = mi.available_quantity - cartQuantity;
                               if (effectiveQuantity <= 0) {
-                                toast.error(`Cannot add more ${mi.name}. Stock limit reached.`);
+                                toastUtils.error(`Cannot add more ${mi.name}. Stock limit reached.`);
                                 return;
                               }
                             }
@@ -1174,7 +1174,7 @@ function PaymentPanel({
       } else if (paymentProcessor === 'paypal' && paypalRef.current) {
         await paypalRef.current.processPayment();
       } else {
-        toast.error('Payment processor not configured');
+        toastUtils.error('Payment processor not configured');
       }
     } catch (error) {
       console.error('Error processing payment:', error);
@@ -1631,7 +1631,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       const cartQuantity = cartItem ? cartItem.quantity : 0;
       const effectiveQuantity = item.available_quantity - cartQuantity;
       if (effectiveQuantity <= 0) {
-        toast.error(`${item.name} is out of stock.`);
+        toastUtils.error(`${item.name} is out of stock.`);
         return;
       }
     }
@@ -1649,12 +1649,12 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       const cartQuantity = cartItem ? cartItem.quantity : 0;
       const effectiveQuantity = item.available_quantity - cartQuantity;
       if (effectiveQuantity <= 0) {
-        toast.error(`${item.name} is out of stock.`);
+        toastUtils.error(`${item.name} is out of stock.`);
         setCustomizingItem(null);
         return;
       }
       if (qty > effectiveQuantity) {
-        toast.error(`Cannot add ${qty} more ${item.name}. Only ${effectiveQuantity} available.`);
+        toastUtils.error(`Cannot add ${qty} more ${item.name}. Only ${effectiveQuantity} available.`);
         setCustomizingItem(null);
         return;
       }
@@ -1684,18 +1684,18 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
 
   const handlePaymentError = (error: Error) => {
     console.error('Payment failed:', error);
-    toast.error(`Payment failed: ${error.message}`);
+    toastUtils.error(`Payment failed: ${error.message}`);
     setPaymentProcessing(false);
   };
 
   async function submitOrderWithPayment(transactionId: string) {
     if (!cartItems.length) {
-      toast.error('Please add items to the order');
+      toastUtils.error('Please add items to the order');
       return;
     }
     const finalPhone = contactPhone.trim() === '+1671' ? '' : contactPhone.trim();
     if (finalPhone && !isValidPhone(finalPhone)) {
-      toast.error('Phone must be + (3 or 4 digit area code) + 7 digits');
+      toastUtils.error('Phone must be + (3 or 4 digit area code) + 7 digits');
       return;
     }
     try {
@@ -1709,16 +1709,16 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         transactionId,
         'credit_card'
       );
-      toast.success('Order created successfully!');
+      toastUtils.success('Order created successfully!');
       onOrderCreated(newOrder.id);
     } catch (err: any) {
       console.error('Error creating order:', err);
       // Stock or generic error
       if (err.response?.data?.error?.includes('stock') || err.response?.data?.error?.includes('inventory')) {
-        toast.error('Some items are no longer available.');
+        toastUtils.error('Some items are no longer available.');
         fetchMenuItems();
       } else {
-        toast.error('Failed to create order. Please try again.');
+        toastUtils.error('Failed to create order. Please try again.');
       }
     }
   }
@@ -1726,12 +1726,12 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   /** Handle staff or non-staff submission */
   async function handleSubmitOrder() {
     if (!cartItems.length) {
-      toast.error('Please add items to the order');
+      toastUtils.error('Please add items to the order');
       return;
     }
     const finalPhone = contactPhone.trim() === '+1671' ? '' : contactPhone.trim();
     if (finalPhone && !isValidPhone(finalPhone)) {
-      toast.error('Phone must be + (3 or 4 digit area code) + 7 digits');
+      toastUtils.error('Phone must be + (3 or 4 digit area code) + 7 digits');
       return;
     }
     // Staff discount path
@@ -1752,11 +1752,11 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           staffPaymentMethod,
           staffBeneficiaryId
         );
-        toast.success('Staff order created successfully!');
+        toastUtils.success('Staff order created successfully!');
         onOrderCreated(newOrder.id);
       } catch (err: any) {
         console.error('Error creating staff order:', err);
-        toast.error('Failed to create order. Please try again.');
+        toastUtils.error('Failed to create order. Please try again.');
       }
     } else {
       // Non-staff => Show payment overlay or go to payment tab on mobile

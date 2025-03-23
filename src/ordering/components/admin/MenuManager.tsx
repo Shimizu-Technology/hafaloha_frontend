@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, X, Save, BookOpen, Package, Eye, EyeOff } from 'lucide-react';
-import toast from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
@@ -288,7 +288,7 @@ export function MenuManager({
     // Otherwise, count how many are currently featured
     const currentlyFeaturedCount = menuItems.filter(m => m.featured).length;
     if (currentlyFeaturedCount >= 4) {
-      toast.error('You can only have 4 featured items at a time.');
+      toastUtils.error('You can only have 4 featured items at a time.');
       return false;
     }
     return true;
@@ -465,7 +465,7 @@ export function MenuManager({
     
     // Validate at least one category
     if (editingItem.category_ids.length === 0) {
-      toast.error('Please select at least one category for this menu item.');
+      toastUtils.error('Please select at least one category for this menu item.');
       return;
     }
 
@@ -568,7 +568,7 @@ export function MenuManager({
             console.log('Updated item available_days:', updatedItem.available_days);
             
             // Show success toast for updated item
-            toast.success('Menu item updated successfully!');
+            toastUtils.success('Menu item updated successfully!');
             
             // Reset unsaved changes flag
             setHasUnsavedChanges(false);
@@ -599,7 +599,7 @@ export function MenuManager({
           }
 
           // Show success toast for new item
-          toast.success('Menu item created successfully!');
+          toastUtils.success('Menu item created successfully!');
           
           // Close the form after creating a new item
           setIsEditing(false);
@@ -1004,7 +1004,7 @@ export function MenuManager({
                         onClick={() => {
                           const { toggleMenuItemVisibility } = useMenuStore.getState();
                           toggleMenuItemVisibility(item.id);
-                          toast.success(item.hidden ? 'Item is now visible on menu' : 'Item hidden from menu');
+                          toastUtils.success(item.hidden ? 'Item is now visible on menu' : 'Item hidden from menu');
                         }}
                         className={`p-2 ${item.hidden ? 'text-gray-400 hover:text-blue-600' : 'text-blue-600 hover:text-blue-800'}`}
                         title={item.hidden ? "Show on menu" : "Hide from menu"}

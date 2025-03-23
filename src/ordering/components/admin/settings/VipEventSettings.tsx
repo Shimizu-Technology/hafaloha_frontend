@@ -9,9 +9,9 @@ import {
 } from '../../../../shared/api/endpoints/specialEvents';
 import { getCodeUsage } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
-import { toast } from 'react-hot-toast';
 import { Calendar, Mail } from 'lucide-react';
 import { VipCodeEmailModal } from './VipCodeEmailModal';
+import toastUtils from '../../../../shared/utils/toastUtils';
 
 interface SpecialEvent {
   id: number;
@@ -97,7 +97,7 @@ export const VipEventSettings: React.FC = () => {
         }
       } catch (error) {
         console.error('Error fetching data:', error);
-        toast.error('Failed to load events');
+        toastUtils.error('Failed to load events');
       } finally {
         setLoading(false);
       }
@@ -216,10 +216,10 @@ export const VipEventSettings: React.FC = () => {
         await setCurrentEvent(id);
         const codes = await getVipCodes(id);
         setVipCodes(codes);
-        toast.success('Event set as current event');
+        toastUtils.success('Event set as current event');
       } catch (error) {
         console.error('Error setting current event:', error);
-        toast.error('Failed to set current event');
+        toastUtils.error('Failed to set current event');
       } finally {
         setLoading(false);
       }
@@ -228,10 +228,10 @@ export const VipEventSettings: React.FC = () => {
         setLoading(true);
         await setCurrentEvent(null);
         setVipCodes([]);
-        toast.success('Current event cleared');
+        toastUtils.success('Current event cleared');
       } catch (error) {
         console.error('Error clearing current event:', error);
-        toast.error('Failed to clear current event');
+        toastUtils.error('Failed to clear current event');
       } finally {
         setLoading(false);
       }
@@ -243,14 +243,19 @@ export const VipEventSettings: React.FC = () => {
     if (!selectedEvent) return;
     
     // Add a longer delay to ensure server has processed changes
+    let loadingToast;
     if (withDelay) {
-      toast.loading('Waiting for server to process changes...', { id: 'refreshing-vip-codes' });
+      loadingToast = toastUtils.loading('Waiting for server to process changes...');
       await new Promise(resolve => setTimeout(resolve, 3000)); // 3 second delay
     }
     
     try {
       setLoading(true);
-      toast.loading('Refreshing VIP codes...', { id: 'refreshing-vip-codes' });
+      
+      // Dismiss previous toast if it exists
+      if (loadingToast) loadingToast.dismiss();
+      
+      const refreshToast = toastUtils.loading('Refreshing VIP codes...');
       
       console.log('Refreshing VIP codes for event:', selectedEvent.id);
       
@@ -316,10 +321,10 @@ export const VipEventSettings: React.FC = () => {
       console.log('Recipient data loaded for', Object.keys(recipientsMap).length, 'codes');
       setCodeRecipients(recipientsMap);
       
-      toast.success('VIP codes refreshed successfully', { id: 'refreshing-vip-codes' });
+      refreshToast.success('VIP codes refreshed successfully');
     } catch (error) {
       console.error('Error refreshing VIP codes:', error);
-      toast.error('Failed to refresh VIP codes', { id: 'refreshing-vip-codes' });
+      toastUtils.error('Failed to refresh VIP codes');
     } finally {
       setLoading(false);
     }
@@ -338,14 +343,14 @@ export const VipEventSettings: React.FC = () => {
       };
       
       await generateVipCodes(selectedEvent.id, params);
-      toast.success(`Generated ${codeGenParams.batch ? params.count : 1} VIP code(s)`);
+      toastUtils.success(`Generated ${codeGenParams.batch ? params.count : 1} VIP code(s)`);
       
       // Refresh VIP codes and their recipient data with a delay
       await refreshVipCodes(true);
       
     } catch (error) {
       console.error('Error generating VIP codes:', error);
-      toast.error('Failed to generate VIP codes');
+      toastUtils.error('Failed to generate VIP codes');
     } finally {
       setLoading(false);
     }

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuthStore } from '../../auth';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 export function ResetPasswordForm() {
   const [searchParams] = useSearchParams();
@@ -55,7 +55,7 @@ export function ResetPasswordForm() {
       }
 
       setSuccessMsg('Password reset successfully. Redirecting...');
-      toast.success('Password reset successfully!');
+      toastUtils.success('Password reset successfully!');
       setTimeout(() => {
         navigate('/ordering');
       }, 1500);

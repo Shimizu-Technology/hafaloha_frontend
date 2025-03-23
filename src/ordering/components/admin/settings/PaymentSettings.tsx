@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { api } from '../../../../shared/api/apiClient';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { CreditCard, WalletCards } from 'lucide-react';
@@ -88,7 +88,7 @@ export function PaymentSettings() {
         });
       } catch (error) {
         console.error('Failed to fetch payment settings:', error);
-        toast.error('Failed to load payment settings');
+        toastUtils.error('Failed to load payment settings');
       } finally {
         setLoading(false);
       }
@@ -157,10 +157,10 @@ export function PaymentSettings() {
       };
       
       await api.patch('/admin/settings', payload);
-      toast.success('Payment settings saved successfully');
+      toastUtils.success('Payment settings saved successfully');
     } catch (error) {
       console.error('Failed to save payment settings:', error);
-      toast.error('Failed to save payment settings');
+      toastUtils.error('Failed to save payment settings');
     } finally {
       setSaving(false);
     }

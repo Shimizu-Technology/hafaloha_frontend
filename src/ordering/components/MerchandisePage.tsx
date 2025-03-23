@@ -1,12 +1,20 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useMerchandiseStore, MerchandiseItem } from '../store/merchandiseStore';
+import { useMerchandiseStore } from '../store/merchandiseStore';
 import { useOrderStore } from '../store/orderStore';
 import { LoadingSpinner } from '../../shared/components/ui';
 import { ShoppingCart, Filter, X, ArrowRight } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 import FilterSidebar, { ActiveFilters } from './merchandise/FilterSidebar';
 import QuickViewModal from './merchandise/QuickViewModal';
 import { extractFilterOptions, filterMerchandiseItems, getDefaultActiveFilters } from '../utils/merchandiseUtils';
+import { MerchandiseItem, MerchandiseVariant } from '../types/merchandise';
+
+interface Collection {
+  id: number;
+  name: string;
+  active: boolean;
+  description?: string;
+}
 
 const MerchandisePage: React.FC = () => {
   const {
@@ -66,14 +74,14 @@ const MerchandisePage: React.FC = () => {
     if (collections.length > 0) {
       const activeCollection = collections.find(c => c.active) || collections[0];
       setSelectedCollectionId(activeCollection.id);
-      fetchMerchandiseItems({ collection_id: activeCollection.id });
+      fetchMerchandiseItems();
     }
   }, [collections, fetchMerchandiseItems]);
 
   // Handle collection change
   const handleCollectionChange = (collectionId: number) => {
     setSelectedCollectionId(collectionId);
-    fetchMerchandiseItems({ collection_id: collectionId });
+    fetchMerchandiseItems();
   };
 
   // Handle variant selection
@@ -95,23 +103,23 @@ const MerchandisePage: React.FC = () => {
   };
 
   // Add merchandise to cart
-  const handleAddToCart = (item: any, variant: any) => {
+  const handleAddToCart = (item: MerchandiseItem, variant: MerchandiseVariant | undefined) => {
     const merchandiseItem = {
-      id: item.id,
+      id: item.id.toString(), // Convert to string for CartItem
       name: item.name,
       price: item.base_price + (variant?.price_adjustment || 0),
-      image_url: item.image_url,
+      image_url: item.image_url || '',
       quantity: 1,
-      type: 'merchandise' as 'merchandise', // Type assertion to fix TypeScript error
+      type: 'merchandise' as const,
       variant_id: variant?.id,
       variant_details: variant ? {
-        size: variant.size,
-        color: variant.color
+        size: variant.size || '',
+        color: variant.color || ''
       } : null
     };
 
     addToCart(merchandiseItem);
-    toast.success(`Added ${item.name} to cart`);
+    toastUtils.success(`Added ${item.name} to cart`);
   };
 
   if (loading && collections.length === 0) {
@@ -131,7 +139,7 @@ const MerchandisePage: React.FC = () => {
   }
 
   // Get the current collection
-  const currentCollection = collections.find(c => c.id === selectedCollectionId) || collections[0];
+  const currentCollection = collections.find(c => c.id === selectedCollectionId) as Collection | undefined;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -160,7 +168,7 @@ const MerchandisePage: React.FC = () => {
                   <button
                     onClick={() => {
                       setSelectedCollectionId(null);
-                      fetchMerchandiseItems({ include_collection_names: true });
+                      fetchMerchandiseItems();
                     }}
                     className={`
                       whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
@@ -198,7 +206,7 @@ const MerchandisePage: React.FC = () => {
               {selectedCollectionId === null ? (
                 <p className="text-gray-600">Browse all merchandise items across all collections.</p>
               ) : currentCollection && (
-                <p className="text-gray-600">{currentCollection.description}</p>
+                <p className="text-gray-600">{currentCollection.description || ''}</p>
               )}
             </div>
             
@@ -359,7 +367,7 @@ const MerchandisePage: React.FC = () => {
                         <>
                           {/* Front image (always visible but fades out on hover if second image exists) */}
                           <img
-                            src={item.image_url}
+                            src={item.image_url || ''}
                             alt={`${item.name} - front`}
                             className={`w-full h-full object-cover absolute inset-0 transition-opacity duration-300 ${
                               item.second_image_url ? 'group-hover:opacity-0' : ''
@@ -369,7 +377,7 @@ const MerchandisePage: React.FC = () => {
                           {/* Back image (if available, initially hidden, fades in on hover) */}
                           {item.second_image_url && (
                             <img
-                              src={item.second_image_url}
+                              src={item.second_image_url || ''}
                               alt={`${item.name} - back`}
                               className="w-full h-full object-cover absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                             />
@@ -415,13 +423,13 @@ const MerchandisePage: React.FC = () => {
                         }}
                       >
                         {item.name}
-                        {selectedCollectionId === null && item.collection_name && (
+                        {selectedCollectionId === null && (
                           <span className="ml-2 text-sm text-gray-500">
-                            ({item.collection_name})
+                            ({item.merchandise_collection_id})
                           </span>
                         )}
                       </h3>
-                      <p className="text-gray-600 text-sm mt-1 line-clamp-2">{item.description}</p>
+                      <p className="text-gray-600 text-sm mt-1 line-clamp-2">{item.description || ''}</p>
                       
                       {/* Price */}
                       <div className="mt-2 flex items-center justify-between">
@@ -441,6 +449,7 @@ const MerchandisePage: React.FC = () => {
                         const sizes = Array.from(new Set(item.variants.map(v => v.size)));
                         const sizeOrder = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
                         const sortedSizes = sizes.sort((a, b) => {
+                          if (!a || !b) return 0;
                           return sizeOrder.indexOf(a) - sizeOrder.indexOf(b);
                         });
                         
@@ -448,6 +457,7 @@ const MerchandisePage: React.FC = () => {
                           <div className="mt-3">
                             <div className="flex flex-wrap gap-1 mt-1">
                               {sortedSizes.map(size => {
+                                if (!size) return null;
                                 // Find all variants with this size
                                 const sizeVariants = item.variants!.filter(v => v.size === size);
                                 // Check if any variant with this size has stock

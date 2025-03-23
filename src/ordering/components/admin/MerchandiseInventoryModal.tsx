@@ -4,7 +4,7 @@ import { MerchandiseItem, MerchandiseVariant } from '../../types/merchandise';
 import { merchandiseItemsApi } from '../../../shared/api/endpoints/merchandiseItems';
 import { useMerchandiseStore } from '../../store/merchandiseStore';
 import { format } from 'date-fns';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 interface MerchandiseInventoryModalProps {
   open: boolean;
@@ -156,11 +156,11 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
         enable_inventory_tracking: enabled,
         enable_stock_tracking: enabled // For backward compatibility
       });
-      toast.success(`Inventory tracking ${enabled ? 'enabled' : 'disabled'}`);
+      toastUtils.success(`Inventory tracking ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('Failed to update tracking setting:', error);
       setEnableTracking(!enabled); // Revert on error
-      toast.error('Failed to update tracking setting');
+      toastUtils.error('Failed to update tracking setting');
     }
   };
 
@@ -250,11 +250,11 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
         );
       }
       
-      toast.success('Inventory saved successfully');
+      toastUtils.success('Inventory saved successfully');
       onSave();
     } catch (error) {
       console.error('Failed to save inventory changes:', error);
-      toast.error('Failed to save inventory changes');
+      toastUtils.error('Failed to save inventory changes');
     } finally {
       setSaving(false);
     }
@@ -263,12 +263,12 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
   // Apply batch operation to selected variants
   const handleApplyBatchOperation = () => {
     if (selectedVariants.size === 0) {
-      toast.error('Please select at least one variant');
+      toastUtils.error('Please select at least one variant');
       return;
     }
     
     if (batchOperation.amount <= 0) {
-      toast.error('Amount must be greater than zero');
+      toastUtils.error('Amount must be greater than zero');
       return;
     }
     
@@ -292,7 +292,7 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
             variant.stock_quantity -= batchOperation.amount;
             variant.damaged_quantity += batchOperation.amount;
           } else {
-            toast.error(`Not enough stock for variant #${variant.id}`);
+            toastUtils.error(`Not enough stock for variant #${variant.id}`);
             return;
           }
           break;
@@ -307,7 +307,7 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
     
     setVariantInventory(newInventory);
     setShowBatchOperation(false);
-    toast.success('Batch operation applied');
+    toastUtils.success('Batch operation applied');
   };
 
   // Reset all changes
@@ -321,7 +321,7 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
         changed: false
       }))
     );
-    toast.success('Changes reset');
+    toastUtils.success('Changes reset');
   };
 
   // Get status label for a variant
@@ -821,12 +821,12 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
                         onClick={() => {
                           // Validate
                           if (stockAdjustmentAmount <= 0) {
-                            toast.error('Quantity must be greater than zero');
+                            toastUtils.error('Quantity must be greater than zero');
                             return;
                           }
                           
                           if (selectedVariants.size === 0) {
-                            toast.error('Please select at least one variant');
+                            toastUtils.error('Please select at least one variant');
                             return;
                           }
                           
@@ -854,7 +854,7 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
                           
                           setVariantInventory(newInventory);
                           setStockAdjustmentAmount(0); // Reset the amount
-                          toast.success(`Stock ${stockOperation === 'add' ? 'added' : 'removed'} successfully`);
+                          toastUtils.success(`Stock ${stockOperation === 'add' ? 'added' : 'removed'} successfully`);
                         }}
                         disabled={stockAdjustmentAmount <= 0 || selectedVariants.size === 0}
                       >
@@ -944,12 +944,12 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
                           
                           // Validate
                           if (damageQuantity <= 0) {
-                            toast.error('Damage quantity must be greater than zero');
+                            toastUtils.error('Damage quantity must be greater than zero');
                             return;
                           }
                           
                           if (damageQuantity > variant.stock_quantity) {
-                            toast.error('Cannot mark more items as damaged than available stock');
+                            toastUtils.error('Cannot mark more items as damaged than available stock');
                             return;
                           }
                           
@@ -957,7 +957,7 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
                           const finalReason = damageReason === 'other' ? otherDamageReason : damageReason;
                           
                           if (!finalReason.trim()) {
-                            toast.error('Please provide a reason for marking items as damaged');
+                            toastUtils.error('Please provide a reason for marking items as damaged');
                             return;
                           }
                           
@@ -976,7 +976,7 @@ const MerchandiseInventoryModal: React.FC<MerchandiseInventoryModalProps> = ({
                           
                           setVariantInventory(newInventory);
                           setSelectedVariantForAction(null);
-                          toast.success(`${damageQuantity} items marked as damaged`);
+                          toastUtils.success(`${damageQuantity} items marked as damaged`);
                         }}
                         disabled={damageQuantity <= 0 || !damageReason.trim()}
                       >

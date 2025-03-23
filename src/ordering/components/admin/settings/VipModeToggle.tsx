@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { Lock } from 'lucide-react';
 
 interface VipModeToggleProps {
@@ -21,10 +21,10 @@ export const VipModeToggle: React.FC<VipModeToggleProps> = ({ className = '' }) 
     setLoading(true);
     try {
       await toggleVipMode(!isVipModeEnabled);
-      toast.success(`VIP-only mode ${!isVipModeEnabled ? 'enabled' : 'disabled'}`);
+      toastUtils.success(`VIP-only mode ${!isVipModeEnabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('Failed to toggle VIP mode:', error);
-      toast.error('Failed to toggle VIP mode');
+      toastUtils.error('Failed to toggle VIP mode');
     } finally {
       setLoading(false);
     }

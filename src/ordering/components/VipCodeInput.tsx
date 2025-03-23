@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { validateVipCode } from '../../shared/api/endpoints/vipAccess';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 
 interface VipCodeInputProps {
   onChange: (code: string, valid: boolean) => void;
@@ -36,18 +36,18 @@ export const VipCodeInput: React.FC<VipCodeInputProps> = ({ onChange }) => {
       if (response.valid) {
         setIsValid(true);
         onChange(code, true);
-        toast.success('VIP code validated successfully!');
+        toastUtils.success('VIP code validated successfully!');
       } else {
         setIsValid(false);
         setErrorMessage(response.message || 'Invalid VIP code');
         onChange(code, false);
-        toast.error(response.message || 'Invalid VIP code');
+        toastUtils.error(response.message || 'Invalid VIP code');
       }
     } catch (error) {
       setIsValid(false);
       setErrorMessage('Failed to validate VIP code');
       onChange(code, false);
-      toast.error('Failed to validate VIP code');
+      toastUtils.error('Failed to validate VIP code');
     } finally {
       setIsValidating(false);
     }

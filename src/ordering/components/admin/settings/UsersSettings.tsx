@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { UserModal } from './UserModal';
 import { SettingsHeader } from '../../../../shared/components/ui';
 import { Users } from 'lucide-react';
@@ -82,7 +82,7 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
       setTotalCount(data.total_count);
     } catch (error) {
       console.error(error);
-      toast.error('Failed to load users.');
+      toastUtils.error('Failed to load users.');
     } finally {
       setLoading(false);
     }

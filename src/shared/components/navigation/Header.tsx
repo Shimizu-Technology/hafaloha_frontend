@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../utils/toastUtils';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatPhoneNumber } from '../../utils/formatters';
 
@@ -310,7 +310,7 @@ export function Header() {
                     <button
                       onClick={() => {
                         signOut();
-                        toast.success('Signed out successfully!');
+                        toastUtils.success('Signed out successfully!');
                         setIsDropdownOpen(false);
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 
@@ -510,7 +510,7 @@ export function Header() {
                 <button
                   onClick={() => {
                     signOut();
-                    toast.success('Signed out successfully!');
+                    toastUtils.success('Signed out successfully!');
                     setIsMobileMenuOpen(false);
                   }}
                   className="block w-full text-left px-3 py-2 rounded-md text-base font-medium

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
 import { api } from '../../../../shared/api/apiClient';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { Bell, MessageSquare, BellRing, Globe } from 'lucide-react';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
@@ -115,14 +115,14 @@ export function NotificationSettings() {
       setSubscribing(true);
       const success = await subscribeToPushNotifications();
       if (success) {
-        toast.success('Successfully subscribed to push notifications');
+        toastUtils.success('Successfully subscribed to push notifications');
         setPushStatus('granted');
       } else {
-        toast.error('Failed to subscribe to push notifications');
+        toastUtils.error('Failed to subscribe to push notifications');
       }
     } catch (error) {
       console.error('Error subscribing to push notifications:', error);
-      toast.error('Failed to subscribe to push notifications');
+      toastUtils.error('Failed to subscribe to push notifications');
     } finally {
       setSubscribing(false);
     }
@@ -134,14 +134,14 @@ export function NotificationSettings() {
       setUnsubscribing(true);
       const success = await unsubscribeFromPushNotifications();
       if (success) {
-        toast.success('Successfully unsubscribed from push notifications');
+        toastUtils.success('Successfully unsubscribed from push notifications');
         setPushStatus('not-subscribed');
       } else {
-        toast.error('Failed to unsubscribe from push notifications');
+        toastUtils.error('Failed to unsubscribe from push notifications');
       }
     } catch (error) {
       console.error('Error unsubscribing from push notifications:', error);
-      toast.error('Failed to unsubscribe from push notifications');
+      toastUtils.error('Failed to unsubscribe from push notifications');
     } finally {
       setUnsubscribing(false);
     }
@@ -199,7 +199,7 @@ export function NotificationSettings() {
         setSettings(newSettings);
       } catch (error) {
         console.error('Failed to fetch notification settings:', error);
-        toast.error('Failed to load notification settings');
+        toastUtils.error('Failed to load notification settings');
       } finally {
         setLoading(false);
       }
@@ -277,10 +277,10 @@ export function NotificationSettings() {
       };
       
       await api.patch('/admin/settings', payload);
-      toast.success('Notification settings saved successfully');
+      toastUtils.success('Notification settings saved successfully');
     } catch (error) {
       console.error('Failed to save notification settings:', error);
-      toast.error('Failed to save notification settings');
+      toastUtils.error('Failed to save notification settings');
     } finally {
       setSaving(false);
     }
@@ -295,7 +295,7 @@ export function NotificationSettings() {
       const userKey = settings.pushover?.group_key || settings.pushover?.user_key;
       
       if (!userKey) {
-        toast.error('Please enter a Pushover user key or group key');
+        toastUtils.error('Please enter a Pushover user key or group key');
         return;
       }
       
@@ -309,13 +309,13 @@ export function NotificationSettings() {
       });
       
       if (response.status === 'success') {
-        toast.success('Test notification sent successfully');
+        toastUtils.success('Test notification sent successfully');
       } else {
-        toast.error('Failed to send test notification');
+        toastUtils.error('Failed to send test notification');
       }
     } catch (error) {
       console.error('Failed to send test notification:', error);
-      toast.error('Failed to send test notification');
+      toastUtils.error('Failed to send test notification');
     } finally {
       setTesting(false);
     }
@@ -330,7 +330,7 @@ export function NotificationSettings() {
       const userKey = settings.pushover?.group_key || settings.pushover?.user_key;
       
       if (!userKey) {
-        toast.error('Please enter a Pushover user key or group key');
+        toastUtils.error('Please enter a Pushover user key or group key');
         return;
       }
       
@@ -340,13 +340,13 @@ export function NotificationSettings() {
       });
       
       if (response.valid) {
-        toast.success('Pushover key is valid');
+        toastUtils.success('Pushover key is valid');
       } else {
-        toast.error('Pushover key is invalid');
+        toastUtils.error('Pushover key is invalid');
       }
     } catch (error) {
       console.error('Failed to validate Pushover key:', error);
-      toast.error('Failed to validate Pushover key');
+      toastUtils.error('Failed to validate Pushover key');
     } finally {
       setValidating(false);
     }
@@ -623,7 +623,7 @@ export function NotificationSettings() {
                         
                         if (!restaurantId) {
                           console.error('Restaurant ID not found');
-                          toast.error('Restaurant ID not found');
+                          toastUtils.error('Restaurant ID not found');
                           return;
                         }
                         
@@ -636,13 +636,13 @@ export function NotificationSettings() {
                               vapid_private_key: response.private_key
                             }
                           }));
-                          toast.success('VAPID keys generated successfully');
+                          toastUtils.success('VAPID keys generated successfully');
                         } else {
-                          toast.error('Failed to generate VAPID keys');
+                          toastUtils.error('Failed to generate VAPID keys');
                         }
                       } catch (error) {
                         console.error('Failed to generate VAPID keys:', error);
-                        toast.error('Failed to generate VAPID keys');
+                        toastUtils.error('Failed to generate VAPID keys');
                       }
                     }}
                     className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"

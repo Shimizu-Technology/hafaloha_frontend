@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../utils/toastUtils';
 import { useAuth } from '../../auth';
 import { User } from '../../types/auth';
 import { useAuthStore } from '../../auth/authStore';
@@ -89,10 +89,10 @@ export function ProfilePage() {
       setSuccessMessage('Profile updated successfully!');
       
       // Still show toast for additional feedback
-      toast.success('Profile updated successfully!');
+      toastUtils.success('Profile updated successfully!');
     } catch (err: any) {
       setError(err.message);
-      toast.error('Failed to update profile');
+      toastUtils.error('Failed to update profile');
     } finally {
       setSaveLoading(false);
     }

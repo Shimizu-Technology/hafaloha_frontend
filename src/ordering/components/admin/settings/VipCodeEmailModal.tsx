@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, RefreshCw, Info } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { 
   bulkSendVipCodes, 
@@ -71,7 +71,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
   
   const fetchVipCodes = async () => {
     if (!restaurant?.current_event_id) {
-      toast.error('No current event selected');
+      toastUtils.error('No current event selected');
       return;
     }
     
@@ -85,7 +85,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
       setAvailableCodes(codes.filter(code => code.is_active));
     } catch (error) {
       console.error('Error fetching VIP codes:', error);
-      toast.error('Failed to load VIP codes');
+      toastUtils.error('Failed to load VIP codes');
     } finally {
       setFetchingCodes(false);
     }
@@ -93,18 +93,18 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
   
   const handleSendEmails = async () => {
     if (!restaurant?.id) {
-      toast.error('Restaurant information is missing');
+      toastUtils.error('Restaurant information is missing');
       return;
     }
     
     if (!emails.trim()) {
-      toast.error('Please enter at least one email address');
+      toastUtils.error('Please enter at least one email address');
       return;
     }
     
     // In existing mode, ensure at least one code is selected
     if (mode === 'existing' && selectedCodes.length === 0) {
-      toast.error('Please select at least one VIP code');
+      toastUtils.error('Please select at least one VIP code');
       return;
     }
     
@@ -117,7 +117,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
         .filter(email => email.length > 0 && email.includes('@')); // Basic validation
       
       if (emailList.length === 0) {
-        toast.error('No valid email addresses found');
+        toastUtils.error('No valid email addresses found');
         setLoading(false);
         return;
       }
@@ -153,7 +153,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
       onClose();
       
       // Show success message
-      toast.success(`Queued ${responseData.total_recipients} emails in ${responseData.batch_count} batches`);
+      toastUtils.success(`Queued ${responseData.total_recipients} emails in ${responseData.batch_count} batches`);
       
       // Add a delay before notifying parent component that codes were updated
       // This gives the server time to process the changes, but doesn't block the UI
@@ -165,7 +165,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
       }, 2000); // 2 second delay
     } catch (error) {
       console.error('Error sending VIP code emails:', error);
-      toast.error('Failed to send VIP code emails');
+      toastUtils.error('Failed to send VIP code emails');
     } finally {
       setLoading(false);
     }

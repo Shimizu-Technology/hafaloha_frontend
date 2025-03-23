@@ -1,7 +1,7 @@
 // src/ordering/components/admin/settings/VipCodesManager.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { useRestaurantStore } from '../../../../shared/store/restaurantStore';
 import { 
   getVipCodes, 
@@ -92,7 +92,7 @@ export const VipCodesManager: React.FC = () => {
       setAllVipCodes(codes as VipAccessCode[]);
     } catch (error) {
       console.error('Error fetching VIP codes:', error);
-      toast.error('Failed to load VIP codes');
+      toastUtils.error('Failed to load VIP codes');
     } finally {
       if (showLoadingIndicator) {
         setFetchingCodes(false);
@@ -237,7 +237,7 @@ export const VipCodesManager: React.FC = () => {
           setCodeRecipients(prev => ({...prev, ...recipientsMap}));
         } catch (error) {
           console.error('Error searching VIP codes by email:', error);
-          toast.error('Failed to search VIP codes by email');
+          toastUtils.error('Failed to search VIP codes by email');
         } finally {
           setLoadingRecipients(false);
         }
@@ -305,7 +305,7 @@ export const VipCodesManager: React.FC = () => {
         newCodes = [groupCode]; // Wrap single code in array for consistent handling
       }
       
-      toast.success(`Generated ${codeType === 'individual' ? formData.count : 1} VIP code(s)`);
+      toastUtils.success(`Generated ${codeType === 'individual' ? formData.count : 1} VIP code(s)`);
       
       // Refresh the codes list silently to ensure we have the latest data without showing loading indicators
       await refreshVipCodesSilently();
@@ -314,7 +314,7 @@ export const VipCodesManager: React.FC = () => {
       pollForVipCodeUpdates();
     } catch (error) {
       console.error('Error generating VIP codes:', error);
-      toast.error('Failed to generate VIP codes');
+      toastUtils.error('Failed to generate VIP codes');
     } finally {
       setLoading(false);
     }
@@ -359,10 +359,10 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success('VIP code deactivated');
+      toastUtils.success('VIP code deactivated');
     } catch (error) {
       console.error('Error deactivating VIP code:', error);
-      toast.error('Failed to deactivate VIP code');
+      toastUtils.error('Failed to deactivate VIP code');
     } finally {
       setLoading(false);
     }
@@ -382,10 +382,10 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success('VIP code reactivated');
+      toastUtils.success('VIP code reactivated');
     } catch (error) {
       console.error('Error reactivating VIP code:', error);
-      toast.error('Failed to reactivate VIP code');
+      toastUtils.error('Failed to reactivate VIP code');
     } finally {
       setLoading(false);
     }
@@ -409,11 +409,11 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success(`${selectedCodes.length} VIP code(s) deactivated`);
+      toastUtils.success(`${selectedCodes.length} VIP code(s) deactivated`);
       setSelectedCodes([]); // Clear selection after bulk action
     } catch (error) {
       console.error('Error deactivating VIP codes:', error);
-      toast.error('Failed to deactivate some VIP codes');
+      toastUtils.error('Failed to deactivate some VIP codes');
     } finally {
       setBulkActionLoading(false);
     }
@@ -433,10 +433,10 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success('VIP code unarchived');
+      toastUtils.success('VIP code unarchived');
     } catch (error) {
       console.error('Error unarchiving VIP code:', error);
-      toast.error('Failed to unarchive VIP code');
+      toastUtils.error('Failed to unarchive VIP code');
     } finally {
       setLoading(false);
     }
@@ -460,11 +460,11 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success(`${selectedCodes.length} VIP code(s) reactivated`);
+      toastUtils.success(`${selectedCodes.length} VIP code(s) reactivated`);
       setSelectedCodes([]); // Clear selection after bulk action
     } catch (error) {
       console.error('Error reactivating VIP codes:', error);
-      toast.error('Failed to reactivate some VIP codes');
+      toastUtils.error('Failed to reactivate some VIP codes');
     } finally {
       setBulkActionLoading(false);
     }
@@ -488,11 +488,11 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success(`${selectedCodes.length} VIP code(s) unarchived`);
+      toastUtils.success(`${selectedCodes.length} VIP code(s) unarchived`);
       setSelectedCodes([]); // Clear selection after bulk action
     } catch (error) {
       console.error('Error unarchiving VIP codes:', error);
-      toast.error('Failed to unarchive some VIP codes');
+      toastUtils.error('Failed to unarchive some VIP codes');
     } finally {
       setBulkActionLoading(false);
     }
@@ -512,10 +512,10 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success('VIP code archived');
+      toastUtils.success('VIP code archived');
     } catch (error) {
       console.error('Error archiving VIP code:', error);
-      toast.error('Failed to archive VIP code');
+      toastUtils.error('Failed to archive VIP code');
     } finally {
       setLoading(false);
     }
@@ -541,11 +541,11 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success(`${selectedCodes.length} VIP code(s) archived`);
+      toastUtils.success(`${selectedCodes.length} VIP code(s) archived`);
       setSelectedCodes([]); // Clear selection after bulk action
     } catch (error) {
       console.error('Error archiving VIP codes:', error);
-      toast.error('Failed to archive some VIP codes');
+      toastUtils.error('Failed to archive some VIP codes');
     } finally {
       setBulkActionLoading(false);
     }
@@ -600,11 +600,11 @@ export const VipCodesManager: React.FC = () => {
         )
       );
       
-      toast.success('VIP code updated');
+      toastUtils.success('VIP code updated');
       setEditingCode(null);
     } catch (error) {
       console.error('Error updating VIP code:', error);
-      toast.error('Failed to update VIP code');
+      toastUtils.error('Failed to update VIP code');
     } finally {
       setLoading(false);
     }
@@ -617,7 +617,7 @@ export const VipCodesManager: React.FC = () => {
   const copyToClipboard = (code: string, id: number) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(id);
-    toast.success('Code copied to clipboard');
+    toastUtils.success('Code copied to clipboard');
     
     // Reset the copied state after 2 seconds
     setTimeout(() => {

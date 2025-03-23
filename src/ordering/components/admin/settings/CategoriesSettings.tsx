@@ -1,7 +1,7 @@
 // src/ordering/components/admin/settings/CategoriesSettings.tsx
 
 import React, { useEffect, useState } from 'react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { api } from '../../../lib/api';
 import { SettingsHeader } from '../../../../shared/components/ui';
 import { List } from 'lucide-react';
@@ -61,9 +61,9 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
       setCategories([...categories, response]);
       setNewName('');
       setNewDescription('');
-      toast.success('Created category');
+      toastUtils.success('Created category');
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create category');
+      toastUtils.error(err.message || 'Failed to create category');
     }
   }
 
@@ -72,9 +72,9 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
     try {
       await api.delete(`/admin/categories/${id}`);
       setCategories(categories.filter((c) => c.id !== id));
-      toast.success('Deleted category');
+      toastUtils.success('Deleted category');
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete');
+      toastUtils.error(err.message || 'Failed to delete');
     }
   }
 
@@ -92,9 +92,9 @@ export function CategoriesSettings({ restaurantId }: CategoriesSettingsProps) {
         categories.map((c) => (c.id === response.id ? response : c))
       );
       setEditingCategory(null);
-      toast.success('Updated category');
+      toastUtils.success('Updated category');
     } catch (err: any) {
-      toast.error(err.message || 'Failed to update');
+      toastUtils.error(err.message || 'Failed to update');
     }
   }
 

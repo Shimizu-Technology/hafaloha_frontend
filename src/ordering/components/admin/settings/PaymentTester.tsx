@@ -5,7 +5,7 @@ import { StripeCheckout, StripeCheckoutRef } from '../../payment/StripeCheckout'
 import { LoadingSpinner } from '../../../../shared/components/ui';
 import { Tab } from '@headlessui/react';
 import { CreditCard, AlertCircle, CheckCircle } from 'lucide-react';
-import toast from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 
 interface PaymentTestResult {
   processor: string;
@@ -42,7 +42,7 @@ export function PaymentTester() {
     };
     
     setTestResults(prev => [result, ...prev]);
-    toast.success(`${processor} test payment successful!`);
+    toastUtils.success(`${processor} test payment successful!`);
     setLoading(false);
   };
   
@@ -55,13 +55,13 @@ export function PaymentTester() {
     };
     
     setTestResults(prev => [result, ...prev]);
-    toast.error(`${processor} test payment failed: ${error.message}`);
+    toastUtils.error(`${processor} test payment failed: ${error.message}`);
     setLoading(false);
   };
   
   const processPayPalPayment = async () => {
     if (!paypalRef.current) {
-      toast.error('PayPal component not initialized');
+      toastUtils.error('PayPal component not initialized');
       return;
     }
     
@@ -80,7 +80,7 @@ export function PaymentTester() {
   
   const processStripePayment = async () => {
     if (!stripeRef.current) {
-      toast.error('Stripe component not initialized');
+      toastUtils.error('Stripe component not initialized');
       return;
     }
     

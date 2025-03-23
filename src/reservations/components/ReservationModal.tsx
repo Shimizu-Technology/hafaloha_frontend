@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { XCircle } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 import { formatPhoneNumber } from '../../shared/utils/formatters';
 
 import {
@@ -147,7 +147,7 @@ export default function ReservationModal({
         }
       } catch (err) {
         console.error('Error loading data in ReservationModal:', err);
-        toast.error('Failed to load seat data.');
+        toastUtils.error('Failed to load seat data.');
       }
     }
     loadLayoutAndAllocations();
@@ -180,12 +180,12 @@ export default function ReservationModal({
         duration_minutes: duration,
       });
 
-      toast.success('Reservation updated!');
+      toastUtils.success('Reservation updated!');
       setIsEditing(false);
       onClose();
     } catch (err) {
       console.error('Failed to update reservation:', err);
-      toast.error('Error updating reservation. Please try again.');
+      toastUtils.error('Error updating reservation. Please try again.');
     }
   }
 
@@ -194,7 +194,7 @@ export default function ReservationModal({
     if (!onDelete) return;
     // Usually you'd confirm with the user first
     onDelete(reservation.id);
-    toast.success('Reservation deleted.');
+    toastUtils.success('Reservation deleted.');
   }
 
   // ---------- Seat Map Modal ----------
@@ -213,11 +213,11 @@ export default function ReservationModal({
   async function handleAssignSeatsFromOption(optionIndex: number) {
     const seatLabels = reservation.seat_preferences?.[optionIndex];
     if (!seatLabels || seatLabels.length === 0) {
-      toast.error('No seats found in that preference.');
+      toastUtils.error('No seats found in that preference.');
       return;
     }
     if (!reservation.start_time) {
-      toast.error('This reservation has no start_time, cannot assign seats.');
+      toastUtils.error('This reservation has no start_time, cannot assign seats.');
       return;
     }
 
@@ -231,7 +231,7 @@ export default function ReservationModal({
       // Then update the reservation to "reserved"
       await updateReservation(reservation.id, { status: 'reserved' });
 
-      toast.success(`Assigned seats from Option ${optionIndex + 1}!`);
+      toastUtils.success(`Assigned seats from Option ${optionIndex + 1}!`);
       // optional: re-fetch data if the parent passes onRefreshData
       if (onRefreshData) {
         onRefreshData();
@@ -239,9 +239,9 @@ export default function ReservationModal({
     } catch (err: any) {
       console.error('Error assigning seats:', err);
       if (err.response?.status === 422) {
-        toast.error('Some seats are already taken. Choose another preference.');
+        toastUtils.error('Some seats are already taken. Choose another preference.');
       } else {
-        toast.error('Failed to assign seats. Check console.');
+        toastUtils.error('Failed to assign seats. Check console.');
       }
     }
   }

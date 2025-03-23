@@ -1,7 +1,7 @@
 // src/ordering/components/admin/settings/VipCodeUsageModal.tsx
 
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { X, ShoppingBag, User, Calendar, DollarSign } from 'lucide-react';
 import { getCodeUsage } from '../../../../shared/api/endpoints/vipCodes';
 import { LoadingSpinner } from '../../../../shared/components/ui/LoadingSpinner';
@@ -68,7 +68,7 @@ export const VipCodeUsageModal: React.FC<VipCodeUsageModalProps> = ({ codeId, on
         setUsageData(data as CodeUsageData);
       } catch (error) {
         console.error('Error fetching VIP code usage data:', error);
-        toast.error('Failed to load VIP code usage data');
+        toastUtils.error('Failed to load VIP code usage data');
       } finally {
         setLoading(false);
       }

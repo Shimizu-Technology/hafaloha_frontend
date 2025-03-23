@@ -5,8 +5,7 @@ import {
   Save, Trash2, Plus as LucidePlus, Settings, Edit2,
   Minus, Maximize, Power
 } from 'lucide-react';
-
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 
 import {
   fetchAllLayouts,
@@ -131,7 +130,7 @@ export default function SeatLayoutEditor() {
         }
       } catch (err) {
         console.error('Error loading layouts:', err);
-        toast.error('Failed to load layouts.');
+        toastUtils.error('Failed to load layouts.');
       }
     })();
   }, []);
@@ -152,7 +151,7 @@ export default function SeatLayoutEditor() {
       setActiveFloor(floors.length > 0 ? floors[0] : 1);
     } catch (err) {
       console.error('Error loading layout ID=', id, err);
-      toast.error('Failed to load layout.');
+      toastUtils.error('Failed to load layout.');
     }
   }
 
@@ -446,7 +445,7 @@ export default function SeatLayoutEditor() {
       if (activeLayoutId) {
         // update existing
         const updatedLayout = await updateLayout(activeLayoutId, payload);
-        toast.success('Layout updated successfully!');
+        toastUtils.success('Layout updated successfully!');
         setLayoutName(updatedLayout.name);
 
         const secWithFloors = (updatedLayout.sections_data.sections || []).map((sec: any) => ({
@@ -461,7 +460,7 @@ export default function SeatLayoutEditor() {
       } else {
         // create new
         const newLayout = await createLayout(payload);
-        toast.success('Layout created!');
+        toastUtils.success('Layout created!');
         setAllLayouts(prev => [...prev, newLayout]);
         setActiveLayoutId(newLayout.id);
         setLayoutName(newLayout.name);
@@ -477,21 +476,21 @@ export default function SeatLayoutEditor() {
       }
     } catch (err) {
       console.error('Error saving layout:', err);
-      toast.error('Failed to save layout. Check console.');
+      toastUtils.error('Failed to save layout. Check console.');
     }
   }
 
   async function handleActivateLayout() {
     if (!activeLayoutId) {
-      toast.error('Cannot activate a layout that is not saved yet!');
+      toastUtils.error('Cannot activate a layout that is not saved yet!');
       return;
     }
     try {
       const resp = await activateLayout(activeLayoutId);
-      toast.success(resp.message || 'Layout activated.');
+      toastUtils.success(resp.message || 'Layout activated.');
     } catch (err) {
       console.error('Error activating layout:', err);
-      toast.error('Failed to activate layout. Check console.');
+      toastUtils.error('Failed to activate layout. Check console.');
     }
   }
 

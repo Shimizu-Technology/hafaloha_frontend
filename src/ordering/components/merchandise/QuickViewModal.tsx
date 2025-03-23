@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, ShoppingCart, Facebook, Twitter, Share2, XCircle } from 'lucide-react';
-import { MerchandiseItem, MerchandiseVariant } from '../../store/merchandiseStore';
-import { toast } from 'react-hot-toast';
+import { MerchandiseItem, MerchandiseVariant } from '../../types/merchandise';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 interface QuickViewModalProps {
   isOpen: boolean;
@@ -68,7 +68,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
     };
     
     addToCart(cartItem, selectedVariant);
-    toast.success(`Added ${quantity} ${item.name} to cart`);
+    toastUtils.success(`Added ${quantity} ${item.name} to cart`);
     onClose();
   };
   
@@ -84,7 +84,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
     
     addToCart(cartItem, selectedVariant);
     // Redirect to checkout would happen here in a real implementation
-    toast.success(`Added ${quantity} ${item.name} to cart - proceeding to checkout`);
+    toastUtils.success(`Added ${quantity} ${item.name} to cart - proceeding to checkout`);
     onClose();
   };
 
@@ -187,10 +187,10 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
           <div className="p-6 overflow-y-auto max-h-[90vh] md:max-h-[unset]">
             <h2 className="text-2xl font-bold text-gray-900">{item.name}</h2>
             
-            {/* Collection name if available */}
-            {item.collection_name && (
+            {/* Category name if available */}
+            {item.category_name && (
               <p className="text-sm text-gray-500 mt-1">
-                Collection: {item.collection_name}
+                Category: {item.category_name}
               </p>
             )}
             
@@ -233,7 +233,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 
                 {/* Extract unique sizes and sort them */}
                 {(() => {
-                  const sizes = Array.from(new Set(item.variants.map(v => v.size)));
+                  const sizes = Array.from(new Set(item.variants.map(v => v.size).filter(Boolean) as string[]));
                   const sizeOrder = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
                   const sortedSizes = sizes.sort((a, b) => {
                     return sizeOrder.indexOf(a) - sizeOrder.indexOf(b);
@@ -242,10 +242,12 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   // Group variants by size for easier selection
                   const variantsBySize: Record<string, MerchandiseVariant[]> = {};
                   item.variants.forEach(v => {
-                    if (!variantsBySize[v.size]) {
-                      variantsBySize[v.size] = [];
+                    if (v.size) {
+                      if (!variantsBySize[v.size]) {
+                        variantsBySize[v.size] = [];
+                      }
+                      variantsBySize[v.size].push(v);
                     }
-                    variantsBySize[v.size].push(v);
                   });
                   
                   // Find the currently selected size
@@ -255,7 +257,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     <div className="flex flex-wrap gap-2">
                       {sortedSizes.map(size => {
                         // Check if any variant with this size is in stock
-                        const variants = variantsBySize[size];
+                        const variants = variantsBySize[size] || [];
                         const hasInStockVariant = variants.some(v => v.stock_quantity > 0);
                         
                         return (
@@ -292,7 +294,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
               if (!selectedVariant || !item.variants) return null;
               
               // Find all available colors for the selected size
-              const sizeVariants = item.variants.filter(v => v.size === selectedVariant.size);
+              const sizeVariants = item.variants.filter(v => v.size === selectedVariant.size && v.color);
               if (sizeVariants.length <= 1) return null;
               
               return (
@@ -318,9 +320,9 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                         <div 
                           className="h-8 w-8 rounded-full"
                           style={{ 
-                            backgroundColor: variant.color.toLowerCase(),
+                            backgroundColor: variant.color ? variant.color.toLowerCase() : '#cccccc',
                             // For white color, add a subtle shadow
-                            boxShadow: variant.color.toLowerCase() === 'white' ? 'inset 0 0 0 1px rgba(0,0,0,0.1)' : 'none'
+                            boxShadow: variant.color && variant.color.toLowerCase() === 'white' ? 'inset 0 0 0 1px rgba(0,0,0,0.1)' : 'none'
                           }}
                         />
                       </button>
@@ -329,7 +331,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   
                   {/* Display selected color name */}
                   <p className="mt-2 text-sm text-gray-600">
-                    Selected: {selectedVariant.color}
+                    Selected: {selectedVariant.color || 'Default'}
                     {selectedVariant.price_adjustment > 0 && ` (+$${selectedVariant.price_adjustment.toFixed(2)})`}
                     {selectedVariant.price_adjustment < 0 && ` (-$${Math.abs(selectedVariant.price_adjustment).toFixed(2)})`}
                   </p>
@@ -457,10 +459,10 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 )}
                 <li>SKU: {item.id}</li>
                 {item.variants && item.variants.length > 0 && (
-                  <li>Available Sizes: {Array.from(new Set(item.variants.map(v => v.size))).join(', ')}</li>
+                  <li>Available Sizes: {Array.from(new Set(item.variants.map(v => v.size).filter(Boolean) as string[])).join(', ')}</li>
                 )}
                 {item.variants && item.variants.length > 0 && (
-                  <li>Available Colors: {Array.from(new Set(item.variants.map(v => v.color))).join(', ')}</li>
+                  <li>Available Colors: {Array.from(new Set(item.variants.map(v => v.color).filter(Boolean) as string[])).join(', ')}</li>
                 )}
               </ul>
             </div>

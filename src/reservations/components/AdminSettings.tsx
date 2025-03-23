@@ -1,6 +1,6 @@
 // src/components/AdminSettings.tsx
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -122,7 +122,7 @@ export default function AdminSettings() {
   async function loadAllData() {
     setLoading(true);
     try {
-      const rest: Restaurant = await fetchRestaurant(1);
+      const rest = await fetchRestaurant(1) as Restaurant;
 
       if (rest.default_reservation_length) {
         setDefaultLength(rest.default_reservation_length);
@@ -134,10 +134,10 @@ export default function AdminSettings() {
         setSeatCount(rest.current_seat_count);
       }
 
-      const oh = await fetchOperatingHours();
+      const oh = await fetchOperatingHours() as OperatingHour[];
       setDraftHours(oh);
 
-      const se = await fetchSpecialEvents();
+      const se = await fetchSpecialEvents() as any[];
       const mapped = se.map((item: any) => ({
         id:                item.id,
         event_date_obj:    parseDateString(item.event_date),
@@ -153,7 +153,7 @@ export default function AdminSettings() {
 
     } catch (err) {
       console.error('Error loading settings:', err);
-      toast.error('Failed to load settings.');
+      toastUtils.error('Failed to load settings.');
     } finally {
       setLoading(false);
     }
@@ -200,7 +200,7 @@ export default function AdminSettings() {
         try {
           parsedAdmin = JSON.parse(adminSettings);
         } catch {
-          toast.error('Invalid JSON in Admin Settings.');
+          toastUtils.error('Invalid JSON in Admin Settings.');
           return;
         }
       }
@@ -259,11 +259,11 @@ export default function AdminSettings() {
         await deleteSpecialEvent(ev.id);
       }
 
-      toast.success('All settings saved successfully!');
+      toastUtils.success('All settings saved successfully!');
       loadAllData();
     } catch (err) {
       console.error('Error saving settings:', err);
-      toast.error('Failed to save settings. See console for details.');
+      toastUtils.error('Failed to save settings. See console for details.');
     }
   }
 

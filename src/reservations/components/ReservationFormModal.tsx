@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../shared/utils/toastUtils';
 import Select, { SingleValue } from 'react-select';
 
 import {
@@ -186,11 +186,11 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   // Attempt create reservation
   async function handleCreate() {
     if (!contactName) {
-      toast.error('Guest name is required.');
+      toastUtils.error('Guest name is required.');
       return;
     }
     if (!date || !time) {
-      toast.error('Please pick a valid date/time.');
+      toastUtils.error('Please pick a valid date/time.');
       return;
     }
 
@@ -222,11 +222,11 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
         },
       });
 
-      toast.success('Reservation created successfully!');
+      toastUtils.success('Reservation created successfully!');
       onSuccess(); // parent can reload
     } catch (err) {
       console.error('Error creating reservation:', err);
-      toast.error('Failed to create reservation. Please try again.');
+      toastUtils.error('Failed to create reservation. Please try again.');
     }
   }
 

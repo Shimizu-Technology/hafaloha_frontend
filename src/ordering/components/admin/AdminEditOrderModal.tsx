@@ -1,7 +1,7 @@
 // src/ordering/components/admin/AdminEditOrderModal.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import toast from 'react-hot-toast'; // Ensure this import is present for toast usage
+import toastUtils from '../../../shared/utils/toastUtils';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 import { SetEtaModal } from './SetEtaModal';
 import { SearchableMenuItemSelector } from './SearchableMenuItemSelector';
@@ -383,7 +383,7 @@ export function AdminEditOrderModal({
           );
         } catch (error) {
           console.error('Error fetching menu item data:', error);
-          toast.error('Unable to load inventory data. Some features may be limited.');
+          toastUtils.error('Unable to load inventory data. Some features may be limited.');
         } finally {
           setLoadingMenuItemData(false);
         }
@@ -602,10 +602,7 @@ export function AdminEditOrderModal({
       const effectiveAvailable = availableQty + originalQty;
 
       if (newQuantity > effectiveAvailable) {
-        toast(
-          `Only ${effectiveAvailable} units of ${itemToUpdate.name} are available. Setting quantity to maximum available.`,
-          { icon: '⚠️' } // or style with a warning color
-        );
+        toastUtils.error(`Only ${effectiveAvailable} units of ${itemToUpdate.name} are available. Setting quantity to maximum available.`, { duration: 5000 });
         newQuantity = effectiveAvailable;
       }
 
@@ -1680,40 +1677,45 @@ export function AdminEditOrderModal({
     items?: Array<{ id: string | number; name: string; requested: number; available: number }>
   ) {
     if (items && items.length > 0) {
-      toast.error(
-        <div>
-          <p className="font-bold">Some items have limited availability</p>
-          <p>The following items have changed since you started editing:</p>
-          <ul className="mt-2 list-disc pl-4">
-            {items.map((item) => (
-              <li key={item.id}>
-                {item.name}: <span className="text-red-600 font-medium">
-                  {item.available} available
-                </span>{' '}
-                (you requested {item.requested})
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2">Would you like to adjust quantities to available amounts or cancel?</p>
-          <div className="mt-2 flex space-x-2">
-            <button
-              onClick={() => adjustToAvailableQuantities(items)}
-              className="px-3 py-1 bg-blue-500 text-white rounded"
-            >
-              Adjust Quantities
-            </button>
-            <button
-              onClick={() => toast.dismiss()}
-              className="px-3 py-1 bg-gray-300 text-gray-700 rounded"
-            >
-              Cancel
-            </button>
+      toastUtils.custom(
+        (t) => (
+          <div className="bg-white shadow-lg rounded-lg p-4 max-w-md border border-red-200">
+            <p className="font-bold text-red-600">Some items have limited availability</p>
+            <p className="mt-1">The following items have changed since you started editing:</p>
+            <ul className="mt-2 list-disc pl-4">
+              {items.map((item) => (
+                <li key={item.id}>
+                  {item.name}: <span className="text-red-600 font-medium">
+                    {item.available} available
+                  </span>{' '}
+                  (you requested {item.requested})
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">Would you like to adjust quantities to available amounts or cancel?</p>
+            <div className="mt-2 flex space-x-2">
+              <button
+                onClick={() => {
+                  adjustToAvailableQuantities(items);
+                  toastUtils.dismiss(t.id);
+                }}
+                className="px-3 py-1 bg-blue-500 text-white rounded"
+              >
+                Adjust Quantities
+              </button>
+              <button
+                onClick={() => toastUtils.dismiss(t.id)}
+                className="px-3 py-1 bg-gray-300 text-gray-700 rounded"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </div>,
+        ),
         { duration: 10000 }
       );
     } else {
-      toast.error(`Inventory validation failed: ${error}`);
+      toastUtils.error(`Inventory validation failed: ${error}`);
     }
   }
 
@@ -1732,7 +1734,7 @@ export function AdminEditOrderModal({
         return item;
       })
     );
-    toast.success('Quantities adjusted to match available inventory');
+    toastUtils.success('Quantities adjusted to match available inventory');
   }
 
   // ----------------------------------------------------------------
@@ -1822,7 +1824,7 @@ export function AdminEditOrderModal({
             } catch (err) {
               console.error(`Failed to update inventory for item ${i.itemId}:`, err);
               // Show a toast notification to the user
-              toast.error(`Failed to return item to inventory. Please check the console for details.`);
+              toastUtils.error(`Failed to return item to inventory. Please check the console for details.`);
               return Promise.reject(err);
             }
           });
@@ -1941,11 +1943,9 @@ export function AdminEditOrderModal({
 
       // Enhanced error handling for inventory/POS failures
       if (error.response?.status === 503 || error.code === 'NETWORK_ERROR') {
-        toast.error(
-          'Network issue when verifying inventory. Please try again or check your connection.'
-        );
+toastUtils.error('Network issue when verifying inventory. Please try again or check your connection.');
       } else {
-        toast.error('Failed to save order changes. Check console for details.');
+        toastUtils.error('Failed to save order changes. Check console for details.');
       }
     }
   }
@@ -2327,7 +2327,7 @@ export function AdminEditOrderModal({
                           
                           // For partially refunded items, don't allow quantity below refunded amount
                           if (item.isPartiallyRefunded && parsedVal < (item.refundedQuantity || 0)) {
-                            toast.error(`Cannot reduce quantity below refunded amount (${item.refundedQuantity})`);
+                            toastUtils.error(`Cannot reduce quantity below refunded amount (${item.refundedQuantity})`);
                             return;
                           }
                           

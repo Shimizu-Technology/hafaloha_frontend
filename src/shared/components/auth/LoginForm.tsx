@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../auth';
 import { Mail, Lock } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 export function LoginForm() {
   const { login, isLoading: loading, error } = useAuth();
@@ -16,7 +16,7 @@ export function LoginForm() {
     e.preventDefault();
     try {
       await login({ email, password });
-      toast.success('Welcome back!');
+      toastUtils.success('Welcome back!');
       navigate('/');
     } catch (err) {
       // Login error is already handled by the auth store

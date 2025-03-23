@@ -1,7 +1,7 @@
 // src/ordering/components/admin/settings/UserModal.tsx
 import React, { useState } from 'react';
 import { api } from '../../../lib/api';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { formatPhoneNumber } from '../../../../shared/utils/formatters';
 import { AlertTriangle, X, KeyRound, Mail, Trash2 } from 'lucide-react';
 
@@ -45,7 +45,7 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
       const finalPhone = phone.trim();
       // If phone isn't blank => validate it
       if (finalPhone && !isValidPhone(finalPhone)) {
-        toast.error('Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567');
+        toastUtils.error('Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567');
         setLoading(false);
         return;
       }
@@ -60,7 +60,7 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
           role,
           restaurant_id: restaurantId
         });
-        toast.success('User created!');
+        toastUtils.success('User created!');
         onClose(true);
       } else if (user) {
         // PATCH /admin/users/:id
@@ -71,12 +71,12 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
           phone: finalPhone || undefined,
           role,
         });
-        toast.success('User updated!');
+        toastUtils.success('User updated!');
         onClose(true);
       }
     } catch (error) {
       console.error(error);
-      toast.error('Failed to save user.');
+      toastUtils.error('Failed to save user.');
       onClose(false);
     } finally {
       setLoading(false);
@@ -102,11 +102,11 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
     setLoading(true);
     try {
       await api.delete(`/admin/users/${user.id}`);
-      toast.success('User deleted.');
+      toastUtils.success('User deleted.');
       onClose(true);
     } catch (error) {
       console.error(error);
-      toast.error('Failed to delete user.');
+      toastUtils.error('Failed to delete user.');
       setLoading(false);
       closeDeleteModal();
     }
@@ -118,10 +118,10 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
     setLoading(true);
     try {
       await api.post(`/admin/users/${user.id}/resend_invite`, {});
-      toast.success(`Invite/reset link sent to ${user.email}`);
+      toastUtils.success(`Invite/reset link sent to ${user.email}`);
     } catch (error) {
       console.error(error);
-      toast.error('Failed to send the invite/reset link.');
+      toastUtils.error('Failed to send the invite/reset link.');
     } finally {
       setLoading(false);
     }
@@ -162,10 +162,10 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
       });
       
       setResetSuccess(true);
-      toast.success(`Password has been reset for ${user.email}`);
+      toastUtils.success(`Password has been reset for ${user.email}`);
     } catch (error) {
       console.error(error);
-      toast.error('Failed to reset the password.');
+      toastUtils.error('Failed to reset the password.');
     } finally {
       setLoading(false);
     }

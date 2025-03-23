@@ -16,7 +16,7 @@ import { RefundModal } from './RefundModal';
 import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
-import toast from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded' | 'partially_refunded';
 
@@ -325,7 +325,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   console.log(`Refund processed for order ${orderId}`);
                 } catch (error) {
                   console.error(`Error processing refund for order ${orderId}:`, error);
-                  toast.error(`Failed to process refund for order #${orderId}`);
+                  toastUtils.error(`Failed to process refund for order #${orderId}`);
                 }
                 break;
                 
@@ -339,7 +339,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   console.log(`Store credit added for order ${orderId}`);
                 } catch (error) {
                   console.error(`Error adding store credit for order ${orderId}:`, error);
-                  toast.error(`Failed to add store credit for order #${orderId}`);
+                  toastUtils.error(`Failed to add store credit for order #${orderId}`);
                 }
                 break;
                 
@@ -352,7 +352,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   console.log(`Order total adjusted for order ${orderId}`);
                 } catch (error) {
                   console.error(`Error adjusting total for order ${orderId}:`, error);
-                  toast.error(`Failed to adjust total for order #${orderId}`);
+                  toastUtils.error(`Failed to adjust total for order #${orderId}`);
                 }
                 break;
             }
@@ -380,7 +380,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
     } catch (error) {
       console.error('Error processing inventory actions:', error);
-      toast.error('Failed to process inventory changes');
+      toastUtils.error('Failed to process inventory changes');
     } finally {
       setIsStatusUpdateInProgress(false);
     }
@@ -1087,7 +1087,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             if (setSelectedOrderId) {
               setSelectedOrderId(Number(orderId));
             }
-            toast.success(`Staff order #${orderId} created successfully!`);
+            toastUtils.success(`Staff order #${orderId} created successfully!`);
           }}
           restaurantId={restaurantId}
         />
@@ -1144,10 +1144,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               setOrderToRefund(null);
               
               // Show success message
-              toast.success('Refund processed successfully');
+              toastUtils.success('Refund processed successfully');
             } catch (error) {
               console.error('Error processing refund:', error);
-              toast.error('Failed to update order status after refund.');
+              toastUtils.error('Failed to update order status after refund.');
             } finally {
               setIsStatusUpdateInProgress(false);
             }

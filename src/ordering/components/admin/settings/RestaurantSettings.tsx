@@ -1,7 +1,7 @@
 // src/ordering/components/admin/settings/RestaurantSettings.tsx
 
 import React, { useEffect, useState } from 'react';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../../shared/utils/toastUtils';
 import { Input, LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { Settings } from 'lucide-react';
 import { 
@@ -192,7 +192,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
       }
     } catch (err: any) {
       console.error('Failed to load restaurant data:', err);
-      toast.error('Failed to load restaurant data');
+      toastUtils.error('Failed to load restaurant data');
       
       // Create a default restaurant object if we can't fetch one
       // This allows the form to still be displayed with default values
@@ -235,7 +235,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
       }
     } catch (error) {
       console.error(`Error processing ${imageType} image preview:`, error);
-      toast.error(`Failed to generate preview for ${imageType} image`);
+      toastUtils.error(`Failed to generate preview for ${imageType} image`);
     }
   }
 
@@ -265,10 +265,10 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
         // Fetch the updated restaurant data to ensure all components have the latest data
         await fetchRestaurant();
         
-        toast.success('Restaurant settings updated!');
+        toastUtils.success('Restaurant settings updated!');
       } catch (err: any) {
         console.error('Failed to update restaurant settings:', err);
-        toast.error('Failed to update restaurant settings');
+        toastUtils.error('Failed to update restaurant settings');
       } finally {
         setLoading(false);
       }
@@ -358,10 +358,10 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
       // Remove the loading overlay
       document.body.removeChild(loadingOverlay);
       
-      toast.success('Restaurant settings updated!');
+      toastUtils.success('Restaurant settings updated!');
     } catch (err: any) {
       console.error('Failed to update restaurant settings:', err);
-      toast.error('Failed to update restaurant settings');
+      toastUtils.error('Failed to update restaurant settings');
       
       // Remove the loading overlay in case of error
       const errorOverlay = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50.flex.items-center.justify-center.z-50');

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../auth';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 export function VerifyPhonePage() {
   const navigate = useNavigate();
@@ -30,11 +30,11 @@ export function VerifyPhonePage() {
 
     try {
       await verifyPhone(code);
-      toast.success('Phone verified successfully!');
+      toastUtils.success('Phone verified successfully!');
       navigate('/');
     } catch (err) {
       // Typically 422 Unprocessable if code is invalid/expired.
-      toast.error('Invalid code or verification expired.');
+      toastUtils.error('Invalid code or verification expired.');
     }
   }
 
@@ -43,14 +43,14 @@ export function VerifyPhonePage() {
       const resp = await resendVerificationCode();
       if (resp.message) {
         setResendMsg(resp.message);
-        toast.success(resp.message);
+        toastUtils.success(resp.message);
       }
     } catch (err: any) {
       // If the server returned 429, the error message likely has "Please wait before requesting another code"
       if (err.message?.includes('Please wait before requesting another code')) {
-        toast.error('You must wait 1 minute before requesting another code again.');
+        toastUtils.error('You must wait 1 minute before requesting another code again.');
       } else {
-        toast.error(err.message || 'Failed to resend code.');
+        toastUtils.error(err.message || 'Failed to resend code.');
       }
     }
   }

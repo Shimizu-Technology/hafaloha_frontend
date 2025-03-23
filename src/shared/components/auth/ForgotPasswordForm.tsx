@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
@@ -26,7 +26,7 @@ export function ForgotPasswordForm() {
       const res = await api.post<ForgotResponse>('/password/forgot', { email });
       const successMsg = res.message || 'Check your email for a reset link.';
       setMessage(successMsg);
-      toast.success(successMsg);
+      toastUtils.success(successMsg);
     } catch (err: any) {
       setError(err.message || 'Something went wrong.');
     } finally {

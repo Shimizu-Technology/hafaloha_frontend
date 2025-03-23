@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../auth';
 import { Mail, Lock, User, Phone } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
+import toastUtils from '../../../shared/utils/toastUtils';
 
 /**
  * Allows a plus sign, then 3 or 4 digits for "country+area code," then exactly 7 digits.
@@ -44,13 +44,13 @@ export function SignUpForm() {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+      toastUtils.error('Passwords do not match');
       return;
     }
 
     const finalPhone = formData.phone.trim();
     if (!isValidPhone(finalPhone)) {
-      toast.error(
+      toastUtils.error(
         'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
       );
       return;
@@ -67,7 +67,7 @@ export function SignUpForm() {
         restaurant_id: 1
       });
       
-      toast.success('Account created successfully!');
+      toastUtils.success('Account created successfully!');
       navigate('/verify-phone');
     } catch (err) {
       console.error('Signup error:', err);
