@@ -351,14 +351,8 @@ export function MerchandisePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredItems.map((item, index) => (
-                <MerchandiseItem 
-                  key={item.id} 
-                  item={item} 
-                  index={index}
-                  // Prioritize loading for above-the-fold content (first 6 items)
-                  loading={index < 6 ? "eager" : "lazy"}
-                />
+              {filteredItems.map(item => (
+                <MerchandiseItem key={item.id} item={item} />
               ))}
             </div>
           )}

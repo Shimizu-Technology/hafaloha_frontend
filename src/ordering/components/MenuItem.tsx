@@ -1,7 +1,6 @@
 // src/ordering/components/MenuItem.tsx
 
 import React, { useState } from 'react';
-import { CachedImage } from '../../shared/components/ui/CachedImage';
 import { Plus } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
@@ -38,10 +37,9 @@ function formatAvailableDays(days?: (number | string)[]): string {
 interface MenuItemProps {
   item: MenuItemType;
   index?: number;
-  loading?: 'lazy' | 'eager';
 }
 
-export function MenuItem({ item, index, loading = 'lazy' }: MenuItemProps) {
+export function MenuItem({ item, index }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
 
   const [showCustomization, setShowCustomization] = useState(false);
@@ -110,13 +108,10 @@ export function MenuItem({ item, index, loading = 'lazy' }: MenuItemProps) {
           ${isOutOfStock ? 'opacity-70' : ''}
         `}
       >
-        <CachedImage
+        <img
           src={item.image}
           alt={item.name}
           className="w-full h-48 object-cover"
-          loading={loading}
-          width={400}
-          height={192}
         />
 
         <div className="p-4 flex flex-col flex-1">

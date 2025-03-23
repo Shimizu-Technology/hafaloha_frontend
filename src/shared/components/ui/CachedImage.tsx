@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getOptimizedImageProps } from '../../utils/imageUtils';
 
 interface CachedImageProps {
   src: string;
@@ -47,12 +46,9 @@ export const CachedImage: React.FC<CachedImageProps> = ({
       return;
     }
 
-    // Get optimized image URL if dimensions are provided
-    const { src: optimizedSrc } = getOptimizedImageProps(src, width, height);
-
     // If not in cache, load it
     const img = new Image();
-    img.src = optimizedSrc;
+    img.src = src;
     
     img.onload = () => {
       setImageSrc(src);
@@ -76,13 +72,12 @@ export const CachedImage: React.FC<CachedImageProps> = ({
     };
   }, [src, onLoad, onError]);
 
-  // Generate srcset for responsive images
-  const getSrcSet = () => {
+  // Generate srcset for responsive images if width is provided
+  const generateSrcSet = () => {
     if (!width) return undefined;
     
-    // Get optimized srcset from utility function
-    const { srcSet } = getOptimizedImageProps(src, width, height);
-    return srcSet;
+    // Create srcset for 1x, 2x, and 3x pixel densities
+    return `${src} 1x, ${src} 2x, ${src} 3x`;
   };
 
   // Placeholder while loading
@@ -116,7 +111,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
   return (
     <img
       src={imageSrc || ''}
-      srcSet={getSrcSet()}
+      srcSet={generateSrcSet()}
       alt={alt}
       className={className}
       width={width}
