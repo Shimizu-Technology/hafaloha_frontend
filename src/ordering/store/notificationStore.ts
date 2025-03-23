@@ -37,7 +37,7 @@ interface NotificationStoreState {
 }
 
 const useNotificationStore = create<NotificationStoreState>((set, get) => ({
-  notifications: [],
+  notifications: [] as Notification[],
   loading: false,
   error: null,
   stats: {
@@ -52,11 +52,19 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
     try {
       set({ loading: true, error: null });
       const notifications = await getUnacknowledgedNotifications(type, hours);
-      set({ notifications, loading: false });
-      return notifications;
+      
+      // Ensure notifications is always an array
+      const safeNotifications = Array.isArray(notifications) ? notifications : [];
+      
+      if (!Array.isArray(notifications)) {
+        console.warn('API returned non-array notifications:', typeof notifications);
+      }
+      
+      set({ notifications: safeNotifications, loading: false });
+      return safeNotifications;
     } catch (error) {
       const errorMessage = handleApiError(error, 'Failed to fetch notifications');
-      set({ error: errorMessage, loading: false });
+      set({ error: errorMessage, loading: false, notifications: [] });
       return [];
     }
   },

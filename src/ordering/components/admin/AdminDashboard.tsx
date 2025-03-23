@@ -322,7 +322,8 @@ export function AdminDashboard() {
   // Update stock alert count when notifications change
   useEffect(() => {
     const stockAlerts = getStockAlerts();
-    setStockAlertCount(stockAlerts.length);
+    // Ensure stockAlerts is an array before accessing length
+    setStockAlertCount(Array.isArray(stockAlerts) ? stockAlerts.length : 0);
   }, [getStockAlerts]);
   
   // Function to acknowledge a low stock item

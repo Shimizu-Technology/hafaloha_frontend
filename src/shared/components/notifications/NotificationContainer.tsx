@@ -61,6 +61,13 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
   
   // Filter and sort notifications when data changes
   useEffect(() => {
+    // Ensure notifications is an array before processing
+    if (!Array.isArray(notifications)) {
+      console.warn('Expected notifications to be an array but got:', typeof notifications);
+      setFilteredNotifications([]);
+      return;
+    }
+    
     let filtered = [...notifications];
     
     // Apply type filter if specified
