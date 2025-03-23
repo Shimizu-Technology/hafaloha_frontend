@@ -22,6 +22,7 @@ import {
   Bell,
   Package
 } from 'lucide-react';
+import AcknowledgeAllButton from '../../../shared/components/notifications/AcknowledgeAllButton';
 import { api } from '../../lib/api';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { useAuthStore } from '../../store/authStore';
@@ -98,8 +99,9 @@ export function AdminDashboard() {
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string | null>(null);
   const [openInventoryForItem, setOpenInventoryForItem] = useState<string | null>(null);
   
-  // Loading state for acknowledge all button
+  // Loading and success states for acknowledge all button
   const [isAcknowledgingAll, setIsAcknowledgingAll] = useState(false);
+  const [acknowledgeSuccess, setAcknowledgeSuccess] = useState(false);
 
   // Function to acknowledge an order via the API
   const acknowledgeOrder = async (orderId: number) => {
@@ -136,6 +138,10 @@ export function AdminDashboard() {
       
       // Clear the unacknowledged orders list
       setUnacknowledgedOrders([]);
+      
+      // Show success state
+      setAcknowledgeSuccess(true);
+      setTimeout(() => setAcknowledgeSuccess(false), 2000);
       
       // Show success toast
       toastUtils.success(`${ordersToAcknowledge.length} orders acknowledged`);
@@ -550,34 +556,14 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 relative">
-  {/* Acknowledge All button - enhanced for better visibility on all devices, especially iPad */}
-  {unacknowledgedOrders.length > 0 && (
-    <div className="fixed left-0 right-0 z-[9999] flex justify-center pointer-events-none"
-      style={{ 
-        bottom: 'env(safe-area-inset-bottom, 1.5rem)',
-        paddingBottom: '0.5rem'
-      }}
-    >
-      <button
-        onClick={acknowledgeAllOrders}
-        disabled={isAcknowledgingAll}
-        className="bg-[#c1902f] hover:bg-[#d4a43f] text-white font-medium py-3 px-6 md:py-4 md:px-8 rounded-full shadow-xl flex items-center space-x-2 transition-all transform hover:scale-105 pointer-events-auto border-2 border-white"
-        style={{ 
-          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-          fontSize: 'clamp(0.875rem, 2vw, 1rem)'
-        }}
-      >
-        <CheckCircle className="h-5 w-5 md:h-6 md:w-6 mr-1" />
-        <span>
-          {isAcknowledgingAll 
-            ? 'Acknowledging...' 
-            : unacknowledgedOrders.length === 1 
-              ? 'Acknowledge Order' 
-              : `Acknowledge All (${unacknowledgedOrders.length})`}
-        </span>
-      </button>
-    </div>
-  )}
+  {/* Acknowledge All button using the new component */}
+  <AcknowledgeAllButton
+    count={unacknowledgedOrders.length}
+    isLoading={isAcknowledgingAll}
+    onClick={acknowledgeAllOrders}
+    showSuccess={acknowledgeSuccess}
+    type="order"
+  />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -605,11 +591,11 @@ export function AdminDashboard() {
                 
                 {/* Stock notification panel */}
                 {showStockNotifications && (
-                  <div className="absolute right-0 mt-2 z-50 w-96">
+                  <div className="absolute right-0 mt-2 z-50 w-96 max-w-[95vw]">
                     <NotificationContainer 
                       notificationType="low_stock"
                       title="Stock Alerts"
-                      maxDisplayed={5}
+                      maxDisplayed={10} // Increased from 5 to allow more notifications
                       onClose={() => setShowStockNotifications(false)}
                       onView={handleStockNotificationView}
                       className="border-t-4 border-yellow-500"

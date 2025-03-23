@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NotificationCard from './NotificationCard';
+import ScrollableNotificationList from './ScrollableNotificationList';
 import useNotificationStore from '../../../ordering/store/notificationStore';
 import { Notification } from '../../../shared/api/endpoints/notifications';
 import { AlertCircle, CheckCircle, X } from 'lucide-react';
 import toastUtils from '../../utils/toastUtils';
+import { isMobileDevice, isIPad } from '../../utils/deviceUtils';
 
 interface NotificationContainerProps {
   notificationType?: string;
@@ -146,18 +148,25 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
         </div>
       )}
       
-      {/* Notification list */}
-      <div className="space-y-3">
-        {filteredNotifications.map(notification => (
-          <NotificationCard
-            key={notification.id}
-            notification={notification}
-            onView={handleView}
-            onDismiss={handleDismiss}
-            onAction={handleAction}
-          />
-        ))}
-      </div>
+      {/* Notification list with scrollable container */}
+      {!loading && filteredNotifications.length > 0 && (
+        <ScrollableNotificationList 
+          maxHeight={isMobileDevice() ? '60vh' : isIPad() ? '65vh' : '70vh'}
+          className="notification-list-container"
+        >
+          <div className="space-y-3">
+            {filteredNotifications.map(notification => (
+              <NotificationCard
+                key={notification.id}
+                notification={notification}
+                onView={handleView}
+                onDismiss={handleDismiss}
+                onAction={handleAction}
+              />
+            ))}
+          </div>
+        </ScrollableNotificationList>
+      )}
       
       {/* Acknowledge all button */}
       {showAcknowledgeAll && filteredNotifications.length > 0 && (
