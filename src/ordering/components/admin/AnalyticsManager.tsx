@@ -237,20 +237,71 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       setDayNames(heatmapRes.day_names || []);
       
       // 7) Staff Discount Summary
-      const discountSummaryRes = await staffDiscountsApi.getStaffDiscountSummary(startDate, endDate);
-      setStaffDiscountSummary(discountSummaryRes.summary);
+      try {
+        const discountSummaryRes = await staffDiscountsApi.getStaffDiscountSummary(startDate, endDate);
+        // Add null check and provide default values if summary is undefined
+        if (discountSummaryRes && discountSummaryRes.summary) {
+          setStaffDiscountSummary(discountSummaryRes.summary);
+        } else {
+          // Set default empty summary
+          setStaffDiscountSummary({
+            total_count: 0,
+            total_discount_amount: 0,
+            total_original_amount: 0,
+            avg_discount_percentage: 0,
+            working_count: 0,
+            non_working_count: 0,
+            house_account_count: 0,
+            immediate_payment_count: 0
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load staff discount summary:', error);
+        // Set default empty summary on error
+        setStaffDiscountSummary({
+          total_count: 0,
+          total_discount_amount: 0,
+          total_original_amount: 0,
+          avg_discount_percentage: 0,
+          working_count: 0,
+          non_working_count: 0,
+          house_account_count: 0,
+          immediate_payment_count: 0
+        });
+      }
       
       // 8) Staff Discount By Employee
-      const discountByEmployeeRes = await staffDiscountsApi.getStaffDiscountByEmployee(startDate, endDate);
-      setStaffDiscountByEmployee(discountByEmployeeRes.employees || []);
+      try {
+        const discountByEmployeeRes = await staffDiscountsApi.getStaffDiscountByEmployee(startDate, endDate);
+        setStaffDiscountByEmployee(
+          discountByEmployeeRes && discountByEmployeeRes.employees ? discountByEmployeeRes.employees : []
+        );
+      } catch (error) {
+        console.error('Failed to load staff discount by employee:', error);
+        setStaffDiscountByEmployee([]);
+      }
       
       // 9) Staff Discount By Beneficiary
-      const discountByBeneficiaryRes = await staffDiscountsApi.getStaffDiscountByBeneficiary(startDate, endDate);
-      setStaffDiscountByBeneficiary(discountByBeneficiaryRes.beneficiaries || []);
+      try {
+        const discountByBeneficiaryRes = await staffDiscountsApi.getStaffDiscountByBeneficiary(startDate, endDate);
+        setStaffDiscountByBeneficiary(
+          discountByBeneficiaryRes && discountByBeneficiaryRes.beneficiaries ? discountByBeneficiaryRes.beneficiaries : []
+        );
+      } catch (error) {
+        console.error('Failed to load staff discount by beneficiary:', error);
+        setStaffDiscountByBeneficiary([]);
+      }
       
       // 10) Staff Discount By Payment Method
-      const discountByPaymentMethodRes = await staffDiscountsApi.getStaffDiscountByPaymentMethod(startDate, endDate);
-      setStaffDiscountByPaymentMethod(discountByPaymentMethodRes.payment_methods || []);
+      try {
+        const discountByPaymentMethodRes = await staffDiscountsApi.getStaffDiscountByPaymentMethod(startDate, endDate);
+        setStaffDiscountByPaymentMethod(
+          discountByPaymentMethodRes && discountByPaymentMethodRes.payment_methods ? discountByPaymentMethodRes.payment_methods : []
+        );
+      } catch (error) {
+        console.error('Failed to load staff discount by payment method:', error);
+        setStaffDiscountByPaymentMethod([]);
+      }
 
     } catch (err) {
       console.error('Failed to load analytics:', err);
