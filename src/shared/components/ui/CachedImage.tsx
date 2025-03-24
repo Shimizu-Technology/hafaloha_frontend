@@ -7,6 +7,7 @@ interface CachedImageProps {
   width?: number;
   height?: number;
   loading?: 'lazy' | 'eager';
+  fetchPriority?: 'high' | 'low' | 'auto'; // Add fetchPriority support
   onLoad?: () => void;
   onError?: () => void;
 }
@@ -17,6 +18,7 @@ interface CachedImageProps {
  * - Supports lazy loading
  * - Shows a loading placeholder
  * - Handles errors gracefully
+ * - Supports fetchPriority for LCP optimization
  */
 export const CachedImage: React.FC<CachedImageProps> = ({
   src,
@@ -25,6 +27,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
   width,
   height,
   loading = 'lazy',
+  fetchPriority = 'auto', // Default to auto
   onLoad,
   onError,
 }) => {
@@ -107,7 +110,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
     );
   }
 
-  // Actual image
+  // Actual image with fetchPriority support
   return (
     <img
       src={imageSrc || ''}
@@ -117,6 +120,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
       width={width}
       height={height}
       loading={loading}
+      {...{ fetchpriority: fetchPriority } as any}
     />
   );
 };

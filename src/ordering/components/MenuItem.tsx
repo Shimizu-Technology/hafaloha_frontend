@@ -4,8 +4,13 @@ import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
+import { CachedImage } from '../../shared/components/ui/CachedImage';
 import type { MenuItem as MenuItemType } from '../types/menu';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
+
+// Standard dimensions for menu item images
+const MENU_IMAGE_WIDTH = 480;
+const MENU_IMAGE_HEIGHT = 320;
 
 // Helper function to format available days for display
 function formatAvailableDays(days?: (number | string)[]): string {
@@ -37,9 +42,10 @@ function formatAvailableDays(days?: (number | string)[]): string {
 interface MenuItemProps {
   item: MenuItemType;
   index?: number;
+  isAboveFold?: boolean; // New prop to indicate if this item is likely above the fold
 }
 
-export function MenuItem({ item, index }: MenuItemProps) {
+export function MenuItem({ item, index = 0, isAboveFold = false }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
 
   const [showCustomization, setShowCustomization] = useState(false);
@@ -108,11 +114,22 @@ export function MenuItem({ item, index }: MenuItemProps) {
           ${isOutOfStock ? 'opacity-70' : ''}
         `}
       >
-        <img
-          src={item.image}
-          alt={item.name}
-          className="w-full h-48 object-cover"
-        />
+        {/* Determine loading priority based on position */}
+        {/* First 6 items or explicitly marked as above fold get high priority */}
+        {(() => {
+          const shouldPrioritize = isAboveFold || index < 6;
+          return (
+            <CachedImage
+              src={item.image}
+              alt={item.name}
+              className="w-full h-48 object-cover"
+              width={MENU_IMAGE_WIDTH}
+              height={MENU_IMAGE_HEIGHT}
+              loading={shouldPrioritize ? "eager" : "lazy"}
+              {...{ fetchpriority: shouldPrioritize ? "high" : "auto" } as any}
+            />
+          );
+        })()}
 
         <div className="p-4 flex flex-col flex-1">
           <div>
