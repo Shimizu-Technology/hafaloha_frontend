@@ -185,9 +185,14 @@ export function MenuPage() {
 
       {/* Menu Items Grid with min-height to prevent layout shift */}
       <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
-        {/* Preload the first few menu item images */}
-        {!loading && filteredItems.length > 0 && (
-          <PreloadMenuImages items={filteredItems} count={aboveFoldCount} />
+        {/* Preload menu item images with enhanced strategy */}
+        {!loading && (
+          <PreloadMenuImages
+            items={filteredItems}
+            count={aboveFoldCount}
+            allItems={menuItems}
+            categoryId={selectedCategoryId}
+          />
         )}
         
         {loading ? (

@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+
+// Global cache to share across component instances
+const imageCache = new Map<string, boolean>();
 
 interface CachedImageProps {
   src: string;
@@ -14,11 +17,12 @@ interface CachedImageProps {
 
 /**
  * CachedImage component for optimized image loading
- * - Uses browser caching
+ * - Uses in-memory cache for faster access
  * - Supports lazy loading
  * - Shows a loading placeholder
  * - Handles errors gracefully
  * - Supports fetchPriority for LCP optimization
+ * - Enhanced for better mobile performance
  */
 export const CachedImage: React.FC<CachedImageProps> = ({
   src,
@@ -34,46 +38,85 @@ export const CachedImage: React.FC<CachedImageProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    // Set up cleanup function
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Reset states when src changes
     setIsLoading(true);
     setHasError(false);
     
-    // Try to get from cache first
-    const cachedImage = localStorage.getItem(`img_cache_${src}`);
-    if (cachedImage) {
-      setImageSrc(cachedImage);
+    // Check if image is already in our in-memory cache
+    if (imageCache.has(src)) {
+      setImageSrc(src);
       setIsLoading(false);
       onLoad?.();
       return;
     }
+    
+    // Try to get from localStorage cache as fallback
+    try {
+      const cachedImage = localStorage.getItem(`img_cache_${src}`);
+      if (cachedImage) {
+        setImageSrc(cachedImage);
+        setIsLoading(false);
+        // Also add to in-memory cache
+        imageCache.set(src, true);
+        onLoad?.();
+        return;
+      }
+    } catch (e) {
+      // Ignore localStorage errors
+    }
 
     // If not in cache, load it
     const img = new Image();
+    
+    // Set priority before setting src
+    if (fetchPriority === 'high') {
+      img.fetchPriority = 'high';
+    } else if (fetchPriority === 'low') {
+      img.fetchPriority = 'low';
+    }
+    
     img.src = src;
     
     img.onload = () => {
+      // Check if component is still mounted
+      if (!isMounted.current) return;
+      
       setImageSrc(src);
       setIsLoading(false);
       
-      // Cache the image URL (not the actual image data)
+      // Add to in-memory cache
+      imageCache.set(src, true);
+      
+      // Also cache in localStorage as backup
       try {
         localStorage.setItem(`img_cache_${src}`, src);
       } catch (e) {
         // Handle localStorage errors (e.g., quota exceeded)
-        console.warn('Failed to cache image URL:', e);
+        console.warn('Failed to cache image URL in localStorage:', e);
       }
       
       onLoad?.();
     };
     
     img.onerror = () => {
+      // Check if component is still mounted
+      if (!isMounted.current) return;
+      
       setIsLoading(false);
       setHasError(true);
       onError?.();
     };
-  }, [src, onLoad, onError]);
+  }, [src, onLoad, onError, fetchPriority]);
 
   // Generate srcset for responsive images if width is provided
   const generateSrcSet = () => {
