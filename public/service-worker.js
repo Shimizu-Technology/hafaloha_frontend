@@ -103,7 +103,7 @@ self.addEventListener('fetch', event => {
     return;
   }
   
-  // For other requests, use cache-first strategy
+  // For other requests, use cache-first strategy with better error handling
   event.respondWith(
     caches.match(event.request)
       .then(response => {
@@ -121,16 +121,41 @@ self.addEventListener('fetch', event => {
             // Clone the response since it can only be consumed once
             const responseToCache = response.clone();
             
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
+            // Try to cache but don't fail if caching fails (for incognito mode)
+            try {
+              caches.open(CACHE_NAME)
+                .then(cache => {
+                  try {
+                    cache.put(event.request, responseToCache);
+                  } catch (cacheError) {
+                    console.warn('[Service Worker] Cache put error (likely incognito mode):', cacheError);
+                  }
+                })
+                .catch(cacheOpenError => {
+                  console.warn('[Service Worker] Cache open error (likely incognito mode):', cacheOpenError);
+                });
+            } catch (error) {
+              console.warn('[Service Worker] Caching error (likely incognito mode):', error);
+            }
             
             return response;
           })
           .catch(error => {
             console.error('[Service Worker] Fetch error:', error);
+            // Return a proper error response instead of undefined
+            return new Response(JSON.stringify({ error: 'Network request failed' }), {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' }
+            });
           });
+      })
+      .catch(error => {
+        console.error('[Service Worker] Cache match error:', error);
+        // Return a proper error response
+        return new Response(JSON.stringify({ error: 'Service worker error' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
       })
   );
 });

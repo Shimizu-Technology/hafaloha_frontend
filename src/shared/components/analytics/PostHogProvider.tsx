@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import posthog from 'posthog-js';
 import { PostHogProvider as OriginalPostHogProvider } from 'posthog-js/react';
 import { useAuthStore } from '../../auth';
@@ -11,41 +11,84 @@ const posthogOptions = {
   capture_pageview: true,
   capture_pageleave: true,
   disable_session_recording: false, // Enable session recording
+  // Add safe localStorage handling for incognito mode
+  persistence: "memory" as "memory", // Use memory persistence in incognito mode
+  bootstrap: {
+    distinctID: `anonymous-${Date.now()}`, // Generate a temporary ID
+  },
+};
+
+// Check if we're likely in incognito mode
+const isIncognitoMode = () => {
+  try {
+    localStorage.setItem('test', 'test');
+    localStorage.removeItem('test');
+    return false;
+  } catch (e) {
+    console.log('[PostHog] Detected incognito mode or localStorage restrictions');
+    return true;
+  }
 };
 
 // Create wrapper component to handle restaurant context
 const PostHogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuthStore();
-  const { restaurant } = useRestaurantStore();
+  // Use state to track if we've initialized safely
+  const [isInitialized, setIsInitialized] = useState(false);
   
+  // Only use these hooks if we're not in incognito mode
+  const authStore = !isIncognitoMode() ? useAuthStore() : { user: null };
+  const restaurantStore = !isIncognitoMode() ? useRestaurantStore() : { restaurant: null };
+  
+  const { user } = authStore;
+  const { restaurant } = restaurantStore;
+  
+  // Initialize PostHog safely
   useEffect(() => {
-    // Identify user when they log in
-    if (user) {
-      posthog.identify(
-        user.id.toString(), 
-        {
-          email: user.email,
-          name: user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-          role: user.role,
-          restaurant_id: user.restaurant_id,
-          phone_verified: user.phone_verified
-        }
-      );
-    }
-    
-    // Set up restaurant as a group when available
-    if (restaurant) {
-      posthog.group('restaurant', restaurant.id.toString(), {
-        name: restaurant.name,
-        address: restaurant.address,
-        time_zone: restaurant.time_zone,
-        vip_enabled: restaurant.vip_enabled
-      });
+    try {
+      // Mark as initialized
+      setIsInitialized(true);
+      
+      // In incognito mode, use an anonymous ID
+      const inIncognito = isIncognitoMode();
+      if (inIncognito) {
+        console.log('[PostHog] Using anonymous tracking in incognito mode');
+        posthog.identify(`anonymous-${Date.now()}`);
+        return; // Skip the rest in incognito mode
+      }
+      
+      // Identify user when they log in
+      if (user) {
+        console.log('[PostHog] Identifying user:', user.id);
+        posthog.identify(
+          user.id.toString(),
+          {
+            email: user.email,
+            name: user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+            role: user.role,
+            restaurant_id: user.restaurant_id,
+            phone_verified: user.phone_verified
+          }
+        );
+      }
+      
+      // Set up restaurant as a group when available
+      if (restaurant) {
+        console.log('[PostHog] Setting restaurant group:', restaurant.id);
+        posthog.group('restaurant', restaurant.id.toString(), {
+          name: restaurant.name,
+          address: restaurant.address,
+          time_zone: restaurant.time_zone,
+          vip_enabled: restaurant.vip_enabled
+        });
+      }
+    } catch (error) {
+      console.error('[PostHog] Error during initialization:', error);
+      // Continue rendering the app even if PostHog fails
     }
   }, [user, restaurant]);
 
   return (
-    <OriginalPostHogProvider 
+    <OriginalPostHogProvider
       apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY}
       options={posthogOptions}
     >

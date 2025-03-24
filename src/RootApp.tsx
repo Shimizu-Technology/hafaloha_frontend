@@ -11,13 +11,14 @@ import OnlineOrderingApp from './ordering/OnlineOrderingApp';
 
 export default function RootApp() {
   return (
-    <PostHogProvider>
-      <AuthProvider>
-        <RestaurantProvider>
+    <AuthProvider>
+      <RestaurantProvider>
+        {/* Move PostHogProvider inside AuthProvider and RestaurantProvider */}
+        <PostHogProvider>
           <BrowserRouter>
             <ScrollToTop />
-            <Toaster 
-              position="top-right" 
+            <Toaster
+              position="top-right"
               reverseOrder={false}
               containerStyle={{
                 maxHeight: '100vh',
@@ -50,8 +51,8 @@ export default function RootApp() {
               </Route>
             </Routes>
           </BrowserRouter>
-        </RestaurantProvider>
-      </AuthProvider>
-    </PostHogProvider>
+        </PostHogProvider>
+      </RestaurantProvider>
+    </AuthProvider>
   );
 }
