@@ -35,7 +35,17 @@ export const PreloadMenuImages: React.FC<PreloadMenuImagesProps> = ({
     
     // Create link elements for each image with high priority
     itemsToPreload.forEach(item => {
-      if (!item.image || preloadedUrls.current.has(item.image)) return;
+      if (!item.image) {
+        console.warn('[PreloadMenuImages] Item missing image property:', item);
+        return;
+      }
+      
+      if (preloadedUrls.current.has(item.image)) {
+        console.log('[PreloadMenuImages] Image already preloaded:', item.image);
+        return;
+      }
+      
+      console.log('[PreloadMenuImages] Preloading high priority image:', item.image);
       
       const linkElement = document.createElement('link');
       linkElement.rel = 'preload';

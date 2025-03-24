@@ -108,9 +108,12 @@ export const CachedImage: React.FC<CachedImageProps> = ({
       onLoad?.();
     };
     
-    img.onerror = () => {
+    img.onerror = (error) => {
       // Check if component is still mounted
       if (!isMounted.current) return;
+      
+      console.error(`[CachedImage] Failed to load image: ${src}`, error);
+      console.log('[CachedImage] Image object:', img);
       
       setIsLoading(false);
       setHasError(true);

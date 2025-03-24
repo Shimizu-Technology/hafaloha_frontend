@@ -118,8 +118,25 @@ export function MenuItem({ item, index = 0, isAboveFold = false }: MenuItemProps
         {/* First 6 items or explicitly marked as above fold get high priority */}
         {(() => {
           const shouldPrioritize = isAboveFold || index < 6;
+          
+          // Use direct img tag as a fallback if CachedImage fails
+          if (window.location.search.includes('direct=true')) {
+            return (
+              <img
+                src={item.image}
+                alt={item.name}
+                className="w-full h-48 object-cover"
+                width={MENU_IMAGE_WIDTH}
+                height={MENU_IMAGE_HEIGHT}
+                loading={shouldPrioritize ? "eager" : "lazy"}
+                {...{ fetchpriority: shouldPrioritize ? "high" : "auto" } as any}
+              />
+            );
+          }
+          
+          // Use direct img tag instead of CachedImage for better compatibility
           return (
-            <CachedImage
+            <img
               src={item.image}
               alt={item.name}
               className="w-full h-48 object-cover"

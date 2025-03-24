@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ReservationModal } from './reservation/ReservationModal';
-import { PreloadHeroImage } from '../../shared/components/PreloadHeroImage';
 
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { useSiteSettingsStore } from '../store/siteSettingsStore';
@@ -27,11 +26,9 @@ export function Hero() {
 
   return (
     <>
-      {/* Preload the hero image */}
-      <PreloadHeroImage src={backgroundImage} />
-      
-      <div className="relative bg-gray-900">
+    <div className="relative bg-gray-900">
         <div className="absolute inset-0">
+          {/* Add debugging for hero image */}
           <img
             className="w-full h-full object-cover"
             src={backgroundImage}
@@ -39,6 +36,9 @@ export function Hero() {
             width={HERO_WIDTH}
             height={HERO_HEIGHT}
             loading="eager"
+            onError={(e) => {
+              console.error('[Hero] Failed to load hero image:', backgroundImage, e);
+            }}
             {...{ fetchpriority: "high" } as any}
           />
           <div className="absolute inset-0 bg-gray-900 opacity-75" />

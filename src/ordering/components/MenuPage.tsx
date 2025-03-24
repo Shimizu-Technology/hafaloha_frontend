@@ -5,7 +5,6 @@ import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
 import { MenuItemSkeletonGrid } from '../../shared/components/ui/SkeletonLoader';
-import { PreloadMenuImages } from '../../shared/components/PreloadMenuImages';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 
 export function MenuPage() {
@@ -185,16 +184,6 @@ export function MenuPage() {
 
       {/* Menu Items Grid with min-height to prevent layout shift */}
       <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
-        {/* Preload menu item images with enhanced strategy */}
-        {!loading && (
-          <PreloadMenuImages
-            items={filteredItems}
-            count={aboveFoldCount}
-            allItems={menuItems}
-            categoryId={selectedCategoryId}
-          />
-        )}
-        
         {loading ? (
           <div className="transition-opacity duration-300">
             <MenuItemSkeletonGrid count={6} />
