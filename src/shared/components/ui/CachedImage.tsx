@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-
-// Global cache to share across component instances
-const imageCache = new Map<string, boolean>();
+import React, { useState, useEffect } from 'react';
 
 interface CachedImageProps {
   src: string;
@@ -10,19 +7,16 @@ interface CachedImageProps {
   width?: number;
   height?: number;
   loading?: 'lazy' | 'eager';
-  fetchPriority?: 'high' | 'low' | 'auto'; // Add fetchPriority support
   onLoad?: () => void;
   onError?: () => void;
 }
 
 /**
  * CachedImage component for optimized image loading
- * - Uses in-memory cache for faster access
+ * - Uses browser caching
  * - Supports lazy loading
  * - Shows a loading placeholder
  * - Handles errors gracefully
- * - Supports fetchPriority for LCP optimization
- * - Enhanced for better mobile performance
  */
 export const CachedImage: React.FC<CachedImageProps> = ({
   src,
@@ -31,95 +25,52 @@ export const CachedImage: React.FC<CachedImageProps> = ({
   width,
   height,
   loading = 'lazy',
-  fetchPriority = 'auto', // Default to auto
   onLoad,
   onError,
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const isMounted = useRef(true);
-
-  useEffect(() => {
-    // Set up cleanup function
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     // Reset states when src changes
     setIsLoading(true);
     setHasError(false);
     
-    // Check if image is already in our in-memory cache
-    if (imageCache.has(src)) {
-      setImageSrc(src);
+    // Try to get from cache first
+    const cachedImage = localStorage.getItem(`img_cache_${src}`);
+    if (cachedImage) {
+      setImageSrc(cachedImage);
       setIsLoading(false);
       onLoad?.();
       return;
     }
-    
-    // Try to get from localStorage cache as fallback
-    try {
-      const cachedImage = localStorage.getItem(`img_cache_${src}`);
-      if (cachedImage) {
-        setImageSrc(cachedImage);
-        setIsLoading(false);
-        // Also add to in-memory cache
-        imageCache.set(src, true);
-        onLoad?.();
-        return;
-      }
-    } catch (e) {
-      // Ignore localStorage errors
-    }
 
     // If not in cache, load it
     const img = new Image();
-    
-    // Set priority before setting src
-    if (fetchPriority === 'high') {
-      img.fetchPriority = 'high';
-    } else if (fetchPriority === 'low') {
-      img.fetchPriority = 'low';
-    }
-    
     img.src = src;
     
     img.onload = () => {
-      // Check if component is still mounted
-      if (!isMounted.current) return;
-      
       setImageSrc(src);
       setIsLoading(false);
       
-      // Add to in-memory cache
-      imageCache.set(src, true);
-      
-      // Also cache in localStorage as backup
+      // Cache the image URL (not the actual image data)
       try {
         localStorage.setItem(`img_cache_${src}`, src);
       } catch (e) {
         // Handle localStorage errors (e.g., quota exceeded)
-        console.warn('Failed to cache image URL in localStorage:', e);
+        console.warn('Failed to cache image URL:', e);
       }
       
       onLoad?.();
     };
     
-    img.onerror = (error) => {
-      // Check if component is still mounted
-      if (!isMounted.current) return;
-      
-      console.error(`[CachedImage] Failed to load image: ${src}`, error);
-      console.log('[CachedImage] Image object:', img);
-      
+    img.onerror = () => {
       setIsLoading(false);
       setHasError(true);
       onError?.();
     };
-  }, [src, onLoad, onError, fetchPriority]);
+  }, [src, onLoad, onError]);
 
   // Generate srcset for responsive images if width is provided
   const generateSrcSet = () => {
@@ -156,7 +107,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
     );
   }
 
-  // Actual image with fetchPriority support
+  // Actual image
   return (
     <img
       src={imageSrc || ''}
@@ -166,7 +117,6 @@ export const CachedImage: React.FC<CachedImageProps> = ({
       width={width}
       height={height}
       loading={loading}
-      {...{ fetchpriority: fetchPriority } as any}
     />
   );
 };

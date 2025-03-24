@@ -17,33 +17,6 @@ export function MenuPage() {
   // Additional flags for filtering
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
   const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
-  
-  // Calculate which items are likely to be above the fold
-  // For a typical grid, the first 3-6 items (depending on screen size)
-  const getAboveFoldCount = () => {
-    // Simple responsive logic - could be enhanced with actual viewport detection
-    if (window.innerWidth >= 1024) return 3; // lg: 3 columns, so first row = 3 items
-    if (window.innerWidth >= 640) return 2; // sm: 2 columns, so first row = 2 items
-    return 1; // xs: 1 column, so first row = 1 item
-  };
-  
-  const [aboveFoldCount, setAboveFoldCount] = useState(3); // Default to 3
-  
-  // Update above-fold count on window resize and initial load
-  useEffect(() => {
-    // Set initial value
-    if (typeof window !== 'undefined') {
-      setAboveFoldCount(getAboveFoldCount());
-      
-      // Add resize listener
-      const handleResize = () => {
-        setAboveFoldCount(getAboveFoldCount());
-      };
-      
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
-  }, []);
 
   useEffect(() => {
     fetchMenuItems();
@@ -193,12 +166,7 @@ export function MenuPage() {
             {filteredItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                 {filteredItems.map((item, index) => (
-                  <MenuItem 
-                    key={item.id} 
-                    item={item} 
-                    index={index}
-                    isAboveFold={index < aboveFoldCount}
-                  />
+                  <MenuItem key={item.id} item={item} />
                 ))}
               </div>
             ) : (
