@@ -114,7 +114,7 @@ export function MenuItem({ item, index }: MenuItemProps) {
           className="w-full h-48 object-cover"
           width="400"
           height="192"
-          loading="lazy"
+          loading="eager"
         />
 
         <div className="p-4 flex flex-col flex-1">
