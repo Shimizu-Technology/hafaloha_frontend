@@ -5,7 +5,7 @@ import { ReservationModal } from './reservation/ReservationModal';
 
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { useSiteSettingsStore } from '../store/siteSettingsStore';
-import fallbackHero from '../assets/hafaloha_hero.jpg';
+import fallbackHero from '../assets/hafaloha_hero.webp';
 
 // Typical hero image dimensions - adjust these to match your actual image
 const HERO_WIDTH = 1920;
