@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useMenuStore } from '../../store/menuStore';
 import { MenuItem, OptionGroup, Category } from '../../types/menu';
-import { useClickOutside } from '../../../shared/hooks/useClickOutside';
+import { ItemCustomizationModal } from './ItemCustomizationModal';
+import { X } from 'lucide-react';
 
 interface SearchableMenuItemSelectorProps {
   onSelect: (item: MenuItem) => void;
@@ -15,11 +16,9 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
-  const [step, setStep] = useState<'search' | 'customize'>('search');
+  const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   
   const modalRef = useRef<HTMLDivElement>(null);
-  useClickOutside(modalRef, onClose);
   
   // Fetch menu items and categories on mount if not already loaded
   useEffect(() => {
@@ -77,95 +76,34 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
     
     setSelectedItem(item);
     
-    // If the item has option groups, go to customize step
+    // If the item has option groups, show the customization modal
     if (item.option_groups && item.option_groups.length > 0) {
-      // Initialize selected options
-      const initialOptions: Record<string, string[]> = {};
-      item.option_groups.forEach(group => {
-        // For required single-select groups, preselect the first option
-        if (group.min_select > 0 && group.max_select === 1) {
-          initialOptions[group.name] = [group.options[0]?.name || ''];
-        } else {
-          initialOptions[group.name] = [];
-        }
-      });
-      
-      setSelectedOptions(initialOptions);
-      setStep('customize');
+      setShowCustomizationModal(true);
     } else {
       // If no option groups, complete selection
-      completeSelection(item, {});
+      onSelect(item);
     }
   };
   
-  // Handle option selection/deselection
-  const handleOptionToggle = (groupName: string, optionName: string, isMultiSelect: boolean) => {
-    setSelectedOptions(prev => {
-      const currentSelections = [...(prev[groupName] || [])];
-      
-      if (isMultiSelect) {
-        // For multi-select, toggle the option
-        const optionIndex = currentSelections.indexOf(optionName);
-        if (optionIndex >= 0) {
-          currentSelections.splice(optionIndex, 1);
-        } else {
-          currentSelections.push(optionName);
-        }
-      } else {
-        // For single-select, replace the selection
-        return {
-          ...prev,
-          [groupName]: [optionName]
-        };
-      }
-      
-      return {
-        ...prev,
-        [groupName]: currentSelections
-      };
-    });
-  };
-  
-  // Complete the selection process
-  const completeSelection = (item: MenuItem, options: Record<string, string[]>) => {
-    // Create a copy of the item with selected options
-    const itemWithOptions: MenuItem = {
-      ...item,
-      customizations: options
-    };
+  // Handle customized item being added to cart
+  const handleAddCustomizedItem = (item: MenuItem, customizations: any[], quantity: number) => {
+    // The item already has the customizations property set by ItemCustomizationModal
+    // with a properly formatted object for display
     
-    // Calculate additional price from options
-    let additionalPrice = 0;
+    // We don't need to modify the item further as the ItemCustomizationModal
+    // has already updated the price and added the formatted customizations
     
-    if (item.option_groups) {
-      item.option_groups.forEach(group => {
-        const selectedOptionNames = options[group.name] || [];
-        
-        group.options.forEach(option => {
-          if (selectedOptionNames.includes(option.name)) {
-            additionalPrice += option.additional_price || 0;
-          }
-        });
-      });
-    }
+    // Close the customization modal
+    setShowCustomizationModal(false);
     
-    // Update the price if there are additional charges
-    if (additionalPrice > 0) {
-      itemWithOptions.price = (parseFloat(String(item.price)) || 0) + additionalPrice;
-    }
+    // Pass the customized item back to the parent
+    onSelect(item);
     
-    onSelect(itemWithOptions);
-  };
-  
-  // Check if all required options are selected
-  const areRequiredOptionsSelected = (): boolean => {
-    if (!selectedItem || !selectedItem.option_groups) return true;
-    
-    return selectedItem.option_groups.every(group => {
-      if (!(group.min_select > 0)) return true;
-      
-      const selections = selectedOptions[group.name] || [];
-      return selections.length > 0;
+    console.log('Added customized item to cart:', {
+      name: item.name,
+      price: item.price,
+      customizations: item.customizations,
+      quantity: quantity
     });
   };
   
@@ -177,11 +115,20 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
   // Render the search step
   const renderSearchStep = () => (
     <div className="p-4 space-y-4">
-      <div className="mb-4">
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Add Menu Item</h3>
-        <p className="text-sm text-gray-600">
-          Search for an item to add to the order
-        </p>
+      <div className="mb-4 flex justify-between items-start">
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Add Menu Item</h3>
+          <p className="text-sm text-gray-600">
+            Search for an item to add to the order
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
+          aria-label="Close"
+        >
+          <X size={20} />
+        </button>
       </div>
       
       {/* Search input */}
@@ -250,8 +197,8 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
                 const isLowStock = item.enable_stock_tracking && availableQty > 0 && availableQty <= (item.low_stock_threshold || 5);
                 
                 return (
-                  <li 
-                    key={item.id} 
+                  <li
+                    key={item.id}
                     className={`py-3 px-2 hover:bg-gray-50 cursor-pointer transition-colors rounded-md ${
                       isOutOfStock ? 'opacity-60' : ''
                     }`}
@@ -292,123 +239,38 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
           )}
         </div>
       )}
+      
+      {/* Cancel button at the bottom */}
+      <div className="mt-6 pt-4 border-t border-gray-200">
+        <button
+          onClick={onClose}
+          className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
   
-  // Render the customize step
-  const renderCustomizeStep = () => {
-    if (!selectedItem || !selectedItem.option_groups) return null;
-    
-    return (
-      <div className="p-4 space-y-4">
-        <div className="mb-4">
-          <div className="flex items-center mb-2">
-            <button
-              type="button"
-              className="mr-2 text-gray-500 hover:text-gray-700"
-              onClick={() => setStep('search')}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <h3 className="text-lg font-medium text-gray-900">Customize {selectedItem.name}</h3>
-          </div>
-          <p className="text-sm text-gray-600">
-            Select options for this item
-          </p>
-        </div>
-        
-        <div className="max-h-[400px] overflow-y-auto space-y-6">
-          {selectedItem.option_groups.map((group) => (
-            <div key={group.name} className="border-b border-gray-200 pb-4 last:border-b-0">
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="font-medium text-gray-900">{group.name}</h4>
-                {group.min_select > 0 && (
-                  <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                    Required
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mb-3">
-                {group.max_select > 1 ? `Select up to ${group.max_select}` : 'Select one'}
-              </p>
-              
-              <ul className="space-y-2">
-                {group.options.map((option) => {
-                  const isSelected = (selectedOptions[group.name] || []).includes(option.name);
-                  
-                  return (
-                    <li key={option.name}>
-                      <button
-                        type="button"
-                        className={`w-full flex justify-between items-center px-3 py-2 rounded-md ${
-                          isSelected 
-                            ? 'bg-[#f8f3e7] border border-[#c1902f]' 
-                            : 'bg-white border border-gray-200 hover:bg-gray-50'
-                        }`}
-                        onClick={() => handleOptionToggle(group.name, option.name, group.max_select > 1)}
-                      >
-                        <div className="flex items-center">
-                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                            isSelected 
-                              ? 'border-[#c1902f] bg-[#c1902f]' 
-                              : 'border-gray-300'
-                          }`}>
-                            {isSelected && (
-                              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                          </div>
-                          <span className="ml-2 text-sm font-medium text-gray-900">
-                            {option.name}
-                          </span>
-                        </div>
-                        {option.additional_price > 0 && (
-                          <span className="text-sm text-gray-600">
-                            +${option.additional_price.toFixed(2)}
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
-        
-        <div className="pt-4 border-t border-gray-200">
-          <button
-            type="button"
-            className={`w-full py-2 px-4 rounded-md text-white font-medium ${
-              areRequiredOptionsSelected()
-                ? 'bg-[#c1902f] hover:bg-[#d4a43f]'
-                : 'bg-gray-300 cursor-not-allowed'
-            }`}
-            disabled={!areRequiredOptionsSelected()}
-            onClick={() => {
-              if (selectedItem && areRequiredOptionsSelected()) {
-                completeSelection(selectedItem, selectedOptions);
-              }
-            }}
-          >
-            Add to Order
-          </button>
-        </div>
-      </div>
-    );
-  };
-  
   return (
     <div className="fixed inset-0 z-[10002] overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div 
+      <div
         ref={modalRef}
         className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col animate-fadeIn"
       >
-        {step === 'search' ? renderSearchStep() : renderCustomizeStep()}
+        {renderSearchStep()}
       </div>
+      
+      {/* ItemCustomizationModal - using a higher z-index to ensure it appears on top */}
+      {selectedItem && showCustomizationModal && (
+        <div className="z-[10003]">
+          <ItemCustomizationModal
+            item={selectedItem}
+            onClose={() => setShowCustomizationModal(false)}
+            onAddToCart={handleAddCustomizedItem}
+          />
+        </div>
+      )}
     </div>
   );
 }

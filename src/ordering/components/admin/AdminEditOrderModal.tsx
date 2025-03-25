@@ -220,8 +220,16 @@ export function AdminEditOrderModal({
             const responseData = resp as any;
             let { payments: list, total_paid, total_refunded } = responseData.data;
             
+            console.log('Initial API response for payments:', {
+              paymentCount: list?.length || 0,
+              total_paid,
+              total_refunded,
+              responseData
+            });
+            
             // If no payments exist but order has total, simulate an initial payment
             if (list.length === 0 && order.total > 0) {
+              console.log('No initial payments found, creating initial payment with amount:', order.total);
               const initialPayment: OrderPaymentLocal = {
                 id: 0,
                 payment_type: 'initial',
@@ -237,9 +245,25 @@ export function AdminEditOrderModal({
               total_refunded = 0;
             }
             
+            // Calculate max refundable amount using our helper function
+            const calculatedMaxRefundable = calculateMaxRefundableAmount(list);
+            
+            // Use API values if provided, otherwise use calculated values
+            let newMaxRefundable = calculatedMaxRefundable;
+            if (total_paid !== undefined && total_refunded !== undefined) {
+              newMaxRefundable = Math.max(0, total_paid - total_refunded);
+            }
+            
+            console.log('Setting initial max refundable amount:', {
+              total_paid,
+              total_refunded,
+              calculatedMaxRefundable,
+              newMaxRefundable
+            });
+            
             // Set payments
             setPayments(list);
-            setMaxRefundable(Math.max(0, total_paid - total_refunded));
+            setMaxRefundable(newMaxRefundable);
             
             // Build refund tracker
             const refundTracker = buildRefundTracker(list);
@@ -487,6 +511,9 @@ export function AdminEditOrderModal({
     adjustments: [],
   });
 
+  // Track whether payment processing or refund is in progress
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
   // Summaries for display
   const [paymentSummary, setPaymentSummary] = useState({
     originalTotal: 0,
@@ -682,6 +709,8 @@ export function AdminEditOrderModal({
     }
     
     // Otherwise, open RefundModal with this item pre-selected
+    // Set processing payment state to true since we're starting a refund process
+    setIsProcessingPayment(true);
     setShowRefundModal(true);
     setPreSelectedRefundItem({
       id: foundItem.id!,
@@ -1396,28 +1425,72 @@ export function AdminEditOrderModal({
         const newNet = Math.max(0, parseFloat(currentSubtotal) - sumRefundsLocal);
         setLocalTotal(newNet.toFixed(2));
       }
+      
+      // 5. Recalculate max refundable amount based on all payments
+      const newMaxRefundable = calculateMaxRefundableAmount(payments);
+      console.log('Recalculating max refundable amount:', {
+        newMaxRefundable,
+        payments: payments.length
+      });
+      setMaxRefundable(newMaxRefundable);
     }
   }, [order.id, payments]);
   
   // Refresh payments when switching to payments tab
   useEffect(() => {
     if (activeTab === 'payments' && order.id) {
-      fetchPayments();
+      console.log('Switching to payments tab, refreshing payments data');
+      fetchPayments().then(() => {
+        // After fetching payments, manually recalculate max refundable amount
+        if (payments.length > 0) {
+          const newMaxRefundable = calculateMaxRefundableAmount(payments);
+          console.log('Tab switch - Recalculating max refundable amount:', {
+            newMaxRefundable,
+            payments: payments.length
+          });
+          
+          setMaxRefundable(newMaxRefundable);
+        }
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, order.id]);
+  
+  // Check for items that need payment and update isProcessingPayment state
+  useEffect(() => {
+    // Check if any items need payment
+    const hasItemsNeedingPayment = localItems.some(it => it.paymentStatus === 'needs_payment');
+    
+    // Only set isProcessingPayment to true if it's not already true
+    // This prevents overriding the state when a payment or refund is in progress
+    if (hasItemsNeedingPayment && !isProcessingPayment) {
+      setIsProcessingPayment(true);
+    } else if (!hasItemsNeedingPayment && !showRefundModal && !showAdditionalPaymentModal) {
+      // Only set to false if no payment or refund is in progress
+      setIsProcessingPayment(false);
+    }
+  }, [localItems, showRefundModal, showAdditionalPaymentModal, isProcessingPayment]);
 
   async function fetchPayments() {
     if (!order.id) return;
     setLoadingPayments(true);
     try {
+      console.log('Fetching payments for order:', order.id);
       const resp = await orderPaymentsApi.getPayments(order.id);
       // Typically the backend returns { payments, total_paid, total_refunded, ... }
       const responseData = resp as any;
       let { payments: list, total_paid, total_refunded } = responseData.data;
 
+      console.log('API response for payments:', {
+        paymentCount: list?.length || 0,
+        total_paid,
+        total_refunded,
+        responseData
+      });
+
       // If no payments exist but order has total, simulate an initial payment
       if (list.length === 0 && order.total > 0) {
+        console.log('No payments found, creating initial payment with amount:', order.total);
         const initialPayment: OrderPaymentLocal = {
           id: 0,
           payment_type: 'initial',
@@ -1433,13 +1506,30 @@ export function AdminEditOrderModal({
         total_refunded = 0;
       }
 
+      // Calculate max refundable amount using our helper function
+      const calculatedMaxRefundable = calculateMaxRefundableAmount(list);
+      
+      // Use API values if provided, otherwise use calculated values
+      let newMaxRefundable = calculatedMaxRefundable;
+      if (total_paid !== undefined && total_refunded !== undefined) {
+        newMaxRefundable = Math.max(0, total_paid - total_refunded);
+      }
+      
+      console.log('Setting max refundable amount:', {
+        total_paid,
+        total_refunded,
+        calculatedMaxRefundable,
+        newMaxRefundable
+      });
+
       setPayments(list);
-      setMaxRefundable(Math.max(0, total_paid - total_refunded));
+      setMaxRefundable(newMaxRefundable);
     } catch (err) {
       console.error('Failed to load payments:', err);
 
       // Fallback if the API fails
       if (order.total > 0) {
+        console.log('API call failed, using order.total as fallback:', order.total);
         setMaxRefundable(parseFloat(order.total));
         const initialPayment: OrderPaymentLocal = {
           id: 0,
@@ -1517,8 +1607,8 @@ export function AdminEditOrderModal({
       setLocalTotal(newNet.toFixed(2));
 
       // Check if all items are now refunded
-      const allItemsRefunded = localItems.every(item => 
-        item.isFullyRefunded || 
+      const allItemsRefunded = localItems.every(item =>
+        item.isFullyRefunded ||
         (item.refundedQuantity && item.refundedQuantity >= item.quantity)
       );
       
@@ -1528,6 +1618,18 @@ export function AdminEditOrderModal({
       } else if (sumRefundsLocal > 0) {
         setLocalStatus('partially_refunded');
       }
+      
+      // Recalculate max refundable amount after refund
+      const newMaxRefundable = calculateMaxRefundableAmount(payments);
+      console.log('After refund - Recalculating max refundable amount:', {
+        newMaxRefundable,
+        payments: payments.length
+      });
+      
+      setMaxRefundable(newMaxRefundable);
+      
+      // Reset processing payment state since refund is complete
+      setIsProcessingPayment(false);
     });
   }
 
@@ -1550,11 +1652,16 @@ export function AdminEditOrderModal({
       return;
     }
 
+    // Set processing payment state to true
+    setIsProcessingPayment(true);
+    
     // Show the additional payment modal
     setShowAdditionalPaymentModal(true);
   }
 
   function handleAdditionalPaymentCompleted() {
+    console.log('Additional payment completed, updating items and refetchings payments');
+    
     // Mark items as paid
     setLocalItems((prev) =>
       prev.map((it) =>
@@ -1571,7 +1678,23 @@ export function AdminEditOrderModal({
     );
 
     // Reload payment history
-    fetchPayments();
+    fetchPayments().then(() => {
+      // After fetching payments, manually recalculate max refundable amount
+      if (payments.length > 0) {
+        const newMaxRefundable = calculateMaxRefundableAmount(payments);
+        console.log('After payment completion - Recalculating max refundable amount:', {
+          newMaxRefundable,
+          payments: payments.length
+        });
+        
+        setMaxRefundable(newMaxRefundable);
+      }
+    });
+    
+    // Reset processing payment state
+    setIsProcessingPayment(false);
+    
+    // Close the modal
     setShowAdditionalPaymentModal(false);
   }
 
@@ -1963,6 +2086,26 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
 
   function calculateSubtotal() {
     return calculateSubtotalFromItems(localItems).toFixed(2);
+  }
+  
+  /**
+   * Helper function to calculate the max refundable amount based on the payments array
+   * This ensures consistent calculation throughout the application
+   */
+  function calculateMaxRefundableAmount(paymentsList: OrderPaymentLocal[]): number {
+    if (!paymentsList || paymentsList.length === 0) {
+      return 0;
+    }
+    
+    const totalPaid = paymentsList
+      .filter((p: OrderPaymentLocal) => p.payment_type !== 'refund')
+      .reduce((acc: number, p: OrderPaymentLocal) => acc + parseFloat(String(p.amount)), 0);
+    
+    const totalRefunded = paymentsList
+      .filter((p: OrderPaymentLocal) => p.payment_type === 'refund')
+      .reduce((acc: number, p: OrderPaymentLocal) => acc + parseFloat(String(p.amount)), 0);
+    
+    return Math.max(0, totalPaid - totalRefunded);
   }
 
   function getStatusBadgeColor(status: string) {
@@ -3161,11 +3304,15 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
             </button>
             <button
               onClick={handleSave}
-              className="w-full sm:w-auto px-4 py-3 sm:py-2.5 bg-[#c1902f] text-white rounded-lg
-                text-sm font-medium hover:bg-[#d4a43f] transition-colors shadow-sm
-                order-1 sm:order-2"
+              disabled={isProcessingPayment}
+              className={`w-full sm:w-auto px-4 py-3 sm:py-2.5 ${
+                isProcessingPayment
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-[#c1902f] hover:bg-[#d4a43f]'
+              } text-white rounded-lg text-sm font-medium transition-colors shadow-sm
+                order-1 sm:order-2`}
             >
-              Save Changes
+              {isProcessingPayment ? 'Process Payment First' : 'Save Changes'}
             </button>
           </div>
         </div>
@@ -3219,6 +3366,8 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
           onClose={() => {
             setShowRefundModal(false);
             setPreSelectedRefundItem(null);
+            // Reset processing payment state if user cancels the refund
+            setIsProcessingPayment(false);
           }}
           orderId={order.id}
           maxRefundable={maxRefundable}
@@ -3232,7 +3381,11 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
       {showAdditionalPaymentModal && (
         <EnhancedAdditionalPaymentModal
           isOpen={showAdditionalPaymentModal}
-          onClose={() => setShowAdditionalPaymentModal(false)}
+          onClose={() => {
+            setShowAdditionalPaymentModal(false);
+            // Reset processing payment state if user cancels the payment
+            setIsProcessingPayment(false);
+          }}
           orderId={order.id}
           paymentItems={localItems
             .filter((it) => it.paymentStatus === 'needs_payment')

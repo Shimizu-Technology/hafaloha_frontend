@@ -382,6 +382,11 @@ function OrderPanel({
                     <div className="flex items-center">
                       <span className="text-gray-700 font-medium text-sm sm:text-base mr-2">
                         ${(item.price * item.quantity).toFixed(2)}
+                        {item.customizations && item.customizations.length > 0 && (
+                          <span className="text-xs text-gray-500 ml-1">
+                            (${item.price.toFixed(2)} each)
+                          </span>
+                        )}
                       </span>
                       <button
                         onClick={() => removeFromCart(itemKey)}
@@ -1659,14 +1664,32 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         return;
       }
     }
+    
+    // Important: Use the price that was already calculated in the ItemCustomizationModal
+    // The item passed from ItemCustomizationModal already has the updated price
+    const finalPrice = item.price;
+    
+    // The customizations from ItemCustomizationModal are already in the correct format
+    // and the price has been properly calculated
+    
+    // Debug log to help troubleshoot price calculations
+    console.log('StaffOrderModal - Adding customized item to cart:', {
+      itemName: item.name,
+      finalPrice: finalPrice,
+      quantity: qty,
+      customizations: item.customizations
+    });
+    
+    // Add to cart with the price and customizations already set in ItemCustomizationModal
     addToCart({
       id: item.id,
       name: item.name,
-      price: item.price,
+      price: finalPrice,
       type: 'food',
       image: item.image,
-      customizations: custom
+      customizations: item.customizations || custom // Use item.customizations if available, otherwise use custom
     }, qty);
+    
     setCustomizingItem(null);
   }
 
