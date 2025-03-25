@@ -33,6 +33,7 @@ export function EnhancedAdditionalPaymentModal({
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
   const [paymentLinkSent, setPaymentLinkSent] = useState(false);
+  const [paymentLinkSentMessage, setPaymentLinkSentMessage] = useState('');
   const [showStripeForm, setShowStripeForm] = useState(false);
   const [paymentSuccessful, setPaymentSuccessful] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -160,28 +161,45 @@ export function EnhancedAdditionalPaymentModal({
     setIsLoading(true);
     setPaymentError(null);
     try {
-      // Generate and send payment link
-      // In a real implementation, this would call an API endpoint
-      // const response = await orderPaymentOperationsApi.generatePaymentLink(orderId, {
-      //   email: customerEmail,
-      //   phone: customerPhone,
-      //   amount: total,
-      //   items: paymentItems,
-      // });
+      // Convert orderId to number if it's a string
+      const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
       
-      console.log('Generating payment link for order:', orderId, {
+      // Generate and send payment link
+      const response = await orderPaymentOperationsApi.generatePaymentLink(numericOrderId, {
         email: customerEmail,
         phone: customerPhone,
-        amount: total,
-        items: paymentItems,
+        items: paymentItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          // Include optional fields if available
+          description: (item as any).description,
+          image: (item as any).image
+        }))
       });
       
-      // Simulate API response with a mock payment link
-      const mockPaymentLink = `https://payment.example.com/order/${orderId}?token=abc123`;
+      // Get the payment link URL from the response
+      const responseData = response.data;
+      const paymentLinkUrl = responseData.payment_link_url;
       
       // Display the payment link URL and mark as sent
-      setPaymentLinkUrl(mockPaymentLink);
+      setPaymentLinkUrl(paymentLinkUrl);
       setPaymentLinkSent(true);
+      
+      // Show appropriate message based on where the link was sent
+      let sentToMessage = '';
+      if (customerEmail && customerPhone) {
+        sentToMessage = `The payment link has been sent to ${customerEmail} and ${customerPhone}.`;
+      } else if (customerEmail) {
+        sentToMessage = `The payment link has been sent to ${customerEmail}.`;
+      } else if (customerPhone) {
+        sentToMessage = `The payment link has been sent to ${customerPhone}.`;
+      }
+      
+      if (sentToMessage) {
+        setPaymentLinkSentMessage(sentToMessage);
+      }
     } catch (error) {
       console.error('Error creating payment link:', error);
       setPaymentError('Failed to create payment link. Please try again.');
@@ -413,10 +431,14 @@ export function EnhancedAdditionalPaymentModal({
                     <div className="ml-3">
                       <h3 className="text-sm font-medium text-green-800">Payment Link Sent</h3>
                       <div className="mt-2 text-sm text-green-700">
-                        <p>
-                          A payment link has been sent to the customer. They can use this link to complete
-                          the payment:
-                        </p>
+                        {paymentLinkSentMessage ? (
+                          <p className="mb-2">{paymentLinkSentMessage}</p>
+                        ) : (
+                          <p>
+                            A payment link has been sent to the customer. They can use this link to complete
+                            the payment:
+                          </p>
+                        )}
                         <div className="mt-2 bg-white p-2 rounded border border-gray-200 break-all">
                           <a
                             href={paymentLinkUrl}

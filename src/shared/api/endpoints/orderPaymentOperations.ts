@@ -50,5 +50,21 @@ export const orderPaymentOperationsApi = {
   // Get payment history for an order
   getPayments: (orderId: number) => {
     return apiClient.get(`/orders/${orderId}/payments`);
+  },
+  
+  // Generate payment link
+  generatePaymentLink: (orderId: number, params: {
+    email?: string;
+    phone?: string;
+    items: {
+      id: number | string;
+      name: string;
+      quantity: number;
+      price: number;
+      description?: string;
+      image?: string;
+    }[];
+  }) => {
+    return apiClient.post(`/orders/${orderId}/payments/payment_link`, params);
   }
 };
