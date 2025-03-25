@@ -1,15 +1,21 @@
 // src/ordering/components/MenuPage.tsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
+import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { MenuItemSkeletonGrid } from '../../shared/components/ui/SkeletonLoader';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 
 export function MenuPage() {
-  const { menuItems, fetchMenuItems, loading, error } = useMenuStore();
-  const { categories, fetchCategories } = useCategoryStore();
+  const { menuItems, fetchMenuItems, fetchMenus, loading, error, currentMenuId } = useMenuStore();
+  const { categories, fetchCategoriesForMenu } = useCategoryStore();
+  const { restaurant } = useRestaurantStore();
+  
+  // Track initial loading state to prevent flickering during refreshes
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadComplete = useRef(false);
 
   // For category filter
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
@@ -18,10 +24,27 @@ export function MenuPage() {
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
   const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
 
+  // First useEffect to fetch menus and set currentMenuId
   useEffect(() => {
-    fetchMenuItems();
-    fetchCategories();
-  }, [fetchMenuItems, fetchCategories]);
+    fetchMenus();
+  }, [fetchMenus]);
+
+  // Second useEffect to fetch menu items and categories once we have currentMenuId
+  useEffect(() => {
+    // Fetch menu items
+    fetchMenuItems().then(() => {
+      // If this is the first load, set initialLoading to false
+      if (!initialLoadComplete.current && menuItems.length > 0) {
+        setInitialLoading(false);
+        initialLoadComplete.current = true;
+      }
+    });
+    
+    // Fetch categories if we have a menu ID
+    if (currentMenuId) {
+      fetchCategoriesForMenu(currentMenuId, restaurant?.id);
+    }
+  }, [fetchMenuItems, currentMenuId, fetchCategoriesForMenu, restaurant, menuItems.length]);
 
   // Combine filters: category, featured, seasonal, day-specific availability, and hidden status
   const filteredItems = useMemo(() => {
@@ -62,6 +85,18 @@ export function MenuPage() {
 
     return list;
   }, [menuItems, selectedCategoryId, showFeaturedOnly, showSeasonalOnly]);
+
+  // Filter categories to only show those for the current menu
+  const activeCategories = useMemo(() => {
+    return currentMenuId ? categories.filter(cat => cat.menu_id === currentMenuId) : [];
+  }, [categories, currentMenuId]);
+
+  // Memoize the selected category description to avoid redundant lookups
+  const selectedCategoryDescription = useMemo(() => {
+    return selectedCategoryId
+      ? activeCategories.find(cat => cat.id === selectedCategoryId)?.description
+      : null;
+  }, [selectedCategoryId, activeCategories]);
 
   // Toggling filters
   function handleToggleFeatured(checked: boolean) {
@@ -104,7 +139,7 @@ export function MenuPage() {
           </button>
 
           {/* Category buttons */}
-          {categories.map((cat) => (
+          {activeCategories.map((cat) => (
             <button
               key={cat.id}
               className={`
@@ -122,15 +157,13 @@ export function MenuPage() {
       </div>
       
       {/* Category Description - Only shown when a category is selected */}
-      {selectedCategoryId && (
+      {selectedCategoryId && selectedCategoryDescription && (
         <div className="animate-fadeIn transition-all duration-300 mb-6">
-          {categories.find(cat => cat.id === selectedCategoryId)?.description && (
-            <div className="bg-white/80 backdrop-blur-sm border-l-2 border-[#c1902f]/70 rounded-lg px-4 py-3 sm:p-4 shadow-sm">
-              <p className="text-gray-600 font-normal leading-relaxed text-sm sm:text-base">
-                {categories.find(cat => cat.id === selectedCategoryId)?.description}
-              </p>
-            </div>
-          )}
+          <div className="bg-white/80 backdrop-blur-sm border-l-2 border-[#c1902f]/70 rounded-lg px-4 py-3 sm:p-4 shadow-sm">
+            <p className="text-gray-600 font-normal leading-relaxed text-sm sm:text-base">
+              {selectedCategoryDescription}
+            </p>
+          </div>
         </div>
       )}
 
@@ -157,7 +190,7 @@ export function MenuPage() {
 
       {/* Menu Items Grid with min-height to prevent layout shift */}
       <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
-        {loading ? (
+        {initialLoading ? (
           <div className="transition-opacity duration-300">
             <MenuItemSkeletonGrid count={6} />
           </div>

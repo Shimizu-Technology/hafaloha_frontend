@@ -5,7 +5,6 @@ import { Store, List, Users, CreditCard, Book, Lock, Bell } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
-const CategoriesSettings = lazy(() => import('./settings/CategoriesSettings').then(module => ({ default: module.CategoriesSettings })));
 const MenusSettings = lazy(() => import('./settings/MenusSettings').then(module => ({ default: module.MenusSettings })));
 const UsersSettings = lazy(() => import('./settings/UsersSettings').then(module => ({ default: module.UsersSettings })));
 const PaymentSettings = lazy(() => import('./settings/PaymentSettings').then(module => ({ default: module.PaymentSettings })));
@@ -13,7 +12,7 @@ const NotificationSettings = lazy(() => import('./settings/NotificationSettings'
 const VipModeToggle = lazy(() => import('./settings/VipModeToggle').then(module => ({ default: module.VipModeToggle })));
 const VipCodesManager = lazy(() => import('./settings/VipCodesManager').then(module => ({ default: module.VipCodesManager })));
 
-type SettingsTab = 'restaurant' | 'categories' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access';
+type SettingsTab = 'restaurant' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -22,7 +21,7 @@ interface SettingsManagerProps {
 export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => {
     const stored = localStorage.getItem('adminSettingsTab');
-    if (stored && ['restaurant', 'categories', 'menus', 'users', 'payments', 'notifications', 'vip-access'].includes(stored)) {
+    if (stored && ['restaurant', 'menus', 'users', 'payments', 'notifications', 'vip-access'].includes(stored)) {
       return stored as SettingsTab;
     }
     return 'restaurant';
@@ -35,7 +34,6 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
 
   const tabs = [
     { id: 'restaurant', label: 'Restaurant', icon: Store },
-    { id: 'categories', label: 'Categories', icon: List },
     { id: 'menus', label: 'Menus', icon: Book },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -55,12 +53,6 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     switch (activeSettingsTab) {
       case 'restaurant':
         return <RestaurantSettings restaurantId={restaurantId} />;
-      case 'categories':
-        return (
-          <div>
-            <CategoriesSettings restaurantId={restaurantId} />
-          </div>
-        );
       case 'menus':
         return (
           <div>

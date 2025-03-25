@@ -1,33 +1,55 @@
 // src/ordering/store/categoryStore.ts
 import { create } from 'zustand';
-import { api } from '../lib/api';
+import { fetchAllCategories, fetchCategoriesByMenu, Category as ApiCategory } from '../../shared/api/endpoints/categories';
 
-export interface Category {
-  id: number;        
-  name: string;
-  position?: number;
-  description?: string;
+// Use the ApiCategory interface directly instead of creating a duplicate
+export type Category = ApiCategory;
+
+// Define the API response type
+interface ApiResponse<T> {
+  data: T;
+  [key: string]: any; // For any other properties that might be in the response
 }
 
 interface CategoryStore {
   categories: Category[];
   loading: boolean;
   error: string | null;
+  currentMenuId: number | null;
 
   fetchCategories: () => Promise<void>;
+  fetchCategoriesForMenu: (menuId: number, restaurantId?: number) => Promise<void>;
+  setCurrentMenuId: (menuId: number | null) => void;
 }
 
-export const useCategoryStore = create<CategoryStore>((set) => ({
+export const useCategoryStore = create<CategoryStore>((set, get) => ({
   categories: [],
   loading: false,
   error: null,
+  currentMenuId: null,
 
+  // Set the current menu ID manually (if needed)
+  setCurrentMenuId: (menuId: number | null) => {
+    set({ currentMenuId: menuId });
+  },
+
+  // Fetch all categories (legacy/global)
   fetchCategories: async () => {
     set({ loading: true, error: null });
     try {
-      // Use the PUBLIC endpoint now:
-      const data = await api.get('/categories');
-      set({ categories: data, loading: false });
+      const response = await fetchAllCategories() as Category[];
+      set({ categories: response, loading: false });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  // Fetch categories specific to a given menu
+  fetchCategoriesForMenu: async (menuId: number, restaurantId?: number) => {
+    set({ loading: true, error: null, currentMenuId: menuId });
+    try {
+      const response = await fetchCategoriesByMenu(menuId, restaurantId) as Category[];
+      set({ categories: response, loading: false });
     } catch (err: any) {
       set({ error: err.message, loading: false });
     }

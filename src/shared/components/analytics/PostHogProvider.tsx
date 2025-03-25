@@ -25,7 +25,6 @@ const isIncognitoMode = () => {
     localStorage.removeItem('test');
     return false;
   } catch (e) {
-    console.log('[PostHog] Detected incognito mode or localStorage restrictions');
     return true;
   }
 };
@@ -51,14 +50,12 @@ const PostHogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) 
       // In incognito mode, use an anonymous ID
       const inIncognito = isIncognitoMode();
       if (inIncognito) {
-        console.log('[PostHog] Using anonymous tracking in incognito mode');
         posthog.identify(`anonymous-${Date.now()}`);
         return; // Skip the rest in incognito mode
       }
       
       // Identify user when they log in
       if (user) {
-        console.log('[PostHog] Identifying user:', user.id);
         posthog.identify(
           user.id.toString(),
           {
@@ -73,7 +70,6 @@ const PostHogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) 
       
       // Set up restaurant as a group when available
       if (restaurant) {
-        console.log('[PostHog] Setting restaurant group:', restaurant.id);
         posthog.group('restaurant', restaurant.id.toString(), {
           name: restaurant.name,
           address: restaurant.address,
@@ -82,7 +78,7 @@ const PostHogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) 
         });
       }
     } catch (error) {
-      console.error('[PostHog] Error during initialization:', error);
+      // Continue rendering the app even if PostHog fails
       // Continue rendering the app even if PostHog fails
     }
   }, [user, restaurant]);

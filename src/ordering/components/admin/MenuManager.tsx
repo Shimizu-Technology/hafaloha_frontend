@@ -118,7 +118,7 @@ export function MenuManager({
     stopInventoryPolling
   } = useMenuStore();
 
-  const { categories, fetchCategories } = useCategoryStore();
+  const { categories, fetchCategories, fetchCategoriesForMenu, loading: categoriesLoading } = useCategoryStore();
 
   // The currently selected menu ID for filtering
   const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null);
@@ -156,10 +156,9 @@ export function MenuManager({
   // On mount => fetch items (admin) + categories + menus and start inventory polling
   useEffect(() => {
     fetchAllMenuItemsForAdmin();
-    fetchCategories();
     fetchMenus();
     
-    // Start automatic polling for inventory updates 
+    // Start automatic polling for inventory updates
     startInventoryPolling();
     
     // Clean up when the component unmounts
@@ -168,7 +167,6 @@ export function MenuManager({
     };
   }, [
     fetchAllMenuItemsForAdmin,
-    fetchCategories,
     fetchMenus,
     startInventoryPolling,
     stopInventoryPolling
@@ -202,8 +200,16 @@ export function MenuManager({
   useEffect(() => {
     if (selectedMenuId) {
       fetchAllMenuItemsForAdmin();
+      // Fetch categories specific to the selected menu
+      fetchCategoriesForMenu(selectedMenuId, restaurantId ? Number(restaurantId) : undefined);
     }
-  }, [selectedMenuId, fetchAllMenuItemsForAdmin]);
+  }, [selectedMenuId, restaurantId, fetchAllMenuItemsForAdmin, fetchCategoriesForMenu]);
+
+  // Filter categories by selected menu
+  const filteredCategories = useMemo(() => {
+    if (!selectedMenuId || !categories?.length) return [];
+    return categories.filter(cat => cat.menu_id === selectedMenuId);
+  }, [categories, selectedMenuId]);
 
   // Filter the items in memory
   const filteredItems = useMemo(() => {
@@ -215,7 +221,7 @@ export function MenuManager({
     }
 
     // If a category is selected, only show items that have that category
-    if (selectedCategory) {
+    if (selectedCategory && categories?.length) {
       list = list.filter(item => item.category_ids?.includes(selectedCategory));
     }
     
@@ -301,15 +307,10 @@ export function MenuManager({
     const damagedQty = item.damaged_quantity || 0;
     const availableQty = Math.max(0, stockQty - damagedQty);
     
-    // Log the available_days for debugging
-    console.log('Item available_days from API:', item.available_days);
-    
     // Convert available_days to numbers if they're strings
-    const availableDays = item.available_days 
+    const availableDays = item.available_days
       ? item.available_days.map(day => typeof day === 'string' ? Number(day) : day)
       : [];
-    
-    console.log('Converted available_days to numbers:', availableDays);
     
     // Reset unsaved changes flag when opening the edit modal
     setHasUnsavedChanges(false);
@@ -480,7 +481,6 @@ export function MenuManager({
 
     // Save the current available_days before submitting
     const currentAvailableDays = editingItem.available_days || [];
-    console.log('Current available_days before submit:', currentAvailableDays);
 
     try {
       await withLoading(async () => {
@@ -491,11 +491,9 @@ export function MenuManager({
           const { id, imageFile, available_quantity, ...rest } = editingItem;
           
           // Ensure available_days is an array of numbers
-          const submittedDays = Array.isArray(editingItem.available_days) 
+          const submittedDays = Array.isArray(editingItem.available_days)
             ? editingItem.available_days.map(day => Number(day))
             : [];
-            
-          console.log('Submitting available_days:', submittedDays);
           
           const payload = { 
             ...rest, 
@@ -519,16 +517,11 @@ export function MenuManager({
           if (updatedItem && updatedItem.available_days && Array.isArray(updatedItem.available_days)) {
             // Ensure all values are numbers
             processedDays = updatedItem.available_days.map((day: any) => Number(day));
-            console.log('Using available_days from API response:', processedDays);
-          } 
+          }
           // If empty or missing, use our saved currentAvailableDays
           else if (currentAvailableDays && currentAvailableDays.length > 0) {
             processedDays = currentAvailableDays.map((day: any) => Number(day));
-            console.log('Restoring available_days from current state:', processedDays);
           }
-          
-          // Log the processed days for debugging
-          console.log('Final processed available_days:', processedDays);
 
           // Update the local form state with the newly fetched data
           if (updatedItem) {
@@ -564,9 +557,6 @@ export function MenuManager({
               ),
             });
             
-            // Log the available_days to help with debugging
-            console.log('Updated item available_days:', updatedItem.available_days);
-            
             // Show success toast for updated item
             toastUtils.success('Menu item updated successfully!');
             
@@ -578,11 +568,9 @@ export function MenuManager({
           const { imageFile, available_quantity, ...rest } = editingItem;
           
           // Ensure available_days is an array of numbers
-          const availableDays = Array.isArray(editingItem.available_days) 
+          const availableDays = Array.isArray(editingItem.available_days)
             ? editingItem.available_days.map(day => Number(day))
             : [];
-            
-          console.log('Creating with available_days:', availableDays);
           
           const payload = {
             ...rest,
@@ -798,20 +786,22 @@ export function MenuManager({
             All Categories
           </button>
 
-          {/* Real categories from the store */}
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              className={
-                selectedCategory === cat.id
-                  ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
-                  : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }
-              onClick={() => setSelectedCategory(cat.id)}
-            >
-              {cat.name}
-            </button>
-          ))}
+          {/* Real categories from the store - filtered by selected menu */}
+          {filteredCategories?.length ? (
+            filteredCategories.map((cat) => (
+              <button
+                key={cat.id}
+                className={
+                  selectedCategory === cat.id
+                    ? 'whitespace-nowrap px-4 py-2 rounded-md bg-[#c1902f] text-white'
+                    : 'whitespace-nowrap px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }
+                onClick={() => setSelectedCategory(cat.id)}
+              >
+                {cat.name}
+              </button>
+            ))
+          ) : null}
         </div>
       </div>
       
@@ -1448,9 +1438,6 @@ export function MenuManager({
                               ? editingItem.available_days.map(day => Number(day)) 
                               : [];
                             
-                            // Log the current days for debugging
-                            console.log('Current days before change:', currentDays);
-                            
                             let newDays;
                             if (e.target.checked) {
                               // Add the day if checked
@@ -1459,9 +1446,6 @@ export function MenuManager({
                               // Remove the day if unchecked
                               newDays = currentDays.filter(d => d !== index);
                             }
-                            
-                            // Log the new days for debugging
-                            console.log('New days after change:', newDays);
                             
                             // Update the state with the new days
                             setEditingItem({

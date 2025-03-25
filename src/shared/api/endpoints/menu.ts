@@ -1,97 +1,116 @@
 // src/shared/api/endpoints/menu.ts
-
 import { api } from '../apiClient';
 import { uploadFile, objectToFormData } from '../utils';
 
 /**
+ * Menu interface
+ */
+export interface Menu {
+  id: number;
+  name: string;
+  restaurant_id?: number;
+  active?: boolean;
+  // ...any other properties
+}
+
+/**
+ * Menu Item interface (example)
+ */
+export interface MenuItem {
+  id: number;
+  name: string;
+  description?: string;
+  price?: number;
+  menu_id?: number;
+  // ...any other properties
+}
+
+/**
+ * Fetch all menus
+ */
+export const fetchMenus = async () => {
+  return api.get('/menus');
+};
+
+/**
+ * Fetch a single menu
+ */
+export const fetchMenu = async (menuId: number) => {
+  return api.get(`/menus/${menuId}`);
+};
+
+/**
+ * Create a new menu
+ */
+export const createMenu = async (name: string, restaurantId: number) => {
+  return api.post('/menus', {
+    menu: { name, restaurant_id: restaurantId },
+  });
+};
+
+/**
+ * Update an existing menu
+ */
+export const updateMenu = async (menuId: number, data: Partial<Menu>) => {
+  return api.patch(`/menus/${menuId}`, {
+    menu: data,
+  });
+};
+
+/**
+ * Delete a menu
+ */
+export const deleteMenu = async (menuId: number) => {
+  return api.delete(`/menus/${menuId}`);
+};
+
+/**
+ * Set a menu as active
+ */
+export const setActiveMenu = async (menuId: number) => {
+  return api.patch(`/menus/${menuId}/activate`);
+};
+
+/**
+ * Clone an existing menu
+ */
+export const cloneMenu = async (menuId: number) => {
+  return api.post(`/menus/${menuId}/clone`);
+};
+
+/**
  * Fetch all menu items
  */
-export const fetchMenuItems = async () => {
+export const fetchAllMenuItems = async () => {
   return api.get('/menu_items');
 };
 
 /**
- * Fetch a specific menu item
- */
-export const fetchMenuItem = async (id: number) => {
-  return api.get(`/menu_items/${id}`);
-};
-
-/**
- * Create a new menu item
- */
-export const createMenuItem = async (data: any) => {
-  return api.post('/menu_items', data);
-};
-
-/**
- * Update an existing menu item
- */
-export const updateMenuItem = async (id: number, data: any) => {
-  return api.patch(`/menu_items/${id}`, data);
-};
-
-/**
- * Delete a menu item
- */
-export const deleteMenuItem = async (id: number) => {
-  return api.delete(`/menu_items/${id}`);
-};
-
-/**
- * Upload an image for a menu item
- */
-export const uploadMenuItemImage = async (itemId: string, file: File) => {
-  return uploadFile(`/menu_items/${itemId}/upload_image`, file, 'image');
-};
-
-/**
- * Create or update a menu item with image
- * This simplifies the process of creating/updating menu items with images
+ * Create or update a menu item (with optional image upload example)
  */
 export const saveMenuItemWithImage = async (
   data: Record<string, any>,
   imageFile?: File | null,
   itemId?: string | number
 ) => {
-  // If there's no image file, use regular JSON request
   if (!imageFile) {
+    // Normal JSON request
     const endpoint = itemId ? `/menu_items/${itemId}` : '/menu_items';
-    
-    if (itemId) {
-      return api.patch(endpoint, { menu_item: data });
-    } else {
-      return api.post(endpoint, { menu_item: data });
-    }
+    const method = itemId ? 'patch' : 'post';
+    return api[method](endpoint, { menu_item: data });
+  } else {
+    // Multipart form-data
+    const formData = objectToFormData({ menu_item: data });
+    formData.append('menu_item[image]', imageFile);
+    const endpoint = itemId ? `/menu_items/${itemId}` : '/menu_items';
+    const method = itemId ? 'PATCH' : 'POST';
+    return api.upload(endpoint, formData, method);
   }
-  
-  // If there is an image file, use multipart/form-data
-  const formData = objectToFormData({ menu_item: data });
-  formData.append('menu_item[image]', imageFile);
-  
-  const endpoint = itemId ? `/menu_items/${itemId}` : '/menu_items';
-  const method = itemId ? 'PATCH' : 'POST';
-  
-  return api.upload(endpoint, formData, method);
 };
 
 /**
- * Fetch all categories
+ * Example of uploading just an image for a menu item
  */
-export const fetchCategories = async () => {
-  return api.get('/categories');
-};
-
-/**
- * Fetch all option groups
- */
-export const fetchOptionGroups = async () => {
-  return api.get('/option_groups');
-};
-
-/**
- * Fetch all options
- */
-export const fetchOptions = async () => {
-  return api.get('/options');
+export const uploadMenuItemImage = async (itemId: string, file: File) => {
+  return uploadFile(`/menu_items/${itemId}/upload_image`, file, 'image');
 };

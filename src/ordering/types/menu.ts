@@ -1,10 +1,10 @@
 // src/ordering/types/menu.ts
 
-export interface Category {
-  id: number;
-  name: string;
-  description?: string;
-}
+// Import the Category type from the API endpoints to ensure consistency
+import { Category } from '../../shared/api/endpoints/categories';
+
+// Re-export the Category type
+export type { Category };
 
 export interface MenuOption {
   id: number;
