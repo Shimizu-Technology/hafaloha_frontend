@@ -190,6 +190,7 @@ export function Header() {
             >
               Menu
             </Link>
+            {/* Merchandise link temporarily hidden
             <Link
               to="/merchandise"
               className={`px-3 py-2 rounded-md text-gray-700 hover:text-[#c1902f] hover:bg-gray-50
@@ -197,6 +198,7 @@ export function Header() {
             >
               Merchandise
             </Link>
+            */}
             {/* Reservations link temporarily hidden
             <Link
               to="/reservations"
@@ -405,6 +407,7 @@ export function Header() {
             >
               Menu
             </Link>
+            {/* Merchandise link temporarily hidden
             <Link
               to="/merchandise"
               className={`block px-3 py-2 rounded-md text-base font-medium text-gray-700
@@ -414,6 +417,7 @@ export function Header() {
             >
               Merchandise
             </Link>
+            */}
             {/* Reservations link temporarily hidden
             <Link
               to="/reservations"
