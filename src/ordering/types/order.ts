@@ -42,6 +42,7 @@ export interface Order {
   payment_method?: string;
   transaction_id?: string;
   restaurant_id?: string;
+  staff_created?: boolean; // Flag to indicate if order was created by staff
   error?: string; // For error handling in optimistic updates
 }
 

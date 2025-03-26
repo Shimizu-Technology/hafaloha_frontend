@@ -459,11 +459,14 @@ export function AdminDashboard() {
         
         console.log('[AdminDashboard] Unacknowledged orders:', fetchedOrders.length);
         
-        // Update unacknowledged orders state
-        setUnacknowledgedOrders(fetchedOrders);
+        // Filter out staff-created orders from unacknowledged orders
+        const nonStaffOrders = fetchedOrders.filter(order => !order.staff_created);
         
-        // Display notifications for unacknowledged orders
-        fetchedOrders.forEach(order => {
+        // Update unacknowledged orders state with only non-staff orders
+        setUnacknowledgedOrders(nonStaffOrders);
+        
+        // Display notifications for unacknowledged orders (already filtered)
+        nonStaffOrders.forEach(order => {
           console.log('[AdminDashboard] Displaying notification for order:', order.id);
           displayOrderNotification(order);
         });
@@ -485,7 +488,7 @@ export function AdminDashboard() {
     checkForUnacknowledgedOrders();
 
     // Set up polling with visibility detection
-    let pollingInterval: number | null = null;
+    let pollingInterval: ReturnType<typeof setInterval> | null = null;
     
     // Function to check for new orders
     const checkForNewOrders = async () => {
@@ -494,10 +497,16 @@ export function AdminDashboard() {
         const newOrders: Order[] = await api.get(url);
 
         if (newOrders.length > 0) {
-          // Display notifications for new orders
-          newOrders.forEach((order) => {
+          // Filter out staff-created orders
+          const nonStaffOrders = newOrders.filter(order => !order.staff_created);
+          
+          // Display notifications for non-staff orders
+          nonStaffOrders.forEach((order) => {
             displayOrderNotification(order);
           });
+          
+          // Add non-staff orders to unacknowledged orders
+          setUnacknowledgedOrders(prev => [...prev, ...nonStaffOrders]);
 
           const maxId = Math.max(...newOrders.map((o) => Number(o.id)));
           setLastOrderId(maxId);

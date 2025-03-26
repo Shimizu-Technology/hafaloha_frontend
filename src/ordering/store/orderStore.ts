@@ -38,7 +38,8 @@ interface OrderStore {
     contactEmail?: string,
     transactionId?: string,
     paymentMethod?: string,
-    vipCode?: string
+    vipCode?: string,
+    staffModal?: boolean
   ) => Promise<Order>;
 
   /** Update just status + optional pickupTime. */
@@ -150,7 +151,8 @@ export const useOrderStore = create<OrderStore>()(
         contactEmail,
         transactionId,
         paymentMethod = 'credit_card',
-        vipCode
+        vipCode,
+        staffModal = false
       ) => {
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
@@ -196,7 +198,8 @@ export const useOrderStore = create<OrderStore>()(
               contact_email: contactEmail,
               transaction_id: transactionId,
               payment_method: paymentMethod,
-              vip_code: vipCode
+              vip_code: vipCode,
+              staff_modal: staffModal
             },
           };
 

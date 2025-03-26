@@ -1281,7 +1281,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         finalPhone,
         contactEmail,
         transactionId,
-        'credit_card'
+        'credit_card',
+        '', // vipCode parameter
+        true // Add staff_modal parameter to indicate this is a staff-created order
       );
       toastUtils.success('Order created successfully!');
       onOrderCreated(newOrder.id);
