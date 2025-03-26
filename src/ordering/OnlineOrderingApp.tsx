@@ -23,7 +23,7 @@ import { useMerchandiseStore } from './store/merchandiseStore';
 import { MenuItem as MenuItemCard } from './components/MenuItem';
 import { useSiteSettingsStore } from './store/siteSettingsStore'; // <-- IMPORTANT
 
-import { ProtectedRoute } from '../shared';
+import { ProtectedRoute, AnonymousRoute } from '../shared';
 
 function OrderingLayout() {
   const loadingCount = useLoadingStore((state) => state.loadingCount);
@@ -144,13 +144,29 @@ export default function OnlineOrderingApp() {
         />
 
         {/* Auth */}
-        <Route path="login" element={<LoginForm />} />
-        <Route path="signup" element={<SignUpForm />} />
-        <Route path="forgot-password" element={<ForgotPasswordForm />} />
+        <Route path="login" element={
+          <AnonymousRoute>
+            <LoginForm />
+          </AnonymousRoute>
+        } />
+        <Route path="signup" element={
+          <AnonymousRoute>
+            <SignUpForm />
+          </AnonymousRoute>
+        } />
+        <Route path="forgot-password" element={
+          <AnonymousRoute>
+            <ForgotPasswordForm />
+          </AnonymousRoute>
+        } />
         <Route path="reset-password" element={<ResetPasswordForm />} />
 
         {/* Phone verification */}
-        <Route path="verify-phone" element={<VerifyPhonePage />} />
+        <Route path="verify-phone" element={
+          <AnonymousRoute>
+            <VerifyPhonePage />
+          </AnonymousRoute>
+        } />
 
         {/* Protected user pages => /orders, /profile */}
         <Route

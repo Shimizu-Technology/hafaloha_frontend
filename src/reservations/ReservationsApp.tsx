@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth, ProtectedRoute } from '../shared';
+import { useAuth, ProtectedRoute, AnonymousRoute } from '../shared';
 
 import { LoginForm, SignUpForm } from '../shared/components/auth';
 import { ProfilePage } from '../shared/components/profile';
@@ -19,8 +19,16 @@ export default function ReservationsApp() {
   return (
     <Routes>
       {/* Public routes for Reservations domain */}
-      <Route path="login" element={<LoginForm />} />
-      <Route path="signup" element={<SignUpForm />} />
+      <Route path="login" element={
+        <AnonymousRoute>
+          <LoginForm />
+        </AnonymousRoute>
+      } />
+      <Route path="signup" element={
+        <AnonymousRoute>
+          <SignUpForm />
+        </AnonymousRoute>
+      } />
 
       {/* Example protected route => /reservations/profile */}
       <Route
