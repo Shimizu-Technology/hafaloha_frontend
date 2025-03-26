@@ -4,8 +4,6 @@ import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
 import { useRestaurantStore } from '../../../shared/store/restaurantStore';
 import { MenuItem } from '../../types/menu';
-import { staffBeneficiariesApi, StaffBeneficiary } from '../../../shared/api/endpoints/staffBeneficiaries';
-import { usersApi, UserProfile } from '../../../shared/api/endpoints/users';
 import { apiClient } from '../../../shared/api/apiClient';
 
 // Payment components
@@ -14,6 +12,7 @@ import { PayPalCheckout, PayPalCheckoutRef } from '../../components/payment/PayP
 
 // Child components
 import { ItemCustomizationModal } from './ItemCustomizationModal';
+
 
 interface StaffOrderModalProps {
   onClose: () => void;
@@ -329,15 +328,6 @@ interface OrderPanelProps {
   onClose: () => void;
   menuItems: MenuItem[];
   setCustomizingItem: (item: MenuItem) => void;
-
-  // Staff discount display
-  isStaffOrder: boolean;
-  staffIsWorking: boolean;
-  calculatedDiscount: {
-    originalAmount: number;
-    discountAmount: number;
-    discountedAmount: number;
-  };
 }
 
 function OrderPanel({
@@ -351,18 +341,13 @@ function OrderPanel({
   onClose,
   menuItems,
   setCustomizingItem,
-
-  // Staff discount props
-  isStaffOrder,
-  staffIsWorking,
-  calculatedDiscount,
 }: OrderPanelProps) {
   const getItemKey = useOrderStore(state => state._getItemKey);
 
   return (
     <div className="flex flex-col h-full">
-      {/* Scrollable cart section - dynamic padding based on discount */}
-      <div className={`overflow-y-auto flex-1 p-4 ${isStaffOrder ? 'pb-[220px]' : 'pb-[150px]'}`}>
+      {/* Scrollable cart section */}
+      <div className="overflow-y-auto flex-1 p-4 pb-[150px]">
         <h3 className="text-lg font-semibold mb-4">Current Order</h3>
         {cartItems.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No items in the order yet</div>
@@ -562,37 +547,12 @@ function OrderPanel({
 
       {/* Bottom bar for totals and 'Create Order' */}
       <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-md">
-        {isStaffOrder ? (
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-gray-700">Original Total:</span>
-              <span className="text-gray-700">
-                ${calculatedDiscount.originalAmount.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-gray-700">
-                Discount ({staffIsWorking ? '50%' : '30%'}):
-              </span>
-              <span className="text-red-600">
-                -${calculatedDiscount.discountAmount.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center font-bold">
-              <span className="text-gray-700">Final Total:</span>
-              <span className="text-[#c1902f]">
-                ${calculatedDiscount.discountedAmount.toFixed(2)}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex justify-between items-center mb-4">
-            <span className="font-semibold text-gray-700 text-lg">Total:</span>
-            <span className="font-bold text-xl text-[#c1902f]">
-              ${orderTotal.toFixed(2)}
-            </span>
-          </div>
-        )}
+        <div className="flex justify-between items-center mb-4">
+          <span className="font-semibold text-gray-700 text-lg">Total:</span>
+          <span className="font-bold text-xl text-[#c1902f]">
+            ${orderTotal.toFixed(2)}
+          </span>
+        </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
           <button
@@ -646,247 +606,6 @@ function OrderPanel({
   );
 }
 
-/** --------------------------------------------------------------------
- * STAFF DISCOUNT MODAL
- * (Separate modal for staff discount options)
- * -------------------------------------------------------------------*/
-interface StaffDiscountModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  isStaffOrder: boolean;
-  setIsStaffOrder: (val: boolean) => void;
-  staffIsWorking: boolean;
-  setStaffIsWorking: (val: boolean) => void;
-  staffPaymentMethod: string;
-  setStaffPaymentMethod: (val: string) => void;
-  staffBeneficiaryId: number | null;
-  setStaffBeneficiaryId: (val: number | null) => void;
-  beneficiaries: StaffBeneficiary[];
-  userProfile: UserProfile | null;
-  isLoadingUserProfile: boolean;
-  calculatedDiscount: {
-    originalAmount: number;
-    discountAmount: number;
-    discountedAmount: number;
-  };
-  onApply: () => void;
-}
-
-function StaffDiscountModal({
-  isOpen,
-  onClose,
-  isStaffOrder,
-  setIsStaffOrder,
-  staffIsWorking,
-  setStaffIsWorking,
-  staffPaymentMethod,
-  setStaffPaymentMethod,
-  staffBeneficiaryId,
-  setStaffBeneficiaryId,
-  beneficiaries,
-  userProfile,
-  isLoadingUserProfile,
-  calculatedDiscount,
-  onApply
-}: StaffDiscountModalProps) {
-  if (!isOpen) return null;
-  
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 bg-black bg-opacity-50">
-      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full h-full sm:h-auto sm:max-w-md sm:max-h-[90vh] overflow-auto">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
-          <h3 className="text-lg font-semibold text-gray-800">Staff Discount Options</h3>
-          <button 
-            onClick={onClose} 
-            className="text-gray-500 hover:text-gray-700 focus:outline-none rounded-full hover:bg-gray-100 p-1"
-            aria-label="Close"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        
-        {/* Content */}
-        <div className="p-6">
-          {/* Checkbox for enabling staff order */}
-          <div className="flex items-center mb-5">
-            <input
-              type="checkbox"
-              id="isStaffOrderModal"
-              checked={isStaffOrder}
-              onChange={e => setIsStaffOrder(e.target.checked)}
-              className="h-5 w-5 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
-            />
-            <label htmlFor="isStaffOrderModal" className="ml-2 block text-base font-medium text-gray-700">
-              This is a staff order (applies discount)
-            </label>
-          </div>
-          
-          {/* Rest of the staff options (only shown if isStaffOrder is true) */}
-          {isStaffOrder && (
-            <div className="space-y-6 mt-4">
-              {/* Working Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Are you currently working?
-                </label>
-                <div className="flex space-x-6">
-                  <div className="flex items-center">
-                    <input
-                      type="radio"
-                      id="working-yes-modal"
-                      name="staffIsWorkingModal"
-                      checked={staffIsWorking}
-                      onChange={() => setStaffIsWorking(true)}
-                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
-                    />
-                    <label htmlFor="working-yes-modal" className="ml-2 block text-sm text-gray-700">
-                      Yes (50% discount)
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="radio"
-                      id="working-no-modal"
-                      name="staffIsWorkingModal"
-                      checked={!staffIsWorking}
-                      onChange={() => setStaffIsWorking(false)}
-                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
-                    />
-                    <label htmlFor="working-no-modal" className="ml-2 block text-sm text-gray-700">
-                      No (30% discount)
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Payment Method
-                </label>
-                <div className="flex space-x-6">
-                  <div className="flex items-center">
-                    <input
-                      type="radio"
-                      id="payment-immediate-modal"
-                      name="staffPaymentMethodModal"
-                      checked={staffPaymentMethod === 'immediate'}
-                      onChange={() => setStaffPaymentMethod('immediate')}
-                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
-                    />
-                    <label htmlFor="payment-immediate-modal" className="ml-2 block text-sm text-gray-700">
-                      Pay Now
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="radio"
-                      id="payment-house-modal"
-                      name="staffPaymentMethodModal"
-                      checked={staffPaymentMethod === 'house_account'}
-                      onChange={() => setStaffPaymentMethod('house_account')}
-                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300"
-                    />
-                    <label htmlFor="payment-house-modal" className="ml-2 block text-sm text-gray-700">
-                      House Account (deduct from paycheck)
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Beneficiary Selector */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  For whom is this order?
-                </label>
-                <select
-                  value={staffBeneficiaryId || ''}
-                  onChange={e => setStaffBeneficiaryId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none
-                           focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm shadow-sm"
-                >
-                  <option value="">Self</option>
-                  {beneficiaries.map(beneficiary => (
-                    <option key={beneficiary.id} value={beneficiary.id}>
-                      {beneficiary.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* House Account Balance */}
-              {staffPaymentMethod === 'house_account' && (
-                <div className="mt-2 p-4 bg-gray-50 border border-gray-200 rounded-md">
-                  <h5 className="text-sm font-medium text-gray-700 mb-2">House Account Balance</h5>
-                  {isLoadingUserProfile ? (
-                    <div className="animate-pulse h-5 w-24 bg-gray-200 rounded" />
-                  ) : userProfile ? (
-                    <p className="text-sm">
-                      Current Balance: <span className="font-semibold">${userProfile.house_account_balance.toFixed(2)}</span>
-                    </p>
-                  ) : (
-                    <p className="text-sm text-gray-500">Unable to load balance</p>
-                  )}
-
-                  {calculatedDiscount.discountedAmount > 0 && (
-                    <p className="text-sm mt-2">
-                      After this order:{' '}
-                      <span className="font-semibold">
-                        $
-                        {(
-                          (userProfile?.house_account_balance || 0) +
-                          calculatedDiscount.discountedAmount
-                        ).toFixed(2)}
-                      </span>
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        
-        {/* Footer with discount summary and actions */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 sticky bottom-0">
-          {isStaffOrder && (
-            <div className="mb-4">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-700">Original Total:</span>
-                <span className="text-gray-700">${calculatedDiscount.originalAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-700">Discount ({staffIsWorking ? '50%' : '30%'}):</span>
-                <span className="text-red-600">-${calculatedDiscount.discountAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center font-bold">
-                <span className="text-gray-700">Final Total:</span>
-                <span className="text-[#c1902f]">${calculatedDiscount.discountedAmount.toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-          
-          <div className="flex justify-end space-x-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onApply}
-              className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#a97c28]"
-            >
-              Apply
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /** --------------------------------------------------------------------
  * CUSTOMER INFO PANEL
@@ -902,27 +621,6 @@ interface CustomerInfoPanelProps {
   specialInstructions: string;
   setSpecialInstructions: (val: string) => void;
   
-  isStaffOrder: boolean;
-  setIsStaffOrder: (val: boolean) => void;
-  staffIsWorking: boolean;
-  setStaffIsWorking: (val: boolean) => void;
-  staffPaymentMethod: string;
-  setStaffPaymentMethod: (val: string) => void;
-  staffBeneficiaryId: number | null;
-  setStaffBeneficiaryId: (val: number | null) => void;
-  beneficiaries: StaffBeneficiary[];
-
-  // For displaying house account balance
-  userProfile: UserProfile | null;
-  isLoadingUserProfile: boolean;
-
-  // We can show the discount in the staff info area if needed
-  calculatedDiscount: {
-    originalAmount: number;
-    discountAmount: number;
-    discountedAmount: number;
-  };
-
   handleSubmitOrder: () => void;
   cartItems: any[];
   orderLoading: boolean;
@@ -934,21 +632,11 @@ function CustomerInfoPanel({
   contactPhone, setContactPhone,
   contactEmail, setContactEmail,
   specialInstructions, setSpecialInstructions,
-  isStaffOrder, setIsStaffOrder,
-  staffIsWorking, setStaffIsWorking,
-  staffPaymentMethod, setStaffPaymentMethod,
-  staffBeneficiaryId, setStaffBeneficiaryId,
-  beneficiaries,
-  userProfile, isLoadingUserProfile,
-  calculatedDiscount,
   handleSubmitOrder,
   cartItems,
   orderLoading,
   onBack,
 }: CustomerInfoPanelProps) {
-  // This sample assumes staff can always see these options
-  const isStaff = true;
-  const [showStaffDiscountModal, setShowStaffDiscountModal] = useState(false);
 
   return (
     <div className="flex flex-col h-full">
@@ -1011,38 +699,6 @@ function CustomerInfoPanel({
             />
           </div>
 
-          {/* Staff Discount Options - Simplified */}
-          {isStaff && (
-            <div className="mt-2 border-t pt-4 border-gray-200">
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="font-medium text-gray-800">Staff Discount Options</h4>
-                <button
-                  onClick={() => setShowStaffDiscountModal(true)}
-                  className="text-[#c1902f] text-sm font-medium hover:underline focus:outline-none"
-                >
-                  Configure
-                </button>
-              </div>
-              
-              {/* Simple status display */}
-              <div className="mt-2 text-sm text-gray-600">
-                {isStaffOrder ? (
-                  <div className="flex items-center">
-                    <svg className="h-4 w-4 text-green-500 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>
-                      Staff discount applied ({staffIsWorking ? "50" : "30"}%)
-                      {staffBeneficiaryId ? " for beneficiary" : ""}
-                      {staffPaymentMethod === 'house_account' ? ", using house account" : ""}
-                    </span>
-                  </div>
-                ) : (
-                  <span>No staff discount applied</span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1057,26 +713,6 @@ function CustomerInfoPanel({
         </button>
       </div>
 
-      {/* Staff Discount Modal */}
-      {showStaffDiscountModal && (
-        <StaffDiscountModal
-          isOpen={showStaffDiscountModal}
-          onClose={() => setShowStaffDiscountModal(false)}
-          isStaffOrder={isStaffOrder}
-          setIsStaffOrder={setIsStaffOrder}
-          staffIsWorking={staffIsWorking}
-          setStaffIsWorking={setStaffIsWorking}
-          staffPaymentMethod={staffPaymentMethod}
-          setStaffPaymentMethod={setStaffPaymentMethod}
-          staffBeneficiaryId={staffBeneficiaryId}
-          setStaffBeneficiaryId={setStaffBeneficiaryId}
-          beneficiaries={beneficiaries}
-          userProfile={userProfile}
-          isLoadingUserProfile={isLoadingUserProfile}
-          calculatedDiscount={calculatedDiscount}
-          onApply={() => setShowStaffDiscountModal(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1458,17 +1094,6 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   const [contactEmail, setContactEmail] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
 
-  // Staff discount default => OFF
-  const [isStaffOrder, setIsStaffOrder] = useState(false);
-  const [staffIsWorking, setStaffIsWorking] = useState(false);
-  const [staffPaymentMethod, setStaffPaymentMethod] = useState('immediate');
-  const [staffBeneficiaryId, setStaffBeneficiaryId] = useState<number | null>(null);
-
-  // For staff discount data
-  const [beneficiaries, setBeneficiaries] = useState<StaffBeneficiary[]>([]);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [isLoadingBeneficiaries, setIsLoadingBeneficiaries] = useState(false);
-  const [isLoadingUserProfile, setIsLoadingUserProfile] = useState(false);
 
   // Data & cart from store
   const { menuItems, fetchMenuItems, loading: menuLoading } = useMenuStore();
@@ -1496,41 +1121,13 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   // Desktop "Add Customer Info" toggle
   const [showCustomerInfoDesktop, setShowCustomerInfoDesktop] = useState(false);
   
-  // Staff discount modal for desktop layout
-  const [showStaffDiscountModal, setShowStaffDiscountModal] = useState(false);
-
-  // Payment overlay for non-staff flow
+  // Payment overlay
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentTransactionId, setPaymentTransactionId] = useState<string | null>(null);
 
   // Order totals
   const orderTotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const [calculatedDiscount, setCalculatedDiscount] = useState({
-    originalAmount: 0,
-    discountAmount: 0,
-    discountedAmount: 0
-  });
-
-  useEffect(() => {
-    // If staff discount is enabled, apply 50% or 30% discount
-    if (isStaffOrder) {
-      const discountPercentage = staffIsWorking ? 0.5 : 0.3;
-      const discountAmount = orderTotal * discountPercentage;
-      const discountedAmount = orderTotal - discountAmount;
-      setCalculatedDiscount({
-        originalAmount: orderTotal,
-        discountAmount,
-        discountedAmount
-      });
-    } else {
-      setCalculatedDiscount({
-        originalAmount: orderTotal,
-        discountAmount: 0,
-        discountedAmount: orderTotal
-      });
-    }
-  }, [isStaffOrder, staffIsWorking, orderTotal]);
 
   // On mount, fetch menu items
   useEffect(() => {
@@ -1568,54 +1165,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     }
   }, [menuItems]);
 
-  // Assume staff for demonstration
+  // Restaurant store
   const restaurantStore = useRestaurantStore();
-  const isStaff = true;
-
-  // Mock fetch staff data
-  useEffect(() => {
-    if (isStaff) {
-      setIsLoadingBeneficiaries(true);
-      // Example: either mock or real API call
-      setTimeout(() => {
-        setBeneficiaries([
-          {
-            id: 1,
-            name: 'John Smith (Family)',
-            active: true,
-            restaurant_id: 1,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          } as StaffBeneficiary,
-          {
-            id: 2,
-            name: 'Sarah Johnson (Family)',
-            active: true,
-            restaurant_id: 1,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          } as StaffBeneficiary,
-        ]);
-        setIsLoadingBeneficiaries(false);
-      }, 500);
-
-      setIsLoadingUserProfile(true);
-      setTimeout(() => {
-        setUserProfile({
-          id: 99,
-          name: 'Staff Member',
-          email: 'staff@example.com',
-          house_account_balance: 75.25,
-          role: 'staff',
-          restaurant_id: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-        setIsLoadingUserProfile(false);
-      }, 700);
-    }
-  }, [isStaff]);
-
   // Helper for cart keys
   const getItemKey = useOrderStore(state => state._getItemKey);
 
@@ -1746,7 +1297,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     }
   }
 
-  /** Handle staff or non-staff submission */
+  /** Handle order submission */
   async function handleSubmitOrder() {
     if (!cartItems.length) {
       toastUtils.error('Please add items to the order');
@@ -1757,37 +1308,12 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       toastUtils.error('Phone must be + (3 or 4 digit area code) + 7 digits');
       return;
     }
-    // Staff discount path
-    if (isStaffOrder && isStaff) {
-      try {
-        const newOrder = await addOrder(
-          cartItems,
-          calculatedDiscount.discountedAmount,
-          specialInstructions,
-          contactName,
-          finalPhone,
-          contactEmail,
-          staffPaymentMethod === 'immediate' ? 'staff_discount_immediate' : 'staff_discount_house_account',
-          staffPaymentMethod,
-          undefined,
-          isStaffOrder,
-          staffIsWorking,
-          staffPaymentMethod,
-          staffBeneficiaryId
-        );
-        toastUtils.success('Staff order created successfully!');
-        onOrderCreated(newOrder.id);
-      } catch (err: any) {
-        console.error('Error creating staff order:', err);
-        toastUtils.error('Failed to create order. Please try again.');
-      }
+    
+    // Show payment overlay or go to payment tab on mobile
+    if (isMobile) {
+      setActiveTab('payment');
     } else {
-      // Non-staff => Show payment overlay or go to payment tab on mobile
-      if (isMobile) {
-        setActiveTab('payment');
-      } else {
-        setShowPaymentPanel(true);
-      }
+      setShowPaymentPanel(true);
     }
   }
 
@@ -1874,9 +1400,6 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
             onClose={onClose}
             menuItems={menuItems}
             setCustomizingItem={setCustomizingItem}
-            isStaffOrder={isStaffOrder}
-            staffIsWorking={staffIsWorking}
-            calculatedDiscount={calculatedDiscount}
           />
         )}
         {activeTab === 'customer' && (
@@ -1891,18 +1414,6 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
                 setContactEmail={setContactEmail}
                 specialInstructions={specialInstructions}
                 setSpecialInstructions={setSpecialInstructions}
-                isStaffOrder={isStaffOrder}
-                setIsStaffOrder={setIsStaffOrder}
-                staffIsWorking={staffIsWorking}
-                setStaffIsWorking={setStaffIsWorking}
-                staffPaymentMethod={staffPaymentMethod}
-                setStaffPaymentMethod={setStaffPaymentMethod}
-                staffBeneficiaryId={staffBeneficiaryId}
-                setStaffBeneficiaryId={setStaffBeneficiaryId}
-                beneficiaries={beneficiaries}
-                userProfile={userProfile}
-                isLoadingUserProfile={isLoadingUserProfile}
-                calculatedDiscount={calculatedDiscount}
                 handleSubmitOrder={handleSubmitOrder}
                 cartItems={cartItems}
                 orderLoading={orderLoading}
@@ -1985,9 +1496,6 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
                 onClose={onClose}
                 menuItems={menuItems}
                 setCustomizingItem={setCustomizingItem}
-                isStaffOrder={isStaffOrder}
-                staffIsWorking={staffIsWorking}
-                calculatedDiscount={calculatedDiscount}
               />
               <div className="absolute bottom-[150px] left-0 right-0 px-4">
                 {!showCustomerInfoDesktop ? (
@@ -2009,18 +1517,6 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
                       setContactEmail={setContactEmail}
                       specialInstructions={specialInstructions}
                       setSpecialInstructions={setSpecialInstructions}
-                      isStaffOrder={isStaffOrder}
-                      setIsStaffOrder={setIsStaffOrder}
-                      staffIsWorking={staffIsWorking}
-                      setStaffIsWorking={setStaffIsWorking}
-                      staffPaymentMethod={staffPaymentMethod}
-                      setStaffPaymentMethod={setStaffPaymentMethod}
-                      staffBeneficiaryId={staffBeneficiaryId}
-                      setStaffBeneficiaryId={setStaffBeneficiaryId}
-                      beneficiaries={beneficiaries}
-                      userProfile={userProfile}
-                      isLoadingUserProfile={isLoadingUserProfile}
-                      calculatedDiscount={calculatedDiscount}
                       handleSubmitOrder={handleSubmitOrder}
                       cartItems={cartItems}
                       orderLoading={orderLoading}
@@ -2070,12 +1566,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
             onClose={onClose}
             menuItems={menuItems}
             setCustomizingItem={setCustomizingItem}
-            isStaffOrder={isStaffOrder}
-            staffIsWorking={staffIsWorking}
-            calculatedDiscount={calculatedDiscount}
           />
-          {/* Fixed position Add Customer Info button or Customer Info panel - dynamic positioning based on discount */}
-          <div className={`absolute ${isStaffOrder ? 'bottom-[190px]' : 'bottom-[140px]'} left-0 right-0 px-4 z-10`}>
+          {/* Fixed position Add Customer Info button or Customer Info panel */}
+          <div className="absolute bottom-[140px] left-0 right-0 px-4 z-10">
             {!showCustomerInfoDesktop ? (
               <button
                 onClick={() => setShowCustomerInfoDesktop(true)}
@@ -2144,38 +1637,6 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
                       />
                     </div>
 
-                    {/* Staff Discount Options - Simplified */}
-                    {isStaff && (
-                      <div className="mt-2 border-t pt-4 border-gray-200">
-                        <div className="flex justify-between items-center mb-3">
-                          <h4 className="font-medium text-gray-800">Staff Discount Options</h4>
-                          <button
-                            onClick={() => setShowStaffDiscountModal(true)}
-                            className="text-[#c1902f] text-sm font-medium hover:underline focus:outline-none"
-                          >
-                            Configure
-                          </button>
-                        </div>
-                        
-                        {/* Simple status display */}
-                        <div className="mt-2 text-sm text-gray-600">
-                          {isStaffOrder ? (
-                            <div className="flex items-center">
-                              <svg className="h-4 w-4 text-green-500 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>
-                                Staff discount applied ({staffIsWorking ? "50" : "30"}%)
-                                {staffBeneficiaryId ? " for beneficiary" : ""}
-                                {staffPaymentMethod === 'house_account' ? ", using house account" : ""}
-                              </span>
-                            </div>
-                          ) : (
-                            <span>No staff discount applied</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
                 
@@ -2197,26 +1658,6 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   /** RENDER */
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4">
-      {/* Staff Discount Modal */}
-      {showStaffDiscountModal && (
-        <StaffDiscountModal
-          isOpen={showStaffDiscountModal}
-          onClose={() => setShowStaffDiscountModal(false)}
-          isStaffOrder={isStaffOrder}
-          setIsStaffOrder={setIsStaffOrder}
-          staffIsWorking={staffIsWorking}
-          setStaffIsWorking={setStaffIsWorking}
-          staffPaymentMethod={staffPaymentMethod}
-          setStaffPaymentMethod={setStaffPaymentMethod}
-          staffBeneficiaryId={staffBeneficiaryId}
-          setStaffBeneficiaryId={setStaffBeneficiaryId}
-          beneficiaries={beneficiaries}
-          userProfile={userProfile}
-          isLoadingUserProfile={isLoadingUserProfile}
-          calculatedDiscount={calculatedDiscount}
-          onApply={() => setShowStaffDiscountModal(false)}
-        />
-      )}
       <div
         className="bg-white rounded-lg shadow-xl
                    w-[95vw] max-w-[1100px]
@@ -2227,7 +1668,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         {/* Header with "Close" button */}
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center shadow-sm">
           <h2 className="text-xl font-semibold text-gray-800">
-            {isStaffOrder ? 'Create Staff Order' : 'Create Order'}
+            Create Order
           </h2>
           <button
             onClick={onClose}

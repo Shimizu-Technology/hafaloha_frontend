@@ -6,7 +6,6 @@ export interface UserProfile {
   name: string;
   email: string;
   role: string;
-  house_account_balance: number;
   restaurant_id: number;
   created_at: string;
   updated_at: string;

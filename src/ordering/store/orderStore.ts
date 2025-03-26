@@ -38,11 +38,7 @@ interface OrderStore {
     contactEmail?: string,
     transactionId?: string,
     paymentMethod?: string,
-    vipCode?: string,
-    isStaffOrder?: boolean,
-    staffIsWorking?: boolean,
-    staffPaymentMethod?: string,
-    staffBeneficiaryId?: number | null
+    vipCode?: string
   ) => Promise<Order>;
 
   /** Update just status + optional pickupTime. */
@@ -143,7 +139,7 @@ export const useOrderStore = create<OrderStore>()(
       },
 
       // ---------------------------------------------------------
-      // Create Order with staff discount parameters included
+      // Create Order
       // ---------------------------------------------------------
       addOrder: async (
         items,
@@ -154,11 +150,7 @@ export const useOrderStore = create<OrderStore>()(
         contactEmail,
         transactionId,
         paymentMethod = 'credit_card',
-        vipCode,
-        isStaffOrder = false,
-        staffIsWorking = false,
-        staffPaymentMethod = 'immediate',
-        staffBeneficiaryId = null
+        vipCode
       ) => {
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
@@ -204,13 +196,7 @@ export const useOrderStore = create<OrderStore>()(
               contact_email: contactEmail,
               transaction_id: transactionId,
               payment_method: paymentMethod,
-              vip_code: vipCode,
-
-              // Staff discount fields
-              is_staff_order: isStaffOrder,
-              staff_is_working: staffIsWorking,
-              staff_payment_method: staffPaymentMethod,
-              staff_beneficiary_id: staffBeneficiaryId
+              vip_code: vipCode
             },
           };
 
