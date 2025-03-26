@@ -1,15 +1,15 @@
-// src/ordering/components/admin/AnalyticsManager.tsx
+// src/ordering/components/admin/AnalyticsManagerUpdated.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 import * as XLSX from 'xlsx';
-import {
-  api,
-  getCustomerOrdersReport,
-  getRevenueTrend,
-  getTopItems,
+import { 
+  api, 
+  getCustomerOrdersReport, 
+  getRevenueTrend, 
+  getTopItems, 
   getIncomeStatement,
   getUserSignups,
   getUserActivityHeatmap,
@@ -25,13 +25,16 @@ import {
   HeatmapDataPoint,
   MenuItemReport,
   CategoryReport,
-  PaymentMethodReport as PaymentMethodReportType,
+  PaymentMethodReport,
   VipCustomerReport as VipCustomerReportType,
   VipReportSummary
 } from '../../../shared/api';
 import { MenuItemPerformance } from './reports/MenuItemPerformance';
 import { PaymentMethodReport } from './reports/PaymentMethodReport';
 import { VipCustomerReport } from './reports/VipCustomerReport';
+
+// Colors for the pie chart
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#A4DE6C'];
 
 // ------------------- Types -------------------
 type SortColumn = 'user_name' | 'total_spent' | 'order_count';
@@ -139,7 +142,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   // VIP Reports States
   const [menuItems, setMenuItems] = useState<MenuItemReport[]>([]);
   const [categories, setCategories] = useState<CategoryReport[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodReportType[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodReport[]>([]);
   const [paymentTotals, setPaymentTotals] = useState({ amount: 0, count: 0 });
   const [vipCustomers, setVipCustomers] = useState<VipCustomerReportType[]>([]);
   const [vipSummary, setVipSummary] = useState<VipReportSummary>({
@@ -192,21 +195,21 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       
       // 7) Menu Item Performance Report
       const menuItemRes = await getMenuItemReport(startDate, endDate);
-      setMenuItems(menuItemRes.data.items || []);
-      setCategories(menuItemRes.data.categories || []);
+      setMenuItems(menuItemRes.items || []);
+      setCategories(menuItemRes.categories || []);
       
       // 8) Payment Method Report
       const paymentMethodRes = await getPaymentMethodReport(startDate, endDate);
-      setPaymentMethods(paymentMethodRes.data.payment_methods || []);
+      setPaymentMethods(paymentMethodRes.payment_methods || []);
       setPaymentTotals({
-        amount: paymentMethodRes.data.total_amount || 0,
-        count: paymentMethodRes.data.total_count || 0
+        amount: paymentMethodRes.total_amount || 0,
+        count: paymentMethodRes.total_count || 0
       });
       
       // 9) VIP Customer Report
       const vipRes = await getVipCustomerReport(startDate, endDate);
-      setVipCustomers(vipRes.data.vip_customers || []);
-      setVipSummary(vipRes.data.summary || {
+      setVipCustomers(vipRes.vip_customers || []);
+      setVipSummary(vipRes.summary || {
         total_vip_customers: 0,
         total_orders: 0,
         total_revenue: 0,
@@ -228,7 +231,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ----- 6) Export Functions -----
+  // ----- 6) Export to Excel (Customer Orders) -----
   function exportOrdersToExcel() {
     if (ordersData.length === 0) {
       alert('No data to export');
@@ -295,223 +298,6 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     }
 
     XLSX.writeFile(wb, `CustomerOrders_${startDate}_to_${endDate}.xlsx`);
-  }
-
-  // Export all reports to a single Excel file
-  function exportAllReports() {
-    // Check if we have data to export
-    const hasData = ordersData.length > 0 ||
-                   revenueTrend.length > 0 ||
-                   topItems.length > 0 ||
-                   incomeStatement.length > 0 ||
-                   userSignups.length > 0 ||
-                   menuItems.length > 0 ||
-                   paymentMethods.length > 0 ||
-                   vipCustomers.length > 0;
-    
-    if (!hasData) {
-      alert('No data to export');
-      return;
-    }
-
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-
-    // Add customer orders data
-    if (ordersData.length > 0) {
-      // Summaries
-      const guestSummary = guestRows.map((r) => ({
-        Customer: r.user_name,
-        'Total Spent': r.total_spent,
-        'Order Count': r.order_count,
-        'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
-      }));
-      const regSummary = registeredRows.map((r) => ({
-        Customer: r.user_name,
-        'Total Spent': r.total_spent,
-        'Order Count': r.order_count,
-        'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
-      }));
-
-      // Details
-      const guestDetails: Array<Record<string, any>> = [];
-      guestRows.forEach((r) => {
-        r.items.forEach((itm) => {
-          guestDetails.push({
-            Customer: r.user_name,
-            'Item Name': itm.name,
-            Quantity: itm.quantity,
-          });
-        });
-      });
-      const regDetails: Array<Record<string, any>> = [];
-      registeredRows.forEach((r) => {
-        r.items.forEach((itm) => {
-          regDetails.push({
-            Customer: r.user_name,
-            'Item Name': itm.name,
-            Quantity: itm.quantity,
-          });
-        });
-      });
-
-      // Add customer orders summary sheet
-      const data: any[] = [];
-      data.push(...guestSummary);
-      data.push({});
-      data.push(...regSummary);
-      const sheet = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(wb, sheet, 'Customer Orders');
-
-      // Add customer orders details sheet
-      const data2: any[] = [];
-      data2.push(...guestDetails);
-      data2.push({});
-      data2.push(...regDetails);
-      const sheet2 = XLSX.utils.json_to_sheet(data2);
-      XLSX.utils.book_append_sheet(wb, sheet2, 'Order Details');
-    }
-
-    // Add revenue trend data
-    if (revenueTrend.length > 0) {
-      const revenueData = revenueTrend.map(item => ({
-        'Date': item.label,
-        'Revenue': `$${item.revenue.toFixed(2)}`
-      }));
-      const revenueSheet = XLSX.utils.json_to_sheet(revenueData);
-      XLSX.utils.book_append_sheet(wb, revenueSheet, 'Revenue Trend');
-    }
-
-    // Add top items data
-    if (topItems.length > 0) {
-      const topItemsData = topItems.map(item => ({
-        'Item': item.item_name,
-        'Quantity Sold': item.quantity_sold,
-        'Revenue': `$${item.revenue.toFixed(2)}`
-      }));
-      const topItemsSheet = XLSX.utils.json_to_sheet(topItemsData);
-      XLSX.utils.book_append_sheet(wb, topItemsSheet, 'Top Items');
-    }
-
-    // Add income statement data
-    if (incomeStatement.length > 0) {
-      const incomeData = incomeStatement.map(row => ({
-        'Month': row.month,
-        'Revenue': `$${row.revenue.toFixed(2)}`
-      }));
-      const incomeSheet = XLSX.utils.json_to_sheet(incomeData);
-      XLSX.utils.book_append_sheet(wb, incomeSheet, 'Income Statement');
-    }
-
-    // Add user signups data
-    if (userSignups.length > 0) {
-      const signupsData = userSignups.map(item => ({
-        'Date': item.date,
-        'New Users': item.count
-      }));
-      const signupsSheet = XLSX.utils.json_to_sheet(signupsData);
-      XLSX.utils.book_append_sheet(wb, signupsSheet, 'User Signups');
-    }
-
-    // Add menu items data
-    if (menuItems.length > 0) {
-      // Format menu item data
-      const itemData = menuItems.map(item => ({
-        'Item': item.name,
-        'Category': item.category,
-        'Quantity Sold': item.quantity_sold,
-        'Revenue': `$${Number(item.revenue).toFixed(2)}`,
-        'Avg. Price': `$${item.average_price ? Number(item.average_price).toFixed(2) : '0.00'}`
-      }));
-
-      // Format category data
-      const categoryData = categories.map(cat => ({
-        'Category': cat.name,
-        'Items Sold': cat.quantity_sold,
-        'Revenue': `$${Number(cat.revenue).toFixed(2)}`
-      }));
-
-      // Add menu items sheet
-      const itemSheet = XLSX.utils.json_to_sheet(itemData);
-      XLSX.utils.book_append_sheet(wb, itemSheet, 'Menu Items');
-
-      // Add categories sheet
-      const catSheet = XLSX.utils.json_to_sheet(categoryData);
-      XLSX.utils.book_append_sheet(wb, catSheet, 'Categories');
-    }
-
-    // Add payment methods data
-    if (paymentMethods.length > 0) {
-      // Format payment method data
-      const paymentData = paymentMethods
-        .sort((a, b) => Number(b.amount) - Number(a.amount))
-        .map(method => ({
-          'Payment Method': method.payment_method
-            .replace(/_/g, ' ')
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' '),
-          'Count': method.count,
-          'Amount': `$${Number(method.amount).toFixed(2)}`,
-          'Percentage': `${Number(method.percentage).toFixed(2)}%`
-        }));
-
-      // Add total row
-      paymentData.push({
-        'Payment Method': 'Total',
-        'Count': paymentTotals.count,
-        'Amount': `$${Number(paymentTotals.amount).toFixed(2)}`,
-        'Percentage': '100%'
-      });
-
-      // Add payment methods sheet
-      const paymentSheet = XLSX.utils.json_to_sheet(paymentData);
-      XLSX.utils.book_append_sheet(wb, paymentSheet, 'Payment Methods');
-    }
-
-    // Add VIP customers data
-    if (vipCustomers.length > 0) {
-      // Format summary data
-      const summaryData = [
-        { 'Metric': 'Total VIP Customers', 'Value': vipSummary.total_vip_customers },
-        { 'Metric': 'Total Orders', 'Value': vipSummary.total_orders },
-        { 'Metric': 'Total Revenue', 'Value': `$${Number(vipSummary.total_revenue).toFixed(2)}` },
-        { 'Metric': 'Average Orders per VIP', 'Value': Number(vipSummary.average_orders_per_vip).toFixed(1) },
-        { 'Metric': 'Average Spend per VIP', 'Value': `$${Number(vipSummary.average_spend_per_vip).toFixed(2)}` },
-        { 'Metric': 'Repeat Customer Rate', 'Value': `${(Number(vipSummary.repeat_customer_rate) * 100).toFixed(0)}%` }
-      ];
-
-      // Format customer data
-      const customerData = vipCustomers.map(customer => {
-        // Get top 3 items
-        const topItems = customer.items
-          .sort((a, b) => Number(b.quantity) - Number(a.quantity))
-          .slice(0, 3)
-          .map(item => `${item.name} (${item.quantity})`)
-          .join(', ');
-
-        return {
-          'Customer': customer.user_name,
-          'Email': customer.email,
-          'Total Spent': `$${Number(customer.total_spent).toFixed(2)}`,
-          'Orders': Number(customer.order_count),
-          'Avg. Order Value': `$${Number(customer.average_order_value).toFixed(2)}`,
-          'First Order': new Date(customer.first_order_date).toLocaleDateString(),
-          'Most Ordered Items': topItems
-        };
-      });
-
-      // Add VIP summary sheet
-      const vipSummarySheet = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, vipSummarySheet, 'VIP Summary');
-
-      // Add VIP customers sheet
-      const vipCustomerSheet = XLSX.utils.json_to_sheet(customerData);
-      XLSX.utils.book_append_sheet(wb, vipCustomerSheet, 'VIP Customers');
-    }
-
-    // Write file
-    XLSX.writeFile(wb, `Hafaloha_Reports_${startDate}_to_${endDate}.xlsx`);
   }
 
   // ----- 7) Render -----
@@ -583,33 +369,13 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           })}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2">
-          {/* "Load Analytics" button */}
-          <button
-            onClick={loadAnalytics}
-            className="px-4 py-2 bg-[#c1902f] text-white rounded hover:bg-[#b2872c]"
-          >
-            Load Analytics
-          </button>
-          
-          {/* "Export All Reports" button - only show if we have data */}
-          {(ordersData.length > 0 ||
-            revenueTrend.length > 0 ||
-            topItems.length > 0 ||
-            incomeStatement.length > 0 ||
-            userSignups.length > 0 ||
-            menuItems.length > 0 ||
-            paymentMethods.length > 0 ||
-            vipCustomers.length > 0) && (
-            <button
-              onClick={exportAllReports}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center"
-            >
-              <span>Export All Reports</span>
-            </button>
-          )}
-        </div>
+        {/* "Load Analytics" button */}
+        <button
+          onClick={loadAnalytics}
+          className="px-4 py-2 bg-[#c1902f] text-white rounded hover:bg-[#b2872c]"
+        >
+          Load Analytics
+        </button>
       </div>
 
       {/* 
@@ -935,7 +701,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         (G) User Activity Heatmap
         ============================================
       */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white rounded-lg shadow p-4 mb-4">
         <h3 className="text-xl font-bold mb-4">User Activity Heatmap</h3>
         {activityHeatmap.length > 0 ? (
           <div>
@@ -978,102 +744,3 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                         </td>
                         
                         {/* Hour cells */}
-                        {Array.from({ length: 24 }).map((_, hour) => {
-                          // Convert from Guam time back to UTC for data lookup
-                          const utcHour = (hour - 10 + 24) % 24;
-                          
-                          // Find data for this day and hour
-                          const cellData = activityHeatmap.find(
-                            item => item.day === dayIndex && item.hour === utcHour
-                          );
-                          
-                          // Get the value or default to 0
-                          const value = cellData?.value || 0;
-                          
-                          // Calculate color intensity
-                          const maxValue = Math.max(...activityHeatmap.map(d => d.value), 1);
-                          const intensity = maxValue > 0 ? (value / maxValue) : 0;
-                          
-                          // Generate background color
-                          const bgColor = value > 0 
-                            ? `rgba(193, 144, 47, ${Math.max(0.15, intensity)})`
-                            : '';
-                          
-                          // Format for tooltip
-                          const hour12 = hour === 0 ? '12 AM' : 
-                                        hour < 12 ? `${hour} AM` : 
-                                        hour === 12 ? '12 PM' : 
-                                        `${hour - 12} PM`;
-                          
-                          return (
-                            <td 
-                              key={hour}
-                              className="w-12 h-12 text-center border border-gray-200"
-                              style={{ backgroundColor: bgColor }}
-                              title={`${dayName} ${hour12} - ${value} orders`}
-                            >
-                              {value > 0 ? value : ''}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Legend */}
-            <div className="mt-4 flex items-center justify-end">
-              <div className="text-sm text-gray-700 mr-3">Activity Level:</div>
-              <div className="flex rounded-md overflow-hidden">
-                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.15)' }}></div>
-                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.3)' }}></div>
-                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.5)' }}></div>
-                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.7)' }}></div>
-                <div className="w-8 h-6" style={{ backgroundColor: 'rgba(193, 144, 47, 0.9)' }}></div>
-              </div>
-              <div className="flex text-sm text-gray-700 ml-2">
-                <span>Low</span>
-                <span className="ml-24">High</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="text-gray-500">No activity data in this range.</p>
-        )}
-      </div>
-
-      {/*
-        ============================================
-        (H) Menu Item Performance
-        ============================================
-      */}
-      <MenuItemPerformance
-        menuItems={menuItems}
-        categories={categories}
-      />
-
-      {/*
-        ============================================
-        (I) Payment Method Report
-        ============================================
-      */}
-      <PaymentMethodReport
-        paymentMethods={paymentMethods}
-        totalAmount={paymentTotals.amount}
-        totalCount={paymentTotals.count}
-      />
-
-      {/*
-        ============================================
-        (J) VIP Customer Report
-        ============================================
-      */}
-      <VipCustomerReport
-        vipCustomers={vipCustomers}
-        summary={vipSummary}
-      />
-    </div>
-  );
-}

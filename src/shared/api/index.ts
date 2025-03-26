@@ -13,6 +13,7 @@ export * from './endpoints/events';
 export * from './endpoints/layouts';
 export * from './endpoints/menu';
 export * from './endpoints/orders';
+export * from './endpoints/reports';
 export * from './endpoints/reservations';
 export * from './endpoints/restaurants';
 export * from './endpoints/seats';
