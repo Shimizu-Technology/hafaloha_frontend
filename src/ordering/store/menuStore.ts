@@ -32,6 +32,10 @@ interface MenuState {
   updateMenuItem: (id: number | string, data: any) => Promise<MenuItem | null>;
   deleteMenuItem: (id: number | string) => Promise<boolean>;
   
+  // Menu item copy functionality
+  fetchMenuItemsByMenu: (menuId: number) => Promise<MenuItem[]>;
+  copyMenuItem: (itemId: string, targetMenuId: number, categoryIds: number[]) => Promise<MenuItem | null>;
+  
   // Visibility actions
   hideMenuItem: (id: number | string) => Promise<MenuItem | null>;
   showMenuItem: (id: number | string) => Promise<MenuItem | null>;
@@ -43,6 +47,9 @@ interface MenuState {
   
   // Get individual menu item with fresh data
   getMenuItemById: (id: number | string) => Promise<MenuItem | null>;
+  
+  // Copy a menu item to another menu
+  copyMenuItem: (itemId: string, targetMenuId: number, categoryIds: number[]) => Promise<MenuItem | null>;
 }
 
 export const useMenuStore = create<MenuState>((set, get) => ({
@@ -466,12 +473,61 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   },
   
   // Stop polling for inventory updates
+  // Fetch menu items for a specific menu
+  fetchMenuItemsByMenu: async (menuId: number) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.get(`/menus/${menuId}/menu_items`);
+      
+      // Process the items to ensure image property is set
+      const processedItems = response.data.map((item: any) => ({
+        ...item,
+        image: item.image_url || '/placeholder-food.jpg'
+      }));
+      
+      set({ loading: false });
+      return processedItems;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return [];
+    }
+  },
+  
+  // Copy a menu item to another menu
+  copyMenuItem: async (itemId: string, targetMenuId: number, categoryIds: number[]) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.post(`/menu_items/${itemId}/copy`, {
+        target_menu_id: targetMenuId,
+        category_ids: categoryIds
+      });
+      
+      const newItem = {
+        ...response.data,
+        image: response.data.image_url || '/placeholder-food.jpg'
+      };
+      
+      // Add the new item to our store
+      set(state => ({
+        menuItems: [...state.menuItems, newItem],
+        loading: false
+      }));
+      
+      return newItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
+  },
+  
   stopInventoryPolling: () => {
     const { inventoryPollingInterval } = get();
     
     if (inventoryPollingInterval !== null) {
       window.clearInterval(inventoryPollingInterval);
-      set({ 
+      set({
         inventoryPollingInterval: null,
         inventoryPolling: false
       });

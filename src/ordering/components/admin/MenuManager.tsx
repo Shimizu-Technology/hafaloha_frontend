@@ -1,7 +1,7 @@
 // src/ordering/components/admin/MenuManager.tsx
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, X, Save, BookOpen, Package, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, BookOpen, Package, Eye, EyeOff, Copy } from 'lucide-react';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
@@ -13,9 +13,11 @@ import { deriveStockStatus, calculateAvailableQuantity } from '../../utils/inven
 
 // Import the Inventory Modal
 import ItemInventoryModal from './ItemInventoryModal';
-
 // Import the updated OptionGroupsModal (no "required" field)
 import OptionGroupsModal from './OptionGroupsModal';
+
+// Import the CopyMenuItemModal component
+import { CopyMenuItemModal } from './CopyMenuItemModal';
 
 /**
  * Local form data for creating/updating a menu item.
@@ -128,6 +130,10 @@ export function MenuManager({
 
   // Menu selector toggle state - closed by default
   const [menuSelectorOpen, setMenuSelectorOpen] = useState(false);
+  
+  // Copy menu item modal state
+  const [copyModalOpen, setCopyModalOpen] = useState(false);
+  const [itemToCopy, setItemToCopy] = useState<MenuItem | null>(null);
 
   // Additional filter checkboxes
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
@@ -758,18 +764,23 @@ export function MenuManager({
               </button>
             )}
           </div>
-          
-          {/* Add Item Button */}
-          <button
-            onClick={handleAdd}
-            className="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
-            disabled={!selectedMenuId}
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Add Item
-          </button>
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* Add Item Button */}
+            {/* Add Item Button */}
+            <button
+              onClick={handleAdd}
+              className="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f]"
+              disabled={!selectedMenuId}
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Add Item
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* We'll replace the Menu Copy Mode with individual copy buttons on each card */}
 
       {/* Category Filter */}
       <div className="mb-3">
@@ -979,14 +990,25 @@ export function MenuManager({
                       >
                         <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
+{/* Manage Inventory */}
+<button
+  onClick={() => handleManageInventory(item)}
+  className="p-2 text-gray-600 hover:text-blue-600"
+  title="Manage Inventory"
+>
+  <Package className="h-4 w-4 sm:h-5 sm:w-5" />
+</button>
 
-                      {/* Manage Inventory */}
+                      {/* Copy to Another Menu */}
                       <button
-                        onClick={() => handleManageInventory(item)}
-                        className="p-2 text-gray-600 hover:text-blue-600"
-                        title="Manage Inventory"
+                        onClick={() => {
+                          setItemToCopy(item);
+                          setCopyModalOpen(true);
+                        }}
+                        className="p-2 text-gray-600 hover:text-purple-600"
+                        title="Copy to Another Menu"
                       >
-                        <Package className="h-4 w-4 sm:h-5 sm:w-5" />
+                        <Copy className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
 
                       {/* Toggle Visibility */}
@@ -1806,6 +1828,21 @@ export function MenuManager({
                 };
               });
             }
+          }}
+        />
+      )}
+      
+      {/* Copy Menu Item Modal */}
+      {copyModalOpen && itemToCopy && (
+        <CopyMenuItemModal
+          item={itemToCopy}
+          menus={menus}
+          isOpen={copyModalOpen}
+          onClose={() => {
+            setCopyModalOpen(false);
+            setItemToCopy(null);
+            // Refresh menu items to show the newly copied item
+            fetchAllMenuItemsForAdmin();
           }}
         />
       )}
