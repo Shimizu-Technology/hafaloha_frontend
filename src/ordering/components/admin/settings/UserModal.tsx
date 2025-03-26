@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { formatPhoneNumber } from '../../../../shared/utils/formatters';
 import { AlertTriangle, X, KeyRound, Mail, Trash2 } from 'lucide-react';
+import { useAuthStore } from '../../../../shared/auth';
 
 // Same phone check from SignUpForm
 // Matches +3-4 digits for country/area code, plus exactly 7 digits => total 10 or 11 digits after the plus
@@ -29,6 +30,10 @@ interface UserModalProps {
 }
 
 export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserModalProps) {
+  // Get current user role
+  const { user: currentUser } = useAuthStore();
+  const isAdmin = currentUser?.role === 'admin';
+  
   // If creating new => default phone to +1671; otherwise load existing phone
   const [email, setEmail] = useState(user?.email || '');
   const [firstName, setFirstName] = useState(user?.first_name || '');
@@ -253,22 +258,32 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
             )}
           </div>
 
-          {/* Role */}
+          {/* Role - Only show dropdown for admins, show static text for staff */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Role <span className="text-red-500">*</span>
             </label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              required
-              className="mt-1 block w-full border border-gray-300 rounded-md
-                         focus:ring-[#c1902f] focus:border-[#c1902f] 
-                         p-2 text-base transition-colors duration-200"
-            >
-              <option value="customer">Customer</option>
-              <option value="admin">Admin</option>
-            </select>
+            {isAdmin ? (
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                required
+                className="mt-1 block w-full border border-gray-300 rounded-md
+                           focus:ring-[#c1902f] focus:border-[#c1902f]
+                           p-2 text-base transition-colors duration-200"
+              >
+                <option value="customer">Customer</option>
+                <option value="staff">Staff</option>
+                <option value="admin">Admin</option>
+              </select>
+            ) : (
+              <div className="mt-1 p-2 bg-gray-100 border border-gray-300 rounded-md text-gray-700">
+                {role.charAt(0).toUpperCase() + role.slice(1)}
+                <p className="mt-1 text-xs text-gray-500">
+                  Only admin users can change user roles.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -413,13 +428,13 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
           <div className="mt-8">
             {/* Admin special actions - only if existing user */}
             {!isCreateMode && (
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className={`grid ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} gap-4 mb-6`}>
                 {/* Send Reset Link button */}
                 <button
                   type="button"
                   onClick={handleResendInvite}
                   disabled={loading}
-                  className="flex flex-col items-center justify-center px-4 py-3 text-sm font-medium text-white bg-blue-600 
+                  className="flex flex-col items-center justify-center px-4 py-3 text-sm font-medium text-white bg-blue-600
                           rounded-md shadow-md hover:bg-blue-700 transition-colors duration-200
                           disabled:opacity-50 disabled:cursor-not-allowed h-24"
                 >
@@ -452,18 +467,20 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
                   <span>Reset Password</span>
                 </button>
 
-                {/* Delete button */}
-                <button
-                  type="button"
-                  onClick={openDeleteModal}
-                  disabled={loading}
-                  className="flex flex-col items-center justify-center px-4 py-3 text-sm font-medium text-white bg-red-600 
-                          rounded-md shadow-md hover:bg-red-700 transition-colors duration-200
-                          disabled:opacity-50 disabled:cursor-not-allowed h-24"
-                >
-                  <Trash2 className="mb-2 h-6 w-6" />
-                  <span>Delete</span>
-                </button>
+                {/* Delete button - only for admins */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={openDeleteModal}
+                    disabled={loading}
+                    className="flex flex-col items-center justify-center px-4 py-3 text-sm font-medium text-white bg-red-600
+                            rounded-md shadow-md hover:bg-red-700 transition-colors duration-200
+                            disabled:opacity-50 disabled:cursor-not-allowed h-24"
+                  >
+                    <Trash2 className="mb-2 h-6 w-6" />
+                    <span>Delete</span>
+                  </button>
+                )}
               </div>
             )}
 

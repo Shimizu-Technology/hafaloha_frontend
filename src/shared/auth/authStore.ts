@@ -27,6 +27,11 @@ interface AuthStore {
   // JWT token helpers
   getToken: () => string | null;
   isAuthenticated: () => boolean;
+  
+  // Role helpers
+  isAdmin: () => boolean;
+  isStaff: () => boolean;
+  isAdminOrStaff: () => boolean;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => {
@@ -34,6 +39,22 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     user: null,
     isLoading: false,
     error: null,
+    
+    // Role helper methods
+    isAdmin: () => {
+      const { user } = get();
+      return user?.role === 'admin';
+    },
+    
+    isStaff: () => {
+      const { user } = get();
+      return user?.role === 'staff';
+    },
+    
+    isAdminOrStaff: () => {
+      const { user } = get();
+      return user?.role === 'admin' || user?.role === 'staff';
+    },
 
     // Helper to set user from API response
     setUserFromResponse: ({ jwt, user }) => {

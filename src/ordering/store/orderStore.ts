@@ -25,8 +25,8 @@ interface OrderStore {
   loading: boolean;
   error: string | null;
 
-  fetchOrders: () => Promise<void>;
-  fetchOrdersQuietly: () => Promise<void>;
+  fetchOrders: (params?: Record<string, any>) => Promise<void>;
+  fetchOrdersQuietly: (params?: Record<string, any>) => Promise<void>;
 
   /** Creates a new order in the backend and returns it. */
   addOrder: (
@@ -38,7 +38,8 @@ interface OrderStore {
     contactEmail?: string,
     transactionId?: string,
     paymentMethod?: string,
-    vipCode?: string
+    vipCode?: string,
+    createdById?: string
   ) => Promise<Order>;
 
   /** Update just status + optional pickupTime. */
@@ -75,58 +76,103 @@ export const useOrderStore = create<OrderStore>()(
       // ---------------------------------------------------------
       // Fetch all orders with pagination
       // ---------------------------------------------------------
-      fetchOrders: async () => {
-        set({ loading: true, error: null });
+      fetchOrders: async (params: Record<string, any> = {}) => {
         try {
-          let currentPage = 1;
-          let allOrders: Order[] = [];
-          let hasMorePages = true;
-          while (hasMorePages) {
-            const response = await api.get<{
-              orders: Order[];
-              total_count: number;
-              page: number;
-              per_page: number;
-            }>(`/orders?page=${currentPage}&per_page=10`);
-            const pageOrders = response.orders || [];
-            allOrders = [...allOrders, ...pageOrders];
-            const totalPages = Math.ceil(response.total_count / response.per_page);
-            hasMorePages = currentPage < totalPages;
-            currentPage++;
-            if (currentPage > 20) break; // safety
+          set({ loading: true, error: null });
+          
+          // Make initial request
+          const response = await api.get<{
+            orders: Order[];
+            total_count: number;
+            page: number;
+            per_page: number;
+          }>('/orders', { params });
+          
+          // Get the orders from the first page
+          let allOrders = response.orders || [];
+          const totalPages = Math.ceil(response.total_count / response.per_page);
+          
+          // If there are more pages, fetch them
+          if (totalPages > 1) {
+            const additionalRequests = [];
+            for (let page = 2; page <= Math.min(totalPages, 10); page++) {
+              additionalRequests.push(
+                api.get<{
+                  orders: Order[];
+                }>('/orders', {
+                  params: { ...params, page }
+                })
+              );
+            }
+            
+            // Wait for all requests to complete
+            const additionalResponses = await Promise.all(additionalRequests);
+            
+            // Add orders from additional pages
+            for (const pageResponse of additionalResponses) {
+              if (pageResponse.orders && pageResponse.orders.length > 0) {
+                allOrders = [...allOrders, ...pageResponse.orders];
+              }
+            }
           }
-          set({ orders: allOrders, loading: false });
-        } catch (err: any) {
-          set({ error: err.message, loading: false });
+          
+          // Deduplicate orders
+          const uniqueOrders = Array.from(
+            new Map(allOrders.map(order => [order.id, order])).values()
+          );
+          
+          set({ orders: uniqueOrders, loading: false });
+        } catch (error) {
+          console.error('Error fetching orders:', error);
+          set({ error, loading: false });
         }
       },
 
       // ---------------------------------------------------------
-      // Fetch quietly (no loading state) 
+      // Fetch quietly (no loading state)
       // ---------------------------------------------------------
-      fetchOrdersQuietly: async () => {
+      fetchOrdersQuietly: async (params: Record<string, any> = {}) => {
         try {
-          // Start with page 1
-          let currentPage = 1;
-          let allOrders: Order[] = [];
-          let hasMorePages = true;
+          // Make a single request to get the first page and total count
+          const queryParams = {
+            ...params,
+            page: 1,
+            per_page: 100 // Increase page size to reduce number of requests
+          };
           
-          // Fetch all pages
-          while (hasMorePages) {
-            const response = await api.get<{
-              orders: Order[];
-              total_count: number;
-              page: number;
-              per_page: number;
-            }>(`/orders?page=${currentPage}&per_page=10`);
-            const pageOrders = response.orders || [];
-            allOrders = [...allOrders, ...pageOrders];
+          const response = await api.get<{
+            orders: Order[];
+            total_count: number;
+            page: number;
+            per_page: number;
+          }>('/orders', { params: queryParams });
+          
+          // Get the orders from the first page
+          let allOrders = response.orders || [];
+          const totalPages = Math.ceil(response.total_count / response.per_page);
+          
+          // If there are more pages, fetch them
+          if (totalPages > 1) {
+            const additionalRequests = [];
+            for (let page = 2; page <= Math.min(totalPages, 10); page++) {
+              additionalRequests.push(
+                api.get<{
+                  orders: Order[];
+                }>('/orders', {
+                  params: { ...queryParams, page }
+                })
+              );
+            }
             
-            // Calculate if there are more pages
-            const totalPages = Math.ceil(response.total_count / response.per_page);
-            hasMorePages = currentPage < totalPages;
-            currentPage++;
-            if (currentPage > 20) break;
+            // Wait for all requests to complete
+            const additionalResponses = await Promise.all(additionalRequests);
+            
+            // Add orders from additional pages
+            for (const pageResponse of additionalResponses) {
+              if (pageResponse.orders && pageResponse.orders.length > 0) {
+                allOrders = [...allOrders, ...pageResponse.orders];
+              }
+            }
           }
           
           // Only update orders, don't change loading state
@@ -150,7 +196,8 @@ export const useOrderStore = create<OrderStore>()(
         contactEmail,
         transactionId,
         paymentMethod = 'credit_card',
-        vipCode
+        vipCode,
+        createdById
       ) => {
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
@@ -196,7 +243,8 @@ export const useOrderStore = create<OrderStore>()(
               contact_email: contactEmail,
               transaction_id: transactionId,
               payment_method: paymentMethod,
-              vip_code: vipCode
+              vip_code: vipCode,
+              created_by_id: createdById
             },
           };
 

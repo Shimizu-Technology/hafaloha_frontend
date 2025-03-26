@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useOrderStore } from '../../store/orderStore';
+import { useAuthStore } from '../../../shared/auth';
+import { api } from '../../lib/api';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 import { AdminEditOrderModal } from './AdminEditOrderModal';
 import { SetEtaModal } from './SetEtaModal';
@@ -37,6 +39,15 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     loading,
     error
   } = useOrderStore();
+  
+  // Get user from auth store
+  const { user, isAdmin, isStaff } = useAuthStore();
+  
+  // Add state for staff filtering (for admins)
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  
+  // Add state for staff users list
+  const [staffUsers, setStaffUsers] = useState<any[]>([]);
 
   // which order is selected for the "details" modal
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -107,38 +118,87 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [isBatchCancel, setIsBatchCancel] = useState(false);
 
   // ----------------------------------
-  // Fetch orders on mount + Setup Polling
+  // Fetch staff users for the filter dropdown (admin only)
   // ----------------------------------
   useEffect(() => {
-    // 1) Initial fetch with full loading state
-    fetchOrders();
+    if (isAdmin()) {
+      const fetchStaffUsers = async () => {
+        try {
+          const response = await api.get<{users: any[]}>('/admin/users?role=staff');
+          setStaffUsers(response.users || []);
+        } catch (error) {
+          console.error('Error fetching staff users:', error);
+        }
+      };
+      
+      fetchStaffUsers();
+    }
+  }, [isAdmin]);
 
-    // 2) Track current order IDs to detect new ones
+  // ----------------------------------
+  // Fetch orders when staff filter changes
+  // ----------------------------------
+  useEffect(() => {
+    // Fetch orders with staff filter
+    const params: Record<string, any> = {
+      // Add any other necessary params like page, per_page, etc.
+      page: 1,
+      per_page: 50  // Increase this to reduce pagination requests
+    };
+    
+    // Add staff filter for admins
+    if (isAdmin() && selectedStaffId) {
+      params.staff_id = selectedStaffId;
+    }
+    
+    // Fetch orders with the filter
+    fetchOrders(params);
+    
+    // Log for debugging
+    console.log("Fetching orders with params:", params);
+  }, [fetchOrders, isAdmin, selectedStaffId]);
+
+  // ----------------------------------
+  // Setup Polling
+  // ----------------------------------
+  useEffect(() => {
     const currentOrderIds = new Set(orders.map((o) => o.id));
     let pollingInterval: number | null = null;
 
-    // Start polling function
     const startPolling = () => {
       if (pollingInterval) clearInterval(pollingInterval);
       pollingInterval = window.setInterval(() => {
-        fetchOrdersQuietly().then(() => {
+        // Add staff filter for admins
+        const params: Record<string, any> = {
+          page: 1,
+          per_page: 50
+        };
+        
+        if (isAdmin() && selectedStaffId) {
+          params.staff_id = selectedStaffId;
+        }
+        
+        fetchOrdersQuietly(params).then(() => {
           const storeOrders = useOrderStore.getState().orders;
-          const newOrderIds = storeOrders
+          
+          // Deduplicate orders
+          const uniqueOrders = Array.from(
+            new Map(storeOrders.map(order => [order.id, order])).values()
+          );
+          
+          const newOrderIds = uniqueOrders
             .filter((o) => !currentOrderIds.has(o.id))
             .map((o) => o.id);
 
           if (newOrderIds.length > 0) {
-            // Mark them as new
             setNewOrders((prev) => {
               const updated = new Set(prev);
               newOrderIds.forEach((id) => updated.add(id));
               return updated;
             });
 
-            // Update the known IDs
             newOrderIds.forEach((id) => currentOrderIds.add(id));
 
-            // Clear highlight after 30s
             setTimeout(() => {
               setNewOrders((prev) => {
                 const updated = new Set(prev);
@@ -167,8 +227,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       if (document.hidden) {
         stopPolling();
       } else {
-        // Refresh once, then start again
-        fetchOrdersQuietly();
+        // Refresh once with staff filter, then start again
+        const params: Record<string, any> = {};
+        if (isAdmin() && selectedStaffId) {
+          params.staff_id = selectedStaffId;
+        }
+        fetchOrdersQuietly(params);
         startPolling();
       }
     };
@@ -178,7 +242,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchOrders, fetchOrdersQuietly]);
+  }, [fetchOrders, fetchOrdersQuietly, isAdmin, selectedStaffId]);
 
   // ----------------------------------
   // Collapsible / Multi-select logic
@@ -491,8 +555,19 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // Combined filtering + sorting
   const filteredOrders = useMemo(() => {
+    // Log for debugging
+    console.log("Processing orders:", orders.length, "orders");
+    console.log("Order IDs:", orders.map(o => o.id));
+    
+    // Deduplicate orders by ID first
+    const uniqueOrders = Array.from(
+      new Map(orders.map(order => [order.id, order])).values()
+    );
+    
+    console.log("After deduplication:", uniqueOrders.length, "unique orders");
+    
     // 1) Sort
-    const sorted = [...orders].sort((a, b) => {
+    const sorted = [...uniqueOrders].sort((a, b) => {
       const dateA = new Date(a.created_at || a.createdAt || Date.now());
       const dateB = new Date(b.created_at || b.createdAt || Date.now());
       return sortNewestFirst ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
@@ -808,8 +883,43 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Order Management</h2>
-          <p className="text-gray-600 text-sm">Manage and track customer orders</p>
+          <p className="text-gray-600 text-sm">
+            {isAdmin()
+              ? "Manage and track all customer orders"
+              : "Manage and track your orders"}
+          </p>
         </div>
+        
+        {/* Add staff filter for admins */}
+        {isAdmin() && (
+          <div className="ml-auto mr-4 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Filter by Staff
+            </label>
+            <div className="relative">
+              <select
+                className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 bg-white focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm rounded-md shadow-sm"
+                value={selectedStaffId || ''}
+                onChange={(e) => setSelectedStaffId(e.target.value || null)}
+              >
+                <option value="">All Staff</option>
+                {staffUsers.map((staffUser) => (
+                  <option key={staffUser.id} value={staffUser.id}>
+                    {staffUser.first_name && staffUser.last_name
+                      ? `${staffUser.first_name} ${staffUser.last_name}`
+                      : staffUser.email}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <button
           onClick={() => setShowStaffOrderModal(true)}
           className="px-4 py-2 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28] focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50 flex items-center space-x-2"

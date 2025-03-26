@@ -30,8 +30,8 @@ export function ProtectedRoute({
     return <Navigate to={redirectPath} replace />;
   }
   
-  // If adminOnly is true, check if user has admin role
-  if (adminOnly && user?.role !== 'admin') {
+  // If adminOnly is true, check if user has admin or staff role
+  if (adminOnly && user?.role !== 'admin' && user?.role !== 'staff') {
     return <Navigate to="/" replace />;
   }
   

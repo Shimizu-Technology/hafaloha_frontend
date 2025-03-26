@@ -6,6 +6,7 @@ import toastUtils from '../../../../shared/utils/toastUtils';
 import { UserModal } from './UserModal';
 import { SettingsHeader } from '../../../../shared/components/ui';
 import { Users } from 'lucide-react';
+import { useAuthStore } from '../../../../shared/auth';
 
 interface User {
   id: number;
@@ -18,7 +19,7 @@ interface User {
   updated_at: string;
 }
 
-type RoleFilter = 'all' | 'admin' | 'customer';
+type RoleFilter = 'all' | 'admin' | 'staff' | 'customer';
 
 // For sorting
 type SortBy = 'created_at' | 'email';
@@ -41,6 +42,10 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<RoleFilter>('all');
+  
+  // Get current user role
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
 
   // Sorting
   const [sortBy, setSortBy] = useState<SortBy>('created_at');
@@ -169,6 +174,7 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
           >
             <option value="all">All Roles</option>
             <option value="admin">Admin</option>
+            <option value="staff">Staff</option>
             <option value="customer">Customer</option>
           </select>
 

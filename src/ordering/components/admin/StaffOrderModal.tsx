@@ -3,6 +3,7 @@ import toastUtils from '../../../shared/utils/toastUtils';
 import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
 import { useRestaurantStore } from '../../../shared/store/restaurantStore';
+import { useAuthStore } from '../../../shared/auth';
 import { MenuItem } from '../../types/menu';
 import { apiClient } from '../../../shared/api/apiClient';
 
@@ -1097,6 +1098,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
 
   // Data & cart from store
   const { menuItems, fetchMenuItems, loading: menuLoading } = useMenuStore();
+  const { user } = useAuthStore();
   const {
     cartItems,
     addToCart,
@@ -1281,7 +1283,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         finalPhone,
         contactEmail,
         transactionId,
-        'credit_card'
+        'credit_card',
+        undefined, // vipCode
+        user?.id // created_by_id
       );
       toastUtils.success('Order created successfully!');
       onOrderCreated(newOrder.id);

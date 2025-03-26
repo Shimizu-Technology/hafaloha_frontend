@@ -140,8 +140,10 @@ export function Header() {
     };
   }, [isMobileMenuOpen]);
 
-  // Admin check
+  // Admin and staff checks
   const isAdmin = user?.role === 'admin';
+  const isStaff = user?.role === 'staff';
+  const isAdminOrStaff = isAdmin || isStaff;
 
   // Display name
   const firstName = user?.first_name || user?.email?.split('@')[0] || 'Guest';
@@ -262,8 +264,8 @@ export function Header() {
                 {isDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 
                                 border border-gray-100 animate-fadeIn">
-                    {/* Admin Tools if isAdmin */}
-                    {isAdmin && (
+                    {/* Admin Tools if isAdmin or isStaff */}
+                    {isAdminOrStaff && (
                       <>
                         <div className="px-4 py-2 text-xs font-semibold text-gray-500 bg-gray-50">
                           Admin Tools
@@ -469,7 +471,7 @@ export function Header() {
             
             {user ? (
               <>
-                {isAdmin && (
+                {isAdminOrStaff && (
                   <>
                     <Link
                       to="/reservations/dashboard"
