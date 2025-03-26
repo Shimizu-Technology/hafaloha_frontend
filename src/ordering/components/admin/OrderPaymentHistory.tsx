@@ -87,6 +87,12 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
         return 'Stripe';
       case 'cash':
         return 'Cash';
+      case 'clover':
+        return 'Clover';
+      case 'revel':
+        return 'Revel';
+      case 'other':
+        return 'Other';
       default:
         return method;
     }
@@ -215,10 +221,27 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
                                 {payment.payment_details.amount && (
                                   <div><span className="font-medium">Amount:</span> ${payment.payment_details.amount}</div>
                                 )}
+                                {payment.payment_details.payment_date && (
+                                  <div><span className="font-medium">Payment Date:</span> {payment.payment_details.payment_date}</div>
+                                )}
+                                {payment.payment_details.transaction_id && (
+                                  <div><span className="font-medium">Transaction ID:</span> {payment.payment_details.transaction_id}</div>
+                                )}
+                                {payment.payment_details.notes && (
+                                  <div><span className="font-medium">Notes:</span> {payment.payment_details.notes}</div>
+                                )}
                                 {payment.payment_details.error_handled && (
                                   <div><span className="font-medium">Error Handled:</span> {payment.payment_details.error_handled}</div>
                                 )}
-                                {/* Add any other relevant fields here */}
+                                {/* Display any other fields that might be in payment_details */}
+                                {Object.entries(payment.payment_details)
+                                  .filter(([key]) => !['status', 'test_mode', 'amount', 'payment_date', 'transaction_id', 'notes', 'error_handled'].includes(key))
+                                  .map(([key, value]) => (
+                                    <div key={key}>
+                                      <span className="font-medium">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {String(value)}
+                                    </div>
+                                  ))
+                                }
                               </div>
                             </div>
                           )}

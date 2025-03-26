@@ -3,6 +3,7 @@ import toastUtils from '../../../shared/utils/toastUtils';
 import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
 import { useRestaurantStore } from '../../../shared/store/restaurantStore';
+import { useAuthStore } from '../../store/authStore';
 import { MenuItem } from '../../types/menu';
 import { apiClient } from '../../../shared/api/apiClient';
 
@@ -729,6 +730,7 @@ interface PaymentPanelProps {
     payment_id?: string;
     amount: string;
     currency?: string;
+    payment_details?: any;
   }) => void;
   onPaymentError: (error: Error) => void;
   onBack: () => void;
@@ -742,7 +744,7 @@ function PaymentPanel({
   onBack,
   isProcessing
 }: PaymentPanelProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link'>('credit_card');
+  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other'>('credit_card');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
@@ -750,6 +752,16 @@ function PaymentPanel({
   const [paymentError, setPaymentError] = useState<string | null>(null);
   // For dynamic height adjustment
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
+  
+  // Manual payment details
+  const [transactionId, setTransactionId] = useState('');
+  // Set default payment date to today
+  const today = new Date().toISOString().split('T')[0];
+  const [paymentDate, setPaymentDate] = useState(today);
+  const [paymentNotes, setPaymentNotes] = useState('');
+  
+  // Get current user from auth store
+  const { user } = useAuthStore();
 
   // Payment processor config
   const stripeRef = useRef<StripeCheckoutRef>(null);
@@ -808,6 +820,10 @@ function PaymentPanel({
       handleSendPaymentLink();
       return;
     }
+    if (['clover', 'revel', 'other'].includes(paymentMethod)) {
+      handleManualPayment();
+      return;
+    }
     // Credit Card Payment
     try {
       if (paymentProcessor === 'stripe' && stripeRef.current) {
@@ -823,19 +839,45 @@ function PaymentPanel({
     }
   };
 
+  // New function to handle manual payments
+  const handleManualPayment = () => {
+    // Validate required fields
+    if (!paymentDate) {
+      setPaymentError('Payment date is required');
+      return;
+    }
+    
+    // Create payment details object
+    const paymentDetails = {
+      payment_method: paymentMethod,
+      transaction_id: transactionId || `${paymentMethod}_${Date.now()}`,
+      payment_date: paymentDate,
+      staff_id: user?.id, // Capture the current user's ID
+      notes: paymentNotes
+    };
+    
+    // Call the success callback with the payment details
+    onPaymentSuccess({
+      status: 'succeeded',
+      transaction_id: paymentDetails.transaction_id,
+      amount: orderTotal.toString(),
+      payment_details: paymentDetails
+    });
+  };
+
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
       {/* Scrollable content area with more padding for payment elements */}
-      <div className="overflow-y-auto p-4 pb-28">
+      <div className="overflow-y-auto p-4 pb-28 flex-1">
         <h3 className="text-lg font-semibold mb-4 text-gray-800 sticky top-0 bg-white z-10 py-2">Payment</h3>
 
         {/* Payment Method Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
             <button
               type="button"
-              className={`px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
                 paymentMethod === 'credit_card'
                   ? 'bg-[#c1902f] text-white border-[#c1902f]'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -846,7 +888,7 @@ function PaymentPanel({
             </button>
             <button
               type="button"
-              className={`px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
                 paymentMethod === 'cash'
                   ? 'bg-[#c1902f] text-white border-[#c1902f]'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -857,7 +899,7 @@ function PaymentPanel({
             </button>
             <button
               type="button"
-              className={`px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
                 paymentMethod === 'payment_link'
                   ? 'bg-[#c1902f] text-white border-[#c1902f]'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -865,6 +907,39 @@ function PaymentPanel({
               onClick={() => setPaymentMethod('payment_link')}
             >
               Send Link
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
+                paymentMethod === 'clover'
+                  ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => setPaymentMethod('clover')}
+            >
+              Clover
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
+                paymentMethod === 'revel'
+                  ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => setPaymentMethod('revel')}
+            >
+              Revel
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
+                paymentMethod === 'other'
+                  ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => setPaymentMethod('other')}
+            >
+              Other
             </button>
           </div>
         </div>
@@ -874,7 +949,7 @@ function PaymentPanel({
           <div className="border border-gray-200 rounded-md p-4 mb-6">
             <h4 className="text-sm font-medium text-gray-700 mb-3">Credit Card Payment</h4>
             <div className="sm:flex sm:space-x-4">
-              <div className="sm:w-full">
+              <div className="w-full">
                 {paymentProcessor === 'stripe' ? (
                   <StripeCheckout
                     ref={stripeRef}
@@ -900,6 +975,51 @@ function PaymentPanel({
             </div>
           </div>
         )}
+{/* Manual Payment Panel (Clover, Revel, Other) */}
+{['clover', 'revel', 'other'].includes(paymentMethod) && (
+  <div className="border border-gray-200 rounded-md p-4 mb-6">
+    <h4 className="text-sm font-medium text-gray-700 mb-3">
+      {paymentMethod === 'clover' ? 'Clover' : paymentMethod === 'revel' ? 'Revel' : 'Other'} Payment Details
+    </h4>
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Transaction ID/Reference Number (optional)
+        </label>
+        <input
+          type="text"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+          value={transactionId}
+          onChange={e => setTransactionId(e.target.value)}
+          placeholder="Enter transaction ID or reference number"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Payment Date
+        </label>
+        <input
+          type="date"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+          value={paymentDate}
+          onChange={e => setPaymentDate(e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Notes (optional)
+        </label>
+        <textarea
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+          value={paymentNotes}
+          onChange={e => setPaymentNotes(e.target.value)}
+          placeholder="Enter any additional payment notes"
+          rows={3}
+        />
+      </div>
+    </div>
+  </div>
+)}
 
         {/* Payment Link Panel */}
         {paymentMethod === 'payment_link' && !paymentLinkSent && (
@@ -1007,7 +1127,7 @@ function PaymentPanel({
       </div>
 
       {/* Fixed buttons at the bottom */}
-      <div className="sticky bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-md z-20">
+      <div className="sticky bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-md z-20 mt-auto">
         <div className="grid gap-2 sm:grid-cols-2">
           <button
             onClick={onBack}
@@ -1056,7 +1176,9 @@ function PaymentPanel({
                   ? 'Complete Cash Payment'
                   : paymentMethod === 'payment_link'
                     ? 'Send Payment Link'
-                    : 'Process Payment'
+                    : ['clover', 'revel', 'other'].includes(paymentMethod)
+                      ? `Complete ${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)} Payment`
+                      : 'Process Payment'
               )}
             </button>
           ) : (
@@ -1250,10 +1372,15 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     transaction_id: string;
     payment_id?: string;
     amount: string;
+    payment_details?: any;
   }) => {
     setPaymentProcessing(false);
     setPaymentTransactionId(details.transaction_id);
-    submitOrderWithPayment(details.transaction_id);
+    submitOrderWithPayment(
+      details.transaction_id,
+      details.payment_details,
+      details.payment_details?.payment_method || 'credit_card'
+    );
   };
 
   const handlePaymentError = (error: Error) => {
@@ -1262,7 +1389,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     setPaymentProcessing(false);
   };
 
-  async function submitOrderWithPayment(transactionId: string) {
+  async function submitOrderWithPayment(transactionId: string, paymentDetails?: any, paymentMethod: string = 'credit_card') {
     if (!cartItems.length) {
       toastUtils.error('Please add items to the order');
       return;
@@ -1281,9 +1408,10 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         finalPhone,
         contactEmail,
         transactionId,
-        'credit_card',
+        paymentMethod,
         '', // vipCode parameter
-        true // Add staff_modal parameter to indicate this is a staff-created order
+        true, // Add staff_modal parameter to indicate this is a staff-created order
+        paymentDetails // Add payment details
       );
       toastUtils.success('Order created successfully!');
       onOrderCreated(newOrder.id);
@@ -1426,7 +1554,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         )}
         {activeTab === 'payment' && (
           <div className="h-full flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden max-h-[calc(100vh-120px)]">
               <PaymentPanel
                 orderTotal={orderTotal}
                 onPaymentSuccess={handlePaymentSuccess}
@@ -1451,8 +1579,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           <div className="absolute inset-0 bg-black bg-opacity-30 z-10"></div>
           {/* Payment Panel on top (z-20) */}
           <div className="absolute inset-0 flex items-start sm:items-center justify-center z-20 p-4 pt-8 sm:pt-4 md:p-6 lg:p-8 overflow-y-auto">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md sm:max-w-lg md:max-w-2xl my-auto sm:my-4 md:my-6">
-              <div className="flex flex-col">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md sm:max-w-lg md:max-w-2xl my-auto sm:my-4 md:my-6 max-h-[90vh]">
+              <div className="flex flex-col h-full">
                 <PaymentPanel
                   orderTotal={orderTotal}
                   onPaymentSuccess={handlePaymentSuccess}

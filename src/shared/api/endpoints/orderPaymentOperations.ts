@@ -33,6 +33,12 @@ export const orderPaymentOperationsApi = {
   processAdditionalPayment: (orderId: number, params: {
     items: { id: number | string; name: string; quantity: number; price: number }[];
     payment_method: string;
+    payment_details?: {
+      transaction_id?: string;
+      payment_date?: string;
+      notes?: string;
+      [key: string]: any;
+    };
   }) => {
     return apiClient.post(`/orders/${orderId}/payments/additional`, params);
   },

@@ -28,7 +28,7 @@ export function EnhancedAdditionalPaymentModal({
   onPaymentCompleted,
 }: EnhancedAdditionalPaymentModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link'>('credit_card');
+  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other'>('credit_card');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
@@ -38,6 +38,13 @@ export function EnhancedAdditionalPaymentModal({
   const [paymentSuccessful, setPaymentSuccessful] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [orderData, setOrderData] = useState<any>(null);
+  
+  // Manual payment details
+  const [transactionId, setTransactionId] = useState('');
+  // Set default payment date to today
+  const today = new Date().toISOString().split('T')[0];
+  const [paymentDate, setPaymentDate] = useState(today);
+  const [paymentNotes, setPaymentNotes] = useState('');
 
   // Payment processor refs
   const stripeRef = useRef<StripeCheckoutRef>(null);
@@ -147,6 +154,67 @@ export function EnhancedAdditionalPaymentModal({
     } catch (error) {
       console.error('Error processing cash payment:', error);
       setPaymentError('Failed to process cash payment. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle manual payments (Clover, Revel, Other)
+  const handleManualPayment = async () => {
+    setIsLoading(true);
+    setPaymentError(null);
+    try {
+      // Validate required fields
+      if (!paymentDate) {
+        setPaymentError('Payment date is required');
+        return;
+      }
+      
+      // Create payment details object
+      const paymentDetails = {
+        payment_method: paymentMethod,
+        transaction_id: transactionId || `${paymentMethod}_${Date.now()}`,
+        payment_date: paymentDate,
+        notes: paymentNotes
+      };
+      
+      // Convert orderId to number if it's a string
+      const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
+      
+      try {
+        // Call the API to process the payment
+        await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
+          payment_method: paymentMethod,
+          items: paymentItems.map(item => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price
+          })),
+          payment_details: paymentDetails
+        });
+        
+        console.log(`Successfully processed ${paymentMethod} payment for order:`, orderId, {
+          payment_method: paymentMethod,
+          amount: total,
+          items: paymentItems,
+          payment_details: paymentDetails
+        });
+        
+        // Payment successful
+        setPaymentSuccessful(true);
+        setTimeout(() => {
+          onPaymentCompleted();
+          onClose();
+        }, 2000);
+      } catch (apiError) {
+        console.error(`API error processing ${paymentMethod} payment:`, apiError);
+        setPaymentError(`Failed to process ${paymentMethod} payment. Please try again.`);
+        return;
+      }
+    } catch (error) {
+      console.error(`Error processing ${paymentMethod} payment:`, error);
+      setPaymentError(`Failed to process ${paymentMethod} payment. Please try again.`);
     } finally {
       setIsLoading(false);
     }
@@ -285,9 +353,9 @@ export function EnhancedAdditionalPaymentModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10001] p-4">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md mx-auto animate-slideUp">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-md md:max-w-2xl mx-auto animate-slideUp max-h-[90vh] flex flex-col">
+        {/* Header - make it sticky */}
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium text-gray-900">
             {paymentSuccessful ? 'Payment Successful' : 'Process Additional Payment'}
           </h3>
@@ -302,8 +370,8 @@ export function EnhancedAdditionalPaymentModal({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="px-6 py-4">
+        {/* Content - make it scrollable */}
+        <div className="px-6 py-4 overflow-y-auto flex-1">
           {paymentSuccessful ? (
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -340,10 +408,10 @@ export function EnhancedAdditionalPaymentModal({
               {!showStripeForm && !paymentLinkSent && (
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                     <button
                       type="button"
-                      className={`px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
                         paymentMethod === 'credit_card'
                           ? 'bg-[#c1902f] text-white border-[#c1902f]'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -354,7 +422,7 @@ export function EnhancedAdditionalPaymentModal({
                     </button>
                     <button
                       type="button"
-                      className={`px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
                         paymentMethod === 'cash'
                           ? 'bg-[#c1902f] text-white border-[#c1902f]'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -365,7 +433,7 @@ export function EnhancedAdditionalPaymentModal({
                     </button>
                     <button
                       type="button"
-                      className={`px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
                         paymentMethod === 'payment_link'
                           ? 'bg-[#c1902f] text-white border-[#c1902f]'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -374,6 +442,85 @@ export function EnhancedAdditionalPaymentModal({
                     >
                       Send Link
                     </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
+                        paymentMethod === 'clover'
+                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                      onClick={() => setPaymentMethod('clover')}
+                    >
+                      Clover
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
+                        paymentMethod === 'revel'
+                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                      onClick={() => setPaymentMethod('revel')}
+                    >
+                      Revel
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
+                        paymentMethod === 'other'
+                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                      onClick={() => setPaymentMethod('other')}
+                    >
+                      Other
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual Payment Panel (Clover, Revel, Other) */}
+              {['clover', 'revel', 'other'].includes(paymentMethod) && !paymentLinkSent && (
+                <div className="border border-gray-200 rounded-md p-4 mb-6">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">
+                    {paymentMethod === 'clover' ? 'Clover' : paymentMethod === 'revel' ? 'Revel' : 'Other'} Payment Details
+                  </h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Transaction ID/Reference Number (optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+                        value={transactionId}
+                        onChange={e => setTransactionId(e.target.value)}
+                        placeholder="Enter transaction ID or reference number"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Payment Date
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+                        value={paymentDate}
+                        onChange={e => setPaymentDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notes (optional)
+                      </label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+                        value={paymentNotes}
+                        onChange={e => setPaymentNotes(e.target.value)}
+                        placeholder="Enter any additional payment notes"
+                        rows={3}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -560,9 +707,9 @@ export function EnhancedAdditionalPaymentModal({
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer - make it sticky */}
         {!paymentSuccessful && (
-          <div className="px-6 py-4 border-t border-gray-200 flex flex-row-reverse">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-row-reverse sticky bottom-0 bg-white z-10">
             {!showStripeForm && !paymentLinkSent && (
               <>
                 {paymentMethod === 'credit_card' && (
@@ -583,6 +730,16 @@ export function EnhancedAdditionalPaymentModal({
                     className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f]"
                   >
                     {isLoading ? 'Processing...' : 'Mark as Paid (Cash)'}
+                  </button>
+                )}
+                {['clover', 'revel', 'other'].includes(paymentMethod) && (
+                  <button
+                    type="button"
+                    onClick={handleManualPayment}
+                    disabled={isLoading || !paymentDate}
+                    className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? 'Processing...' : `Complete ${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)} Payment`}
                   </button>
                 )}
                 {paymentMethod === 'payment_link' && (
