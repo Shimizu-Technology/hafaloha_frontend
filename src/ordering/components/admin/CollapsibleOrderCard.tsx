@@ -222,47 +222,26 @@ function detectOrderHasRefunds(order: any): {
   refundAmount: number;
   originalAmount: number;
 } {
-  console.log("🔍 REFUND DETECTION - Order:", order.id, "Status:", order.status);
-  console.log("🔍 Order data:", JSON.stringify({
-    status: order.status,
-    total: order.total,
-    original_total: order.original_total,
-    total_refunded: order.total_refunded,
-    order_payments: order.order_payments ? order.order_payments.length : 0
-  }));
   
   // Check for refund status
   const hasRefundStatus = order.status === 'refunded' || order.status === 'partially_refunded';
-  console.log("🔍 Has refund status:", hasRefundStatus);
-  
   // Check for refund amount in order_payments
   const refunds = (order.order_payments || []).filter((p: any) => p.payment_type === 'refund');
-  console.log("🔍 Refund payments found:", refunds.length);
   if (refunds.length > 0) {
-  console.log("🔍 Refund details:", refunds.map((r: OrderPayment) => ({
-    id: r.id,
-    amount: r.amount,
-    description: r.description,
-    has_refunded_items: r.refunded_items && r.refunded_items.length > 0
-  })));
   }
   
   let refundAmount = refunds.reduce((sum: number, p: any) => sum + parseFloat(String(p.amount)), 0);
-  console.log("🔍 Calculated refund amount from payments:", refundAmount);
   
   // If no refund data in order_payments but order has total_refunded property, use that
   if (refunds.length === 0 && order.total_refunded) {
     refundAmount = parseFloat(String(order.total_refunded));
-    console.log("🔍 Using total_refunded property:", refundAmount);
   }
   
   // Calculate the true original total from all items
   const originalTotal = calculateOriginalTotal(order);
-  console.log("🔍 Original total (calculated from all items):", originalTotal);
   
   // Calculate net amount
   const netAmount = Math.max(0, originalTotal - refundAmount);
-  console.log("🔍 Net amount after refund:", netAmount);
   
   // Determine if it's a full refund
   const isFullRefund = (hasRefundStatus && order.status === 'refunded') || 
@@ -275,7 +254,6 @@ function detectOrderHasRefunds(order: any): {
     originalAmount: originalTotal
   };
   
-  console.log("🔍 REFUND DETECTION RESULT:", result);
   return result;
 }
 
@@ -342,7 +320,7 @@ export function CollapsibleOrderCard({
         
         setPayments(list || []);
       } catch (err) {
-        console.error('Failed to load payments for order:', order.id, err);
+        // Error loading payments for order
       } finally {
         setLoadingPayments(false);
       }
@@ -355,8 +333,7 @@ export function CollapsibleOrderCard({
   const refundedItemsMap = useMemo(() => {
     const itemsMap: Record<string, RefundInfo> = {};
     
-    // Log the entire order object to see its structure
-    console.log("🔍 FULL ORDER OBJECT:", JSON.stringify(order, null, 2));
+    // Get order structure for processing
     
     // Create a copy of the order with our fetched payments
     const orderWithPayments = {
@@ -370,14 +347,14 @@ export function CollapsibleOrderCard({
     
     // If the order is refunded but we don't have payment data, we need to handle it specially
     if (isOrderRefunded || (order.total_refunded && parseFloat(String(order.total_refunded)) > 0)) {
-      console.log("Order is marked as refunded or has total_refunded property");
+      // Process refunded order
       
       // Calculate the refund amount from the order total and current total
       const originalTotal = parseFloat(String(order.original_total || order.total || 0));
       const currentTotal = parseFloat(String(order.total || 0));
       const refundAmount = order.total_refunded ? parseFloat(String(order.total_refunded)) : Math.max(0, originalTotal - currentTotal);
       
-      console.log("Original total:", originalTotal, "Current total:", currentTotal, "Refund amount:", refundAmount);
+      // Calculate refund amount from order totals
       
       // For any order with refund status, check all items
       if (order.items && order.items.length > 0) {
@@ -387,7 +364,7 @@ export function CollapsibleOrderCard({
         );
         
         if (refundedItems.length > 0) {
-          console.log("Found items already marked as refunded:", refundedItems);
+          // Process pre-marked refunded items
           
           // Process pre-marked refunded items
           refundedItems.forEach((item: any, index: number) => {
@@ -408,13 +385,13 @@ export function CollapsibleOrderCard({
                 }]
               };
               
-              console.log("Processed pre-marked refunded item:", itemKey, itemsMap[itemKey]);
+              // Track pre-marked refunded items
             }
           });
         } 
         // If no items are pre-marked as refunded, try to infer from order status
         else if (isOrderRefunded && refundAmount > 0) {
-          console.log("Order is marked as refunded but no specific items are marked - trying to infer");
+          // Infer refunded items from order status
           
           // Try to infer which items might be refunded based on the order status
           // This is a fallback when we don't have specific item refund data
@@ -424,7 +401,7 @@ export function CollapsibleOrderCard({
           
           // If refund amount is close to the total, mark all items as refunded
           if (Math.abs(refundAmount - totalItemsValue) < 0.01) {
-            console.log("Refund amount matches total - marking all items as fully refunded");
+            // Process fully refunded items
             order.items.forEach((item: any, index: number) => {
               const itemKey = `${item.id || ''}-${item.name}-${index}`;
               itemsMap[itemKey] = {
@@ -443,7 +420,7 @@ export function CollapsibleOrderCard({
           }
           // Otherwise, try to find items that might match the refund amount
           else {
-            console.log("Partial refund detected - trying to match items to refund amount:", refundAmount);
+            // Processing partial refund amount
             
             // Sort items by price (highest first) to try matching larger items first
             const sortedItems = [...order.items].sort((a, b) => 
@@ -461,7 +438,7 @@ export function CollapsibleOrderCard({
               
               // If this item's value is less than or equal to the remaining refund amount
               if (itemTotal <= remainingRefundAmount + 0.01) { // Add small buffer for floating point
-                console.log(`Marking item ${item.name} as fully refunded (${itemTotal})`);
+                // Process fully refunded item
                 itemsMap[itemKey] = {
                   isFullyRefunded: true,
                   isPartiallyRefunded: false,
@@ -482,7 +459,7 @@ export function CollapsibleOrderCard({
                 const refundedUnits = Math.floor(remainingRefundAmount / unitPrice);
                 
                 if (refundedUnits > 0) {
-                  console.log(`Marking ${refundedUnits} units of ${item.name} as refunded`);
+                  // Process partially refunded item
                   itemsMap[itemKey] = {
                     isFullyRefunded: false,
                     isPartiallyRefunded: true,
@@ -621,21 +598,6 @@ export function CollapsibleOrderCard({
       });
     }
     
-    // Log the final refundedItemsMap for debugging
-    console.log("🔍 FINAL REFUNDED ITEMS MAP:", Object.keys(itemsMap).length, "items tracked");
-    
-    // Log details of each item that has refund info
-    Object.entries(itemsMap).forEach(([key, info]) => {
-      if (info.isFullyRefunded || info.isPartiallyRefunded) {
-        console.log(`🔍 Item ${key}:`, {
-          isFullyRefunded: info.isFullyRefunded,
-          isPartiallyRefunded: info.isPartiallyRefunded,
-          refundedQuantity: info.refundedQuantity,
-          originalQuantity: info.originalQuantity,
-          refundDetails: info.refundDetails.length
-        });
-      }
-    });
     
     return itemsMap;
   }, [order.items, order.order_payments]);
@@ -674,16 +636,6 @@ export function CollapsibleOrderCard({
   const isFullyRefunded = refundInfo.isFullRefund;
   const isPartiallyRefunded = refundInfo.hasRefund && !refundInfo.isFullRefund;
   
-  // Log the refund detection results for this specific order
-  console.log("🔍 ORDER REFUND STATUS:", {
-    orderId: order.id,
-    hasRefund: refundInfo.hasRefund,
-    isFullRefund: refundInfo.isFullRefund,
-    refundAmount: refundInfo.refundAmount,
-    originalAmount: refundInfo.originalAmount,
-    netTotal: netTotal,
-    refundedItemsCount: getTotalRefundedItemsCount(refundedItemsMap)
-  });
   
   return (
     <div 
