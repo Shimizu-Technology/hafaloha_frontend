@@ -353,9 +353,9 @@ export function EnhancedAdditionalPaymentModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10001] p-4">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md md:max-w-2xl mx-auto animate-slideUp max-h-[90vh] flex flex-col">
-        {/* Header - make it sticky */}
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-md md:max-w-2xl mx-auto animate-slideUp max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header - fixed position instead of sticky for better iPad compatibility */}
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white z-10">
           <h3 className="text-lg font-medium text-gray-900">
             {paymentSuccessful ? 'Payment Successful' : 'Process Additional Payment'}
           </h3>
@@ -707,9 +707,9 @@ export function EnhancedAdditionalPaymentModal({
           )}
         </div>
 
-        {/* Footer - make it sticky */}
+        {/* Footer - fixed position instead of sticky for better iPad compatibility */}
         {!paymentSuccessful && (
-          <div className="px-6 py-4 border-t border-gray-200 flex flex-row-reverse sticky bottom-0 bg-white z-10">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-row-reverse bg-white z-10">
             {!showStripeForm && !paymentLinkSent && (
               <>
                 {paymentMethod === 'credit_card' && (
