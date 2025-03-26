@@ -1,7 +1,7 @@
 // src/ordering/OnlineOrderingApp.tsx
 
 import React, { useEffect, Suspense } from 'react';
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, Link } from 'react-router-dom';
 
 import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
@@ -28,7 +28,7 @@ import { ProtectedRoute, AnonymousRoute } from '../shared';
 function OrderingLayout() {
   const loadingCount = useLoadingStore((state) => state.loadingCount);
   const [showSpinner, setShowSpinner] = React.useState(false);
-  const [timerId, setTimerId] = React.useState<number | null>(null);
+  const [timerId, setTimerId] = React.useState<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     if (loadingCount > 0) {
@@ -102,21 +102,31 @@ export default function OnlineOrderingApp() {
             <>
               <Hero />
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2">
+                {featuredItems.length > 0 ? (
+                  // Show Popular Items with heading outside the grid
+                  <div>
                     <h2 className="text-2xl sm:text-3xl font-display text-gray-900 mb-8">
                       Popular Items
                     </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                      {featuredSlice.map((item) => (
-                        <MenuItemCard key={item.id} item={item} />
-                      ))}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                      <div className="lg:col-span-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                          {featuredSlice.map((item) => (
+                            <MenuItemCard key={item.id} item={item} />
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <LoyaltyTeaser />
+                      </div>
                     </div>
                   </div>
-                  <div>
+                ) : (
+                  // Center the Loyalty Teaser when no featured items exist
+                  <div className="max-w-md mx-auto">
                     <LoyaltyTeaser />
                   </div>
-                </div>
+                )}
               </div>
             </>
           }
