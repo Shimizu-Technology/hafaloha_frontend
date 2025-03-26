@@ -365,38 +365,40 @@ export function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment Information */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
-              
-              {/* Conditionally render PayPal or Stripe checkout based on payment processor setting */}
-              {restaurant?.admin_settings?.payment_gateway?.payment_processor === 'stripe' ? (
-                <StripeCheckout 
-                  ref={stripeRef}
-                  amount={finalTotal.toString()} 
-                  publishableKey={(restaurant?.admin_settings?.payment_gateway?.publishable_key as string) || ""}
-                  currency="USD"
-                  testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true}
-                  onPaymentSuccess={handlePaymentSuccess}
-                  onPaymentError={handlePaymentError}
-                />
-              ) : (
-                // Default to PayPal if not specified or if set to 'paypal'
-                <PayPalCheckout 
-                  ref={paypalRef}
-                  amount={finalTotal.toString()} 
-                  clientId={(restaurant?.admin_settings?.payment_gateway?.client_id as string) || "sandbox_client_id"}
-                  currency="USD"
-                  testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true}
-                  onPaymentSuccess={handlePaymentSuccess}
-                  onPaymentError={handlePaymentError}
-                />
-              )}
-            </div>
-
             {/* VIP Code Input (only appears when restaurant is in VIP-only mode) */}
             {restaurant?.vip_only_checkout && (
               <VipCodeInput onChange={handleVipCodeChange} />
+            )}
+
+            {/* Payment Information - only show if not VIP-only mode OR if VIP code is valid */}
+            {(!restaurant?.vip_only_checkout || vipCodeValid) && (
+              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
+                
+                {/* Conditionally render PayPal or Stripe checkout based on payment processor setting */}
+                {restaurant?.admin_settings?.payment_gateway?.payment_processor === 'stripe' ? (
+                  <StripeCheckout
+                    ref={stripeRef}
+                    amount={finalTotal.toString()}
+                    publishableKey={(restaurant?.admin_settings?.payment_gateway?.publishable_key as string) || ""}
+                    currency="USD"
+                    testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true}
+                    onPaymentSuccess={handlePaymentSuccess}
+                    onPaymentError={handlePaymentError}
+                  />
+                ) : (
+                  // Default to PayPal if not specified or if set to 'paypal'
+                  <PayPalCheckout
+                    ref={paypalRef}
+                    amount={finalTotal.toString()}
+                    clientId={(restaurant?.admin_settings?.payment_gateway?.client_id as string) || "sandbox_client_id"}
+                    currency="USD"
+                    testMode={restaurant?.admin_settings?.payment_gateway?.test_mode ?? true}
+                    onPaymentSuccess={handlePaymentSuccess}
+                    onPaymentError={handlePaymentError}
+                  />
+                )}
+              </div>
             )}
 
             {/* Special Instructions */}
@@ -460,12 +462,12 @@ export function CheckoutPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (restaurant?.vip_only_checkout && !vipCodeValid)}
                 className={`w-full bg-[#c1902f] text-white py-3 px-4
                   rounded-md hover:bg-[#d4a43f] transition-colors duration-200
-                  ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  ${(isSubmitting || (restaurant?.vip_only_checkout && !vipCodeValid)) ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                {isSubmitting ? 'Processing...' : 'Place Order'}
+                {isSubmitting ? 'Processing...' : (restaurant?.vip_only_checkout && !vipCodeValid) ? 'Validate VIP Code First' : 'Place Order'}
               </button>
             </div>
           </form>
