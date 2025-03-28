@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MenuItem as MenuItemType, MenuItemStockAudit } from '../../../ordering/types/menu';
+import { MenuItem as MenuItemType, MenuItemStockAudit, MenuOption } from '../../../ordering/types/menu';
+import OptionInventoryForm from './OptionInventoryForm';
 import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { useMenuStore } from '../../store/menuStore';
 import { format } from 'date-fns';
@@ -19,8 +20,8 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   onSave,
   onEnableTrackingChange
 }) => {
-  // State for inventory tracking toggle
-  const [enableTracking, setEnableTracking] = useState(false);
+  // State for inventory tracking type (menu-level, option-level, or none)
+  const [inventoryTrackingType, setInventoryTrackingType] = useState<'menu' | 'option' | 'none'>('none');
   
   // State for stock quantities
   const [stockQuantity, setStockQuantity] = useState<number>(0);
@@ -53,26 +54,52 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   // Load menu item data when opened and start polling for real-time updates
   useEffect(() => {
     if (open && menuItem) {
-      setEnableTracking(menuItem.enable_stock_tracking || false);
-      setStockQuantity(menuItem.stock_quantity || 0);
-      setDamagedQuantity(menuItem.damaged_quantity || 0);
-      setLowStockThreshold(menuItem.low_stock_threshold || 10);
-      setStockAdjustmentAmount(0); // Reset adjustment amount when opening modal
-      
-      // Only load audit history if tracking is enabled
-      if (menuItem.enable_stock_tracking) {
-        loadAuditHistory();
-      }
+      // Fetch the menu item with option groups included
+      refreshInventoryData({
+        refreshAuditHistory: menuItem.enable_stock_tracking === true,
+        notifyParent: false
+      }).then(updatedItem => {
+        if (updatedItem) {
+          // Check if any options have inventory tracking enabled
+          const hasOptionWithInventoryTracking = updatedItem.option_groups?.some(group =>
+            group.options?.some(option => option.enable_stock_tracking)
+          );
+          
+          // Set initial tracking type based on menu item data and options
+          if (updatedItem.enable_stock_tracking) {
+            setInventoryTrackingType('menu');
+          } else if (hasOptionWithInventoryTracking) {
+            setInventoryTrackingType('option');
+          } else {
+            setInventoryTrackingType('none');
+          }
+          
+          setStockQuantity(updatedItem.stock_quantity || 0);
+          setDamagedQuantity(updatedItem.damaged_quantity || 0);
+          setLowStockThreshold(updatedItem.low_stock_threshold || 10);
+          setStockAdjustmentAmount(0); // Reset adjustment amount when opening modal
+          
+          // Only load audit history if menu-level tracking is enabled
+          if (updatedItem.enable_stock_tracking) {
+            loadAuditHistory();
+          }
+        }
+      });
       
       // Start polling for real-time inventory updates
       startInventoryPolling(menuItem.id);
     }
     
-    // Clean up polling when the modal closes
+    // Clean up when the modal closes
     return () => {
       stopInventoryPolling();
     };
-  }, [open, menuItem, startInventoryPolling, stopInventoryPolling]);
+  }, [
+    open,
+    menuItem,
+    startInventoryPolling,
+    stopInventoryPolling
+  ]);
 
   // Load and refresh inventory data when menuItem changes
   useEffect(() => {
@@ -86,15 +113,17 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   }, [menuItem, open]);
 
   // Function to refresh inventory data with optimizations to prevent page shaking
-  const refreshInventoryData = async (options = { 
-    refreshAuditHistory: true, 
-    notifyParent: true 
+  const refreshInventoryData = async (options = {
+    refreshAuditHistory: true,
+    notifyParent: true
   }) => {
     if (!menuItem?.id) return;
     
     try {
-      // Fetch the latest menu item data
-      const updatedItem = await menuItemsApi.getById(menuItem.id);
+      // Fetch the latest menu item data with option groups and options included
+      const updatedItem = await menuItemsApi.getById(menuItem.id, true);
+      
+      console.log('Refreshed menu item data:', updatedItem);
       
       // Update local state with the latest values using functional updates
       // to ensure we're working with the most current state
@@ -144,12 +173,16 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     
     try {
       // Set optimistic updates locally first
+      const isMenuLevelTracking = inventoryTrackingType === 'menu';
+      
       const updatedValues = {
-        enable_stock_tracking: enableTracking,
-        stock_quantity: enableTracking ? stockQuantity : 0,
-        damaged_quantity: enableTracking ? damagedQuantity : 0,
-        low_stock_threshold: enableTracking ? lowStockThreshold : undefined
+        enable_stock_tracking: isMenuLevelTracking,
+        stock_quantity: isMenuLevelTracking ? stockQuantity : 0,
+        damaged_quantity: isMenuLevelTracking ? damagedQuantity : 0,
+        low_stock_threshold: isMenuLevelTracking ? lowStockThreshold : undefined
       };
+      
+      console.log('Saving inventory settings:', updatedValues);
       
       // When disabling inventory tracking, explicitly set values to 0/undefined
       // This ensures the database clears these values when tracking is off
@@ -174,6 +207,12 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     
     if (damageQuantity <= 0) {
       setError('Damage quantity must be greater than zero');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    if (!damageReason.trim()) {
+      setError('Please provide a reason for marking items as damaged');
       setTimeout(() => setError(null), 3000);
       return;
     }
@@ -335,140 +374,148 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
           )}
           
           <div className="mb-6">
-            <div className="flex items-center mb-2">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={enableTracking}
-                  onChange={async (e) => {
-                    const newValue = e.target.checked;
-                    setEnableTracking(newValue);
-                    
-                    // Notify the parent component about the change
-                    if (onEnableTrackingChange) {
-                      onEnableTrackingChange(newValue);
-                    }
-                    
-                    // Show success message immediately for better user feedback
-                    setSuccess(
-                      'Inventory tracking ' +
-                        (newValue ? 'enabled' : 'disabled') +
-                        ' successfully'
-                    );
-                    
-                    // Immediately save the change to the database
-                    if (menuItem) {
-                      try {
-                        // When disabling inventory tracking, explicitly set values to 0/undefined
-                        await menuItemsApi.update(menuItem.id, {
-                          enable_stock_tracking: newValue,
-                          stock_quantity: newValue ? stockQuantity : 0,
-                          damaged_quantity: newValue ? damagedQuantity : 0,
-                          low_stock_threshold: newValue
-                            ? lowStockThreshold
-                            : undefined
-                        });
-                        
-                        // Refresh inventory data with minimal UI disruption
-                        await refreshInventoryData({
-                          refreshAuditHistory: false,
-                          notifyParent: true
-                        });
-                        
-                        setTimeout(() => setSuccess(null), 3000);
-                      } catch (err) {
-                        console.error('Failed to update inventory tracking:', err);
-                        setError('Failed to update inventory tracking');
-                        setTimeout(() => setSuccess(null), 0); // Clear success message
-                        setTimeout(() => setError(null), 3000);
-                        
-                        // Revert the UI if the API call fails
-                        setEnableTracking(!newValue);
+            <h3 className="font-semibold text-lg mb-4">Inventory Tracking</h3>
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <label className="inline-flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="inventoryTrackingType"
+                    value="none"
+                    checked={inventoryTrackingType === 'none'}
+                    onChange={() => {
+                      setInventoryTrackingType('none');
+                      
+                      // Notify the parent component about the change
+                      if (onEnableTrackingChange) {
+                        onEnableTrackingChange(false);
                       }
-                    }
-                  }}
-                  className="sr-only peer"
-                />
-                <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#c1902f]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#c1902f]"></div>
-                <span className="ml-3 text-gray-900 font-medium">
-                  Enable Inventory Tracking
-                </span>
-              </label>
-            </div>
-            <p className="text-sm text-gray-500">
-              When enabled, you can track stock quantities, set low stock
-              thresholds, and mark items as damaged.
-            </p>
-          </div>
-          
-          {enableTracking && (
-            <>
-              <h3 className="font-semibold text-lg mb-4">Inventory Settings</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
-                    value={stockQuantity}
-                    min={0}
-                    onChange={(e) =>
-                      setStockQuantity(parseInt(e.target.value) || 0)
-                    }
+                      
+                      // Show success message
+                      setSuccess('Inventory tracking disabled successfully');
+                    }}
+                    className="mr-2"
                   />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Damaged Quantity
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
-                    value={damagedQuantity}
-                    min={0}
-                    onChange={(e) =>
-                      setDamagedQuantity(parseInt(e.target.value) || 0)
-                    }
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Low Stock Threshold
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:border-[#c1902f]"
-                    value={lowStockThreshold}
-                    min={1}
-                    onChange={(e) =>
-                      setLowStockThreshold(parseInt(e.target.value) || 1)
-                    }
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    When stock falls below this number, item will be marked as
-                    'low stock'
-                  </p>
-                </div>
+                  <span>No inventory tracking</span>
+                </label>
               </div>
               
-              <div className="flex justify-between items-center mb-6">
-                <p className="text-gray-800">
-                  Available Quantity:{' '}
-                  <span className="font-bold">
-                    {stockQuantity - damagedQuantity > 0
-                      ? stockQuantity - damagedQuantity
-                      : 0}
-                  </span>
+              <div className="flex items-center">
+                <label className="inline-flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="inventoryTrackingType"
+                    value="menu"
+                    checked={inventoryTrackingType === 'menu'}
+                    onChange={() => {
+                      setInventoryTrackingType('menu');
+                      
+                      // Notify the parent component about the change
+                      if (onEnableTrackingChange) {
+                        onEnableTrackingChange(true);
+                      }
+                      
+                      // Save the changes immediately
+                      setTimeout(() => {
+                        handleSaveSettings();
+                      }, 100);
+                      
+                      // Show success message
+                      setSuccess('Menu-level inventory tracking enabled successfully');
+                    }}
+                    className="mr-2"
+                  />
+                  <span>Track inventory at menu item level</span>
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <label className="inline-flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="inventoryTrackingType"
+                    value="option"
+                    checked={inventoryTrackingType === 'option'}
+                    onChange={() => {
+                      setInventoryTrackingType('option');
+                      
+                      // Notify the parent component about the change
+                      if (onEnableTrackingChange) {
+                        onEnableTrackingChange(false);
+                      }
+                      
+                      // Save the changes immediately
+                      setTimeout(() => {
+                        handleSaveSettings();
+                      }, 100);
+                      
+                      // Show success message
+                      setSuccess('Option-level inventory tracking enabled successfully');
+                    }}
+                    className="mr-2"
+                  />
+                  <span>Track inventory at option level</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          {/* Menu-level inventory section */}
+          {inventoryTrackingType === 'menu' && (
+            <>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stock Quantity
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={stockQuantity}
+                  onChange={(e) => setStockQuantity(parseInt(e.target.value, 10) || 0)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Damaged Quantity
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={damagedQuantity}
+                  onChange={(e) => setDamagedQuantity(parseInt(e.target.value, 10) || 0)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Low Stock Threshold
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={lowStockThreshold}
+                  onChange={(e) => setLowStockThreshold(parseInt(e.target.value, 10) || 10)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  When stock falls below this number, item will be marked as 'low stock'
                 </p>
-                
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-gray-700 mb-2">
+                  Available Quantity: <span className="font-bold">{Math.max(0, stockQuantity - damagedQuantity)}</span>
+                </p>
+              </div>
+              
+              <div className="flex justify-end mb-6">
                 <button
-                  className="bg-[#c1902f] hover:bg-[#a97c28] text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50"
+                  type="button"
                   onClick={handleSaveSettings}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Save Settings
                 </button>
@@ -489,7 +536,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                     value={damageQuantity}
                     min={1}
                     onChange={(e) =>
-                      setDamageQuantity(parseInt(e.target.value) || 0)
+                      setDamageQuantity(parseInt(e.target.value, 10) || 0)
                     }
                   />
                 </div>
@@ -783,7 +830,54 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
               )}
             </>
           )}
-        </div>
+          
+          {/* Option-level inventory section */}
+          {inventoryTrackingType === 'option' && (
+            <>
+              {menuItem.option_groups && menuItem.option_groups.length > 0 ? (
+                <>
+                  <hr className="my-6" />
+                  
+                  <h3 className="font-semibold text-lg mb-4">Option-Level Inventory</h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Manage inventory for individual options (e.g., shirt sizes, musubi types)
+                  </p>
+                  
+                  <div className="space-y-6">
+                    {menuItem.option_groups.map((group) => (
+                      <div key={group.id} className="border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-medium text-base mb-3">{group.name}</h4>
+                        
+                        <div className="space-y-4">
+                          {group.options.map((option) => (
+                            <OptionInventoryForm
+                              key={option.id}
+                              option={option as MenuOption}
+                              onUpdate={() => {
+                                // Refresh the menu item data after updating an option
+                                refreshInventoryData({
+                                  refreshAuditHistory: false,
+                                  notifyParent: true
+                                });
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-yellow-800">
+                    This menu item doesn't have any option groups or options.
+                    Please add option groups and options first before enabling option-level inventory tracking.
+                  </p>
+                </div>
+              )}
+                    </>
+                  )}
+                </div>
         
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end">

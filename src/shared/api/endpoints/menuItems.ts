@@ -30,9 +30,12 @@ export const menuItemsApi = {
   /**
    * Get a specific menu item by ID
    */
-  getById: async (id: string | number, includeStock: boolean = true): Promise<MenuItem> => {
+  getById: async (id: string | number, includeOptions: boolean = false, includeStock: boolean = true): Promise<MenuItem> => {
     const response = await apiClient.get(`/menu_items/${id}`, {
-      params: { include_stock: includeStock }
+      params: {
+        include_stock: includeStock,
+        include_options: includeOptions
+      }
     });
     return response.data;
   },

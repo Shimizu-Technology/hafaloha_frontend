@@ -7,6 +7,7 @@ import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem } from '../../types/menu';
 import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
 import { api, uploadMenuItemImage } from '../../lib/api';
+import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { Tooltip } from '../../../shared/components/ui';
 import { deriveStockStatus, calculateAvailableQuantity } from '../../utils/inventoryUtils';
@@ -425,9 +426,18 @@ export function MenuManager({
   }, [menuItems, isEditing, editItemPollingActive, editingItem]);
 
   /** Manage inventory => show the modal. */
-  const handleManageInventory = (item: MenuItem) => {
-    setInventoryModalItem(item);
-    setInventoryModalOpen(true);
+  const handleManageInventory = async (item: MenuItem) => {
+    try {
+      // Fetch the menu item with option groups included
+      const fullItem = await menuItemsApi.getById(item.id, true);
+      setInventoryModalItem(fullItem);
+      setInventoryModalOpen(true);
+    } catch (error) {
+      console.error("Error fetching menu item with options:", error);
+      // Fallback to using the item without option groups
+      setInventoryModalItem(item);
+      setInventoryModalOpen(true);
+    }
   };
   const handleCloseInventoryModal = () => {
     setInventoryModalOpen(false);
@@ -943,9 +953,15 @@ export function MenuManager({
                       {item.featured && (
                         <Badge bgColor="bg-yellow-500">Featured</Badge>
                       )}
-                      {/* 6) If inventory tracking is enabled */}
+                      {/* 6) If inventory tracking is enabled at menu item level */}
                       {item.enable_stock_tracking && (
                         <Badge bgColor="bg-blue-500">Inventory Tracked</Badge>
+                      )}
+                      {/* 6.1) If any option has inventory tracking enabled */}
+                      {!item.enable_stock_tracking && item.option_groups?.some(group =>
+                        group.options?.some(option => option.enable_stock_tracking)
+                      ) && (
+                        <Badge bgColor="bg-blue-500">Options Tracked</Badge>
                       )}
                       {/* 7) If tracking is enabled, show dynamic stock badges */}
                       {item.enable_stock_tracking && deriveStockStatus(item) === 'low_stock' && (

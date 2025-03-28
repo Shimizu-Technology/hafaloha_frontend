@@ -13,6 +13,23 @@ export interface MenuOption {
   additional_price_float?: number; // Added this property to match the API response
   available: boolean;
   is_preselected?: boolean;
+  
+  // Inventory tracking fields
+  enable_stock_tracking?: boolean;
+  stock_quantity?: number;
+  damaged_quantity?: number;
+  low_stock_threshold?: number;
+  stock_status?: 'in_stock' | 'out_of_stock' | 'low_stock';
+}
+
+/**
+ * Parameters for updating option inventory
+ */
+export interface OptionInventoryUpdate {
+  enable_stock_tracking?: boolean;
+  stock_quantity?: number;
+  damaged_quantity?: number;
+  low_stock_threshold?: number;
 }
 
 export interface OptionGroup {
@@ -30,6 +47,21 @@ export interface OptionGroup {
 export interface MenuItemStockAudit {
   id: number;
   menu_item_id: number;
+  previous_quantity: number;
+  new_quantity: number;
+  reason?: string;
+  user_id?: number;
+  order_id?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Stock audit record for tracking option inventory changes
+ */
+export interface OptionStockAudit {
+  id: number;
+  option_id: number;
   previous_quantity: number;
   new_quantity: number;
   reason?: string;
