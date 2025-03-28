@@ -313,13 +313,21 @@ export function EnhancedAdditionalPaymentModal({
       // Convert orderId to number if it's a string
       const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
       
+      // Determine the actual payment method based on the processor
+      let actualPaymentMethod = 'credit_card';
+      if (paymentProcessor === 'stripe') {
+        actualPaymentMethod = 'stripe';
+      } else if (paymentProcessor === 'paypal') {
+        actualPaymentMethod = 'paypal';
+      }
+      
       // Log the transaction details for debugging/tracking purposes
-      console.log(`Payment processed with transaction ID: ${transactionId}, amount: ${numericAmount}`);
+      console.log(`Payment processed with transaction ID: ${transactionId}, amount: ${numericAmount}, method: ${actualPaymentMethod}`);
       
       // Here you would call your API to process the payment on the backend
       // Note: We're adapting to the API's expected parameters based on TypeScript errors
       await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
-        payment_method: 'credit_card',
+        payment_method: actualPaymentMethod,
         items: paymentItems.map(item => ({
           id: item.id,
           name: item.name,

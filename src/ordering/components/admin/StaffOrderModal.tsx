@@ -1376,10 +1376,24 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   }) => {
     setPaymentProcessing(false);
     setPaymentTransactionId(details.transaction_id);
+    
+    // Get the payment processor from restaurant settings
+    const restaurant = useRestaurantStore.getState().restaurant;
+    const paymentGateway = restaurant?.admin_settings?.payment_gateway || {};
+    const currentPaymentProcessor = paymentGateway.payment_processor || 'paypal';
+    
+    // Determine the actual payment method based on the processor
+    let actualPaymentMethod = 'credit_card';
+    if (currentPaymentProcessor === 'stripe') {
+      actualPaymentMethod = 'stripe';
+    } else if (currentPaymentProcessor === 'paypal') {
+      actualPaymentMethod = 'paypal';
+    }
+    
     submitOrderWithPayment(
       details.transaction_id,
       details.payment_details,
-      details.payment_details?.payment_method || 'credit_card'
+      details.payment_details?.payment_method || actualPaymentMethod
     );
   };
 
