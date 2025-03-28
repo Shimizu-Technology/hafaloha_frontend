@@ -28,7 +28,7 @@ export function EnhancedAdditionalPaymentModal({
   onPaymentCompleted,
 }: EnhancedAdditionalPaymentModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other'>('credit_card');
+  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other' | 'stripe_reader'>('credit_card');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
@@ -159,7 +159,7 @@ export function EnhancedAdditionalPaymentModal({
     }
   };
 
-  // Handle manual payments (Clover, Revel, Other)
+  // Handle manual payments (Stripe Reader, Clover, Revel, Other)
   const handleManualPayment = async () => {
     setIsLoading(true);
     setPaymentError(null);
@@ -313,13 +313,21 @@ export function EnhancedAdditionalPaymentModal({
       // Convert orderId to number if it's a string
       const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
       
+      // Determine the actual payment method based on the processor
+      let actualPaymentMethod = 'credit_card';
+      if (paymentProcessor === 'stripe') {
+        actualPaymentMethod = 'stripe';
+      } else if (paymentProcessor === 'paypal') {
+        actualPaymentMethod = 'paypal';
+      }
+      
       // Log the transaction details for debugging/tracking purposes
-      console.log(`Payment processed with transaction ID: ${transactionId}, amount: ${numericAmount}`);
+      console.log(`Payment processed with transaction ID: ${transactionId}, amount: ${numericAmount}, method: ${actualPaymentMethod}`);
       
       // Here you would call your API to process the payment on the backend
       // Note: We're adapting to the API's expected parameters based on TypeScript errors
       await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
-        payment_method: 'credit_card',
+        payment_method: actualPaymentMethod,
         items: paymentItems.map(item => ({
           id: item.id,
           name: item.name,
@@ -408,7 +416,7 @@ export function EnhancedAdditionalPaymentModal({
               {!showStripeForm && !paymentLinkSent && (
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                     <button
                       type="button"
                       className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
@@ -419,6 +427,17 @@ export function EnhancedAdditionalPaymentModal({
                       onClick={() => setPaymentMethod('credit_card')}
                     >
                       Credit Card
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
+                        paymentMethod === 'stripe_reader'
+                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                      onClick={() => setPaymentMethod('stripe_reader')}
+                    >
+                      Stripe Reader
                     </button>
                     <button
                       type="button"
@@ -479,11 +498,17 @@ export function EnhancedAdditionalPaymentModal({
                 </div>
               )}
 
-              {/* Manual Payment Panel (Clover, Revel, Other) */}
-              {['clover', 'revel', 'other'].includes(paymentMethod) && !paymentLinkSent && (
+              {/* Manual Payment Panel (Stripe Reader, Clover, Revel, Other) */}
+              {['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod) && !paymentLinkSent && (
                 <div className="border border-gray-200 rounded-md p-4 mb-6">
                   <h4 className="text-sm font-medium text-gray-700 mb-3">
-                    {paymentMethod === 'clover' ? 'Clover' : paymentMethod === 'revel' ? 'Revel' : 'Other'} Payment Details
+                    {paymentMethod === 'stripe_reader'
+                      ? 'Stripe Card Reader'
+                      : paymentMethod === 'clover'
+                        ? 'Clover'
+                        : paymentMethod === 'revel'
+                          ? 'Revel'
+                          : 'Other'} Payment Details
                   </h4>
                   <div className="space-y-4">
                     <div>
@@ -732,7 +757,7 @@ export function EnhancedAdditionalPaymentModal({
                     {isLoading ? 'Processing...' : 'Mark as Paid (Cash)'}
                   </button>
                 )}
-                {['clover', 'revel', 'other'].includes(paymentMethod) && (
+                {['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod) && (
                   <button
                     type="button"
                     onClick={handleManualPayment}
