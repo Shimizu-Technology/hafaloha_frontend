@@ -821,7 +821,7 @@ function PaymentPanel({
       handleSendPaymentLink();
       return;
     }
-    if (['clover', 'revel', 'other'].includes(paymentMethod)) {
+    if (['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod)) {
       handleManualPayment();
       return;
     }
