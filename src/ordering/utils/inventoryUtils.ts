@@ -31,42 +31,45 @@ export function calculateEffectiveQuantity(
 
 /**
  * Determines if an item is out of stock.
- * 
+ *
  * @param item The order item to check
  * @returns True if the item is out of stock, false otherwise
  */
 export function isOutOfStock(item: OrderItem): boolean {
-  return !!item.enable_stock_tracking && 
-         item.stock_quantity !== undefined && 
+  // Check inventory tracking
+  return !!item.enable_stock_tracking &&
+         item.stock_quantity !== undefined &&
          item.stock_quantity <= 0;
 }
 
 /**
  * Determines if an item is low on stock.
- * 
+ *
  * @param item The order item to check
  * @returns True if the item is low on stock, false otherwise
  */
 export function isLowStock(item: OrderItem): boolean {
-  return !!item.enable_stock_tracking && 
-         item.stock_quantity !== undefined && 
+  // Check inventory tracking
+  return !!item.enable_stock_tracking &&
+         item.stock_quantity !== undefined &&
          item.stock_quantity > 0 &&
          item.stock_quantity <= (item.low_stock_threshold || 5);
 }
 
 /**
  * Gets the appropriate stock status label for an item.
- * 
+ *
  * @param item The order item to get the status for
  * @param currentQuantity The current quantity in the order
  * @param effectiveQuantity The effective available quantity
  * @returns A string with the stock status label
  */
 export function getStockStatusLabel(
-  item: OrderItem, 
+  item: OrderItem,
   currentQuantity: number,
   effectiveQuantity: number
 ): string {
+  // If inventory tracking is disabled, return empty string
   if (!item.enable_stock_tracking || item.stock_quantity === undefined) {
     return '';
   }
@@ -88,12 +91,27 @@ export function getStockStatusLabel(
 
 /**
  * Calculates the available quantity for a menu item.
- * 
+ *
  * @param item The menu item to calculate available quantity for
- * @returns The available quantity, or Infinity if stock tracking is disabled
+ * @returns The available quantity, or Infinity if stock tracking is disabled and item is in stock
  */
 export function calculateAvailableQuantity(item: MenuItem): number {
-  if (!item.enable_stock_tracking || item.available_quantity === undefined) {
+  // If inventory tracking is disabled, check the manually set stock status
+  if (!item.enable_stock_tracking) {
+    // If manually set to out of stock, return 0
+    if (item.stock_status === 'out_of_stock') {
+      return 0;
+    }
+    // If manually set to low stock, return a low number (e.g., 2)
+    if (item.stock_status === 'low_stock') {
+      return item.low_stock_threshold || 2;
+    }
+    // Otherwise, return Infinity (unlimited)
+    return Infinity;
+  }
+  
+  // When inventory tracking is enabled, use the available quantity
+  if (item.available_quantity === undefined) {
     return Infinity;
   }
   
@@ -102,12 +120,22 @@ export function calculateAvailableQuantity(item: MenuItem): number {
 
 /**
  * Derives the stock status for a menu item.
- * 
+ *
  * @param item The menu item to check
  * @returns 'out_of_stock', 'low_stock', or 'in_stock'
  */
 export function deriveStockStatus(item: MenuItem): 'out_of_stock' | 'low_stock' | 'in_stock' {
-  if (!item.enable_stock_tracking || item.available_quantity === undefined) {
+  // If inventory tracking is disabled, respect the manually set stock_status
+  if (!item.enable_stock_tracking) {
+    // Check if the item has a manually set stock_status
+    if (item.stock_status === 'out_of_stock' || item.stock_status === 'low_stock') {
+      return item.stock_status;
+    }
+    return 'in_stock';
+  }
+  
+  // When inventory tracking is enabled, calculate based on available quantity
+  if (item.available_quantity === undefined) {
     return 'in_stock';
   }
   

@@ -1202,10 +1202,16 @@ export function MenuManager({
                     value={editingItem.price}
                     onChange={(e) => {
                       setHasUnsavedChanges(true);
+                      // Ensure we're always working with a string
+                      const newValue = e.target.value;
                       setEditingItem({
                         ...editingItem,
-                        price: e.target.value,
+                        price: newValue,
                       });
+                    }}
+                    onFocus={(e) => {
+                      // Select all text when focused to make it easier to replace
+                      e.target.select();
                     }}
                     className="w-full px-4 py-2 border rounded-md"
                     required
@@ -1231,10 +1237,16 @@ export function MenuManager({
                     value={editingItem.cost_to_make}
                     onChange={(e) => {
                       setHasUnsavedChanges(true);
+                      // Ensure we're always working with a string
+                      const newValue = e.target.value;
                       setEditingItem({
                         ...editingItem,
-                        cost_to_make: e.target.value,
+                        cost_to_make: newValue,
                       });
+                    }}
+                    onFocus={(e) => {
+                      // Select all text when focused to make it easier to replace
+                      e.target.select();
                     }}
                     className="w-full px-4 py-2 border rounded-md"
                   />
