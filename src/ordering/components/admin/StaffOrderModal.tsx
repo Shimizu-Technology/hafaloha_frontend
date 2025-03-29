@@ -1,5 +1,5 @@
 // src/ordering/componenets/admin/StaffOrderModal.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
@@ -78,6 +78,11 @@ function MenuItemsPanel({
   removeFromCart,
   getItemKey
 }: MenuItemsPanelProps) {
+  // Debug: Log categories when they change
+  useEffect(() => {
+    console.log('MenuItemsPanel - categories:', Array.from(categories.entries()));
+    console.log('MenuItemsPanel - categories size:', categories.size);
+  }, [categories]);
   // Filter items by search term & category
   const filteredMenuItems = menuItems.filter(item => {
     const matchesSearch =
@@ -1384,7 +1389,12 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
 
 
   // Data & cart from store
-  const { menuItems, fetchMenuItems, loading: menuLoading } = useMenuStore();
+  const { menuItems, fetchMenuItems, loading: menuLoading, currentMenuId } = useMenuStore();
+  
+  // Debug: Log currentMenuId when it changes
+  useEffect(() => {
+    console.log('StaffOrderModal - currentMenuId changed:', currentMenuId);
+  }, [currentMenuId]);
   const {
     cartItems,
     addToCart,
@@ -1425,33 +1435,76 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     };
   }, [fetchMenuItems, clearCart]);
 
-  // Load categories once menuItems is present
+  // Store all categories from API
+  const [allCategories, setAllCategories] = useState<any[]>([]);
+  
+  // Load all categories once menuItems is present
   useEffect(() => {
     async function fetchCats() {
       try {
+        console.log('Fetching all categories');
         const res = await apiClient.get('/categories');
-        const catMap = new Map<number, string>();
-        res.data.forEach((c: any) => {
-          catMap.set(c.id, c.name);
-        });
-        setCategories(catMap);
+        console.log('Categories from API:', res.data);
+        
+        // Store all categories in state
+        setAllCategories(res.data);
       } catch (error) {
         console.error('Error fetching categories:', error);
-        const fallback = new Map<number, string>();
-        menuItems.forEach(it => {
-          if (it.category_ids) {
-            it.category_ids.forEach(catId => {
-              if (!fallback.has(catId)) fallback.set(catId, `Category ${catId}`);
-            });
-          }
-        });
-        setCategories(fallback);
+        setAllCategories([]);
       }
     }
     if (menuItems.length > 0) {
       fetchCats();
     }
   }, [menuItems]);
+  
+  // Filter categories by current menu ID using useMemo
+  const filteredCategories = useMemo(() => {
+    console.log('StaffOrderModal - filtering categories, currentMenuId:', currentMenuId);
+    
+    // Get the active menu ID from the menuStore if currentMenuId is null
+    const menuStore = useMenuStore.getState();
+    const activeMenuId = currentMenuId || menuStore.currentMenuId;
+    console.log('StaffOrderModal - using activeMenuId for filtering:', activeMenuId);
+    
+    const catMap = new Map<number, string>();
+    
+    if (activeMenuId && allCategories.length > 0) {
+      // Filter categories by active menu ID
+      allCategories.forEach((c: any) => {
+        if (Number(c.menu_id) === Number(activeMenuId)) {
+          console.log(`StaffOrderModal - adding category ${c.id} (${c.name}) - matches menu ${activeMenuId}`);
+          catMap.set(c.id, c.name);
+        }
+      });
+    } else if (allCategories.length > 0) {
+      // Fallback: if no activeMenuId but we have categories, use menu item categories as fallback
+      console.log('StaffOrderModal - no activeMenuId, using fallback from menu items');
+      menuItems.forEach(item => {
+        if (item.category_ids) {
+          item.category_ids.forEach(catId => {
+            // Try to find the category name in allCategories
+            const category = allCategories.find(c => c.id === catId);
+            if (category) {
+              catMap.set(catId, category.name);
+            } else if (!catMap.has(catId)) {
+              catMap.set(catId, `Category ${catId}`);
+            }
+          });
+        }
+      });
+    }
+    
+    console.log('StaffOrderModal - final catMap size:', catMap.size);
+    console.log('StaffOrderModal - final catMap entries:', Array.from(catMap.entries()));
+    
+    return catMap;
+  }, [allCategories, currentMenuId, menuItems]);
+  
+  // Update categories state when filteredCategories changes
+  useEffect(() => {
+    setCategories(filteredCategories);
+  }, [filteredCategories]);
 
   // Restaurant store
   const restaurantStore = useRestaurantStore();

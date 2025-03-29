@@ -11,7 +11,7 @@ interface SearchableMenuItemSelectorProps {
 }
 
 export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenuItemSelectorProps) {
-  const { menuItems, categories, fetchMenuItems, fetchCategories, loading } = useMenuStore();
+  const { menuItems, categories, fetchMenuItems, fetchCategories, loading, currentMenuId } = useMenuStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
@@ -30,28 +30,43 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
     }
   }, [menuItems.length, categories, fetchMenuItems, fetchCategories]);
   
-  // Filter menu items based on search query and selected category
+  // Filter menu items based on search query, selected category, and active menu
   useEffect(() => {
+    // First, filter by active menu
+    const menuStore = useMenuStore.getState();
+    const activeMenuId = currentMenuId || menuStore.currentMenuId;
+    
+    // Start with all menu items
     let filtered = [...menuItems];
+    
+    // Filter by active menu if we have one
+    if (activeMenuId) {
+      filtered = filtered.filter(item =>
+        Number(item.menu_id) === Number(activeMenuId)
+      );
+      console.log(`SearchableMenuItemSelector - filtered items by menu ${activeMenuId}, ${filtered.length} items remaining`);
+    }
     
     // Filter by category if one is selected
     if (selectedCategoryId !== null) {
-      filtered = filtered.filter(item => 
+      filtered = filtered.filter(item =>
         item.category_ids?.includes(selectedCategoryId)
       );
+      console.log(`SearchableMenuItemSelector - filtered by category ${selectedCategoryId}, ${filtered.length} items remaining`);
     }
     
     // Filter by search query if one exists
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(item => 
-        item.name.toLowerCase().includes(query) || 
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(query) ||
         item.description?.toLowerCase().includes(query)
       );
+      console.log(`SearchableMenuItemSelector - filtered by search "${searchQuery}", ${filtered.length} items remaining`);
     }
     
     setFilteredItems(filtered);
-  }, [searchQuery, selectedCategoryId, menuItems]);
+  }, [searchQuery, selectedCategoryId, menuItems, currentMenuId]);
   
   // Calculate available quantity (stock minus damaged)
   const calculateAvailableQuantity = (item: MenuItem): number => {
@@ -107,10 +122,61 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
     });
   };
   
-  // Get sorted categories for the filter
+  // Get sorted categories for the filter - filter in component like MenuManager.tsx and MenuPage.tsx
   const sortedCategories = useMemo(() => {
-    return [...(categories || [])].sort((a, b) => a.name.localeCompare(b.name));
-  }, [categories]);
+    console.log('SearchableMenuItemSelector - categories:', categories);
+    console.log('SearchableMenuItemSelector - currentMenuId:', currentMenuId);
+    
+    // Get the active menu ID from the menuStore
+    const menuStore = useMenuStore.getState();
+    const activeMenuId = currentMenuId || menuStore.currentMenuId;
+    console.log('SearchableMenuItemSelector - using activeMenuId:', activeMenuId);
+    
+    // If we have categories
+    if (categories?.length) {
+      // If we have an active menu ID, filter by it
+      if (activeMenuId) {
+        const filtered = categories.filter(cat => Number(cat.menu_id) === Number(activeMenuId));
+        console.log(`SearchableMenuItemSelector - filtered ${filtered.length} categories for menu ${activeMenuId}`);
+        
+        // If we found categories for this menu, return them
+        if (filtered.length > 0) {
+          return filtered.sort((a, b) => a.name.localeCompare(b.name));
+        }
+      }
+      
+      // Fallback: If no activeMenuId or no categories found for the active menu,
+      // group categories by name to avoid duplicates
+      console.log('SearchableMenuItemSelector - using fallback: grouping categories by name');
+      
+      // Create a map to store unique categories by name
+      const uniqueCategories = new Map();
+      categories.forEach(cat => {
+        // If we haven't seen this category name yet, or if this category belongs to the current menu
+        if (!uniqueCategories.has(cat.name) ||
+            (activeMenuId && Number(cat.menu_id) === Number(activeMenuId))) {
+          uniqueCategories.set(cat.name, cat);
+        }
+      });
+      
+      // Convert the map values back to an array and sort
+      const result = Array.from(uniqueCategories.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+      
+      console.log(`SearchableMenuItemSelector - fallback found ${result.length} unique categories`);
+      return result;
+    }
+    
+    // No categories at all
+    console.log('SearchableMenuItemSelector - no categories available');
+    return [];
+  }, [categories, currentMenuId]);
+  
+  // Debug: Log when sortedCategories changes
+  useEffect(() => {
+    console.log('SearchableMenuItemSelector - sortedCategories changed:', sortedCategories);
+    console.log('SearchableMenuItemSelector - sortedCategories length:', sortedCategories.length);
+  }, [sortedCategories]);
   
   // Render the search step
   const renderSearchStep = () => (
@@ -148,36 +214,38 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
         </div>
       </div>
       
-      {/* Category filters */}
-      <div className="mb-2">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">Filter by Category</h4>
-        <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto pb-1">
-          <button
-            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-              selectedCategoryId === null
-                ? 'bg-[#c1902f] text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-            onClick={() => setSelectedCategoryId(null)}
-          >
-            All
-          </button>
-          
-          {sortedCategories.map(category => (
+      {/* Category filters - only show if we have categories */}
+      {sortedCategories.length > 0 && (
+        <div className="mb-2">
+          <h4 className="text-sm font-medium text-gray-700 mb-2">Filter by Category</h4>
+          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto pb-1">
             <button
-              key={category.id}
               className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                selectedCategoryId === category.id
+                selectedCategoryId === null
                   ? 'bg-[#c1902f] text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
-              onClick={() => setSelectedCategoryId(category.id)}
+              onClick={() => setSelectedCategoryId(null)}
             >
-              {category.name}
+              All
             </button>
-          ))}
+            
+            {sortedCategories.map(category => (
+              <button
+                key={category.id}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                  selectedCategoryId === category.id
+                    ? 'bg-[#c1902f] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                onClick={() => setSelectedCategoryId(category.id)}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       
       {loading ? (
         <div className="py-8 flex justify-center">
