@@ -32,6 +32,7 @@ import {
 import { MenuItemPerformance } from './reports/MenuItemPerformance';
 import { PaymentMethodReport } from './reports/PaymentMethodReport';
 import { VipCustomerReport } from './reports/VipCustomerReport';
+import { ComprehensiveBusinessReport } from './reports/ComprehensiveBusinessReport';
 
 // ------------------- Types -------------------
 type SortColumn = 'user_name' | 'total_spent' | 'order_count';
@@ -401,6 +402,61 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
 
     // Create workbook
     const wb = XLSX.utils.book_new();
+    
+    // Create Executive Summary sheet
+    const totalItemsSold = menuItems.reduce((sum, item) => sum + item.quantity_sold, 0);
+    const sortedCategories = [...categories].sort((a, b) => Number(b.revenue) - Number(a.revenue));
+    const sortedItems = [...menuItems].sort((a, b) => Number(b.revenue) - Number(a.revenue));
+    const sortedPaymentsByCount = [...paymentMethods].sort((a, b) => Number(b.count) - Number(a.count));
+    const sortedPaymentsByAmount = [...paymentMethods].sort((a, b) => Number(b.amount) - Number(a.amount));
+    
+    // Calculate VIP percentage of total revenue
+    const vipRevenuePercentage = paymentTotals.amount > 0
+      ? (vipSummary.total_revenue / paymentTotals.amount * 100).toFixed(2)
+      : '0.00';
+    
+    // Calculate average order value
+    const avgOrderValue = paymentTotals.count > 0
+      ? (paymentTotals.amount / paymentTotals.count).toFixed(2)
+      : '0.00';
+    
+    const executiveSummary = [
+      { 'Metric': 'Report Period', 'Value': `${startDate} to ${endDate}` },
+      { 'Metric': 'Total Revenue', 'Value': `$${Number(paymentTotals.amount).toFixed(2)}` },
+      { 'Metric': 'Total Orders', 'Value': paymentTotals.count },
+      { 'Metric': 'Average Order Value', 'Value': `$${avgOrderValue}` },
+      { 'Metric': '', 'Value': '' },
+      { 'Metric': 'Menu Performance', 'Value': '' },
+      { 'Metric': 'Total Items Sold', 'Value': totalItemsSold },
+      { 'Metric': 'Top Category', 'Value': sortedCategories.length > 0 ? sortedCategories[0].name : 'N/A' },
+      { 'Metric': 'Top Category Revenue', 'Value': sortedCategories.length > 0 ? `$${Number(sortedCategories[0].revenue).toFixed(2)}` : 'N/A' },
+      { 'Metric': 'Top Item', 'Value': sortedItems.length > 0 ? sortedItems[0].name : 'N/A' },
+      { 'Metric': 'Top Item Revenue', 'Value': sortedItems.length > 0 ? `$${Number(sortedItems[0].revenue).toFixed(2)}` : 'N/A' },
+      { 'Metric': '', 'Value': '' },
+      { 'Metric': 'Payment Methods', 'Value': '' },
+      { 'Metric': 'Most Used Method', 'Value': sortedPaymentsByCount.length > 0 ?
+        sortedPaymentsByCount[0].payment_method
+          .replace(/_/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ') : 'N/A' },
+      { 'Metric': 'Highest Revenue Method', 'Value': sortedPaymentsByAmount.length > 0 ?
+        sortedPaymentsByAmount[0].payment_method
+          .replace(/_/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ') : 'N/A' },
+      { 'Metric': '', 'Value': '' },
+      { 'Metric': 'VIP Customers', 'Value': '' },
+      { 'Metric': 'Total VIP Customers', 'Value': vipSummary.total_vip_customers },
+      { 'Metric': 'VIP Revenue', 'Value': `$${Number(vipSummary.total_revenue).toFixed(2)}` },
+      { 'Metric': 'VIP Revenue %', 'Value': `${vipRevenuePercentage}%` },
+      { 'Metric': 'Repeat Customer Rate', 'Value': `${(Number(vipSummary.repeat_customer_rate) * 100).toFixed(0)}%` }
+    ];
+
+    // Add the executive summary as the first sheet
+    const summarySheet = XLSX.utils.json_to_sheet(executiveSummary);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Executive Summary');
 
     // Add customer orders data
     if (ordersData.length > 0) {
@@ -1265,6 +1321,21 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       <VipCustomerReport
         vipCustomers={vipCustomers}
         summary={vipSummary}
+      />
+
+      {/*
+        ============================================
+        (K) Comprehensive Business Report
+        ============================================
+      */}
+      <ComprehensiveBusinessReport
+        menuItems={menuItems}
+        categories={categories}
+        paymentMethods={paymentMethods}
+        paymentTotals={paymentTotals}
+        vipCustomers={vipCustomers}
+        vipSummary={vipSummary}
+        onExport={exportAllReports}
       />
     </div>
   );
