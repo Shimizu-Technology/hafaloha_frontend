@@ -100,18 +100,23 @@ axiosInstance.interceptors.response.use(
   (error) => {
     // Handle 401 Unauthorized (expired token)
     if (error.response && error.response.status === 401) {
-      // Only logout if we're not already on the login page and token exists
-      const token = localStorage.getItem('token');
-      const isLoginPage = window.location.pathname.includes('/login');
+      // Check if this is a VIP validation request
+      const isVipValidation = error.config?.url?.includes('/vip_access/validate_code');
       
-      if (token && !isLoginPage) {
-        // Clear auth state and redirect to login
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+      // Only proceed with logout if it's not a VIP validation and we're not on login page
+      if (!isVipValidation) {
+        const token = localStorage.getItem('token');
+        const isLoginPage = window.location.pathname.includes('/login');
         
-        // Use the auth store to logout
-        const authStore = useAuthStore.getState();
-        authStore.logout();
+        if (token && !isLoginPage) {
+          // Clear auth state and redirect to login
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          
+          // Use the auth store to logout
+          const authStore = useAuthStore.getState();
+          authStore.logout();
+        }
       }
     }
     

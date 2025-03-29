@@ -247,6 +247,9 @@ export function CheckoutPage() {
           
           if (!validationResult.valid) {
             toastUtils.error(validationResult.message || 'Invalid VIP code');
+            // Reset VIP code input and validation state
+            setFormData(prev => ({ ...prev, vipCode: '' }));
+            setVipCodeValid(false);
             setIsSubmitting(false);
             return;
           }
@@ -257,6 +260,9 @@ export function CheckoutPage() {
         } catch (error) {
           if (validationToast) validationToast.dismiss();
           toastUtils.error('Failed to validate VIP code');
+          // Reset VIP code input and validation state on error
+          setFormData(prev => ({ ...prev, vipCode: '' }));
+          setVipCodeValid(false);
           setIsSubmitting(false);
           return;
         }
