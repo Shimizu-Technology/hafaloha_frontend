@@ -213,30 +213,44 @@ function MenuItemsPanel({
                             </p>
                           </div>
                           
-                          {/* Stock indicator if enabled */}
-                          {item.enable_stock_tracking && item.available_quantity !== undefined && (
+                          {/* Stock indicator */}
+                          {(item.enable_stock_tracking || item.stock_status === 'out_of_stock' || item.stock_status === 'low_stock') && (
                             <p className="text-xs text-gray-500 mb-1">
                               {(() => {
-                                // Calculate effective available quantity by subtracting cart quantity
-                                const cartItem = findCartItem(item.id);
-                                const cartQuantity = cartItem ? cartItem.quantity : 0;
-                                const effectiveQuantity = item.available_quantity - cartQuantity;
-                                return effectiveQuantity > 0 
-                                  ? `${effectiveQuantity} left`
-                                  : 'Out of stock';
+                                // Check manually set stock status first
+                                if (item.stock_status === 'out_of_stock') {
+                                  return 'Out of stock';
+                                }
+                                if (item.stock_status === 'low_stock') {
+                                  return 'Low stock';
+                                }
+                                
+                                // Then check inventory tracking
+                                if (item.enable_stock_tracking && item.available_quantity !== undefined) {
+                                  // Calculate effective available quantity by subtracting cart quantity
+                                  const cartItem = findCartItem(item.id);
+                                  const cartQuantity = cartItem ? cartItem.quantity : 0;
+                                  const effectiveQuantity = item.available_quantity - cartQuantity;
+                                  return effectiveQuantity > 0
+                                    ? `${effectiveQuantity} left`
+                                    : 'Out of stock';
+                                }
+                                return '';
                               })()}
                             </p>
                           )}
 
                           {/* Add / Customize / Stock buttons */}
                           <div className="flex justify-end">
-                            {item.enable_stock_tracking && item.available_quantity !== undefined && (() => {
-                              // Calculate effective available quantity by subtracting cart quantity
-                              const cartItem = findCartItem(item.id);
-                              const cartQuantity = cartItem ? cartItem.quantity : 0;
-                              const effectiveQuantity = item.available_quantity - cartQuantity;
-                              return effectiveQuantity <= 0;
-                            })() ? (
+                            {(item.stock_status === 'out_of_stock' ||
+                              (item.enable_stock_tracking && item.available_quantity !== undefined && (() => {
+                                // Calculate effective available quantity by subtracting cart quantity
+                                const cartItem = findCartItem(item.id);
+                                const cartQuantity = cartItem ? cartItem.quantity : 0;
+                                const effectiveQuantity = item.available_quantity - cartQuantity;
+                                return effectiveQuantity <= 0;
+                              })())
+                            ) ? (
                               // Out of stock
                               <button
                                 disabled
@@ -1534,6 +1548,13 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
 
   /** Add normal or customized items */
   function handleAddItem(item: MenuItem) {
+    // Check manually set stock status first
+    if (item.stock_status === 'out_of_stock') {
+      toastUtils.error(`${item.name} is out of stock.`);
+      return;
+    }
+    
+    // Then check inventory tracking
     if (item.enable_stock_tracking && item.available_quantity !== undefined) {
       const cartItem = findCartItem(item.id);
       const cartQuantity = cartItem ? cartItem.quantity : 0;
@@ -1543,6 +1564,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         return;
       }
     }
+    
     // If item has custom options, open customization modal
     if (item.option_groups?.length) {
       setCustomizingItem(item);
@@ -1552,6 +1574,14 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   }
 
   function handleAddCustomizedItem(item: MenuItem, custom: any[], qty: number) {
+    // Check manually set stock status first
+    if (item.stock_status === 'out_of_stock') {
+      toastUtils.error(`${item.name} is out of stock.`);
+      setCustomizingItem(null);
+      return;
+    }
+    
+    // Then check inventory tracking
     if (item.enable_stock_tracking && item.available_quantity !== undefined) {
       const cartItem = findCartItem(item.id);
       const cartQuantity = cartItem ? cartItem.quantity : 0;
