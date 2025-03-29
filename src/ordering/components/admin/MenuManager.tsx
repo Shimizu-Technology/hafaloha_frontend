@@ -27,8 +27,8 @@ interface MenuItemFormData {
   id?: number;
   name: string;
   description: string;
-  price: number;
-  cost_to_make: number;
+  price: string;
+  cost_to_make: string;
   category_ids: number[]; // numeric category IDs
 
   menu_id?: number;
@@ -259,8 +259,8 @@ export function MenuManager({
   const initialFormData: MenuItemFormData = {
     name: '',
     description: '',
-    price: 0,
-    cost_to_make: 0,
+    price: '0',
+    cost_to_make: '0',
     category_ids: [],
     image: '',
     imageFile: null,
@@ -325,8 +325,8 @@ export function MenuManager({
       id: Number(item.id),
       name: item.name,
       description: item.description,
-      price: item.price,
-      cost_to_make: item.cost_to_make ?? 0,
+      price: item.price.toString(),
+      cost_to_make: (item.cost_to_make ?? 0).toString(),
       category_ids: item.category_ids || [],
       image: item.image || '',
       imageFile: null,
@@ -482,8 +482,11 @@ export function MenuManager({
       finalLabel = 'Limited Time';
     }
     
-    // Derive final stock status
-    let derivedStockStatus = deriveStockStatus(editingItem as any);
+    // Determine final stock status
+    // Only use derived status when inventory tracking is enabled
+    let finalStockStatus = editingItem.enable_stock_tracking
+      ? deriveStockStatus(editingItem as any)
+      : editingItem.stock_status;
 
     // Save the current available_days before submitting
     const currentAvailableDays = editingItem.available_days || [];
@@ -501,10 +504,12 @@ export function MenuManager({
             ? editingItem.available_days.map(day => Number(day))
             : [];
           
-          const payload = { 
-            ...rest, 
+          const payload = {
+            ...rest,
+            price: parseFloat(editingItem.price) || 0,
+            cost_to_make: parseFloat(editingItem.cost_to_make) || 0,
             promo_label: finalLabel,
-            stock_status: derivedStockStatus,
+            stock_status: finalStockStatus,
             available_days: submittedDays
           };
           updatedItem = await updateMenuItem(String(id), payload);
@@ -535,8 +540,8 @@ export function MenuManager({
               id: Number(updatedItem.id),
               name: updatedItem.name,
               description: updatedItem.description,
-              price: updatedItem.price,
-              cost_to_make: updatedItem.cost_to_make ?? 0,
+              price: updatedItem.price.toString(),
+              cost_to_make: (updatedItem.cost_to_make ?? 0).toString(),
               category_ids: updatedItem.category_ids || [],
               image: updatedItem.image_url || updatedItem.image || '',
               imageFile: null,
@@ -580,8 +585,10 @@ export function MenuManager({
           
           const payload = {
             ...rest,
+            price: parseFloat(editingItem.price) || 0,
+            cost_to_make: parseFloat(editingItem.cost_to_make) || 0,
             promo_label: finalLabel,
-            stock_status: derivedStockStatus,
+            stock_status: finalStockStatus,
             available_days: availableDays
           };
           updatedItem = await addMenuItem(payload);
@@ -1197,7 +1204,7 @@ export function MenuManager({
                       setHasUnsavedChanges(true);
                       setEditingItem({
                         ...editingItem,
-                        price: parseFloat(e.target.value) || 0,
+                        price: e.target.value,
                       });
                     }}
                     className="w-full px-4 py-2 border rounded-md"
@@ -1226,7 +1233,7 @@ export function MenuManager({
                       setHasUnsavedChanges(true);
                       setEditingItem({
                         ...editingItem,
-                        cost_to_make: parseFloat(e.target.value) || 0,
+                        cost_to_make: e.target.value,
                       });
                     }}
                     className="w-full px-4 py-2 border rounded-md"
