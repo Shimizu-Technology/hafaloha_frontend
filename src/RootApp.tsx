@@ -1,9 +1,9 @@
 // src/RootApp.tsx
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
 import { AuthProvider, ScrollToTop, RestaurantProvider } from './shared';
 import PostHogProvider from './shared/components/analytics/PostHogProvider';
+import { ToastContainer } from './shared/components/ToastContainer';
 
 import GlobalLayout from './GlobalLayout';
 import ReservationsApp from './reservations/ReservationsApp';
@@ -17,7 +17,7 @@ export default function RootApp() {
         <PostHogProvider>
           <BrowserRouter>
             <ScrollToTop />
-            <Toaster
+            <ToastContainer
               position="top-right"
               reverseOrder={false}
               containerStyle={{
