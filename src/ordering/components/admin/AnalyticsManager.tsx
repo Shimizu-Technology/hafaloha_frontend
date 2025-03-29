@@ -40,6 +40,12 @@ type SortDirection = 'asc' | 'desc';
 // For date-range presets
 type PresetRange = '1m' | '3m' | '6m' | '1y' | 'all' | null;
 
+// For time frame selection
+type TimeFrame = '30min' | 'hour' | 'day' | 'week' | 'month';
+
+// For quick time presets
+type TimePreset = '30min' | '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | 'custom';
+
 // ------------------- Helper to sort reports -------------------
 function sortReports(
   data: CustomerOrderReport[],
@@ -83,6 +89,14 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   const [startDate, setStartDate] = useState(defaultStart.toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedPreset, setSelectedPreset] = useState<PresetRange>(null);
+  
+  // Time frame states
+  const [timeGranularity, setTimeGranularity] = useState<TimeFrame>('day'); // Default to day view
+  const [timePreset, setTimePreset] = useState<TimePreset>('custom'); // Default to custom
+  
+  // For time-sensitive queries (with time component)
+  const [startDateWithTime, setStartDateWithTime] = useState<string | null>(null);
+  const [endDateWithTime, setEndDateWithTime] = useState<string | null>(null);
 
   // Manually changing date => reset preset
   function handleChangeStartDate(value: string) {
@@ -119,6 +133,72 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     setStartDate(start.toISOString().split('T')[0]);
     setEndDate(now.toISOString().split('T')[0]);
     setSelectedPreset(preset);
+    
+    // Reset time preset to custom when using date presets
+    setTimePreset('custom');
+  }
+  
+  // Apply time preset logic
+  function applyTimePreset(preset: TimePreset) {
+    const now = new Date();
+    let start = new Date();
+    let granularity: TimeFrame = 'day'; // Default granularity
+    
+    switch (preset) {
+      case '30min':
+        start = new Date(now.getTime() - 30 * 60 * 1000);
+        granularity = '30min';
+        break;
+      case '1h':
+        start = new Date(now.getTime() - 60 * 60 * 1000);
+        granularity = '30min';
+        break;
+      case '3h':
+        start = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+        granularity = '30min';
+        break;
+      case '6h':
+        start = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        granularity = 'hour';
+        break;
+      case '12h':
+        start = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        granularity = 'hour';
+        break;
+      case '24h':
+        start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        granularity = 'hour';
+        break;
+      case '7d':
+        start.setDate(now.getDate() - 7);
+        granularity = 'day';
+        break;
+      case 'custom':
+        // Don't change dates for custom, just update the preset state
+        return setTimePreset('custom');
+    }
+    
+    // Update states
+    setStartDate(start.toISOString().split('T')[0]);
+    setEndDate(now.toISOString().split('T')[0]);
+    setTimeGranularity(granularity);
+    setTimePreset(preset);
+    setSelectedPreset(null); // Reset date preset when using time presets
+    
+    // For hour/minute level presets, we need to include the time component
+    if (['30min', '1h', '3h', '6h', '12h', '24h'].includes(preset)) {
+      // Format with time component for API
+      const startWithTime = start.toISOString();
+      const endWithTime = now.toISOString();
+      
+      // Store full datetime for these short timeframes
+      setStartDateWithTime(startWithTime);
+      setEndDateWithTime(endWithTime);
+    } else {
+      // Clear time components for longer timeframes
+      setStartDateWithTime(null);
+      setEndDateWithTime(null);
+    }
   }
 
   // ----- 2) Analytics States -----
@@ -165,16 +245,21 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   // ----- 4) Load Analytics -----
   async function loadAnalytics() {
     try {
+      // For short time frames, use the datetime with time component
+      const useTimeComponent = ['30min', '1h', '3h', '6h', '12h', '24h'].includes(timePreset);
+      const apiStartDate = useTimeComponent && startDateWithTime ? startDateWithTime : startDate;
+      const apiEndDate = useTimeComponent && endDateWithTime ? endDateWithTime : endDate;
+      
       // 1) Customer Orders
-      const custRes = await getCustomerOrdersReport(startDate, endDate);
+      const custRes = await getCustomerOrdersReport(apiStartDate, apiEndDate);
       setOrdersData(custRes.results || []);
 
-      // 2) Revenue Trend (day-based)
-      const revTrend = await getRevenueTrend('day', startDate, endDate);
+      // 2) Revenue Trend with selected time granularity
+      const revTrend = await getRevenueTrend(timeGranularity, apiStartDate, apiEndDate);
       setRevenueTrend(revTrend.data || []);
 
       // 3) Top Items => limit=5
-      const topRes = await getTopItems(5, startDate, endDate);
+      const topRes = await getTopItems(5, apiStartDate, apiEndDate);
       setTopItems(topRes.top_items || []);
 
       // 4) Income Statement => by year
@@ -182,21 +267,21 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       setIncomeStatement(incRes.income_statement || []);
 
       // 5) User Signups => by day
-      const signupsRes = await getUserSignups(startDate, endDate);
+      const signupsRes = await getUserSignups(apiStartDate, apiEndDate);
       setUserSignups(signupsRes.signups || []);
 
       // 6) User Activity Heatmap
-      const heatmapRes = await getUserActivityHeatmap(startDate, endDate);
+      const heatmapRes = await getUserActivityHeatmap(apiStartDate, apiEndDate);
       setActivityHeatmap(heatmapRes.heatmap || []);
       setDayNames(heatmapRes.day_names || []);
       
       // 7) Menu Item Performance Report
-      const menuItemRes = await getMenuItemReport(startDate, endDate);
+      const menuItemRes = await getMenuItemReport(apiStartDate, apiEndDate);
       setMenuItems(menuItemRes.data.items || []);
       setCategories(menuItemRes.data.categories || []);
       
       // 8) Payment Method Report
-      const paymentMethodRes = await getPaymentMethodReport(startDate, endDate);
+      const paymentMethodRes = await getPaymentMethodReport(apiStartDate, apiEndDate);
       setPaymentMethods(paymentMethodRes.data.payment_methods || []);
       setPaymentTotals({
         amount: paymentMethodRes.data.total_amount || 0,
@@ -204,7 +289,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       });
       
       // 9) VIP Customer Report
-      const vipRes = await getVipCustomerReport(startDate, endDate);
+      const vipRes = await getVipCustomerReport(apiStartDate, apiEndDate);
       setVipCustomers(vipRes.data.vip_customers || []);
       setVipSummary(vipRes.data.summary || {
         total_vip_customers: 0,
@@ -531,6 +616,89 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       <div className="bg-white rounded-lg shadow p-4 animate-fadeIn">
         <h3 className="text-lg font-semibold mb-3">Analytics Date Range</h3>
 
+        {/* Quick Time Presets */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Quick Time Presets
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col">
+              <span className="text-xs text-gray-500 mb-1">Recent</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => applyTimePreset('30min')}
+                  className={timePreset === '30min'
+                    ? 'px-2 py-1 bg-blue-500 text-white text-xs rounded'
+                    : 'px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200'}
+                >
+                  30 Min
+                </button>
+                <button
+                  onClick={() => applyTimePreset('1h')}
+                  className={timePreset === '1h'
+                    ? 'px-2 py-1 bg-blue-500 text-white text-xs rounded'
+                    : 'px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200'}
+                >
+                  1 Hour
+                </button>
+                <button
+                  onClick={() => applyTimePreset('3h')}
+                  className={timePreset === '3h'
+                    ? 'px-2 py-1 bg-blue-500 text-white text-xs rounded'
+                    : 'px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200'}
+                >
+                  3 Hours
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-xs text-gray-500 mb-1">Today/Yesterday</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => applyTimePreset('6h')}
+                  className={timePreset === '6h'
+                    ? 'px-2 py-1 bg-blue-500 text-white text-xs rounded'
+                    : 'px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200'}
+                >
+                  6 Hours
+                </button>
+                <button
+                  onClick={() => applyTimePreset('12h')}
+                  className={timePreset === '12h'
+                    ? 'px-2 py-1 bg-blue-500 text-white text-xs rounded'
+                    : 'px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200'}
+                >
+                  12 Hours
+                </button>
+                <button
+                  onClick={() => applyTimePreset('24h')}
+                  className={timePreset === '24h'
+                    ? 'px-2 py-1 bg-blue-500 text-white text-xs rounded'
+                    : 'px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200'}
+                >
+                  24 Hours
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-xs text-gray-500 mb-1">Longer Period</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => applyTimePreset('7d')}
+                  className={timePreset === '7d'
+                    ? 'px-2 py-1 bg-blue-500 text-white text-xs rounded'
+                    : 'px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200'}
+                >
+                  7 Days
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Manual Date Range */}
         <div className="flex flex-wrap items-end gap-4 mb-4">
           {/* Start Date */}
           <div>
@@ -540,7 +708,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             <input
               type="date"
               value={startDate}
-              onChange={(e) => handleChangeStartDate(e.target.value)}
+              onChange={(e) => {
+                handleChangeStartDate(e.target.value);
+                setTimePreset('custom');
+              }}
               className="border rounded px-3 py-1 w-44"
             />
           </div>
@@ -553,9 +724,30 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             <input
               type="date"
               value={endDate}
-              onChange={(e) => handleChangeEndDate(e.target.value)}
+              onChange={(e) => {
+                handleChangeEndDate(e.target.value);
+                setTimePreset('custom');
+              }}
               className="border rounded px-3 py-1 w-44"
             />
+          </div>
+          
+          {/* Data Granularity Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Data Granularity
+            </label>
+            <select
+              value={timeGranularity}
+              onChange={(e) => setTimeGranularity(e.target.value as TimeFrame)}
+              className="border rounded px-3 py-1 w-44"
+            >
+              <option value="30min">30 Minutes</option>
+              <option value="hour">Hourly</option>
+              <option value="day">Daily</option>
+              <option value="week">Weekly</option>
+              <option value="month">Monthly</option>
+            </select>
           </div>
         </div>
 
