@@ -1671,6 +1671,36 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         true, // Add staff_modal parameter to indicate this is a staff-created order
         paymentDetails // Add payment details
       );
+      
+      // Create an OrderPayment record for manual payment methods
+      // Note: We exclude stripe_reader since it's already creating OrderPayment records
+      if (['cash', 'other', 'clover', 'revel'].includes(paymentMethod)) {
+        try {
+          if (paymentMethod === 'cash') {
+            // Use the cash-specific endpoint for cash payments
+            await apiClient.post(`/orders/${newOrder.id}/payments/cash`, {
+              order_total: orderTotal,
+              cash_received: paymentDetails?.cash_received || orderTotal,
+              payment_method: 'cash',
+              transaction_id: transactionId
+            });
+          } else {
+            // For other manual payment methods, use the additional endpoint
+            await apiClient.post(`/orders/${newOrder.id}/payments/additional`, {
+              amount: orderTotal,
+              payment_method: paymentMethod,
+              payment_details: paymentDetails,
+              transaction_id: transactionId,
+              items: [] // No additional items, just creating a payment record
+            });
+          }
+          console.log(`Created payment record for ${paymentMethod} payment`);
+        } catch (paymentErr) {
+          // Just log the error but don't fail the order creation
+          console.error('Failed to create payment record:', paymentErr);
+        }
+      }
+      
       toastUtils.success('Order created successfully!');
       onOrderCreated(newOrder.id);
     } catch (err: any) {
