@@ -744,20 +744,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 </button>
               )}
               
-              {/* Refund button - show for paid orders that aren't fully refunded */}
-              {(order.status === 'completed' || order.status === 'ready' || 
-                order.status === 'partially_refunded') && 
-                order.payment_status === 'completed' && (
-                <button
-                  className="px-4 py-2 bg-purple-500 text-white rounded-md text-sm font-medium hover:bg-purple-600 min-w-[120px] flex-grow sm:flex-grow-0"
-                  onClick={() => {
-                    setOrderToRefund(order);
-                    setShowRefundModal(true);
-                  }}
-                >
-                  {order.status === 'partially_refunded' ? 'Additional Refund' : 'Refund'}
-                </button>
-              )}
+              {/* Refund button removed - users should use the AdminEditOrderModal for refunds */}
               
               {/* Cancel button (with inventory handling) */}
               {(order.status === 'pending' || order.status === 'preparing') && (
