@@ -767,7 +767,7 @@ function PaymentPanel({
   // Set default payment date to today
   const today = new Date().toISOString().split('T')[0];
   // Cash register functionality
-  const [cashReceived, setCashReceived] = useState<number>(orderTotal);
+  const [cashReceived, setCashReceived] = useState<string>(orderTotal.toString());
   
   // For simplicity, we'll use a temporary ID for the cash payment
   // In a real implementation, you would get this from the order being created
@@ -801,8 +801,11 @@ function PaymentPanel({
   }, [paymentMethod]);
 
   const handleCashPayment = async () => {
+    // Convert string to number for calculations
+    const cashReceivedNum = cashReceived === '' ? 0 : parseFloat(cashReceived);
+    
     // Validate that cash received is sufficient
-    if (cashReceived < orderTotal) {
+    if (cashReceivedNum < orderTotal) {
       setPaymentError('Cash received must be at least equal to the order total');
       return;
     }
@@ -813,7 +816,7 @@ function PaymentPanel({
     // In a real implementation, you would call the API endpoint
     try {
       // Calculate change
-      const changeDue = cashReceived - orderTotal;
+      const changeDue = cashReceivedNum - orderTotal;
       
       // Show change due to the user if needed
       if (changeDue > 0) {
@@ -831,8 +834,8 @@ function PaymentPanel({
           payment_method: 'cash',
           transaction_id: `cash_${Date.now()}`,
           payment_date: today,
-          notes: `Cash payment - Received: $${cashReceived.toFixed(2)}, Change: $${changeDue.toFixed(2)}`,
-          cash_received: cashReceived,
+          notes: `Cash payment - Received: $${cashReceivedNum.toFixed(2)}, Change: $${changeDue.toFixed(2)}`,
+          cash_received: cashReceivedNum,
           change_due: changeDue,
           status: 'succeeded'
         }
@@ -1065,9 +1068,9 @@ function PaymentPanel({
                     <button
                       key={amount}
                       type="button"
-                      onClick={() => setCashReceived(amount)}
+                      onClick={() => setCashReceived(amount.toString())}
                       className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
-                        ${cashReceived === amount
+                        ${cashReceived === amount.toString()
                           ? 'bg-[#c1902f] text-white border-[#c1902f]'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                         }`}
@@ -1077,9 +1080,9 @@ function PaymentPanel({
                   ))}
                   <button
                     type="button"
-                    onClick={() => setCashReceived(Math.ceil(orderTotal))}
+                    onClick={() => setCashReceived(Math.ceil(orderTotal).toString())}
                     className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
-                      ${cashReceived === Math.ceil(orderTotal)
+                      ${cashReceived === Math.ceil(orderTotal).toString()
                         ? 'bg-[#c1902f] text-white border-[#c1902f]'
                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
@@ -1088,9 +1091,9 @@ function PaymentPanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCashReceived(orderTotal)}
+                    onClick={() => setCashReceived(orderTotal.toString())}
                     className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
-                      ${cashReceived === orderTotal
+                      ${cashReceived === orderTotal.toString()
                         ? 'bg-[#c1902f] text-white border-[#c1902f]'
                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
@@ -1106,7 +1109,15 @@ function PaymentPanel({
                     type="number"
                     step="0.01"
                     value={cashReceived}
-                    onChange={e => setCashReceived(parseFloat(e.target.value) || orderTotal)}
+                    onChange={e => {
+                      // Ensure we're always working with a string
+                      const newValue = e.target.value;
+                      setCashReceived(newValue);
+                    }}
+                    onFocus={e => {
+                      // Select all text when focused to make it easier to replace
+                      e.target.select();
+                    }}
                     className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
                     placeholder="Other amount"
                   />
@@ -1114,12 +1125,12 @@ function PaymentPanel({
               </div>
               
               {/* Change Calculation (only shown if cashReceived > orderTotal) */}
-              {cashReceived > orderTotal && (
+              {parseFloat(cashReceived || '0') > orderTotal && (
                 <div className="bg-green-50 border border-green-100 rounded-md p-3">
                   <div className="flex justify-between items-center">
                     <span className="font-medium">Change Due:</span>
                     <span className="text-lg font-bold text-green-700">
-                      ${(cashReceived - orderTotal).toFixed(2)}
+                      ${(parseFloat(cashReceived || '0') - orderTotal).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -1302,7 +1313,7 @@ function PaymentPanel({
               disabled={
                 isProcessing ||
                 (paymentMethod === 'payment_link' && !customerEmail && !customerPhone) ||
-                (paymentMethod === 'cash' && cashReceived < orderTotal)
+                (paymentMethod === 'cash' && (parseFloat(cashReceived || '0') < orderTotal))
               }
               className="py-3 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28]
                         focus:outline-none focus:ring-2 focus:ring-[#c1902f]
