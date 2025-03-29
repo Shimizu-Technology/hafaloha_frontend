@@ -132,10 +132,10 @@ function MenuItemsPanel({
           className="w-full px-4 py-2 border border-gray-300 rounded-md
                      focus:outline-none focus:ring-2 focus:ring-[#c1902f]"
         />
-        <div className="flex items-center mt-3 gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center mt-3 gap-3 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium
+            className={`whitespace-nowrap px-4 py-3 rounded-md text-sm font-medium
             ${selectedCategory === 'all'
               ? 'bg-[#c1902f] text-white shadow'
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -147,7 +147,7 @@ function MenuItemsPanel({
             <button
               key={catId}
               onClick={() => setSelectedCategory(catId)}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium
+              className={`whitespace-nowrap px-4 py-3 rounded-md text-sm font-medium
               ${selectedCategory === catId
                 ? 'bg-[#c1902f] text-white shadow'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -174,7 +174,7 @@ function MenuItemsPanel({
                 {categories.get(Number(catId)) ||
                   (catId === 'uncategorized' ? 'Uncategorized' : `Category ${catId}`)}
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {items.map(item => {
                   const cartItem = findCartItem(item.id);
                   const isInCart = !!cartItem;
@@ -183,7 +183,7 @@ function MenuItemsPanel({
                   return (
                     <div
                       key={item.id}
-                      className={`border rounded-lg hover:shadow-md transition-shadow
+                      className={`border rounded-lg hover:shadow-md transition-shadow p-1
                         ${isInCart
                           ? 'border-[#c1902f] bg-yellow-50 shadow'
                           : 'border-gray-200'
@@ -270,9 +270,9 @@ function MenuItemsPanel({
                                       removeFromCart(itemKey);
                                     }
                                   }}
-                                  className="text-gray-600 hover:text-[#c1902f] p-1"
+                                  className="text-gray-600 hover:text-[#c1902f] p-2.5"
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor">
                                     <path
                                       fillRule="evenodd"
                                       d="M5 10a1 1 0
@@ -290,9 +290,9 @@ function MenuItemsPanel({
                                     const itemKey = getItemKey(item);
                                     setCartQuantity(itemKey, cartItem.quantity + 1);
                                   }}
-                                  className="text-gray-600 hover:text-[#c1902f] p-1"
+                                  className="text-gray-600 hover:text-[#c1902f] p-2.5"
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor">
                                     <path
                                       fillRule="evenodd"
                                       d="M10 5a1 1 0
@@ -309,14 +309,14 @@ function MenuItemsPanel({
                             ) : hasOptions ? (
                               <button
                                 onClick={() => setCustomizingItem(item)}
-                                className="bg-[#c1902f] text-white px-3 py-1 rounded text-sm font-medium hover:bg-[#a97c28]"
+                                className="bg-[#c1902f] text-white px-4 py-2.5 rounded text-base font-medium hover:bg-[#a97c28]"
                               >
                                 {isInCart ? 'Add Another' : 'Customize'}
                               </button>
                             ) : (
                               <button
                                 onClick={() => handleAddItem(item)}
-                                className="text-[#c1902f] hover:bg-[#c1902f] hover:text-white px-2 py-1 rounded text-sm font-medium"
+                                className="text-[#c1902f] hover:bg-[#c1902f] hover:text-white px-4 py-2.5 rounded text-base font-medium"
                               >
                                 Add
                               </button>
@@ -478,9 +478,9 @@ function OrderPanel({
                             removeFromCart(itemKey);
                           }
                         }}
-                        className="text-gray-600 hover:text-[#c1902f] p-1 rounded-l"
+                        className="text-gray-600 hover:text-[#c1902f] p-2.5 rounded-l"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor">
                           <path
                             fillRule="evenodd"
                             d="M5 10a1 1 0
@@ -507,9 +507,9 @@ function OrderPanel({
                           }
                           return false;
                         })()}
-                        className="text-gray-600 hover:text-[#c1902f] p-1 rounded-r"
+                        className="text-gray-600 hover:text-[#c1902f] p-2.5 rounded-r"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor">
                           <path
                             fillRule="evenodd"
                             d="M10 5a1 1 0
@@ -553,8 +553,8 @@ function OrderPanel({
                           return false;
                         })()}
                         className="mt-1 sm:mt-0 text-[#c1902f] border border-[#c1902f]
-                                   hover:bg-[#c1902f] hover:text-white px-3 py-1
-                                   rounded text-xs font-medium transition-colors"
+                                   hover:bg-[#c1902f] hover:text-white px-4 py-2
+                                   rounded text-sm font-medium transition-colors"
                       >
                         Add Another
                       </button>
