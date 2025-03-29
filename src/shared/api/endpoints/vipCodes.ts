@@ -119,7 +119,7 @@ export const sendVipCodeEmail = async (codeId: number, emails: string[]) => {
 
 /**
  * Bulk send VIP codes to multiple email addresses
- * Generates a unique code for each email
+ * Can generate a single code for all emails or a unique code for each email
  */
 export const bulkSendVipCodes = async (options: {
   email_list: string[];
@@ -127,6 +127,7 @@ export const bulkSendVipCodes = async (options: {
   prefix?: string;
   max_uses?: number;
   name?: string;
+  one_code_per_batch?: boolean;
 }) => {
   return api.post(`/vip_access/bulk_send_vip_codes`, options);
 };

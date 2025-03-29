@@ -41,6 +41,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
     name: 'VIP Customer',
     prefix: 'VIP',
     maxUses: '',
+    oneCodePerBatch: true,
   });
   const [availableCodes, setAvailableCodes] = useState<VipAccessCode[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<number[]>([]);
@@ -132,6 +133,7 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
           name: bulkOptions.name,
           prefix: bulkOptions.prefix || undefined,
           max_uses: bulkOptions.maxUses ? parseInt(bulkOptions.maxUses) : undefined,
+          one_code_per_batch: bulkOptions.oneCodePerBatch,
         });
       } else {
         // Send emails with existing VIP codes
@@ -284,6 +286,38 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
                     onChange={(e) => setBulkOptions({...bulkOptions, maxUses: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                   />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Code Generation Method
+                </label>
+                <div className="flex flex-col space-y-2">
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      className="form-radio text-purple-600"
+                      checked={bulkOptions.oneCodePerBatch}
+                      onChange={() => setBulkOptions({...bulkOptions, oneCodePerBatch: true})}
+                    />
+                    <span className="ml-2">One code for all recipients</span>
+                    <div className="ml-2 text-xs text-gray-500">
+                      (All recipients will receive the same VIP code)
+                    </div>
+                  </label>
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      className="form-radio text-purple-600"
+                      checked={!bulkOptions.oneCodePerBatch}
+                      onChange={() => setBulkOptions({...bulkOptions, oneCodePerBatch: false})}
+                    />
+                    <span className="ml-2">Unique code for each recipient</span>
+                    <div className="ml-2 text-xs text-gray-500">
+                      (Each recipient will receive their own unique VIP code)
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>
