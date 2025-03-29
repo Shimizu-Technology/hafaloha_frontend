@@ -1491,8 +1491,17 @@ export function AdminEditOrderModal({
       // Check if we need to simulate an initial payment
       const hasInitialPayment = list.some((p: OrderPaymentLocal) => p.payment_type === 'initial');
       
-      // If no payments exist OR no initial payment exists but order has total and payment_method
-      if ((list.length === 0 || !hasInitialPayment) && order.total > 0 && order.payment_method) {
+      // Check if there's an additional payment that covers the full amount
+      const hasFullAdditionalPayment = list.some((p: OrderPaymentLocal) =>
+        p.payment_type === 'additional' &&
+        Math.abs(parseFloat(String(p.amount)) - parseFloat(String(order.total))) < 0.01
+      );
+      
+      // Only simulate an initial payment if there's no initial payment AND no full additional payment
+      if ((list.length === 0 || !hasInitialPayment) &&
+          !hasFullAdditionalPayment &&
+          order.total > 0 &&
+          order.payment_method) {
         console.log('Creating simulated initial payment with amount:', order.payment_amount || order.total);
         
         // Calculate the initial payment amount
@@ -1537,6 +1546,50 @@ export function AdminEditOrderModal({
         calculatedMaxRefundable,
         newMaxRefundable
       });
+
+      // Convert "additional" payments to "initial" payments in the UI if they're the only payment for the order
+      // This ensures consistent display across all payment methods
+      if (list.length === 1 && list[0].payment_type === 'additional') {
+        console.log('Converting single additional payment to initial payment for UI consistency');
+        
+        // Extract cash payment details if available
+        const payment = list[0];
+        const cashReceived = payment.cash_received;
+        const changeDue = payment.change_due;
+        
+        // Create payment details if they don't exist
+        const paymentDetails = payment.payment_details || {};
+        
+        // Get payment details from the order if available
+        const orderPaymentDetails = order.payment_details ?
+          (typeof order.payment_details === 'string' ?
+            JSON.parse(order.payment_details) :
+            order.payment_details) :
+          {};
+        
+        // Ensure all cash payment details are preserved
+        const enhancedPaymentDetails = {
+          ...orderPaymentDetails,
+          ...paymentDetails,
+          status: paymentDetails.status || payment.status || orderPaymentDetails.status || 'succeeded',
+          payment_method: payment.payment_method || orderPaymentDetails.payment_method,
+          transaction_id: payment.transaction_id || orderPaymentDetails.transaction_id,
+          payment_date: paymentDetails.payment_date || orderPaymentDetails.payment_date || new Date().toISOString().split('T')[0],
+          notes: paymentDetails.notes || orderPaymentDetails.notes || `Cash payment - Received: $${cashReceived?.toFixed(2) || orderPaymentDetails.cash_received?.toFixed(2) || payment.amount}, Change: $${changeDue?.toFixed(2) || orderPaymentDetails.change_due?.toFixed(2) || '0.00'}`,
+          cash_received: cashReceived || orderPaymentDetails.cash_received,
+          change_due: changeDue || orderPaymentDetails.change_due
+        };
+        
+        console.log('Enhanced payment details:', enhancedPaymentDetails);
+        
+        // Create the enhanced payment with all details preserved
+        list = [{
+          ...payment,
+          payment_type: 'initial',
+          description: 'Initial payment',
+          payment_details: enhancedPaymentDetails
+        }];
+      }
 
       setPayments(list);
       setMaxRefundable(newMaxRefundable);
@@ -2118,6 +2171,48 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
   }
   
   /**
+   * Helper function to calculate the total paid amount, avoiding double-counting
+   * when we have both an initial payment and a full additional payment with the same amount
+   */
+  function calculateTotalPaid(paymentsList: OrderPaymentLocal[]): number {
+    if (!paymentsList || paymentsList.length === 0) {
+      return 0;
+    }
+    
+    // Find initial payments and full additional payments with the same amount
+    const initialPayments = paymentsList.filter(p => p.payment_type === 'initial');
+    
+    // If we have initial payments, check for matching additional payments
+    if (initialPayments.length > 0) {
+      // Create a copy of the payments list to avoid modifying the original
+      let paymentsToCount = [...paymentsList];
+      
+      // For each initial payment, check if there's a matching additional payment
+      initialPayments.forEach(initialPayment => {
+        const matchingAdditionalPayments = paymentsList.filter(p =>
+          p.payment_type === 'additional' &&
+          Math.abs(parseFloat(String(p.amount)) - parseFloat(String(initialPayment.amount))) < 0.01
+        );
+        
+        // If we have matching additional payments, remove the initial payment to avoid double-counting
+        if (matchingAdditionalPayments.length > 0) {
+          paymentsToCount = paymentsToCount.filter(p => p !== initialPayment);
+        }
+      });
+      
+      // Calculate total from the filtered list
+      return paymentsToCount
+        .filter(p => p.payment_type !== 'refund')
+        .reduce((acc, p) => acc + parseFloat(String(p.amount)), 0);
+    }
+    
+    // If no initial payments, just calculate normally
+    return paymentsList
+      .filter(p => p.payment_type !== 'refund')
+      .reduce((acc, p) => acc + parseFloat(String(p.amount)), 0);
+  }
+
+  /**
    * Helper function to calculate the max refundable amount based on the payments array
    * This ensures consistent calculation throughout the application
    */
@@ -2126,9 +2221,8 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
       return 0;
     }
     
-    const totalPaid = paymentsList
-      .filter((p: OrderPaymentLocal) => p.payment_type !== 'refund')
-      .reduce((acc: number, p: OrderPaymentLocal) => acc + parseFloat(String(p.amount)), 0);
+    // Use the calculateTotalPaid function to avoid double-counting
+    const totalPaid = calculateTotalPaid(paymentsList);
     
     const totalRefunded = paymentsList
       .filter((p: OrderPaymentLocal) => p.payment_type === 'refund')
