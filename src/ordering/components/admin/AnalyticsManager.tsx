@@ -1,4 +1,4 @@
-// src/ordering/components/admin/AnalyticsManager.tsx
+  // src/ordering/components/admin/AnalyticsManager.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -90,6 +90,11 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedPreset, setSelectedPreset] = useState<PresetRange>(null);
   
+  // Time inputs for specific time ranges
+  const [startTime, setStartTime] = useState('08:00'); // Default to 8:00 AM
+  const [endTime, setEndTime] = useState('23:59');     // Default to 11:59 PM
+  const [useTimeFilter, setUseTimeFilter] = useState(true);  // Enable by default for better UX
+  
   // Time frame states
   const [timeGranularity, setTimeGranularity] = useState<TimeFrame>('day'); // Default to day view
   const [timePreset, setTimePreset] = useState<TimePreset>('custom'); // Default to custom
@@ -106,6 +111,62 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   function handleChangeEndDate(value: string) {
     setEndDate(value);
     setSelectedPreset(null);
+  }
+  
+  // Handle time input changes
+  function handleChangeStartTime(value: string) {
+    setStartTime(value);
+    setTimePreset('custom');
+    setUseTimeFilter(true);
+  }
+  function handleChangeEndTime(value: string) {
+    setEndTime(value);
+    setTimePreset('custom');
+    setUseTimeFilter(true);
+  }
+  
+  // Toggle time filter
+  function toggleTimeFilter(value: boolean) {
+    setUseTimeFilter(value);
+    if (value) {
+      setTimePreset('custom');
+    }
+  }
+  
+  // Apply common business hour presets
+  function applyBusinessHourPreset(preset: string) {
+    setUseTimeFilter(true);
+    setTimePreset('custom');
+    setSelectedPreset(null);
+    
+    // Set the same date for both start and end
+    const today = new Date().toISOString().split('T')[0];
+    setStartDate(today);
+    setEndDate(today);
+    
+    // Set time based on preset
+    switch(preset) {
+      case 'morning':
+        setStartTime('08:00');
+        setEndTime('12:00');
+        break;
+      case 'lunch':
+        setStartTime('12:00');
+        setEndTime('14:00');
+        break;
+      case 'afternoon':
+        setStartTime('14:00');
+        setEndTime('17:00');
+        break;
+      case 'evening':
+        setStartTime('17:00');
+        setEndTime('21:00');
+        break;
+      case 'full_day':
+        setStartTime('08:00');
+        setEndTime('23:59');
+        break;
+    }
   }
 
   // Preset date range logic
@@ -245,10 +306,23 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   // ----- 4) Load Analytics -----
   async function loadAnalytics() {
     try {
-      // For short time frames, use the datetime with time component
-      const useTimeComponent = ['30min', '1h', '3h', '6h', '12h', '24h'].includes(timePreset);
-      const apiStartDate = useTimeComponent && startDateWithTime ? startDateWithTime : startDate;
-      const apiEndDate = useTimeComponent && endDateWithTime ? endDateWithTime : endDate;
+      let apiStartDate: string;
+      let apiEndDate: string;
+      
+      // Determine which date format to use based on filters
+      if (['30min', '1h', '3h', '6h', '12h', '24h'].includes(timePreset)) {
+        // For short time presets, use the datetime with time component
+        apiStartDate = startDateWithTime || startDate;
+        apiEndDate = endDateWithTime || endDate;
+      } else if (useTimeFilter) {
+        // For custom time filter, combine date and time
+        apiStartDate = `${startDate}T${startTime}:00`;
+        apiEndDate = `${endDate}T${endTime}:00`;
+      } else {
+        // Otherwise use just the date
+        apiStartDate = startDate;
+        apiEndDate = endDate;
+      }
       
       // 1) Customer Orders
       const custRes = await getCustomerOrdersReport(apiStartDate, apiEndDate);
@@ -379,7 +453,12 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       XLSX.utils.book_append_sheet(wb, sheet2, 'Details');
     }
 
-    XLSX.writeFile(wb, `CustomerOrders_${startDate}_to_${endDate}.xlsx`);
+    // Include time in filename if time filter is enabled
+    const filename = useTimeFilter
+      ? `CustomerOrders_${startDate}T${startTime}_to_${endDate}T${endTime}.xlsx`
+      : `CustomerOrders_${startDate}_to_${endDate}.xlsx`;
+    
+    XLSX.writeFile(wb, filename);
   }
 
   // Export all reports to a single Excel file
@@ -596,7 +675,12 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     }
 
     // Write file
-    XLSX.writeFile(wb, `Hafaloha_Reports_${startDate}_to_${endDate}.xlsx`);
+    // Include time in filename if time filter is enabled
+    const filename = useTimeFilter
+      ? `Hafaloha_Reports_${startDate}T${startTime}_to_${endDate}T${endTime}.xlsx`
+      : `Hafaloha_Reports_${startDate}_to_${endDate}.xlsx`;
+    
+    XLSX.writeFile(wb, filename);
   }
 
   // ----- 7) Render -----
@@ -698,38 +782,112 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           </div>
         </div>
 
+        {/* Enable Time Filter Checkbox */}
+        <div className="mb-2">
+          <label className="flex items-center text-sm font-medium text-blue-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useTimeFilter}
+              onChange={(e) => toggleTimeFilter(e.target.checked)}
+              className="mr-2 h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+            />
+            Enable Specific Time Range Filter
+          </label>
+        </div>
+        
+        {/* Business Hours Presets - only show when time filter is enabled */}
+        {useTimeFilter && (
+          <div className="mb-4 ml-7">
+            <div className="text-xs text-gray-500 mb-1">Common Business Hours</div>
+            <div className="flex flex-wrap gap-1">
+              <button
+                onClick={() => applyBusinessHourPreset('morning')}
+                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200"
+              >
+                Morning (8am-12pm)
+              </button>
+              <button
+                onClick={() => applyBusinessHourPreset('lunch')}
+                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200"
+              >
+                Lunch (12pm-2pm)
+              </button>
+              <button
+                onClick={() => applyBusinessHourPreset('afternoon')}
+                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200"
+              >
+                Afternoon (2pm-5pm)
+              </button>
+              <button
+                onClick={() => applyBusinessHourPreset('evening')}
+                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200"
+              >
+                Evening (5pm-9pm)
+              </button>
+              <button
+                onClick={() => applyBusinessHourPreset('full_day')}
+                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200"
+              >
+                Full Day (8am-12am)
+              </button>
+            </div>
+          </div>
+        )}
+        
         {/* Manual Date Range */}
         <div className="flex flex-wrap items-end gap-4 mb-4">
-          {/* Start Date */}
+          {/* Start Date and Time */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Start Date
+              Start Date {useTimeFilter ? '& Time' : ''}
             </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                handleChangeStartDate(e.target.value);
-                setTimePreset('custom');
-              }}
-              className="border rounded px-3 py-1 w-44"
-            />
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  handleChangeStartDate(e.target.value);
+                  setTimePreset('custom');
+                }}
+                className="border rounded px-3 py-1 w-44"
+              />
+              {useTimeFilter && (
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => handleChangeStartTime(e.target.value)}
+                  className="border rounded px-3 py-1 w-32"
+                  placeholder="08:00 AM"
+                />
+              )}
+            </div>
           </div>
 
-          {/* End Date */}
+          {/* End Date and Time */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              End Date
+              End Date {useTimeFilter ? '& Time' : ''}
             </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                handleChangeEndDate(e.target.value);
-                setTimePreset('custom');
-              }}
-              className="border rounded px-3 py-1 w-44"
-            />
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  handleChangeEndDate(e.target.value);
+                  setTimePreset('custom');
+                }}
+                className="border rounded px-3 py-1 w-44"
+              />
+              {useTimeFilter && (
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => handleChangeEndTime(e.target.value)}
+                  className="border rounded px-3 py-1 w-32"
+                  placeholder="11:59 PM"
+                />
+              )}
+            </div>
           </div>
           
           {/* Data Granularity Selection */}
