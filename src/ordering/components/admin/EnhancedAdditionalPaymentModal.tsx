@@ -28,7 +28,7 @@ export function EnhancedAdditionalPaymentModal({
   onPaymentCompleted,
 }: EnhancedAdditionalPaymentModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other' | 'stripe_reader'>('credit_card');
+  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other' | 'stripe_reader' | 'stripe' | 'paypal'>('credit_card');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
@@ -45,6 +45,8 @@ export function EnhancedAdditionalPaymentModal({
   const today = new Date().toISOString().split('T')[0];
   const [paymentDate, setPaymentDate] = useState(today);
   const [paymentNotes, setPaymentNotes] = useState('');
+  // Cash register functionality
+  const [cashReceived, setCashReceived] = useState<number>(0);
 
   // Payment processor refs
   const stripeRef = useRef<StripeCheckoutRef>(null);
@@ -61,6 +63,11 @@ export function EnhancedAdditionalPaymentModal({
     (sum, item) => sum + parseFloat(String(item.price)) * parseInt(String(item.quantity)),
     0
   );
+  
+  // Update cashReceived when total changes
+  useEffect(() => {
+    setCashReceived(total);
+  }, [total]);
   
   useEffect(() => {
     // In a real implementation, we would fetch the order data from an API endpoint
@@ -102,6 +109,25 @@ export function EnhancedAdditionalPaymentModal({
     setIsLoading(true);
     setPaymentError(null);
     try {
+      // Create payment details with the correct payment method
+      const paymentDetails = {
+        payment_method: 'credit_card', // Always use 'credit_card' for credit card payments
+        processor: paymentProcessor === 'stripe' ? 'stripe' : 'paypal',
+        payment_date: today,
+        status: 'pending'
+      };
+
+      // Convert orderId to number if it's a string
+      const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
+
+      // Prepare common items mapping
+      const itemsMapping = paymentItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price
+      }));
+
       if (paymentProcessor === 'stripe' && stripeRef.current) {
         // Process with Stripe
         const success = await stripeRef.current.processPayment();
@@ -127,25 +153,74 @@ export function EnhancedAdditionalPaymentModal({
   };
 
   const handleCashPayment = async () => {
+    // Validate that cash received is sufficient
+    if (cashReceived < total) {
+      setPaymentError('Cash received must be at least equal to the order total');
+      return;
+    }
+    
     setIsLoading(true);
     setPaymentError(null);
     try {
-      // Process cash payment
-      // In a real implementation, this would call an API endpoint
-      // await orderPaymentOperationsApi.processPayment(orderId, {
-      //   payment_method: 'cash',
-      //   amount: total,
-      //   items: paymentItems,
-      // });
+      // Convert orderId to number if it's a string
+      const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
       
-      // Simulate API call success
+      // Calculate change
+      const changeDue = cashReceived - total;
+      
+      // Generate a unique transaction ID
+      const transactionId = `cash_${Date.now()}`;
+      
+      // Create payment details object with the specific payment method
+      // IMPORTANT: Always use 'cash' as the payment method for cash payments
+      const paymentDetails = {
+        payment_method: 'cash', // This must be 'cash' for cash payments
+        transaction_id: transactionId,
+        payment_date: new Date().toISOString().split('T')[0],
+        notes: `Cash payment - Received: $${cashReceived.toFixed(2)}, Change: $${changeDue.toFixed(2)}`,
+        cash_received: cashReceived,
+        change_due: changeDue,
+        status: 'paid'
+      };
+      
+      // Log the transaction details
       console.log('Processing cash payment for order:', orderId, {
         payment_method: 'cash',
         amount: total,
         items: paymentItems,
+        cash_received: cashReceived,
+        change_due: changeDue,
+        payment_details: paymentDetails
       });
       
-      // Simulate successful payment
+      // Prepare common items mapping to avoid repetition
+      const itemsMapping = paymentItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      
+      // Use the processAdditionalPayment endpoint with consistent structure
+      const response = await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
+        payment_method: 'cash', // This must be 'cash' for cash payments
+        items: itemsMapping,
+        payment_details: paymentDetails,
+        order_payment: {
+          payment_method: 'cash', // This must be 'cash' for cash payments
+          payment_details: paymentDetails
+        }
+      });
+      
+      console.log('Cash payment processed successfully:', response.data);
+      
+      // Show change due to the user
+      if (changeDue > 0) {
+        // In a real implementation, you would show a toast or alert
+        console.log(`Change due: $${changeDue.toFixed(2)}`);
+      }
+      
+      // Mark payment as successful
       setPaymentSuccessful(true);
       setTimeout(() => {
         onPaymentCompleted();
@@ -170,34 +245,53 @@ export function EnhancedAdditionalPaymentModal({
         return;
       }
       
-      // Create payment details object
+      // Generate a unique transaction ID if one wasn't provided
+      const finalTransactionId = transactionId || `${paymentMethod}_${Date.now()}`;
+      
+      // Create payment details object with the specific payment method
+      // IMPORTANT: Always preserve the original payment method selected by the user
       const paymentDetails = {
-        payment_method: paymentMethod,
-        transaction_id: transactionId || `${paymentMethod}_${Date.now()}`,
+        payment_method: paymentMethod, // Use the exact payment method selected by the user
+        transaction_id: finalTransactionId,
         payment_date: paymentDate,
-        notes: paymentNotes
+        notes: paymentNotes || `Payment processed via ${paymentMethod}`
       };
       
       // Convert orderId to number if it's a string
       const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
       
+      // Prepare common items mapping to avoid repetition
+      const itemsMapping = paymentItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      
       try {
-        // Call the API to process the payment
+        // Call the API to process the payment with a consistent structure
         await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
-          payment_method: paymentMethod,
-          items: paymentItems.map(item => ({
-            id: item.id,
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price
-          })),
-          payment_details: paymentDetails
+          payment_method: paymentMethod, // This must match the selected payment method
+          items: itemsMapping,
+          payment_details: {
+            ...paymentDetails,
+            status: 'succeeded'
+          },
+          order_payment: {
+            payment_method: paymentMethod, // This is critical - must match the payment method
+            payment_details: {
+              ...paymentDetails,
+              status: 'succeeded'
+            }
+          }
         });
         
+        // Log detailed payment information for debugging
         console.log(`Successfully processed ${paymentMethod} payment for order:`, orderId, {
           payment_method: paymentMethod,
           amount: total,
           items: paymentItems,
+          transaction_id: finalTransactionId,
           payment_details: paymentDetails
         });
         
@@ -232,20 +326,28 @@ export function EnhancedAdditionalPaymentModal({
       // Convert orderId to number if it's a string
       const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
       
+      // Prepare common items mapping to avoid repetition
+      const itemsMapping = paymentItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        // Include optional fields if available
+        description: (item as any).description,
+        image: (item as any).image
+      }));
+      
       // Generate and send payment link
       const response = await orderPaymentOperationsApi.generatePaymentLink(numericOrderId, {
         email: customerEmail,
         phone: customerPhone,
-        items: paymentItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          // Include optional fields if available
-          description: (item as any).description,
-          image: (item as any).image
-        }))
+        items: itemsMapping
       });
+      
+      // After generating the link, we'll store the payment method information
+      // This will be used when marking the payment as completed
+      // IMPORTANT: Always use 'payment_link' as the payment method for payment links
+      console.log('Payment link generated with payment method: payment_link');
       
       // Get the payment link URL from the response
       const responseData = response.data;
@@ -276,23 +378,51 @@ export function EnhancedAdditionalPaymentModal({
     }
   };
 
-  // Handler for payment success
+  // Handler for payment success (aligned with StaffOrderModal)
   const handlePaymentSuccess = (details: {
     status: string;
     transaction_id: string;
     amount: string;
     currency?: string;
+    payment_method?: string; // Method reported by the payment component
+    payment_intent_id?: string;
+    payment_details?: any; // Optional: Detailed object from payment component
   }) => {
     // Payment succeeded
     setPaymentSuccessful(true);
     
-    // Process the completion with the backend
-    processSuccessfulPayment(details.transaction_id, details.amount);
+    // Log the payment success details received from the component
+    console.log('Payment success details received:', {
+      ...details,
+      selectedPaymentMethod: paymentMethod // Log the method selected in this modal
+    });
     
-    setTimeout(() => {
-      onPaymentCompleted();
-      onClose();
-    }, 2000);
+    // Extract paymentIntentId if available
+    const paymentIntentId = details.payment_intent_id || details.transaction_id;
+    
+    try {
+      // Process the completion with the backend
+      // Pass the transaction_id, amount, paymentIntentId, and crucially,
+      // pass the payment_details object if it was provided by the component.
+      processSuccessfulPayment(
+        details.transaction_id,
+        details.amount,
+        paymentIntentId,
+        details.payment_details // Pass this along if available
+      );
+      
+      // Show success message
+      console.log('Payment processed successfully with transaction ID:', details.transaction_id);
+      
+      setTimeout(() => {
+        onPaymentCompleted();
+        onClose();
+      }, 2000);
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setPaymentError(`Payment processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPaymentSuccessful(false);
+    }
   };
 
   // Handler for payment errors
@@ -301,40 +431,78 @@ export function EnhancedAdditionalPaymentModal({
     setPaymentError(`Payment failed: ${error.message}`);
   };
   
-  // Process successful payment with the backend
-  const processSuccessfulPayment = async (transactionId: string, amount: string) => {
+  // Process successful payment with the backend (aligned with StaffOrderModal logic)
+  const processSuccessfulPayment = async (
+    transactionId: string,
+    amount: string,
+    paymentIntentId?: string,
+    receivedPaymentDetails?: any
+  ) => {
     try {
-      // Convert amount to number and ensure it's a valid number
       const numericAmount = Number(amount);
       if (isNaN(numericAmount)) {
         throw new Error(`Invalid amount: ${amount}`);
       }
       
-      // Convert orderId to number if it's a string
       const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
       
-      // Determine the actual payment method based on the processor
-      let actualPaymentMethod = 'credit_card';
-      if (paymentProcessor === 'stripe') {
-        actualPaymentMethod = 'stripe';
-      } else if (paymentProcessor === 'paypal') {
-        actualPaymentMethod = 'paypal';
+      // Determine the actual payment method based on the type of payment
+      let actualPaymentMethod = paymentMethod;
+      let processor = undefined;
+      
+      // Special handling for credit card payments
+      if (paymentMethod === 'credit_card') {
+        actualPaymentMethod = 'credit_card'; // Always use 'credit_card' for card payments
+        processor = paymentProcessor === 'stripe' ? 'stripe' : 'paypal';
+      } else if (paymentMethod === 'stripe_reader') {
+        actualPaymentMethod = 'stripe_reader'; // Preserve stripe_reader as its own method
+        processor = 'stripe';
       }
       
-      // Log the transaction details for debugging/tracking purposes
-      console.log(`Payment processed with transaction ID: ${transactionId}, amount: ${numericAmount}, method: ${actualPaymentMethod}`);
+      // Build payment details object
+      const paymentDetails = {
+        payment_method: actualPaymentMethod, // Use the determined payment method
+        transaction_id: transactionId,
+        payment_date: today,
+        notes: paymentMethod === 'credit_card'
+          ? `Payment processed via ${processor}`
+          : `Payment processed via ${actualPaymentMethod}`,
+        processor: processor,
+        status: 'succeeded',
+        payment_intent_id: paymentIntentId,
+        ...receivedPaymentDetails // Allow overriding with received details
+      };
       
-      // Here you would call your API to process the payment on the backend
-      // Note: We're adapting to the API's expected parameters based on TypeScript errors
-      await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
-        payment_method: actualPaymentMethod,
-        items: paymentItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price
-        }))
+      // Log the transaction details for debugging/tracking purposes
+      console.log('Processing successful payment:', {
+        transactionId: paymentDetails.transaction_id,
+        paymentIntentId: paymentDetails.payment_intent_id,
+        amount: numericAmount,
+        method: actualPaymentMethod,
+        processor: paymentDetails.processor || 'none',
+        constructedPaymentDetails: paymentDetails
       });
+      
+      // Prepare common items mapping
+      const itemsMapping = paymentItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      
+      // Call the API with consistent payment method and details
+      await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
+        payment_method: paymentDetails.payment_method, // Use the payment method from payment details
+        items: itemsMapping,
+        payment_details: paymentDetails,
+        order_payment: {
+          payment_method: paymentDetails.payment_method, // Must match the payment_details.payment_method
+          payment_details: paymentDetails
+        }
+      });
+      
+      console.log(`${actualPaymentMethod} payment processed successfully with backend.`);
     } catch (error) {
       console.error('Error processing payment with backend:', error);
       // We don't set payment error here since the payment was successful with the processor
@@ -348,11 +516,42 @@ export function EnhancedAdditionalPaymentModal({
       // Show error to customer
       setPaymentError(result.error.message);
     } else if (result.paymentIntent) {
-      // Payment succeeded
+      // Generate a transaction ID
+      const transactionId = 'mock_' + Date.now().toString();
+      
+      // Create payment details with the correct payment method
+      const paymentDetails = {
+        payment_method: 'credit_card', // Always use 'credit_card' for credit card payments
+        transaction_id: transactionId,
+        payment_date: today,
+        processor: 'stripe', // Specify the processor
+        status: 'succeeded',
+        payment_method_details: {
+          type: 'card',
+          card: {
+            brand: 'visa',
+            last4: '4242'
+          }
+        }
+      };
+      
+      // Payment succeeded - include payment method information and details
       handlePaymentSuccess({
         status: 'succeeded',
-        transaction_id: 'mock_' + Date.now().toString(),
-        amount: total.toFixed(2)
+        transaction_id: transactionId,
+        amount: total.toFixed(2),
+        currency: 'USD',
+        payment_method: 'credit_card', // Explicitly set payment_method
+        payment_details: paymentDetails // Pass the complete payment details
+      });
+      
+      // Log the payment for debugging
+      console.log('Mock Stripe payment completed:', {
+        transactionId,
+        amount: total,
+        method: 'credit_card',
+        processor: 'stripe',
+        paymentDetails
       });
     }
   };
@@ -631,6 +830,92 @@ export function EnhancedAdditionalPaymentModal({
                 </div>
               )}
 
+              {/* Cash Payment Panel */}
+              {paymentMethod === 'cash' && !paymentLinkSent && (
+                <div className="border border-gray-200 rounded-md p-4 mb-6">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">Cash Payment</h4>
+                  <div className="space-y-4">
+                    {/* Order Total Display */}
+                    <div className="flex justify-between items-center font-medium bg-gray-50 p-3 rounded-md">
+                      <span>Order Total:</span>
+                      <span className="text-lg text-[#c1902f]">${total.toFixed(2)}</span>
+                    </div>
+                    
+                    {/* Cash Received Input */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Cash Received
+                      </label>
+                      
+                      {/* Quick denomination buttons */}
+                      <div className="grid grid-cols-4 gap-2 mb-2">
+                        {[5, 10, 20, 50, 100].map((amount) => (
+                          <button
+                            key={amount}
+                            type="button"
+                            onClick={() => setCashReceived(amount)}
+                            className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
+                              ${cashReceived === amount
+                                ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                              }`}
+                          >
+                            ${amount}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setCashReceived(Math.ceil(total))}
+                          className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
+                            ${cashReceived === Math.ceil(total)
+                              ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            }`}
+                        >
+                          ${Math.ceil(total)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCashReceived(total)}
+                          className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
+                            ${cashReceived === total
+                              ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            }`}
+                        >
+                          Exact
+                        </button>
+                      </div>
+                      
+                      {/* Custom amount input */}
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={cashReceived}
+                          onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
+                          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+                          placeholder="Other amount"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Change Calculation (only shown if cashReceived > total) */}
+                    {cashReceived > total && (
+                      <div className="bg-green-50 border border-green-100 rounded-md p-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">Change Due:</span>
+                          <span className="text-lg font-bold text-green-700">
+                            ${(cashReceived - total).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Real Payment Integration */}
               {paymentMethod === 'credit_card' && !paymentLinkSent && !showStripeForm && (
                 <div className="border border-gray-200 rounded-md p-4 mb-6">
@@ -638,7 +923,7 @@ export function EnhancedAdditionalPaymentModal({
                   
                   {/* Conditionally render Stripe or PayPal components based on restaurant settings */}
                   {paymentProcessor === 'stripe' ? (
-                    <StripeCheckout 
+                    <StripeCheckout
                       ref={stripeRef}
                       amount={total.toString()} 
                       publishableKey={(paymentGateway.publishable_key as string) || ""}
@@ -751,10 +1036,10 @@ export function EnhancedAdditionalPaymentModal({
                   <button
                     type="button"
                     onClick={handleCashPayment}
-                    disabled={isLoading}
-                    className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f]"
+                    disabled={isLoading || cashReceived < total}
+                    className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? 'Processing...' : 'Mark as Paid (Cash)'}
+                    {isLoading ? 'Processing...' : 'Complete Cash Payment'}
                   </button>
                 )}
                 {['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod) && (
@@ -792,8 +1077,20 @@ export function EnhancedAdditionalPaymentModal({
                 <button
                   type="button"
                   onClick={() => {
-                    // Mock successful payment for demo purposes
-                    handleStripePaymentCompleted({ paymentIntent: { status: 'succeeded' } });
+                    // Mock successful payment for demo purposes with payment method info
+                    handleStripePaymentCompleted({
+                      paymentIntent: {
+                        status: 'succeeded',
+                        payment_method: 'credit_card',
+                        payment_method_details: {
+                          type: 'card',
+                          card: {
+                            brand: 'visa',
+                            last4: '4242'
+                          }
+                        }
+                      }
+                    });
                   }}
                   disabled={isLoading}
                   className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f]"
@@ -813,14 +1110,55 @@ export function EnhancedAdditionalPaymentModal({
             {paymentLinkSent && (
               <button
                 type="button"
-                onClick={() => {
-                  // Mark as paid for the purpose of this UI flow
-                  onPaymentCompleted();
-                  onClose();
+                onClick={async () => {
+                  try {
+                    setIsLoading(true);
+                    // Mark the payment as completed with the correct payment method
+                    const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
+                    const transactionId = `payment_link_${Date.now()}`;
+                    
+                    // Create payment details object with consistent structure
+                    const paymentDetails = {
+                      payment_method: 'payment_link', // Always use 'payment_link' for payment links
+                      transaction_id: transactionId,
+                      payment_date: today,
+                      notes: `Payment link completed: ${paymentLinkUrl}`,
+                      status: 'succeeded'
+                    };
+                    
+                    // Prepare common items mapping to avoid repetition
+                    const itemsMapping = paymentItems.map(item => ({
+                      id: item.id,
+                      name: item.name,
+                      quantity: item.quantity,
+                      price: item.price
+                    }));
+                    
+                    // Process the payment with the API using consistent structure
+                    await orderPaymentOperationsApi.processAdditionalPayment(numericOrderId, {
+                      payment_method: 'payment_link', // This must be 'payment_link'
+                      items: itemsMapping,
+                      payment_details: paymentDetails,
+                      order_payment: {
+                        payment_method: 'payment_link', // This is critical - must match the payment method
+                        payment_details: paymentDetails
+                      }
+                    });
+                    
+                    // Mark as paid for the purpose of this UI flow
+                    onPaymentCompleted();
+                    onClose();
+                  } catch (error) {
+                    console.error('Error marking payment link as paid:', error);
+                    setPaymentError('Failed to mark payment as paid. Please try again.');
+                  } finally {
+                    setIsLoading(false);
+                  }
                 }}
-                className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f]"
+                className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoading}
               >
-                Mark as Paid & Close
+                {isLoading ? 'Processing...' : 'Mark as Paid & Close'}
               </button>
             )}
           </div>

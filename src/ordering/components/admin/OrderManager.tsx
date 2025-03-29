@@ -872,7 +872,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         <div className="relative mt-2">
           <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1 pb-2 -mb-1 snap-x touch-pan-x">
             <button
-              onClick={() => setSelectedStatus('all')}
+              onClick={() => {
+                setSelectedStatus('all');
+                if (setSelectedOrderId) setSelectedOrderId(null);
+              }}
               className={`
                 whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start
                 ${selectedStatus === 'all'
@@ -886,7 +889,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             {(['pending', 'preparing', 'ready', 'completed', 'cancelled', 'refunded', 'partially_refunded'] as const).map((status) => (
               <button
                 key={status}
-                onClick={() => setSelectedStatus(status)}
+                onClick={() => {
+                  setSelectedStatus(status);
+                  if (setSelectedOrderId) setSelectedOrderId(null);
+                }}
                 className={`
                   whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start
                   ${selectedStatus === status

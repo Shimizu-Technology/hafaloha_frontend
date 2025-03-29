@@ -1488,22 +1488,38 @@ export function AdminEditOrderModal({
         responseData
       });
 
-      // If no payments exist but order has total, simulate an initial payment
-      if (list.length === 0 && order.total > 0) {
-        console.log('No payments found, creating initial payment with amount:', order.total);
+      // Check if we need to simulate an initial payment
+      const hasInitialPayment = list.some((p: OrderPaymentLocal) => p.payment_type === 'initial');
+      
+      // If no payments exist OR no initial payment exists but order has total and payment_method
+      if ((list.length === 0 || !hasInitialPayment) && order.total > 0 && order.payment_method) {
+        console.log('Creating simulated initial payment with amount:', order.payment_amount || order.total);
+        
+        // Calculate the initial payment amount
+        // If there's a payment_amount, use that, otherwise use the total
+        const initialAmount = parseFloat(order.payment_amount || order.total);
+        
+        // Create the initial payment object with details from the order
         const initialPayment: OrderPaymentLocal = {
           id: 0,
           payment_type: 'initial',
-          amount: parseFloat(order.total),
-          payment_method: order.payment_method || 'credit_card',
+          amount: initialAmount,
+          payment_method: order.payment_method,
           status: 'completed',
           created_at: order.createdAt || new Date().toISOString(),
           description: 'Initial payment',
           transaction_id: order.transaction_id || 'N/A',
+          payment_details: order.payment_details || undefined
         };
-        list = [initialPayment];
-        total_paid = parseFloat(order.total);
-        total_refunded = 0;
+        
+        // Add the initial payment to the beginning of the list
+        list = [initialPayment, ...list];
+        
+        // Update the total_paid to include this initial payment
+        total_paid = (total_paid || 0) + initialAmount;
+        total_refunded = total_refunded || 0;
+        
+        console.log('Payment list after adding initial payment:', list);
       }
 
       // Calculate max refundable amount using our helper function
@@ -2039,13 +2055,26 @@ export function AdminEditOrderModal({
         }),
       }));
 
+      // Check if all items are refunded to determine the correct status
+      const areAllItemsRefunded = localItems.length > 0 && localItems.every(item =>
+        item.isFullyRefunded || (item.refundedQuantity && item.refundedQuantity >= item.quantity)
+      );
+      
+      // If all items are refunded, set status to "refunded" regardless of UI state
+      const finalStatus = areAllItemsRefunded ? 'refunded' : localStatus;
+      
+      // Log for debugging
+      if (areAllItemsRefunded) {
+        console.log('All items are refunded, setting order status to "refunded"');
+      }
+
       const updatedOrder = {
         id: order.id,
         restaurant_id: order.restaurant_id,
         user_id: order.user_id,
         items: cleanedItems,
         total: parsedTotal,
-        status: localStatus,
+        status: finalStatus,
         special_instructions: localInstructions,
         contact_name: order.contact_name,
         contact_phone: order.contact_phone,

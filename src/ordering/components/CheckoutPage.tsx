@@ -134,12 +134,29 @@ export function CheckoutPage() {
     transaction_id: string;
     amount: string;
     currency?: string;
+    payment_method?: string;
+    payment_intent_id?: string;
   }) => {
     setPaymentProcessing(false);
     setPaymentProcessed(true);
     setPaymentTransactionId(details.transaction_id);
-    // Submit the order with the transaction ID
-    submitOrder(details.transaction_id);
+    
+    // Get the payment processor from restaurant settings
+    const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
+    
+    // Create payment details object with all relevant information
+    const paymentDetails = {
+      status: details.status,
+      payment_method: paymentProcessor === 'stripe' ? 'stripe' : 'paypal',
+      transaction_id: details.transaction_id,
+      payment_date: new Date().toISOString().split('T')[0],
+      payment_intent_id: details.payment_intent_id || details.transaction_id,
+      processor: paymentProcessor,
+      notes: `Payment processed via ${paymentProcessor === 'stripe' ? 'Stripe' : 'PayPal'}`
+    };
+    
+    // Submit the order with the transaction ID and payment details
+    submitOrder(details.transaction_id, paymentDetails);
   };
 
   // Handler for payment errors
@@ -150,7 +167,7 @@ export function CheckoutPage() {
     setIsSubmitting(false);
   };
 
-  async function submitOrder(transactionId: string) {
+  async function submitOrder(transactionId: string, paymentDetails?: any) {
     try {
       // Check if any item needs 24-hr notice
       const hasAny24hrItem = cartItems.some(
@@ -166,7 +183,20 @@ export function CheckoutPage() {
         return;
       }
 
-      // Use transaction ID as the payment_method_nonce since that's 
+      // Determine the actual payment method based on the processor or use the one from payment details
+      const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
+      let actualPaymentMethod = 'credit_card';
+      
+      // Use the correct payment method based on the processor or payment details
+      if (paymentDetails?.payment_method) {
+        actualPaymentMethod = paymentDetails.payment_method;
+      } else if (paymentProcessor === 'stripe') {
+        actualPaymentMethod = 'stripe';
+      } else if (paymentProcessor === 'paypal') {
+        actualPaymentMethod = 'paypal';
+      }
+      
+      // Use transaction ID as the payment_method_nonce since that's
       // what the API expects from the previous implementation
       const newOrder = await addOrder(
         cartItems,
@@ -176,8 +206,10 @@ export function CheckoutPage() {
         finalPhone,
         formData.email,
         transactionId, // Use the transaction ID as the payment method nonce
-        'credit_card',
-        formData.vipCode
+        actualPaymentMethod, // Use the correct payment method based on the processor
+        formData.vipCode,
+        false, // Not a staff order
+        paymentDetails // Include detailed payment information
       );
 
       toastUtils.success('Order placed successfully!');
@@ -237,7 +269,18 @@ export function CheckoutPage() {
 
       // If payment already processed (unlikely in normal flow), just submit the order
       if (paymentProcessed && paymentTransactionId) {
-        await submitOrder(paymentTransactionId);
+        // Create basic payment details for already processed payments
+        const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
+        const paymentDetails = {
+          status: 'succeeded',
+          payment_method: paymentProcessor === 'stripe' ? 'stripe' : 'paypal',
+          transaction_id: paymentTransactionId,
+          payment_date: new Date().toISOString().split('T')[0],
+          processor: paymentProcessor,
+          notes: `Payment processed via ${paymentProcessor === 'stripe' ? 'Stripe' : 'PayPal'}`
+        };
+        
+        await submitOrder(paymentTransactionId, paymentDetails);
         return;
       }
 

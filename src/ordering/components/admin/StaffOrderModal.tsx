@@ -7,6 +7,7 @@ import { useRestaurantStore } from '../../../shared/store/restaurantStore';
 import { useAuthStore } from '../../store/authStore';
 import { MenuItem } from '../../types/menu';
 import { apiClient } from '../../../shared/api/apiClient';
+import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
 
 // Payment components
 import { StripeCheckout, StripeCheckoutRef } from '../../components/payment/StripeCheckout';
@@ -753,11 +754,19 @@ function PaymentPanel({
   const [paymentError, setPaymentError] = useState<string | null>(null);
   // For dynamic height adjustment
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
+  // Loading state for payment processing
+  const [isLoading, setIsLoading] = useState(false);
   
   // Manual payment details
   const [transactionId, setTransactionId] = useState('');
   // Set default payment date to today
   const today = new Date().toISOString().split('T')[0];
+  // Cash register functionality
+  const [cashReceived, setCashReceived] = useState<number>(orderTotal);
+  
+  // For simplicity, we'll use a temporary ID for the cash payment
+  // In a real implementation, you would get this from the order being created
+  const tempOrderId = 'temp-order';
   const [paymentDate, setPaymentDate] = useState(today);
   const [paymentNotes, setPaymentNotes] = useState('');
   
@@ -786,13 +795,51 @@ function PaymentPanel({
     return () => window.removeEventListener('resize', handleResize);
   }, [paymentMethod]);
 
-  const handleCashPayment = () => {
-    const mockTransactionId = `cash_${Date.now()}`;
-    onPaymentSuccess({
-      status: 'succeeded',
-      transaction_id: mockTransactionId,
-      amount: orderTotal.toString()
-    });
+  const handleCashPayment = async () => {
+    // Validate that cash received is sufficient
+    if (cashReceived < orderTotal) {
+      setPaymentError('Cash received must be at least equal to the order total');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    // For now, we'll simulate the cash payment without calling the backend
+    // In a real implementation, you would call the API endpoint
+    try {
+      // Calculate change
+      const changeDue = cashReceived - orderTotal;
+      
+      // Show change due to the user if needed
+      if (changeDue > 0) {
+        toastUtils.success(`Payment successful. Change due: $${changeDue.toFixed(2)}`);
+      } else {
+        toastUtils.success('Payment successful');
+      }
+      
+      // Complete the order process
+      onPaymentSuccess({
+        status: 'succeeded',
+        transaction_id: `cash_${Date.now()}`,
+        amount: orderTotal.toString(),
+        payment_details: {
+          payment_method: 'cash',
+          transaction_id: `cash_${Date.now()}`,
+          payment_date: today,
+          notes: `Cash payment - Received: $${cashReceived.toFixed(2)}, Change: $${changeDue.toFixed(2)}`,
+          cash_received: cashReceived,
+          change_due: changeDue,
+          status: 'succeeded'
+        }
+      });
+    } catch (err: any) {
+      console.error('Error processing cash payment:', err);
+      const errorMessage = err.response?.data?.error || 'Failed to process cash payment';
+      toastUtils.error(errorMessage);
+      setPaymentError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSendPaymentLink = async () => {
@@ -854,7 +901,9 @@ function PaymentPanel({
       transaction_id: transactionId || `${paymentMethod}_${Date.now()}`,
       payment_date: paymentDate,
       staff_id: user?.id, // Capture the current user's ID
-      notes: paymentNotes
+      notes: paymentNotes || `Payment processed via ${paymentMethod}`,
+      status: 'succeeded',
+      processor: paymentMethod === 'stripe_reader' ? 'stripe' : paymentMethod
     };
     
     // Call the success callback with the payment details
@@ -984,6 +1033,92 @@ function PaymentPanel({
                   />
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cash Payment Panel */}
+        {paymentMethod === 'cash' && !paymentLinkSent && (
+          <div className="border border-gray-200 rounded-md p-4 mb-6">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Cash Payment</h4>
+            <div className="space-y-4">
+              {/* Order Total Display */}
+              <div className="flex justify-between items-center font-medium bg-gray-50 p-3 rounded-md">
+                <span>Order Total:</span>
+                <span className="text-lg text-[#c1902f]">${orderTotal.toFixed(2)}</span>
+              </div>
+              
+              {/* Cash Received Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cash Received
+                </label>
+                
+                {/* Quick denomination buttons */}
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  {[5, 10, 20, 50, 100].map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setCashReceived(amount)}
+                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
+                        ${cashReceived === amount
+                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                    >
+                      ${amount}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setCashReceived(Math.ceil(orderTotal))}
+                    className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
+                      ${cashReceived === Math.ceil(orderTotal)
+                        ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                  >
+                    ${Math.ceil(orderTotal)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCashReceived(orderTotal)}
+                    className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors
+                      ${cashReceived === orderTotal
+                        ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                  >
+                    Exact
+                  </button>
+                </div>
+                
+                {/* Custom amount input */}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={cashReceived}
+                    onChange={e => setCashReceived(parseFloat(e.target.value) || orderTotal)}
+                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
+                    placeholder="Other amount"
+                  />
+                </div>
+              </div>
+              
+              {/* Change Calculation (only shown if cashReceived > orderTotal) */}
+              {cashReceived > orderTotal && (
+                <div className="bg-green-50 border border-green-100 rounded-md p-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Change Due:</span>
+                    <span className="text-lg font-bold text-green-700">
+                      ${(cashReceived - orderTotal).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1161,7 +1296,8 @@ function PaymentPanel({
               onClick={handleProcessPayment}
               disabled={
                 isProcessing ||
-                (paymentMethod === 'payment_link' && !customerEmail && !customerPhone)
+                (paymentMethod === 'payment_link' && !customerEmail && !customerPhone) ||
+                (paymentMethod === 'cash' && cashReceived < orderTotal)
               }
               className="py-3 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28]
                         focus:outline-none focus:ring-2 focus:ring-[#c1902f]
@@ -1204,10 +1340,22 @@ function PaymentPanel({
               onClick={() => {
                 // Mark as "pending" or "paid" in your real system
                 const mockTransactionId = `link_${Date.now()}`;
+                
+                // Create detailed payment information
+                const paymentDetails = {
+                  payment_method: 'payment_link',
+                  transaction_id: mockTransactionId,
+                  payment_date: today,
+                  status: 'pending',
+                  notes: `Payment link sent to ${customerEmail || customerPhone}`,
+                  processor: 'payment_link'
+                };
+                
                 onPaymentSuccess({
                   status: 'pending',
                   transaction_id: mockTransactionId,
-                  amount: orderTotal.toString()
+                  amount: orderTotal.toString(),
+                  payment_details: paymentDetails
                 });
               }}
               className="py-3 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28]
@@ -1390,6 +1538,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     transaction_id: string;
     payment_id?: string;
     amount: string;
+    currency?: string;
+    payment_method?: string;
+    payment_intent_id?: string;
     payment_details?: any;
   }) => {
     setPaymentProcessing(false);
@@ -1408,10 +1559,32 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       actualPaymentMethod = 'paypal';
     }
     
+    // If payment details are already provided, use them
+    let paymentDetails = details.payment_details;
+    
+    // If not, create comprehensive payment details
+    if (!paymentDetails) {
+      paymentDetails = {
+        status: details.status || 'succeeded',
+        payment_method: details.payment_method || actualPaymentMethod,
+        transaction_id: details.transaction_id,
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_intent_id: details.payment_intent_id || details.transaction_id,
+        processor: currentPaymentProcessor,
+        notes: `Payment processed via ${currentPaymentProcessor === 'stripe' ? 'Stripe' : 'PayPal'}`
+      };
+    }
+    
+    // For cash payments, add cash-specific details
+    if (actualPaymentMethod === 'cash' && details.payment_details) {
+      paymentDetails.cash_received = details.payment_details.cash_received;
+      paymentDetails.change_due = details.payment_details.change_due;
+    }
+    
     submitOrderWithPayment(
       details.transaction_id,
-      details.payment_details,
-      details.payment_details?.payment_method || actualPaymentMethod
+      paymentDetails,
+      paymentDetails.payment_method || actualPaymentMethod
     );
   };
 

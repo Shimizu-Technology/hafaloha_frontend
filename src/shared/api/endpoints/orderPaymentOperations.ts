@@ -39,6 +39,15 @@ export const orderPaymentOperationsApi = {
       notes?: string;
       [key: string]: any;
     };
+    order_payment?: {
+      payment_method: string;
+      payment_details?: {
+        transaction_id?: string;
+        payment_date?: string;
+        notes?: string;
+        [key: string]: any;
+      };
+    };
   }) => {
     return apiClient.post(`/orders/${orderId}/payments/additional`, params);
   },
@@ -72,5 +81,18 @@ export const orderPaymentOperationsApi = {
     }[];
   }) => {
     return apiClient.post(`/orders/${orderId}/payments/payment_link`, params);
+  },
+  
+  // Process cash payment
+  processCashPayment: (orderId: number, params: {
+    cash_received: number;
+    order_total: number;
+    order_payment?: {
+      payment_method?: string;
+      cash_received?: number;
+      change_due?: number;
+    };
+  }) => {
+    return apiClient.post(`/orders/${orderId}/payments/cash`, params);
   }
 };

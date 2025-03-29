@@ -11,6 +11,7 @@ interface StripeCheckoutProps {
     status: string;
     transaction_id: string;
     payment_id?: string; // Added for webhook lookups
+    payment_intent_id?: string; // Added to explicitly track the payment intent ID
     amount: string;
   }) => void;
   onPaymentError: (error: Error) => void;
@@ -187,6 +188,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
           status: 'succeeded',
           transaction_id: testId,
           payment_id: testId, // Use the same ID for payment_id
+          payment_intent_id: testId, // Also include as payment_intent_id
           amount: amount,
         });
         setProcessing(false);
@@ -221,6 +223,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
           status: paymentIntent.status,
           transaction_id: paymentIntent.id,
           payment_id: paymentIntent.id, // Store payment_id for webhook lookups
+          payment_intent_id: paymentIntent.id, // Explicitly include payment_intent_id
           amount: (paymentIntent.amount / 100).toString(), // Convert from cents
         });
         return true;
