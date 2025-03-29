@@ -638,9 +638,13 @@ export function CollapsibleOrderCard({
   
   
   return (
-    <div 
+    <div
       id={`order-${order.id}`}
-      className={`bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden ${newOrderClasses} ${highlightClasses} transition-all duration-200`}
+      className={`rounded-lg shadow-sm overflow-hidden ${newOrderClasses} ${highlightClasses} transition-all duration-200 ${
+        order.staff_created
+          ? 'bg-blue-50 border-l-4 border-blue-400 border-t border-r border-b border-gray-200 bg-[url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%234b91f1\' fill-opacity=\'0.05\' fill-rule=\'evenodd\'%3E%3Ccircle cx=\'3\' cy=\'3\' r=\'1\'/%3E%3C/g%3E%3C/svg%3E")]'
+          : 'bg-white border border-gray-200'
+      }`}
     >
       <style>{mobileStyles}</style>
       {/* Order header - optimized for mobile and tablet */}
@@ -662,6 +666,21 @@ export function CollapsibleOrderCard({
               {isNew && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 mr-2">
                   NEW
+                </span>
+              )}
+              {order.staff_created ? (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 mr-2 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Staff Order
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800 mr-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Customer Order
                 </span>
               )}
               <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
@@ -709,6 +728,25 @@ export function CollapsibleOrderCard({
               <div className="text-sm">
                 <span className="font-medium text-gray-700">Customer: </span>
                 <span>{order.contact_name}</span>
+                {order.staff_created && (
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 inline-flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Staff Order
+                  </span>
+                )}
+              </div>
+            )}
+            {!order.contact_name && order.staff_created && (
+              <div className="text-sm">
+                <span className="font-medium text-gray-700">Type: </span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 inline-flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Staff Order
+                </span>
               </div>
             )}
             <div className="text-sm">
@@ -719,7 +757,17 @@ export function CollapsibleOrderCard({
             {/* Preview of order items in collapsed state */}
             {!isExpanded && (
               <div className="mt-2">
-                <h4 className="font-medium text-sm text-gray-700">Items:</h4>
+                <div className="flex items-center">
+                  <h4 className="font-medium text-sm text-gray-700">Items:</h4>
+                  {order.staff_created && (
+                    <span className="ml-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 shadow-sm flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      Staff Order
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm text-gray-600 mt-1 flex flex-wrap">
                   {order.items && order.items.map((item: any, index: number) => {
                     // Get refund info for this specific item
@@ -1121,6 +1169,28 @@ export function CollapsibleOrderCard({
               </div>
             </div>
           )}
+
+          {/* Order Type */}
+          <div className="mb-4">
+            <h4 className="font-medium text-sm text-gray-700 mb-1">Order Type:</h4>
+            <div className="text-sm">
+              {order.staff_created ? (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Staff Order
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Customer Order
+                </span>
+              )}
+            </div>
+          </div>
 
           {/* Customer contact info */}
           <div className="mb-4">
