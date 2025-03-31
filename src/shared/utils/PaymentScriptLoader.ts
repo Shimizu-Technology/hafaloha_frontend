@@ -3,45 +3,48 @@
  * A utility for dynamically loading payment scripts (Stripe, PayPal) based on configuration
  */
 
-// Track script loading status
+// Track script loading status and promises
 const scriptStatus: Record<string, 'loading' | 'loaded' | 'error' | undefined> = {};
+const scriptPromises: Record<string, Promise<void>> = {};
+
+// Cache for Stripe instances
+const stripeInstances: Record<string, any> = {};
+
+// Constants
+const STRIPE_SCRIPT_URL = 'https://js.stripe.com/v3/';
+const STRIPE_SCRIPT_ID = 'stripe-js';
 
 /**
- * Load a script dynamically
+ * Load a script dynamically with high priority
  * @param src Script source URL
  * @param id Optional ID for the script tag
  * @returns Promise that resolves when the script is loaded
  */
 function loadScript(src: string, id?: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Check if script is already loaded or loading
+  // Return cached promise if script is already loading
+  if (src in scriptPromises) {
+    return scriptPromises[src];
+  }
+
+  const promise = new Promise<void>((resolve, reject) => {
+    // Check if script is already loaded
     if (scriptStatus[src] === 'loaded') {
       resolve();
-      return;
-    }
-
-    if (scriptStatus[src] === 'loading') {
-      // Wait for script to load
-      const checkLoaded = setInterval(() => {
-        if (scriptStatus[src] === 'loaded') {
-          clearInterval(checkLoaded);
-          resolve();
-        } else if (scriptStatus[src] === 'error') {
-          clearInterval(checkLoaded);
-          reject(new Error(`Failed to load script: ${src}`));
-        }
-      }, 100);
       return;
     }
 
     // Mark as loading
     scriptStatus[src] = 'loading';
 
-    // Create script element
+    // Create script element with high priority
     const script = document.createElement('script');
     script.src = src;
-    script.async = true;
-    if (id) script.id = id;
+    script.id = id || `script-${Date.now()}`;
+    
+    // Set high priority attributes
+    script.async = false; // Load synchronously for higher priority
+    script.setAttribute('fetchpriority', 'high');
+    script.setAttribute('importance', 'high');
 
     // Set up load and error handlers
     script.onload = () => {
@@ -51,17 +54,50 @@ function loadScript(src: string, id?: string): Promise<void> {
 
     script.onerror = () => {
       scriptStatus[src] = 'error';
-      document.body.removeChild(script);
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+      delete scriptPromises[src];
       reject(new Error(`Failed to load script: ${src}`));
     };
 
-    // Add to document
-    document.body.appendChild(script);
+    // Add to document head for faster loading (instead of body)
+    document.head.appendChild(script);
   });
+
+  // Cache the promise
+  scriptPromises[src] = promise;
+  return promise;
 }
 
 /**
- * Load Stripe.js script
+ * Preload Stripe.js script with resource hints
+ * This should be called as early as possible
+ */
+export function preloadStripeScript(): void {
+  // Skip if already loaded or preloaded
+  if (scriptStatus[STRIPE_SCRIPT_URL] || document.getElementById('stripe-preload')) {
+    return;
+  }
+
+  // Add preload link
+  const preloadLink = document.createElement('link');
+  preloadLink.rel = 'preload';
+  preloadLink.as = 'script';
+  preloadLink.href = STRIPE_SCRIPT_URL;
+  preloadLink.id = 'stripe-preload';
+  preloadLink.crossOrigin = 'anonymous';
+  document.head.appendChild(preloadLink);
+
+  // Also add DNS prefetch
+  const dnsPrefetch = document.createElement('link');
+  dnsPrefetch.rel = 'dns-prefetch';
+  dnsPrefetch.href = 'https://js.stripe.com';
+  document.head.appendChild(dnsPrefetch);
+}
+
+/**
+ * Load Stripe.js script with optimized loading
  * @returns Promise that resolves when Stripe.js is loaded
  */
 export async function loadStripeScript(): Promise<void> {
@@ -71,7 +107,11 @@ export async function loadStripeScript(): Promise<void> {
       return;
     }
     
-    await loadScript('https://js.stripe.com/v3/', 'stripe-js');
+    // Preload first (no-op if already preloaded)
+    preloadStripeScript();
+    
+    // Then load the script
+    await loadScript(STRIPE_SCRIPT_URL, STRIPE_SCRIPT_ID);
   } catch (error) {
     console.error('Error loading Stripe script:', error);
     throw error;
@@ -79,7 +119,7 @@ export async function loadStripeScript(): Promise<void> {
 }
 
 /**
- * Load PayPal script
+ * Load PayPal script with optimized loading
  * @param clientId PayPal client ID
  * @returns Promise that resolves when PayPal script is loaded
  */
@@ -123,7 +163,7 @@ export async function initPaymentScript(
 }
 
 /**
- * Get the Stripe instance
+ * Get the Stripe instance with caching
  * @param publishableKey Stripe publishable key
  * @returns Stripe instance
  */
@@ -131,5 +171,20 @@ export function getStripe(publishableKey: string): any {
   if (!(window as any).Stripe) {
     throw new Error('Stripe.js not loaded');
   }
-  return (window as any).Stripe(publishableKey);
+  
+  // Return cached instance if available
+  if (stripeInstances[publishableKey]) {
+    return stripeInstances[publishableKey];
+  }
+  
+  // Create and cache new instance
+  const stripeInstance = (window as any).Stripe(publishableKey);
+  stripeInstances[publishableKey] = stripeInstance;
+  return stripeInstance;
+}
+
+// Immediately preload Stripe script when this module is imported
+// This ensures the script starts loading as early as possible
+if (typeof window !== 'undefined') {
+  preloadStripeScript();
 }

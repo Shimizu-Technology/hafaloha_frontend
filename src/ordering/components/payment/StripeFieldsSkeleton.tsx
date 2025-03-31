@@ -2,14 +2,14 @@ import React from 'react';
 
 /**
  * StripeFieldsSkeleton
- * 
+ *
  * A skeleton UI component that mimics the appearance of Stripe payment fields
  * while they are loading. This improves perceived performance by showing
  * a placeholder immediately.
  */
 export function StripeFieldsSkeleton() {
   return (
-    <div className="stripe-skeleton animate-pulse">
+    <div className="stripe-skeleton animate-pulse w-full px-4 py-3">
       {/* Card number field skeleton */}
       <div className="mb-4">
         <div className="h-4 w-24 bg-gray-200 rounded mb-2"></div>

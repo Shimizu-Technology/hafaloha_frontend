@@ -256,18 +256,20 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
-        <p>Error: {error}</p>
-        <p className="mt-2">Please try another payment method or contact support.</p>
+      <div className="w-full px-4 py-3">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
+          <p>Error: {error}</p>
+          <p className="mt-2">Please try another payment method or contact support.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="stripe-checkout-container">
+    <div className="stripe-checkout-container w-full mx-auto">
       {/* Test mode view - just show test fields, no submit button */}
       {testMode ? (
-        <div>
+        <div className="w-full px-4 py-3">
           <div className="bg-yellow-50 border border-yellow-100 p-3 mb-4 rounded-md">
             <p className="font-bold text-yellow-700 inline-block mr-2">TEST MODE</p>
             <span className="text-yellow-700">Payments will be simulated without processing real cards.</span>
@@ -323,7 +325,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
           // Show skeleton UI while elements are being initialized
           <StripeFieldsSkeleton />
         ) : (
-          <div>
+          <div className="w-full px-4 py-3">
             <div id="payment-element" ref={paymentElementRef} className="mb-6">
               {/* Payment Element will be mounted here by the useEffect hook */}
             </div>
