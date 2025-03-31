@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../../../shared/api/apiClient';
 import { LoadingSpinner } from '../../../shared/components/ui';
+import { loadStripeScript, getStripe } from '../../../shared/utils/PaymentScriptLoader';
+import { StripeFieldsSkeleton } from './StripeFieldsSkeleton';
 
 interface StripeCheckoutProps {
   amount: string;
@@ -46,7 +48,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   const paymentElementMounted = useRef(false);
   const paymentElementRef = useRef<HTMLDivElement>(null);
 
-  // Load Stripe.js - only once
+  // Load Stripe.js, initialize Stripe, and create payment intent in parallel
   useEffect(() => {
     if (stripeLoaded.current || testMode) {
       setLoading(false);
@@ -61,66 +63,59 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       return;
     }
 
-    if ((window as any).Stripe) {
-      setStripe((window as any).Stripe(publishableKey));
-      setLoading(false);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://js.stripe.com/v3/';
-    script.async = true;
-    script.onload = () => {
-      setStripe((window as any).Stripe(publishableKey));
-      setLoading(false);
-    };
-    script.onerror = () => {
-      setError('Failed to load Stripe.js');
-      setLoading(false);
-    };
-    document.body.appendChild(script);
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, [publishableKey, testMode]);
-
-  // Create payment intent - only once
-  useEffect(() => {
-    // For test mode, just create a fake client secret
-    if (testMode && !clientSecret) {
-      setClientSecret(`test_secret_${Math.random().toString(36).substring(2, 15)}`);
-      return;
-    }
-
-    // Skip if already created, missing stripe, already have client secret, or have an error
-    if (paymentIntentCreated.current || !stripe || clientSecret || error) {
-      return;
-    }
-
-    paymentIntentCreated.current = true;
-    
-    const createPaymentIntent = async () => {
+    // Start both processes in parallel
+    const initializeStripeAndCreateIntent = async () => {
       try {
-        const response = await api.post<{ client_secret: string }>('/stripe/create_intent', {
-          amount,
-          currency
-        });
+        // Start loading Stripe.js
+        const stripePromise = loadStripeScript();
         
-        if (response && response.client_secret) {
-          setClientSecret(response.client_secret);
-        } else {
-          throw new Error('No client secret returned');
+        // In parallel, create payment intent if needed
+        let intentPromise = Promise.resolve();
+        if (!paymentIntentCreated.current && !clientSecret && !testMode) {
+          paymentIntentCreated.current = true;
+          intentPromise = api.post<{ client_secret: string }>('/stripe/create_intent', {
+            amount,
+            currency
+          }).then(response => {
+            if (response && response.client_secret) {
+              setClientSecret(response.client_secret);
+            } else {
+              throw new Error('No client secret returned');
+            }
+          }).catch(err => {
+            setError(err.message || 'Failed to create payment intent');
+            onPaymentError(err);
+          });
+        } else if (testMode && !clientSecret) {
+          // For test mode, just create a fake client secret
+          setClientSecret(`test_secret_${Math.random().toString(36).substring(2, 15)}`);
         }
-      } catch (err: any) {
-        setError(err.message || 'Failed to create payment intent');
-        onPaymentError(err);
+        
+        // Wait for Stripe to load
+        await stripePromise;
+        
+        // Initialize Stripe with publishable key
+        const stripeInstance = getStripe(publishableKey);
+        setStripe(stripeInstance);
+        
+        // Wait for both processes to complete
+        await intentPromise;
+        
+        setLoading(false);
+      } catch (err) {
+        console.error('Error initializing Stripe:', err);
+        setError('Failed to load Stripe.js');
+        setLoading(false);
       }
     };
 
-    createPaymentIntent();
+    initializeStripeAndCreateIntent();
+  }, [publishableKey, testMode, clientSecret, amount, currency, onPaymentError]);
+
+  // Keep this empty useEffect to replace the old payment intent creation
+  // This ensures we don't break any dependencies that might be expecting this effect
+  useEffect(() => {
+    // Payment intent creation is now handled in parallel with Stripe initialization
   }, [stripe, testMode, clientSecret, error, amount, currency, onPaymentError]);
 
   // Initialize Stripe Elements - only once
@@ -254,13 +249,9 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     processPayment
   }), [processPayment]);
 
+  // Show skeleton UI while loading instead of a spinner
   if (loading) {
-    return (
-      <div className="flex justify-center items-center p-4">
-        <LoadingSpinner className="w-8 h-8" />
-        <span className="ml-2">Loading Stripe...</span>
-      </div>
-    );
+    return <StripeFieldsSkeleton />;
   }
 
   if (error) {
@@ -329,10 +320,8 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       ) : (
         // Live mode with actual Stripe Elements
         !elements ? (
-          <div className="flex justify-center items-center p-4">
-            <LoadingSpinner className="w-8 h-8" />
-            <span className="ml-2">Preparing checkout...</span>
-          </div>
+          // Show skeleton UI while elements are being initialized
+          <StripeFieldsSkeleton />
         ) : (
           <div>
             <div id="payment-element" ref={paymentElementRef} className="mb-6">
