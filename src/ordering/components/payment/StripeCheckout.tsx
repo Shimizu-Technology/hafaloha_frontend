@@ -40,6 +40,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [stripe, setStripe] = useState<any>(null);
   const [elements, setElements] = useState<any>(null);
+  const [elementMounted, setElementMounted] = useState(false);
 
   // Use refs to track initialization state
   const stripeLoaded = useRef(false);
@@ -155,6 +156,12 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     // Create and mount the payment element
     const paymentElement = elements.create('payment');
     
+    // Add event listener for when the element is fully ready
+    paymentElement.on('ready', () => {
+      console.log('Stripe payment element is fully ready');
+      setElementMounted(true);
+    });
+    
     // Mount the element
     paymentElement.mount(paymentElementRef.current);
     
@@ -163,6 +170,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       if (paymentElementMounted.current) {
         paymentElement.unmount();
         paymentElementMounted.current = false;
+        setElementMounted(false);
       }
     };
   }, [elements, testMode]);
@@ -249,26 +257,22 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     processPayment
   }), [processPayment]);
 
-  // Show skeleton UI while loading instead of a spinner
-  if (loading) {
-    return <StripeFieldsSkeleton />;
-  }
-
-  if (error) {
-    return (
-      <div className="w-full px-4 py-3">
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
-          <p>Error: {error}</p>
-          <p className="mt-2">Please try another payment method or contact support.</p>
+  // Create a consistent container with minimum height to prevent layout shifts
+  const renderContent = () => {
+    if (error) {
+      return (
+        <div className="w-full px-4 py-3">
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
+            <p>Error: {error}</p>
+            <p className="mt-2">Please try another payment method or contact support.</p>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  return (
-    <div className="stripe-checkout-container w-full mx-auto">
-      {/* Test mode view - just show test fields, no submit button */}
-      {testMode ? (
+    if (testMode) {
+      // Test mode view - just show test fields, no submit button
+      return (
         <div className="w-full px-4 py-3">
           <div className="bg-yellow-50 border border-yellow-100 p-3 mb-4 rounded-md">
             <p className="font-bold text-yellow-700 inline-block mr-2">TEST MODE</p>
@@ -281,7 +285,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
             {/* Card Number */}
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-medium mb-1">Card Number</label>
-              <input 
+              <input
                 type="text"
                 defaultValue="4111 1111 1111 1111"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -314,28 +318,30 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
               </div>
             </div>
           </div>
-          
-          {/* No submit button - parent will call processPayment */}
-          
-          {/* Processing indicator removed in favor of full-screen overlay */}
         </div>
-      ) : (
-        // Live mode with actual Stripe Elements
-        !elements ? (
-          // Show skeleton UI while elements are being initialized
-          <StripeFieldsSkeleton />
-        ) : (
-          <div className="w-full px-4 py-3">
-            <div id="payment-element" ref={paymentElementRef} className="mb-6">
-              {/* Payment Element will be mounted here by the useEffect hook */}
-            </div>
-            
-            {/* No submit button - parent will call processPayment */}
-            
-            {/* Processing indicator removed in favor of full-screen overlay */}
+      );
+    }
+
+    // Show skeleton until element is fully mounted
+    if (loading || !elements || !elementMounted) {
+      return <StripeFieldsSkeleton />;
+    }
+
+    // Show the actual Stripe Elements
+    return (
+      <div className="w-full px-4 py-3 flex flex-col items-center transition-opacity duration-300 ease-in-out opacity-100">
+        <div className="w-full max-w-md min-h-[250px]">
+          <div id="payment-element" ref={paymentElementRef} className="mb-6">
+            {/* Payment Element will be mounted here by the useEffect hook */}
           </div>
-        )
-      )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="stripe-checkout-container w-full mx-auto min-h-[300px] flex items-center justify-center">
+      {renderContent()}
     </div>
   );
 });
