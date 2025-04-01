@@ -107,7 +107,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [isBatchCancel, setIsBatchCancel] = useState(false);
 
   // ----------------------------------
-  // Fetch orders on mount + Setup Polling
+  // Fetch orders on mount + Setup WebSocket
   // ----------------------------------
   useEffect(() => {
     // 1) Initial fetch with full loading state
@@ -115,67 +115,58 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
     // 2) Track current order IDs to detect new ones
     const currentOrderIds = new Set(orders.map((o) => o.id));
-    let pollingInterval: number | null = null;
+    
+    // Start WebSocket connection
+    const { startWebSocketConnection, stopWebSocketConnection, startOrderPolling, stopOrderPolling } = useOrderStore.getState();
+    
+    // Start WebSocket connection
+    startWebSocketConnection();
+    
+    // Handle new orders from WebSocket or polling
+    const unsubscribeFromStore = useOrderStore.subscribe((state) => {
+      const storeOrders = state.orders;
+      const newOrderIds = storeOrders
+        .filter((o) => !currentOrderIds.has(o.id))
+        .map((o) => o.id);
 
-    // Start polling function
-    const startPolling = () => {
-      if (pollingInterval) clearInterval(pollingInterval);
-      pollingInterval = window.setInterval(() => {
-        fetchOrdersQuietly().then(() => {
-          const storeOrders = useOrderStore.getState().orders;
-          const newOrderIds = storeOrders
-            .filter((o) => !currentOrderIds.has(o.id))
-            .map((o) => o.id);
-
-          if (newOrderIds.length > 0) {
-            // Mark them as new
-            setNewOrders((prev) => {
-              const updated = new Set(prev);
-              newOrderIds.forEach((id) => updated.add(id));
-              return updated;
-            });
-
-            // Update the known IDs
-            newOrderIds.forEach((id) => currentOrderIds.add(id));
-
-            // Clear highlight after 30s
-            setTimeout(() => {
-              setNewOrders((prev) => {
-                const updated = new Set(prev);
-                newOrderIds.forEach((id) => updated.delete(id));
-                return updated;
-              });
-            }, 30000);
-          }
+      if (newOrderIds.length > 0) {
+        // Mark them as new
+        setNewOrders((prev) => {
+          const updated = new Set(prev);
+          newOrderIds.forEach((id) => updated.add(id));
+          return updated;
         });
-      }, POLLING_INTERVAL);
-    };
 
-    // Stop polling function
-    const stopPolling = () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
+        // Update the known IDs
+        newOrderIds.forEach((id) => currentOrderIds.add(id));
+
+        // Clear highlight after 30s
+        setTimeout(() => {
+          setNewOrders((prev) => {
+            const updated = new Set(prev);
+            newOrderIds.forEach((id) => updated.delete(id));
+            return updated;
+          });
+        }, 30000);
       }
-    };
-
-    // Start polling now
-    startPolling();
-
-    // Pause polling if the tab is hidden
+    });
+    
+    // Pause WebSocket if the tab is hidden and switch to polling
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        stopPolling();
+        stopWebSocketConnection();
       } else {
-        // Refresh once, then start again
+        // Refresh once, then start WebSocket again
         fetchOrdersQuietly();
-        startPolling();
+        startWebSocketConnection();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      stopPolling();
+      stopWebSocketConnection();
+      stopOrderPolling();
+      unsubscribeFromStore();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [fetchOrders, fetchOrdersQuietly]);

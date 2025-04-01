@@ -10,11 +10,15 @@ import {
   RestockActionResponse
 } from '../../shared/api/endpoints/notifications';
 import { handleApiError } from '../../shared/utils/errorHandler';
+import websocketService from '../../shared/services/websocketService';
+import { useAuthStore } from './authStore';
 
 interface NotificationStoreState {
   notifications: Notification[];
   loading: boolean;
   error: string | null;
+  websocketConnected: boolean;
+  pollingInterval: number | null;
   stats: {
     orderCount: number;
     lowStockCount: number;
@@ -22,6 +26,15 @@ interface NotificationStoreState {
     totalCount: number;
     oldestNotificationDate: string | null;
   };
+
+  // WebSocket methods
+  startWebSocketConnection: () => void;
+  stopWebSocketConnection: () => void;
+  handleNewNotification: (notification: Notification) => void;
+  
+  // Polling methods (fallback)
+  startNotificationPolling: () => void;
+  stopNotificationPolling: () => void;
 
   // Actions
   fetchNotifications: (hours?: number, type?: string) => Promise<Notification[]>;
@@ -40,12 +53,118 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
   notifications: [] as Notification[],
   loading: false,
   error: null,
+  websocketConnected: false,
+  pollingInterval: null,
   stats: {
     orderCount: 0,
     lowStockCount: 0,
     outOfStockCount: 0,
     totalCount: 0,
     oldestNotificationDate: null,
+  },
+  
+  // ---------------------------------------------------------
+  // WebSocket Methods
+  // ---------------------------------------------------------
+  startWebSocketConnection: () => {
+    // First stop any existing connections or polling
+    get().stopWebSocketConnection();
+    get().stopNotificationPolling();
+    
+    const user = useAuthStore.getState().user;
+    if (!user?.restaurant_id) {
+      console.error('[NotificationStore] Cannot start WebSocket connection: No restaurant ID');
+      return;
+    }
+    
+    // Define callbacks for WebSocket events
+    const callbacks = {
+      onNotification: (notification: Notification) => {
+        get().handleNewNotification(notification);
+      },
+      onConnected: () => {
+        set({ websocketConnected: true });
+        console.debug('[NotificationStore] WebSocket connected');
+      },
+      onDisconnected: () => {
+        set({ websocketConnected: false });
+        console.debug('[NotificationStore] WebSocket disconnected');
+        
+        // Fallback to polling if WebSocket disconnects
+        get().startNotificationPolling();
+      },
+      onError: (error: any) => {
+        console.error('[NotificationStore] WebSocket error:', error);
+        
+        // Fallback to polling on error
+        get().startNotificationPolling();
+      }
+    };
+    
+    // Connect to WebSocket
+    websocketService.connect(user.restaurant_id, callbacks);
+  },
+  
+  stopWebSocketConnection: () => {
+    if (get().websocketConnected) {
+      websocketService.disconnect('notificationStore');
+      set({ websocketConnected: false });
+    }
+  },
+  
+  handleNewNotification: (notification: Notification) => {
+    if (!notification || !notification.id) return;
+    
+    console.debug('[NotificationStore] Received new notification via WebSocket:', notification.id);
+    
+    // Check if we already have this notification
+    const existingNotificationIndex = get().notifications.findIndex(n => n.id === notification.id);
+    
+    if (existingNotificationIndex === -1) {
+      // Add the new notification to the store
+      set(state => ({
+        notifications: [notification, ...state.notifications],
+        // Update stats
+        stats: {
+          ...state.stats,
+          totalCount: state.stats.totalCount + 1,
+          // Update specific counters based on notification type
+          orderCount: notification.notification_type === 'order' ? state.stats.orderCount + 1 : state.stats.orderCount,
+          lowStockCount: notification.notification_type === 'low_stock' ? state.stats.lowStockCount + 1 : state.stats.lowStockCount,
+          outOfStockCount: notification.notification_type === 'out_of_stock' ? state.stats.outOfStockCount + 1 : state.stats.outOfStockCount,
+        }
+      }));
+    }
+  },
+  
+  // ---------------------------------------------------------
+  // Polling Methods (Fallback)
+  // ---------------------------------------------------------
+  startNotificationPolling: () => {
+    // First stop any existing polling
+    get().stopNotificationPolling();
+    
+    // Log that we're falling back to polling
+    console.debug('[NotificationStore] Starting polling for notifications (WebSocket fallback)');
+    
+    // Start a new polling interval
+    const intervalId = window.setInterval(async () => {
+      console.debug('[NotificationStore] Polling for notifications');
+      await get().fetchNotifications();
+      await get().fetchStats();
+    }, 30000); // Poll every 30 seconds
+    
+    // Store the interval ID so we can clear it later
+    set({ pollingInterval: intervalId });
+  },
+  
+  stopNotificationPolling: () => {
+    const { pollingInterval } = get();
+    
+    if (pollingInterval !== null) {
+      window.clearInterval(pollingInterval);
+      set({ pollingInterval: null });
+    }
   },
 
   fetchNotifications: async (hours = 24, type?: string) => {

@@ -43,7 +43,7 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
   
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
   
-  // Fetch notifications on mount and set up polling
+  // Fetch notifications on mount and set up WebSocket connection
   useEffect(() => {
     const fetchData = async () => {
       await fetchNotifications(defaultHours, notificationType);
@@ -52,12 +52,18 @@ const NotificationContainer: React.FC<NotificationContainerProps> = ({
     // Fetch immediately on mount
     fetchData();
     
-    // Set up polling
-    const intervalId = setInterval(fetchData, pollInterval);
+    // Get WebSocket methods from the store
+    const notificationStore = useNotificationStore.getState();
+    
+    // Start WebSocket connection
+    notificationStore.startWebSocketConnection();
     
     // Clean up on unmount
-    return () => clearInterval(intervalId);
-  }, [fetchNotifications, defaultHours, notificationType, pollInterval]);
+    return () => {
+      notificationStore.stopWebSocketConnection();
+      notificationStore.stopNotificationPolling();
+    };
+  }, [fetchNotifications, defaultHours, notificationType]);
   
   // Filter and sort notifications when data changes
   useEffect(() => {

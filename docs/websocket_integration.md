@@ -250,6 +250,8 @@ private reconnect(): void {
 
 ## Recent Fixes and Improvements
 
+### WebSocket Stability
+
 Several key issues were resolved to ensure stable WebSocket connections:
 
 1. **Authentication Token Format**: Updated the `authStore` to store the token under both `token` and `auth_token` keys for compatibility.
@@ -259,6 +261,22 @@ Several key issues were resolved to ensure stable WebSocket connections:
 3. **Improved Error Handling**: Added better error handling and logging for connection issues.
 
 4. **Backend Connection Fixes**: Fixed issues in the backend connection handling, including the `disconnect` method and EventMachine timer usage.
+
+### Inventory Management Integration
+
+The WebSocket implementation has been enhanced to better support inventory management:
+
+1. **Damaged Item Handling**: Updated the system to correctly track damaged items without affecting stock quantities, ensuring accurate inventory management.
+
+2. **Available Quantity Display**: Modified the frontend to display available quantities as `stock_quantity - damaged_quantity`, providing a more accurate view of inventory status.
+
+3. **Low Stock Notifications**: Enhanced the WebSocket integration to receive and display low stock notifications in real-time, including the available quantity in the notification.
+
+4. **Restaurant ID Resolution**: Improved the backend's ability to determine the correct restaurant ID for different types of models, ensuring broadcasts reach the right clients.
+
+### Menu Item Availability
+
+Fixed an issue with the menu item's available days not being cleared when all days are deselected in the UI. The controller now properly handles the case when no days are selected by setting `available_days` to an empty array, making the item available every day.
 
 ## Troubleshooting
 

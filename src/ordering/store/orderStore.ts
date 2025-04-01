@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../lib/api';
 import type { Order, OrderItem } from '../types/order';
+import websocketService from '../../shared/services/websocketService';
+import { useAuthStore } from './authStore';
 
 /** CartItem for local cart usage. */
 export interface CartItem extends Omit<OrderItem, 'id'> {
@@ -24,6 +26,18 @@ interface OrderStore {
   orders: Order[];
   loading: boolean;
   error: string | null;
+  websocketConnected: boolean;
+  pollingInterval: number | null;
+
+  // WebSocket methods
+  startWebSocketConnection: () => void;
+  stopWebSocketConnection: () => void;
+  handleNewOrder: (order: Order) => void;
+  handleOrderUpdate: (order: Order) => void;
+  
+  // Polling methods (fallback)
+  startOrderPolling: () => void;
+  stopOrderPolling: () => void;
 
   fetchOrders: () => Promise<void>;
   fetchOrdersQuietly: () => Promise<void>;
@@ -73,6 +87,118 @@ export const useOrderStore = create<OrderStore>()(
       orders: [],
       loading: false,
       error: null,
+      websocketConnected: false,
+      pollingInterval: null,
+      
+      // ---------------------------------------------------------
+      // WebSocket Methods
+      // ---------------------------------------------------------
+      startWebSocketConnection: () => {
+        // First stop any existing connections or polling
+        get().stopWebSocketConnection();
+        get().stopOrderPolling();
+        
+        const user = useAuthStore.getState().user;
+        if (!user?.restaurant_id) {
+          console.error('[OrderStore] Cannot start WebSocket connection: No restaurant ID');
+          return;
+        }
+        
+        // Define callbacks for WebSocket events
+        const callbacks = {
+          onNewOrder: (order: Order) => {
+            get().handleNewOrder(order);
+          },
+          onOrderUpdated: (order: Order) => {
+            get().handleOrderUpdate(order);
+          },
+          onConnected: () => {
+            set({ websocketConnected: true });
+            console.debug('[OrderStore] WebSocket connected');
+          },
+          onDisconnected: () => {
+            set({ websocketConnected: false });
+            console.debug('[OrderStore] WebSocket disconnected');
+            
+            // Fallback to polling if WebSocket disconnects
+            get().startOrderPolling();
+          },
+          onError: (error: any) => {
+            console.error('[OrderStore] WebSocket error:', error);
+            
+            // Fallback to polling on error
+            get().startOrderPolling();
+          }
+        };
+        
+        // Connect to WebSocket
+        websocketService.connect(user.restaurant_id, callbacks);
+      },
+      
+      stopWebSocketConnection: () => {
+        if (get().websocketConnected) {
+          websocketService.disconnect('orderStore');
+          set({ websocketConnected: false });
+        }
+      },
+      
+      handleNewOrder: (order: Order) => {
+        if (!order || !order.id) return;
+        
+        console.debug('[OrderStore] Received new order via WebSocket:', order.id);
+        
+        // Check if we already have this order
+        const existingOrderIndex = get().orders.findIndex(o => o.id === order.id);
+        
+        if (existingOrderIndex === -1) {
+          // Add the new order to the store
+          set(state => ({
+            orders: [order, ...state.orders]
+          }));
+        }
+      },
+      
+      handleOrderUpdate: (order: Order) => {
+        if (!order || !order.id) return;
+        
+        console.debug('[OrderStore] Received order update via WebSocket:', order.id);
+        
+        // Update the specific order in the store
+        set(state => ({
+          orders: state.orders.map(o => 
+            o.id === order.id ? { ...o, ...order } : o
+          )
+        }));
+      },
+      
+      // ---------------------------------------------------------
+      // Polling Methods (Fallback)
+      // ---------------------------------------------------------
+      startOrderPolling: () => {
+        // First stop any existing polling
+        get().stopOrderPolling();
+        
+        // Log that we're falling back to polling
+        console.debug('[OrderStore] Starting polling for orders (WebSocket fallback)');
+        
+        // Start a new polling interval
+        const intervalId = window.setInterval(async () => {
+          console.debug('[OrderStore] Polling for orders');
+          await get().fetchOrdersQuietly();
+        }, 30000); // Poll every 30 seconds
+        
+        // Store the interval ID so we can clear it later
+        set({ pollingInterval: intervalId });
+      },
+      
+      stopOrderPolling: () => {
+        const { pollingInterval } = get();
+        
+        if (pollingInterval !== null) {
+          window.clearInterval(pollingInterval);
+          set({ pollingInterval: null });
+        }
+      },
 
       // ---------------------------------------------------------
       // Fetch all orders with pagination
