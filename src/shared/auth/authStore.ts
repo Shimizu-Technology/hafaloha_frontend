@@ -47,7 +47,13 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       
       // Save to localStorage so we persist across reloads
       localStorage.setItem('token', jwt);
+      localStorage.setItem('auth_token', jwt); // Also save as auth_token for WebSocket compatibility
       localStorage.setItem('user', JSON.stringify(user));
+      
+      // Make token available to window.authStore for WebSocket service
+      if (typeof window !== 'undefined') {
+        window.authStore = window.authStore || { getState: () => ({ token: jwt }) };
+      }
 
       // Update our store state
       set({ user, isLoading: false, error: null });
@@ -97,7 +103,13 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     // Logout
     logout: () => {
       localStorage.removeItem('token');
+      localStorage.removeItem('auth_token'); // Also remove auth_token for WebSocket compatibility
       localStorage.removeItem('user');
+      
+      // Clear window.authStore
+      if (typeof window !== 'undefined' && window.authStore) {
+        window.authStore = { getState: () => ({}) };
+      }
       set({ user: null, isLoading: false, error: null });
       
       // Redirect to login page

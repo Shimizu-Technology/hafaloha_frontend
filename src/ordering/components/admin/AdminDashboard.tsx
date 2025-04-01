@@ -1,6 +1,6 @@
 // src/ordering/components/admin/AdminDashboard.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MenuManager } from './MenuManager';
 import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
@@ -31,6 +31,7 @@ import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
 import { MenuItem } from '../../types/menu';
 import { useMenuStore } from '../../store/menuStore';
 import { calculateAvailableQuantity } from '../../utils/inventoryUtils';
+import useWebSocket from '../../../shared/hooks/useWebSocket';
 
 type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise';
 
@@ -70,9 +71,12 @@ export function AdminDashboard() {
 
   // For order modal
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+// Constants for configuration
+const POLLING_INTERVAL = 5000; // 5 seconds - could be moved to a config file or environment variable
+const USE_WEBSOCKETS = true; // Enable WebSockets with polling fallback
+const WEBSOCKET_DEBUG = true; // Enable detailed WebSocket logging
+console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DEBUG });
 
-  // Constants for configuration
-  const POLLING_INTERVAL = 5000; // 5 seconds - could be moved to a config file or environment variable
 
   // Polling for new orders - track the highest order ID we've seen
   // Note: We no longer use localStorage to persist this value between sessions
@@ -153,8 +157,8 @@ export function AdminDashboard() {
     }
   };
 
-  // Function to display order notification
-  const displayOrderNotification = (order: Order) => {
+  // Function to display order notification - memoized to prevent infinite loops
+  const displayOrderNotification = useCallback((order: Order) => {
     // Skip displaying notification if the order has already been acknowledged globally
     // This prevents showing notifications for orders that were acknowledged by any admin
     // after a cache clear or first-time login
@@ -164,7 +168,7 @@ export function AdminDashboard() {
     }
     
     // Handle both snake_case and camelCase date formats
-  const createdAtStr = new Date(order.created_at || order.createdAt || Date.now()).toLocaleString();
+    const createdAtStr = new Date(order.created_at || order.createdAt || Date.now()).toLocaleString();
     const itemCount = order.items?.length || 0;
     const totalPrice = (order.total ?? 0).toFixed(2);
     const contactName = (order as any).contact_name || 'N/A';
@@ -312,42 +316,17 @@ export function AdminDashboard() {
       duration: Infinity,
       id: `new_order_${order.id}`,
     });
-  };
+  }, [activeTab, acknowledgeOrder]);
 
-  // Add effect for stock notifications
-  useEffect(() => {
-    // Only run for admin users
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-      return;
-    }
-    
-    // Fetch stock notifications on component mount
-    fetchNotifications(24, 'low_stock');
-    
-    // Set up polling interval for stock notifications
-    const interval = setInterval(() => {
-      fetchNotifications(24, 'low_stock');
-    }, POLLING_INTERVAL * 2); // Poll at a slower rate than orders
-    
-    return () => clearInterval(interval);
-  }, [fetchNotifications, user]);
-  
-  // Update stock alert count when notifications change
-  useEffect(() => {
-    const stockAlerts = getStockAlerts();
-    // Ensure stockAlerts is an array before accessing length
-    setStockAlertCount(Array.isArray(stockAlerts) ? stockAlerts.length : 0);
-  }, [getStockAlerts]);
-  
   // Function to acknowledge a low stock item
-  const acknowledgeLowStockItem = (itemId: string, currentQty: number) => {
+  const acknowledgeLowStockItem = useCallback((itemId: string, currentQty: number) => {
     const updatedItems = { ...acknowledgedLowStockItems, [itemId]: currentQty };
     setAcknowledgedLowStockItems(updatedItems);
     localStorage.setItem('acknowledgedLowStockItems', JSON.stringify(updatedItems));
-  };
+  }, [acknowledgedLowStockItems]);
   
-  // Function to display low stock notification
-  const displayLowStockNotification = (item: MenuItem) => {
+  // Function to display low stock notification - memoized to prevent infinite loops
+  const displayLowStockNotification = useCallback((item: MenuItem) => {
     const availableQty = calculateAvailableQuantity(item);
     
     toastUtils.custom((t) => (
@@ -407,7 +386,149 @@ export function AdminDashboard() {
       duration: Infinity,
       id: `low_stock_${item.id}`,
     });
-  };
+  }, [calculateAvailableQuantity, acknowledgeLowStockItem, setActiveTab, setOpenInventoryForItem]);
+  
+  // WebSocket integration for real-time updates
+  const handleNewOrder = useCallback((order: Order) => {
+    console.log('[WebSocket] Received new order:', order);
+    
+    // Skip staff-created orders and already acknowledged orders
+    if (order.staff_created || order.global_last_acknowledged_at) {
+      return;
+    }
+    
+    // Update the last order ID if needed
+    if (Number(order.id) > lastOrderId) {
+      setLastOrderId(Number(order.id));
+    }
+    
+    // Add to unacknowledged orders if not already present
+    setUnacknowledgedOrders(prev => {
+      // Check if order is already in the list
+      const exists = prev.some(o => Number(o.id) === Number(order.id));
+      if (exists) return prev;
+      return [...prev, order];
+    });
+    
+    // Display notification
+    displayOrderNotification(order);
+  }, [lastOrderId, displayOrderNotification]);
+  
+  const handleLowStock = useCallback((item: MenuItem) => {
+    console.log('[WebSocket] Received low stock alert:', item);
+    
+    const availableQty = calculateAvailableQuantity(item);
+    const acknowledgedQty = acknowledgedLowStockItems[item.id];
+    
+    // Show notification if:
+    // 1. Item has never been acknowledged, or
+    // 2. Current quantity is lower than when it was last acknowledged
+    if (acknowledgedQty === undefined || availableQty < acknowledgedQty) {
+      displayLowStockNotification(item);
+    }
+  }, [acknowledgedLowStockItems, calculateAvailableQuantity, displayLowStockNotification]);
+  
+  // Initialize WebSocket connection
+  const { isConnected, error: wsError } = useWebSocket({
+    autoConnect: USE_WEBSOCKETS && !!user && (user.role === 'admin' || user.role === 'super_admin'),
+    onNewOrder: handleNewOrder,
+    onLowStock: handleLowStock,
+    onConnected: () => {
+      console.debug('[WebSocket] Connected successfully', {
+        user: user?.id,
+        restaurant: user?.restaurant_id,
+        role: user?.role,
+        useWebsockets: USE_WEBSOCKETS,
+        isPolling: !!pollingIntervalRef.current
+      });
+      
+      // Clear any existing polling interval when WebSocket connects
+      if (pollingIntervalRef.current) {
+        console.debug('[WebSocket] Clearing existing polling interval');
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      
+      // Initial fetch when connected
+      fetchNotifications(24, 'low_stock');
+    },
+    onDisconnected: () => {
+      console.debug('[WebSocket] Disconnected, may fall back to polling', {
+        user: user?.id,
+        restaurant: user?.restaurant_id,
+        wasConnected: isConnected,
+        useWebsockets: USE_WEBSOCKETS,
+        isPolling: !!pollingIntervalRef.current
+      });
+      
+      // If WebSockets are still enabled but we got disconnected, attempt to reconnect
+      if (USE_WEBSOCKETS && user?.role === 'admin' || user?.role === 'super_admin') {
+        console.debug('[WebSocket] Will attempt to reconnect');
+      }
+    },
+    onError: (err) => {
+      console.error('[WebSocket] Error:', err, {
+        user: user?.id,
+        restaurant: user?.restaurant_id,
+        errorType: err?.name,
+        errorMessage: err?.message,
+        useWebsockets: USE_WEBSOCKETS,
+        isPolling: !!pollingIntervalRef.current
+      });
+    }
+  });
+
+  // Log WebSocket status changes
+  useEffect(() => {
+    console.debug('[WebSocket] Connection status changed', {
+      isConnected,
+      useWebsockets: USE_WEBSOCKETS,
+      isPolling: !!pollingIntervalRef.current,
+      error: wsError?.message
+    });
+  }, [isConnected, wsError]);
+  
+  // Add effect for stock notifications (fallback to polling if WebSockets fail)
+  useEffect(() => {
+    // Only run for admin users
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return;
+    }
+    
+    // Fetch stock notifications on component mount
+    fetchNotifications(24, 'low_stock');
+    
+    // Set up polling interval for stock notifications if WebSockets are disabled
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (!USE_WEBSOCKETS) {
+      interval = setInterval(() => {
+        console.debug('[Polling] Fetching stock notifications');
+        fetchNotifications(24, 'low_stock');
+      }, POLLING_INTERVAL * 2); // Poll at a slower rate than orders
+    } else if (isConnected) {
+      console.debug('[WebSocket] Connected, disabling polling');
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }
+    
+    return () => {
+      if (interval) {
+        console.debug('[Polling] Cleaning up polling interval');
+        clearInterval(interval);
+      }
+    };
+  }, [fetchNotifications, user, isConnected]);
+  
+  // Update stock alert count when notifications change
+  useEffect(() => {
+    const stockAlerts = getStockAlerts();
+    // Ensure stockAlerts is an array before accessing length
+    setStockAlertCount(Array.isArray(stockAlerts) ? stockAlerts.length : 0);
+  }, [getStockAlerts]);
+  
   
   // Handle stock notification view
   const handleStockNotificationView = (notification: any) => {
@@ -453,131 +574,170 @@ export function AdminDashboard() {
         displayLowStockNotification(item);
       }
     });
-  }, [menuItems, acknowledgedLowStockItems, user, calculateAvailableQuantity]);
+  }, [menuItems, acknowledgedLowStockItems, user, calculateAvailableQuantity, displayLowStockNotification]);
 
-  useEffect(() => {
-    // Only run polling for admin users
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-      return;
+// SIMPLIFIED POLLING IMPLEMENTATION
+// Use a ref to track if the component is mounted and to store the polling interval
+const mountedRef = useRef(false);
+const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+// This effect runs once on mount to check for unacknowledged orders
+useEffect(() => {
+  // Skip if not an admin user
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    return;
+  }
+
+  // Skip initial check if WebSockets are enabled and connected
+  if (USE_WEBSOCKETS && isConnected) {
+    console.debug('[WebSocket] Connected, skipping initial order check');
+    return;
+  }
+
+  // Mark as mounted
+  mountedRef.current = true;
+  
+  // Function to check for unacknowledged orders
+  const checkForUnacknowledgedOrders = async () => {
+    if (!mountedRef.current) return;
+    
+    try {
+      console.log('[AdminDashboard] Checking for unacknowledged orders...');
+      
+      // Get unacknowledged orders from the last 24 hours
+      const url = `/orders/unacknowledged?hours=24`;
+      const fetchedOrders: Order[] = await api.get(url);
+      
+      if (!mountedRef.current) return;
+      
+      console.log('[AdminDashboard] Unacknowledged orders:', fetchedOrders.length);
+      
+      // Filter out staff-created orders and orders that have already been acknowledged globally
+      const nonStaffOrders = fetchedOrders.filter(order =>
+        !order.staff_created && !order.global_last_acknowledged_at
+      );
+      
+      // Update unacknowledged orders state with only non-staff orders that haven't been acknowledged globally
+      setUnacknowledgedOrders(nonStaffOrders);
+      
+      // Display notifications for unacknowledged orders (already filtered)
+      nonStaffOrders.forEach(order => {
+        console.log('[AdminDashboard] Displaying notification for order:', order.id);
+        displayOrderNotification(order);
+      });
+      
+      // Update lastOrderId if needed
+      if (fetchedOrders.length > 0) {
+        const maxId = Math.max(...fetchedOrders.map((o) => Number(o.id)));
+        if (maxId > lastOrderId) {
+          setLastOrderId(maxId);
+        }
+      }
+    } catch (err) {
+      console.error('[AdminDashboard] Failed to check for unacknowledged orders:', err);
     }
+  };
+  
+  // Only check for unacknowledged orders if WebSockets are not enabled or not connected
+  if (!USE_WEBSOCKETS || !isConnected) {
+    checkForUnacknowledgedOrders();
+  }
+  
+  // Clean up function
+  return () => {
+    mountedRef.current = false;
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isConnected]); // Add isConnected to dependencies
 
-    // Check for unacknowledged orders on mount
-    const checkForUnacknowledgedOrders = async () => {
-      try {
-        console.log('[AdminDashboard] Checking for unacknowledged orders...');
-        
-        // Get unacknowledged orders from the last 24 hours
-        const url = `/orders/unacknowledged?hours=24`;
-        const fetchedOrders: Order[] = await api.get(url);
-        
-        console.log('[AdminDashboard] Unacknowledged orders:', fetchedOrders.length);
-        
+// This effect sets up polling for new orders
+useEffect(() => {
+  // Skip if not an admin user
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    return;
+  }
+
+  // Skip polling if WebSockets are enabled and connected
+  if (USE_WEBSOCKETS && isConnected) {
+    console.debug('[WebSocket] Connected, disabling order polling', {
+      useWebsockets: USE_WEBSOCKETS,
+      isConnected,
+      hasPollingInterval: !!pollingIntervalRef.current
+    });
+    
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    return; // Exit early, don't set up polling
+  }
+  
+  // Function to check for new orders
+  const checkForNewOrders = async () => {
+    if (!mountedRef.current) return;
+    
+    try {
+      console.log('[Polling] Checking for new orders since ID:', lastOrderId, {
+        useWebsockets: USE_WEBSOCKETS,
+        isConnected,
+        hasPollingInterval: !!pollingIntervalRef.current
+      });
+      
+      const url = `/orders/new_since/${lastOrderId}`;
+      const newOrders: Order[] = await api.get(url);
+      
+      if (!mountedRef.current) return;
+      
+      if (newOrders.length > 0) {
         // Filter out staff-created orders and orders that have already been acknowledged globally
-        const nonStaffOrders = fetchedOrders.filter(order =>
+        const nonStaffOrders = newOrders.filter(order =>
           !order.staff_created && !order.global_last_acknowledged_at
         );
         
-        // Update unacknowledged orders state with only non-staff orders that haven't been acknowledged globally
-        setUnacknowledgedOrders(nonStaffOrders);
-        
-        // Display notifications for unacknowledged orders (already filtered)
-        nonStaffOrders.forEach(order => {
-          console.log('[AdminDashboard] Displaying notification for order:', order.id);
+        // Display notifications for non-staff orders that haven't been acknowledged globally
+        nonStaffOrders.forEach((order) => {
           displayOrderNotification(order);
         });
         
-        // Update lastOrderId if needed
-        if (fetchedOrders.length > 0) {
-          const maxId = Math.max(...fetchedOrders.map((o) => Number(o.id)));
-          if (maxId > lastOrderId) {
-            setLastOrderId(maxId);
-          }
-        }
-      } catch (err) {
-        console.error('[AdminDashboard] Failed to check for unacknowledged orders:', err);
+        // Add non-staff orders to unacknowledged orders
+        setUnacknowledgedOrders(prev => [...prev, ...nonStaffOrders]);
+        
+        const maxId = Math.max(...newOrders.map((o) => Number(o.id)));
+        setLastOrderId(maxId);
       }
-    };
-    
-    // Check for unacknowledged orders when component mounts
-    checkForUnacknowledgedOrders();
-
-    // Set up polling with visibility detection
-    let pollingInterval: ReturnType<typeof setInterval> | null = null;
-    
-    // Function to check for new orders
-    const checkForNewOrders = async () => {
-      try {
-        const url = `/orders/new_since/${lastOrderId}`;
-        const newOrders: Order[] = await api.get(url);
-
-        if (newOrders.length > 0) {
-          // Filter out staff-created orders and orders that have already been acknowledged globally
-          const nonStaffOrders = newOrders.filter(order =>
-            !order.staff_created && !order.global_last_acknowledged_at
-          );
-          
-          // Display notifications for non-staff orders that haven't been acknowledged globally
-          nonStaffOrders.forEach((order) => {
-            displayOrderNotification(order);
-          });
-          
-          // Add non-staff orders to unacknowledged orders
-          setUnacknowledgedOrders(prev => [...prev, ...nonStaffOrders]);
-
-          const maxId = Math.max(...newOrders.map((o) => Number(o.id)));
-          setLastOrderId(maxId);
-        }
-      } catch (err) {
-        console.error('[AdminDashboard] Failed to poll new orders:', err);
-        // Error is logged but polling continues
-      }
-    };
-    
-    // Function to start polling
-    const startPolling = () => {
-      // Clear any existing interval first
-      if (pollingInterval) clearInterval(pollingInterval);
-      
-      // Set up new interval
-      pollingInterval = setInterval(() => {
-        checkForNewOrders().catch(error => {
-          console.error('[AdminDashboard] Error checking for new orders:', error);
-          // Continue polling even if there's an error
-        });
-      }, POLLING_INTERVAL);
-    };
-    
-    // Function to stop polling
-    const stopPolling = () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-      }
-    };
-    
-    // Start polling immediately
-    startPolling();
-    
-    // Set up visibility change detection to pause polling when tab is not visible
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        // When becoming visible again, check immediately then start polling
-        checkForNewOrders().catch(console.error);
-        startPolling();
-      }
-    };
-    
-    // Add visibility change listener
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Clean up on component unmount
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [user, lastOrderId, activeTab]);
+    } catch (err) {
+      console.error('[AdminDashboard] Failed to poll new orders:', err);
+    }
+  };
+  
+  // Clear any existing interval
+  if (pollingIntervalRef.current) {
+    clearInterval(pollingIntervalRef.current);
+    pollingIntervalRef.current = null;
+  }
+  
+  // Only set up polling if WebSockets are disabled or not connected
+  console.log('[AdminDashboard] Setting up polling for new orders', {
+    useWebsockets: USE_WEBSOCKETS,
+    isConnected,
+    hasPollingInterval: !!pollingIntervalRef.current
+  });
+  
+  pollingIntervalRef.current = setInterval(checkForNewOrders, POLLING_INTERVAL);
+  
+  // Clean up function
+  return () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [lastOrderId, isConnected, USE_WEBSOCKETS]); // Add USE_WEBSOCKETS to dependencies
 
   return (
     <div className="min-h-screen bg-gray-50 relative">

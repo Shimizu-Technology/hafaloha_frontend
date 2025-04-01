@@ -51,13 +51,26 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
   fetchNotifications: async (hours = 24, type?: string) => {
     try {
       set({ loading: true, error: null });
+      
+      console.debug('Fetching notifications with params:', { type, hours });
       const notifications = await getUnacknowledgedNotifications(type, hours);
+      
+      console.debug('Raw notifications response:', {
+        isArray: Array.isArray(notifications),
+        type: typeof notifications,
+        value: notifications,
+        keys: notifications ? Object.keys(notifications) : null
+      });
       
       // Ensure notifications is always an array
       const safeNotifications = Array.isArray(notifications) ? notifications : [];
       
       if (!Array.isArray(notifications)) {
-        console.warn('API returned non-array notifications:', typeof notifications);
+        console.warn('API returned non-array notifications:', {
+          type: typeof notifications,
+          value: notifications,
+          keys: notifications ? Object.keys(notifications) : null
+        });
       }
       
       set({ notifications: safeNotifications, loading: false });

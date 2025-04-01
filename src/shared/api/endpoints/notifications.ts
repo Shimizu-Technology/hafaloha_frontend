@@ -1,4 +1,4 @@
-import { apiClient } from '../apiClient';
+import { api } from '../apiClient';
 
 // Define the Notification interface
 export interface Notification {
@@ -27,6 +27,10 @@ export interface Notification {
 }
 
 // Get all unacknowledged notifications
+interface NotificationsResponse {
+  notifications: Notification[];
+}
+
 export const getUnacknowledgedNotifications = async (
   type?: string,
   hours?: number
@@ -38,12 +42,13 @@ export const getUnacknowledgedNotifications = async (
   if (type) {
     params.type = type;
   }
-  return apiClient.get('/notifications/unacknowledged', { params });
+  const response = await api.get<NotificationsResponse>('/notifications/unacknowledged', params);
+  return response.notifications || [];
 };
 
 // Acknowledge a single notification
 export const acknowledgeNotification = async (id: number): Promise<void> => {
-  return apiClient.post(`/notifications/${id}/acknowledge`);
+  return api.post(`/notifications/${id}/acknowledge`);
 };
 
 // Acknowledge all notifications (optionally by type)
@@ -52,7 +57,7 @@ export const acknowledgeAllNotifications = async (type?: string): Promise<{ ackn
   if (type) {
     params.type = type;
   }
-  return apiClient.post('/notifications/acknowledge_all', { params });
+  return api.post('/notifications/acknowledge_all', params);
 };
 
 // Interface for the response from take_action for restock actions
@@ -73,12 +78,12 @@ export interface RestockActionResponse {
 
 // Take an action on a notification (e.g., restock a low stock item)
 export const takeActionOnNotification = async (
-  id: number, 
-  actionType: string, 
+  id: number,
+  actionType: string,
   // Additional parameters specific to the action type
   actionParams: Record<string, any> = {}
 ): Promise<RestockActionResponse> => {
-  return apiClient.post(`/notifications/${id}/take_action`, {
+  return api.post(`/notifications/${id}/take_action`, {
     action_type: actionType,
     ...actionParams
   });
@@ -90,7 +95,7 @@ export const getNotificationCount = async (type?: string): Promise<{ count: numb
   if (type) {
     params.type = type;
   }
-  return apiClient.get('/notifications/count', { params });
+  return api.get('/notifications/count', params);
 };
 
 // Get notification statistics
@@ -101,5 +106,5 @@ export const getNotificationStats = async (): Promise<{
   total_count: number;
   oldest_notification_date: string | null;
 }> => {
-  return apiClient.get('/notifications/stats');
+  return api.get('/notifications/stats');
 };
