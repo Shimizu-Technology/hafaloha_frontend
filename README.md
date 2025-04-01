@@ -45,6 +45,7 @@ Frontend web application for the Hafaloha restaurant management system.
 
 - [Pushover Integration](docs/pushover_integration.md) - Real-time push notifications via Pushover
 - [Web Push Integration](docs/web_push_integration.md) - Browser-based push notifications for PWA
+- [Order Notification Consistency](../hafaloha_api/docs/order_notification_consistency.md) - Ensuring consistent order notifications across devices and sessions
 
 ## Tech Stack
 

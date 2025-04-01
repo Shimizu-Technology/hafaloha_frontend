@@ -74,11 +74,11 @@ export function AdminDashboard() {
   // Constants for configuration
   const POLLING_INTERVAL = 5000; // 5 seconds - could be moved to a config file or environment variable
 
-  // Polling for new orders
-  const [lastOrderId, setLastOrderId] = useState<number>(() => {
-    const stored = localStorage.getItem('adminLastOrderId');
-    return stored ? parseInt(stored, 10) || 0 : 0;
-  });
+  // Polling for new orders - track the highest order ID we've seen
+  // Note: We no longer use localStorage to persist this value between sessions
+  // because the server now handles first-time users and cache clears by tracking
+  // global acknowledgment timestamps
+  const [lastOrderId, setLastOrderId] = useState<number>(0);
 
   // Track unacknowledged orders
   const [unacknowledgedOrders, setUnacknowledgedOrders] = useState<Order[]>([]);
@@ -155,6 +155,14 @@ export function AdminDashboard() {
 
   // Function to display order notification
   const displayOrderNotification = (order: Order) => {
+    // Skip displaying notification if the order has already been acknowledged globally
+    // This prevents showing notifications for orders that were acknowledged by any admin
+    // after a cache clear or first-time login
+    if (order.global_last_acknowledged_at) {
+      console.log(`[AdminDashboard] Skipping notification for already acknowledged order: ${order.id}`);
+      return;
+    }
+    
     // Handle both snake_case and camelCase date formats
   const createdAtStr = new Date(order.created_at || order.createdAt || Date.now()).toLocaleString();
     const itemCount = order.items?.length || 0;
@@ -464,10 +472,12 @@ export function AdminDashboard() {
         
         console.log('[AdminDashboard] Unacknowledged orders:', fetchedOrders.length);
         
-        // Filter out staff-created orders from unacknowledged orders
-        const nonStaffOrders = fetchedOrders.filter(order => !order.staff_created);
+        // Filter out staff-created orders and orders that have already been acknowledged globally
+        const nonStaffOrders = fetchedOrders.filter(order =>
+          !order.staff_created && !order.global_last_acknowledged_at
+        );
         
-        // Update unacknowledged orders state with only non-staff orders
+        // Update unacknowledged orders state with only non-staff orders that haven't been acknowledged globally
         setUnacknowledgedOrders(nonStaffOrders);
         
         // Display notifications for unacknowledged orders (already filtered)
@@ -481,7 +491,6 @@ export function AdminDashboard() {
           const maxId = Math.max(...fetchedOrders.map((o) => Number(o.id)));
           if (maxId > lastOrderId) {
             setLastOrderId(maxId);
-            localStorage.setItem('adminLastOrderId', String(maxId));
           }
         }
       } catch (err) {
@@ -502,10 +511,12 @@ export function AdminDashboard() {
         const newOrders: Order[] = await api.get(url);
 
         if (newOrders.length > 0) {
-          // Filter out staff-created orders
-          const nonStaffOrders = newOrders.filter(order => !order.staff_created);
+          // Filter out staff-created orders and orders that have already been acknowledged globally
+          const nonStaffOrders = newOrders.filter(order =>
+            !order.staff_created && !order.global_last_acknowledged_at
+          );
           
-          // Display notifications for non-staff orders
+          // Display notifications for non-staff orders that haven't been acknowledged globally
           nonStaffOrders.forEach((order) => {
             displayOrderNotification(order);
           });
@@ -515,7 +526,6 @@ export function AdminDashboard() {
 
           const maxId = Math.max(...newOrders.map((o) => Number(o.id)));
           setLastOrderId(maxId);
-          localStorage.setItem('adminLastOrderId', String(maxId));
         }
       } catch (err) {
         console.error('[AdminDashboard] Failed to poll new orders:', err);
