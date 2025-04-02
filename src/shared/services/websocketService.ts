@@ -272,10 +272,9 @@ class WebSocketService {
       // Handle different message types
       // Handle ping/pong messages silently to avoid log noise
       if (data.type === 'ping' || data.type === 'pong') {
-        // Only respond to ping messages
-        if (data.type === 'ping' && this.socket?.readyState === WebSocket.OPEN) {
-          this.socket.send(JSON.stringify({ type: 'pong' }));
-        }
+        // Don't respond to ping messages as ActionCable doesn't handle pong responses well
+        // Just acknowledge them silently
+        this.log('debug', `Received ${data.type} message, acknowledging silently`);
         return;
       }
       
