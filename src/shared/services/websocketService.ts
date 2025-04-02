@@ -1,10 +1,14 @@
 // src/shared/services/websocketService.ts
 
-// Add global type definition for window.authStore
+// Add global type definition for window.authStore and window.ENV
 declare global {
   interface Window {
     authStore?: {
       getState: () => { token?: string; auth_token?: string; };
+    };
+    ENV?: {
+      API_URL?: string;
+      [key: string]: any;
     };
   }
 }
@@ -135,9 +139,36 @@ class WebSocketService {
     this.log('debug', `Token found with length: ${token.length}, first 3 chars: ${token.substring(0, 3)}...`);
 
     // Determine the WebSocket URL based on the environment
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // For development, always use localhost:3000 regardless of NODE_ENV
-    const host = 'localhost:3000';
+    // Determine the WebSocket URL based on the environment
+    let protocol: string;
+    let host: string;
+    
+    // For production, use VITE_API_URL if available
+    if (process.env.NODE_ENV === 'production' && typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL;
+        const apiUrlObj = new URL(apiUrl);
+        
+        protocol = apiUrlObj.protocol === 'https:' ? 'wss:' : 'ws:';
+        host = apiUrlObj.host;
+        
+        this.log('debug', `Using production API URL for WebSocket: ${apiUrl}`, {
+          protocol,
+          host,
+          apiUrl
+        });
+      } catch (error) {
+        this.log('error', `Failed to parse production API URL, falling back to default`, { error });
+        protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        host = window.location.host;
+      }
+    } else {
+      // For development, always use localhost:3000
+      protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      host = 'localhost:3000';
+      
+      this.log('debug', `Using development WebSocket host: ${host}`);
+    }
     
     // Get token without 'Bearer ' prefix if it exists
     const cleanToken = token.startsWith('Bearer ') ? token.substring(7) : token;
