@@ -56,6 +56,7 @@ class WebSocketService {
   private lastConnectionAttempt: number | null = null;
   private minReconnectDelay: number = 1000;
   private maxReconnectDelay: number = 5000;
+  private paginationParams: { page: number; perPage: number } = { page: 1, perPage: 10 };
   
   // Channel subscriptions
   private subscriptions: Map<string, ChannelSubscription> = new Map();
@@ -577,7 +578,9 @@ class WebSocketService {
       command: 'subscribe',
       identifier: JSON.stringify({
         channel: 'OrderChannel',
-        restaurant_id: this.restaurantId
+        restaurant_id: this.restaurantId,
+        page: this.paginationParams.page,
+        per_page: this.paginationParams.perPage
       })
     };
     
@@ -648,6 +651,23 @@ class WebSocketService {
     });
     this.isActive = value;
     this.disconnectCaller = caller;
+  }
+
+  /**
+   * Update pagination parameters for the WebSocket connection
+   * This will be used when subscribing to channels that support pagination
+   * @param params Object containing page and perPage values
+   */
+  public updatePaginationParams(params: { page: number; perPage: number }): void {
+    this.log('info', 'Updating pagination params', params);
+    this.paginationParams = params;
+    
+    // If already connected, update the subscription with new parameters
+    if (this.socket && this.socket.readyState === WebSocket.OPEN && this.restaurantId) {
+      this.log('debug', 'Resubscribing to OrderChannel with updated pagination params');
+      // Resubscribe to the OrderChannel with updated parameters
+      this.subscribeToOrderChannel();
+    }
   }
 
   public disconnect(caller: string = 'unknown'): void {

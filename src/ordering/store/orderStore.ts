@@ -22,12 +22,34 @@ export interface CartItem extends Omit<OrderItem, 'id'> {
   color?: string;
 }
 
+export interface OrdersMetadata {
+  total_count: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface OrderQueryParams {
+  page?: number;
+  perPage?: number;
+  status?: string | null;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  searchQuery?: string | null;
+  restaurantId?: string | null;
+  _sourceId?: string; // Track the source of the request for debugging
+}
+
 interface OrderStore {
   orders: Order[];
+  metadata: OrdersMetadata;
   loading: boolean;
   error: string | null;
   websocketConnected: boolean;
   pollingInterval: number | null;
+  _lastFetchRequestId: number;
 
   // WebSocket methods
   startWebSocketConnection: () => void;
@@ -39,8 +61,8 @@ interface OrderStore {
   startOrderPolling: () => void;
   stopOrderPolling: () => void;
 
-  fetchOrders: () => Promise<void>;
-  fetchOrdersQuietly: () => Promise<void>;
+  fetchOrders: (params?: OrderQueryParams) => Promise<void>;
+  fetchOrdersQuietly: (params?: OrderQueryParams) => Promise<void>;
 
   /** Creates a new order in the backend and returns it. */
   addOrder: (
@@ -84,7 +106,14 @@ interface OrderStore {
 export const useOrderStore = create<OrderStore>()(
   persist(
     (set, get) => ({
+      _lastFetchRequestId: 0,
       orders: [],
+      metadata: {
+        total_count: 0,
+        page: 1,
+        per_page: 10,
+        total_pages: 0
+      },
       loading: false,
       error: null,
       websocketConnected: false,
@@ -93,9 +122,24 @@ export const useOrderStore = create<OrderStore>()(
       // ---------------------------------------------------------
       // WebSocket Methods
       // ---------------------------------------------------------
-      startWebSocketConnection: () => {
-        // First stop any existing connections or polling
-        get().stopWebSocketConnection();
+      startWebSocketConnection: (paginationParams?: { page?: number; perPage?: number }) => {
+        // Check if already connected to avoid duplicate connections
+        if (get().websocketConnected) {
+          console.debug('[OrderStore] WebSocket already connected, skipping connection');
+          // Ensure polling is stopped when WebSocket is connected
+          get().stopOrderPolling();
+          
+          // Even if already connected, update pagination params to ensure WebSocket has current state
+          const currentMetadata = get().metadata;
+          websocketService.updatePaginationParams({
+            page: paginationParams?.page || currentMetadata.page,
+            perPage: paginationParams?.perPage || currentMetadata.per_page
+          });
+          
+          return;
+        }
+        
+        // Stop polling if it's active
         get().stopOrderPolling();
         
         const user = useAuthStore.getState().user;
@@ -103,6 +147,29 @@ export const useOrderStore = create<OrderStore>()(
           console.error('[OrderStore] Cannot start WebSocket connection: No restaurant ID');
           return;
         }
+        
+        // If pagination params are provided, update the store's metadata
+        if (paginationParams) {
+          console.debug('[OrderStore] Updating metadata with pagination params:', paginationParams);
+          set(state => ({
+            metadata: {
+              ...state.metadata,
+              page: paginationParams.page || state.metadata.page,
+              per_page: paginationParams.perPage || state.metadata.per_page
+            }
+          }));
+        }
+        
+        // Get current pagination state to send to WebSocket
+        const currentMetadata = get().metadata;
+        
+        // Immediately set websocketConnected to true to prevent race conditions
+        // This will be set to false if connection fails
+        set({ websocketConnected: true });
+        
+        // Track reconnection attempts
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 3;
         
         // Define callbacks for WebSocket events
         const callbacks = {
@@ -113,30 +180,132 @@ export const useOrderStore = create<OrderStore>()(
             get().handleOrderUpdate(order);
           },
           onConnected: () => {
+            // Reset reconnection attempts on successful connection
+            reconnectAttempts = 0;
+            
+            // Ensure websocketConnected is true
             set({ websocketConnected: true });
-            console.debug('[OrderStore] WebSocket connected');
+            
+            // Send current pagination state to WebSocket service
+            websocketService.updatePaginationParams({
+              page: currentMetadata.page,
+              perPage: currentMetadata.per_page
+            });
+            
+            // Stop polling when WebSocket is connected
+            get().stopOrderPolling();
+            console.debug('[OrderStore] WebSocket connected, polling stopped');
           },
           onDisconnected: () => {
+            const wasConnected = get().websocketConnected;
             set({ websocketConnected: false });
             console.debug('[OrderStore] WebSocket disconnected');
             
-            // Fallback to polling if WebSocket disconnects
-            get().startOrderPolling();
+            // Attempt to reconnect a few times before falling back to polling
+            if (wasConnected && reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              console.debug(`[OrderStore] Attempting WebSocket reconnection (${reconnectAttempts}/${maxReconnectAttempts})`);
+              
+              // Exponential backoff for reconnection attempts
+              const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 10000);
+              
+              setTimeout(() => {
+                // Try to reconnect if we're still disconnected
+                if (!get().websocketConnected) {
+                  // Attempt to reconnect with current pagination state
+                  const currentState = get().metadata;
+                  // Use connect instead of reconnect since reconnect is not available
+                  const user = useAuthStore.getState().user;
+                  if (user?.restaurant_id) {
+                    websocketService.connect(user.restaurant_id, {
+                      onNewOrder: (order) => get().handleNewOrder(order),
+                      onOrderUpdated: (order) => get().handleOrderUpdate(order),
+                      onConnected: () => set({ websocketConnected: true }),
+                      onDisconnected: () => set({ websocketConnected: false }),
+                      onError: (error) => console.error('[OrderStore] WebSocket error:', error)
+                    });
+                    
+                    // Update pagination parameters after connection
+                    websocketService.updatePaginationParams({
+                      page: currentState.page,
+                      perPage: currentState.per_page
+                    });
+                  }
+                }
+              }, backoffTime);
+            } else if (wasConnected) {
+              // If we've exceeded reconnection attempts, fall back to polling
+              console.debug('[OrderStore] WebSocket reconnection failed, falling back to polling');
+              
+              // Add a small delay to ensure we don't have race conditions
+              setTimeout(() => {
+                // Double-check we're still not connected before starting polling
+                if (!get().websocketConnected) {
+                  // Use current page from metadata when starting polling
+                  get().startOrderPolling();
+                }
+              }, 500);
+            }
           },
           onError: (error: any) => {
             console.error('[OrderStore] WebSocket error:', error);
+            set({ websocketConnected: false }); // Ensure we mark as disconnected on error
             
-            // Fallback to polling on error
-            get().startOrderPolling();
+            // Attempt to reconnect on error if we haven't exceeded the limit
+            if (reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              console.debug(`[OrderStore] Attempting WebSocket reconnection after error (${reconnectAttempts}/${maxReconnectAttempts})`);
+              
+              // Exponential backoff for reconnection attempts
+              const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 10000);
+              
+              setTimeout(() => {
+                // Try to reconnect if we're still disconnected
+                if (!get().websocketConnected) {
+                  // Attempt to reconnect with current pagination state
+                  const currentState = get().metadata;
+                  // Use connect instead of reconnect since reconnect is not available
+                  const user = useAuthStore.getState().user;
+                  if (user?.restaurant_id) {
+                    websocketService.connect(user.restaurant_id, {
+                      onNewOrder: (order) => get().handleNewOrder(order),
+                      onOrderUpdated: (order) => get().handleOrderUpdate(order),
+                      onConnected: () => set({ websocketConnected: true }),
+                      onDisconnected: () => set({ websocketConnected: false }),
+                      onError: (error) => console.error('[OrderStore] WebSocket error:', error)
+                    });
+                    
+                    // Update pagination parameters after connection
+                    websocketService.updatePaginationParams({
+                      page: currentState.page,
+                      perPage: currentState.per_page
+                    });
+                  }
+                }
+              }, backoffTime);
+            } else {
+              // Only start polling if we're not already polling and have exceeded reconnection attempts
+              setTimeout(() => {
+                if (!get().websocketConnected) {
+                  // Use current page from metadata when starting polling
+                  get().startOrderPolling();
+                }
+              }, 500);
+            }
           }
         };
         
         // Connect to WebSocket
+        console.debug('[OrderStore] Connecting to WebSocket', { 
+          restaurantId: user.restaurant_id,
+          currentPage: get().metadata.page 
+        });
         websocketService.connect(user.restaurant_id, callbacks);
       },
       
       stopWebSocketConnection: () => {
         if (get().websocketConnected) {
+          console.debug('[OrderStore] Stopping WebSocket connection');
           websocketService.disconnect('orderStore');
           set({ websocketConnected: false });
         }
@@ -148,13 +317,32 @@ export const useOrderStore = create<OrderStore>()(
         console.debug('[OrderStore] Received new order via WebSocket:', order.id);
         
         // Check if we already have this order
-        const existingOrderIndex = get().orders.findIndex(o => o.id === order.id);
+        const existingOrderIndex = get().orders.findIndex((o: Order) => o.id === order.id);
         
         if (existingOrderIndex === -1) {
-          // Add the new order to the store
-          set(state => ({
-            orders: [order, ...state.orders]
-          }));
+          // Only add the new order if we're on page 1
+          // This prevents new orders from affecting pagination on other pages
+          const { metadata } = get();
+          if (metadata.page === 1) {
+            console.debug('[OrderStore] Adding new order to page 1');
+            
+            // IMPORTANT: Create a shallow copy of the current state to avoid modifying metadata
+            // This is the root cause of the pagination issues - we need to preserve the original metadata
+            const currentOrders = [...get().orders];
+            
+            // Add the new order to the beginning of the array
+            currentOrders.unshift(order);
+            
+            // Update only the orders array, explicitly preserving the existing metadata
+            set({
+              orders: currentOrders,
+              // Explicitly keep the same metadata to prevent pagination issues
+              metadata: { ...get().metadata }
+            });
+          } else {
+            console.debug(`[OrderStore] Not adding new order to page ${metadata.page}, only updating page 1 would show this`);
+            // Don't modify the current page's orders
+          }
         }
       },
       
@@ -163,12 +351,29 @@ export const useOrderStore = create<OrderStore>()(
         
         console.debug('[OrderStore] Received order update via WebSocket:', order.id);
         
-        // Update the specific order in the store
-        set(state => ({
-          orders: state.orders.map(o => 
+        // Check if this order is in our current view
+        const orderExists = get().orders.some((o: Order) => o.id === order.id);
+        
+        if (orderExists) {
+          // Only update if the order is in our current page
+          console.debug('[OrderStore] Updating existing order in current page');
+          
+          // IMPORTANT: Create a shallow copy of the current orders to avoid modifying metadata
+          const updatedOrders = get().orders.map((o: Order) => 
             o.id === order.id ? { ...o, ...order } : o
-          )
-        }));
+          );
+          
+          // Update only the orders array, explicitly preserving the existing metadata
+          set({
+            orders: updatedOrders,
+            // Explicitly keep the same metadata to prevent pagination issues
+            metadata: { ...get().metadata }
+          });
+        } else {
+          // If the order isn't in our current view, don't modify the state
+          // This prevents pagination issues when viewing pages other than page 1
+          console.debug('[OrderStore] Order not in current page, skipping update');
+        }
       },
       
       // ---------------------------------------------------------
@@ -178,13 +383,34 @@ export const useOrderStore = create<OrderStore>()(
         // First stop any existing polling
         get().stopOrderPolling();
         
+        // Check if WebSocket is connected - if so, don't start polling
+        if (get().websocketConnected) {
+          console.debug('[OrderStore] WebSocket is connected, not starting polling');
+          return;
+        }
+        
         // Log that we're falling back to polling
         console.debug('[OrderStore] Starting polling for orders (WebSocket fallback)');
         
         // Start a new polling interval
         const intervalId = window.setInterval(async () => {
-          console.debug('[OrderStore] Polling for orders');
-          await get().fetchOrdersQuietly();
+          // Double-check WebSocket status before each poll
+          if (get().websocketConnected) {
+            console.debug('[OrderStore] WebSocket is now connected, stopping polling');
+            get().stopOrderPolling();
+            return;
+          }
+          
+          // Get the current metadata to ensure we poll with the correct page
+          const { metadata } = get();
+          console.debug(`[OrderStore] Polling for orders on page ${metadata.page}`);
+          
+          // Use the current page from metadata when polling
+          await get().fetchOrdersQuietly({
+            page: metadata.page,
+            perPage: metadata.per_page,
+            _sourceId: 'polling' // Mark this request as coming from polling
+          });
         }, 30000); // Poll every 30 seconds
         
         // Store the interval ID so we can clear it later
@@ -201,64 +427,154 @@ export const useOrderStore = create<OrderStore>()(
       },
 
       // ---------------------------------------------------------
-      // Fetch all orders with pagination
+      // Fetch orders with server-side pagination, filtering, and sorting
       // ---------------------------------------------------------
-      fetchOrders: async () => {
-        set({ loading: true, error: null });
+      fetchOrders: async (params: OrderQueryParams = {}) => {
+        // Check if this is a page change request (starts with 'page-change-')
+        const isPaginationRequest = params._sourceId && String(params._sourceId).startsWith('page-change-');
+        
+        // Only set loading: true if this is not a pagination request
+        // This prevents the UI from flashing during page transitions
+        if (!isPaginationRequest) {
+          set({ loading: true, error: null });
+        } else {
+          // For pagination requests, just clear errors
+          set({ error: null });
+          console.debug(`[OrderStore] Handling pagination request: ${params._sourceId}, page: ${params.page}`);
+        }
+        
         try {
-          let currentPage = 1;
-          let allOrders: Order[] = [];
-          let hasMorePages = true;
-          while (hasMorePages) {
-            const response = await api.get<{
-              orders: Order[];
-              total_count: number;
-              page: number;
-              per_page: number;
-            }>(`/orders?page=${currentPage}&per_page=10`);
-            const pageOrders = response.orders || [];
-            allOrders = [...allOrders, ...pageOrders];
-            const totalPages = Math.ceil(response.total_count / response.per_page);
-            hasMorePages = currentPage < totalPages;
-            currentPage++;
-            if (currentPage > 20) break; // safety
-          }
-          set({ orders: allOrders, loading: false });
+          const {
+            page = 1,
+            perPage = 10,
+            status = null,
+            sortBy = 'created_at',
+            sortDirection = 'desc',
+            dateFrom = null,
+            dateTo = null,
+            searchQuery = null,
+            restaurantId = null
+          } = params;
+          
+          // Build query string
+          const queryParams = new URLSearchParams();
+          queryParams.append('page', page.toString());
+          queryParams.append('per_page', perPage.toString());
+          if (status && status !== 'all') queryParams.append('status', status);
+          queryParams.append('sort_by', sortBy);
+          queryParams.append('sort_direction', sortDirection);
+          if (dateFrom) queryParams.append('date_from', dateFrom);
+          if (dateTo) queryParams.append('date_to', dateTo);
+          if (searchQuery) queryParams.append('search', searchQuery);
+          if (restaurantId) queryParams.append('restaurant_id', restaurantId);
+          
+          const response = await api.get<{
+            orders: Order[];
+            total_count: number;
+            page: number;
+            per_page: number;
+            total_pages: number;
+          }>(`/orders?${queryParams.toString()}`);
+          
+          const metadata = {
+            total_count: response.total_count || 0,
+            page: response.page || 1,
+            per_page: response.per_page || 10,
+            total_pages: response.total_pages || Math.ceil((response.total_count || 0) / (response.per_page || 10))
+          };
+          
+          set({ 
+            orders: response.orders || [], 
+            metadata, 
+            loading: false 
+          });
         } catch (err: any) {
           set({ error: err.message, loading: false });
         }
       },
 
       // ---------------------------------------------------------
-      // Fetch quietly (no loading state) 
+      // Fetch quietly (no loading state) with server-side pagination, filtering, and sorting
       // ---------------------------------------------------------
-      fetchOrdersQuietly: async () => {
+      // Track the last fetch request to prevent race conditions
+      
+      fetchOrdersQuietly: async (params: OrderQueryParams = {}) => {
         try {
-          // Start with page 1
-          let currentPage = 1;
-          let allOrders: Order[] = [];
-          let hasMorePages = true;
-          
-          // Fetch all pages
-          while (hasMorePages) {
-            const response = await api.get<{
-              orders: Order[];
-              total_count: number;
-              page: number;
-              per_page: number;
-            }>(`/orders?page=${currentPage}&per_page=10`);
-            const pageOrders = response.orders || [];
-            allOrders = [...allOrders, ...pageOrders];
-            
-            // Calculate if there are more pages
-            const totalPages = Math.ceil(response.total_count / response.per_page);
-            hasMorePages = currentPage < totalPages;
-            currentPage++;
-            if (currentPage > 20) break;
+          // If source is polling and WebSocket is connected, skip the request
+          if (params._sourceId === 'polling' && get().websocketConnected) {
+            console.debug('[OrderStore] Skipping polling request because WebSocket is connected');
+            return;
           }
           
+          // Generate a unique request ID to track this specific request
+          const requestId = get()._lastFetchRequestId + 1;
+          set({ _lastFetchRequestId: requestId });
+          
+          const {
+            page = 1,
+            perPage = 10,
+            status = null,
+            sortBy = 'created_at',
+            sortDirection = 'desc',
+            dateFrom = null,
+            dateTo = null,
+            searchQuery = null,
+            restaurantId = null,
+            _sourceId = null
+          } = params;
+          
+          // Log the request with its ID and source for debugging
+          console.debug(`[OrderStore] Fetch request #${requestId} from source ${_sourceId || 'unknown'} for page ${page}`);
+          
+          // Build query string
+          const queryParams = new URLSearchParams();
+          queryParams.append('page', page.toString());
+          queryParams.append('per_page', perPage.toString());
+          if (status && status !== 'all') queryParams.append('status', status);
+          queryParams.append('sort_by', sortBy);
+          queryParams.append('sort_direction', sortDirection);
+          if (dateFrom) queryParams.append('date_from', dateFrom);
+          if (dateTo) queryParams.append('date_to', dateTo);
+          if (searchQuery) queryParams.append('search', searchQuery);
+          if (restaurantId) queryParams.append('restaurant_id', restaurantId);
+          
+          // Update metadata before the request to ensure any WebSocket updates
+          // that arrive while we're waiting for the response use the correct page
+          set(state => ({
+            metadata: {
+              ...state.metadata,
+              page: page,
+              per_page: perPage
+            }
+          }));
+          
+          const response = await api.get<{
+            orders: Order[];
+            total_count: number;
+            page: number;
+            per_page: number;
+            total_pages: number;
+          }>(`/orders?${queryParams.toString()}`);
+          
+          // Check if this request is still the most recent one
+          // If not, discard the results to prevent race conditions
+          if (requestId !== get()._lastFetchRequestId) {
+            console.debug(`[OrderStore] Discarding stale response for request #${requestId} from ${_sourceId || 'unknown'}, current is #${get()._lastFetchRequestId}`);
+            return;
+          }
+          
+          const metadata = {
+            total_count: response.total_count || 0,
+            page: response.page || 1,
+            per_page: response.per_page || 10,
+            total_pages: response.total_pages || Math.ceil((response.total_count || 0) / (response.per_page || 10))
+          };
+          
+          console.debug(`[OrderStore] Updating state with page ${metadata.page} data from request #${requestId} (source: ${_sourceId || 'unknown'})`);
+          console.debug(`[OrderStore] Metadata from API: total_count=${metadata.total_count}, total_pages=${metadata.total_pages}`);
+          
           // Only update orders, don't change loading state
-          set({ orders: allOrders });
+          set({ orders: response.orders || [], metadata });
         } catch (err: any) {
           // Only update error, don't change loading state
           set({ error: err.message });
@@ -402,14 +718,14 @@ export const useOrderStore = create<OrderStore>()(
       // ---------------------------------------------------------
       updateOrderStatusQuietly: async (orderId, status, pickupTime) => {
         set({ error: null });
-        const existingOrder = get().orders.find(o => o.id === orderId);
+        const existingOrder = get().orders.find((o: Order) => o.id === orderId);
         if (existingOrder) {
           const typedStatus = status as Order['status'];
           const optimisticOrder = { ...existingOrder, status: typedStatus };
           if (pickupTime) {
             (optimisticOrder as any).estimated_pickup_time = pickupTime;
           }
-          const optimisticOrders = get().orders.map(o =>
+          const optimisticOrders = get().orders.map((o: Order) =>
             o.id === orderId ? optimisticOrder : o
           );
           set({ orders: optimisticOrders });

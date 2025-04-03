@@ -1,8 +1,9 @@
 // src/ordering/components/admin/OrderManager.tsx
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useOrderStore } from '../../store/orderStore';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
+import websocketService from '../../../shared/services/websocketService';
 import { AdminEditOrderModal } from './AdminEditOrderModal';
 import { SetEtaModal } from './SetEtaModal';
 import { OrderDetailsModal } from './OrderDetailsModal';
@@ -31,7 +32,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     orders,
     fetchOrders,
     fetchOrdersQuietly,    // For background polling
-    updateOrderStatus,
+    // updateOrderStatus, // Not used with server-side pagination
     updateOrderStatusQuietly,
     updateOrderData,
     loading,
@@ -52,6 +53,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   
   // date filter
   const [dateFilter, setDateFilter] = useState<DateFilterOption>('today');
+  
+  // pagination transition states
+  const [isPageChanging, setIsPageChanging] = useState(false);
+  const [previousOrders, setPreviousOrders] = useState<any[]>([]);
   const [customStartDate, setCustomStartDate] = useState<Date>(new Date());
   const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
   
@@ -79,18 +84,18 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [orderToRefund, setOrderToRefund] = useState<any | null>(null);
 
-  // for mobile menu (if you have a contextual menu or dropdown)
-  const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
+  // for mobile menu (if you have a contextual menu or dropdown) - not used with server-side pagination
+  // const [showOrderActions, setShowOrderActions] = useState<number | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 10;
 
-  // Auto-refresh interval in ms
-  const POLLING_INTERVAL = 30000; // 30 seconds
+  // Auto-refresh interval in ms (used by WebSocket fallback)
+  // const POLLING_INTERVAL = 30000; // 30 seconds - now handled by orderStore
 
   // Are we in the middle of refreshing data (quietly)?
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // const [isRefreshing, setIsRefreshing] = useState(false); // Not needed with server-side pagination
 
   // If we are updating an order’s status, block certain UI interactions
   const [isStatusUpdateInProgress, setIsStatusUpdateInProgress] = useState(false);
@@ -107,20 +112,177 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [isBatchCancel, setIsBatchCancel] = useState(false);
 
   // ----------------------------------
-  // Fetch orders on mount + Setup WebSocket
+  // Date / Search / Filter
+  // ----------------------------------
+  const getDateRange = useCallback(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+
+    const lastWeekStart = new Date(weekStart);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+    const lastWeekEnd = new Date(weekStart);
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    switch (dateFilter) {
+      case 'today':
+        return { start: today, end: tomorrow };
+      case 'yesterday':
+        return { start: yesterday, end: today };
+      case 'thisWeek':
+        return { start: weekStart, end: tomorrow };
+      case 'lastWeek':
+        return { start: lastWeekStart, end: lastWeekEnd };
+      case 'thisMonth':
+        return { start: monthStart, end: tomorrow };
+      case 'custom':
+        return { start: customStartDate, end: customEndDate };
+      default:
+        return { start: today, end: tomorrow };
+    }
+  }, [dateFilter, customStartDate, customEndDate]);
+
+  // Store a reference to the last page change timestamp to prevent race conditions
+  const lastPageChangeRef = useRef<number>(0);
+
+  // Define a function to fetch orders with current parameters
+  // IMPORTANT: We DO NOT include currentPage in the dependency array to avoid stale closures
+  const fetchOrdersWithParams = useCallback((requestId?: number, pageOverride?: number) => {
+    const { start, end } = getDateRange();
+    
+    // Use direct API call to ensure we get the right page
+    const { fetchOrders } = useOrderStore.getState();
+    
+    // Use the pageOverride if provided, otherwise use currentPage from state
+    // This prevents stale closures from using outdated page numbers
+    const pageToFetch = pageOverride !== undefined ? pageOverride : currentPage;
+    
+    // If this is a page change (pageOverride is provided), save current orders for smooth transition
+    if (pageOverride !== undefined && orders.length > 0) {
+      setPreviousOrders(orders);
+      setIsPageChanging(true);
+    }
+    
+    console.log(`[OrderManager:Pagination] Fetching orders for page ${pageToFetch}, ordersPerPage=${ordersPerPage}`);
+    console.log(`[OrderManager:Pagination] Current component state page: ${currentPage}`);
+    console.log(`[OrderManager:Pagination] Current filters: status=${selectedStatus}, sortNewestFirst=${sortNewestFirst}, dateFilter=${dateFilter}`);
+    console.log(`[OrderManager:Pagination] Date range: ${start.toISOString()} to ${end.toISOString()}`);
+    
+    // Create a unique source ID for tracking this request
+    const sourceId = requestId ? `page-change-${requestId}` : `page-change-${Date.now()}`;
+    
+    // Get current store state to log
+    const currentStoreState = useOrderStore.getState();
+    console.log(`[OrderManager:Pagination] Current store metadata before fetch: page=${currentStoreState.metadata.page}, total_pages=${currentStoreState.metadata.total_pages}, total_count=${currentStoreState.metadata.total_count}`);
+    console.log(`[OrderManager:Pagination] ⚠️ Using page ${pageToFetch} for this request (${pageToFetch === currentPage ? 'matches' : 'DIFFERS FROM'} component state)`);
+    
+    // Make the API request with explicit parameters
+    fetchOrders({
+      page: pageToFetch, // Use the captured page parameter
+      perPage: ordersPerPage,
+      status: selectedStatus !== 'all' ? selectedStatus : null,
+      sortBy: 'created_at',
+      sortDirection: sortNewestFirst ? 'desc' : 'asc',
+      dateFrom: start.toISOString().split('T')[0],
+      dateTo: end.toISOString().split('T')[0],
+      searchQuery: searchQuery || null,
+      restaurantId: restaurantId || null,
+      _sourceId: sourceId // Add a unique ID to track this request
+    });
+    
+    // Log the request ID for debugging
+    console.debug(`[OrderManager:Pagination] API request sent with ID: ${sourceId} for page ${pageToFetch}`);
+    
+    return sourceId; // Return the source ID for potential future reference
+  }, [/* deliberately NOT including currentPage to avoid stale closures */
+      ordersPerPage, selectedStatus, sortNewestFirst, getDateRange, searchQuery, restaurantId]);
+
+  // Fetch orders quietly with current filter parameters (for background updates)
+  const fetchOrdersWithParamsQuietly = useCallback(() => {
+    const { start, end } = getDateRange();
+    
+    // Log the current page to help with debugging
+    console.debug(`[OrderManager:Pagination] Fetching orders quietly with params: page=${currentPage}, ordersPerPage=${ordersPerPage}`);
+    console.debug(`[OrderManager:Pagination] Current store metadata before quiet fetch: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+    console.debug(`[OrderManager:Pagination] WebSocket connected: ${useOrderStore.getState().websocketConnected}`);
+    
+    // Get the function directly from the store to avoid stale references
+    const { fetchOrdersQuietly } = useOrderStore.getState();
+    
+    // Create a unique source ID for tracking this request
+    const sourceId = `quiet-update-${Date.now()}`;
+    
+    fetchOrdersQuietly({
+      page: currentPage,
+      perPage: ordersPerPage,
+      status: selectedStatus !== 'all' ? selectedStatus : null,
+      sortBy: 'created_at',
+      sortDirection: sortNewestFirst ? 'desc' : 'asc',
+      dateFrom: start.toISOString().split('T')[0],
+      dateTo: end.toISOString().split('T')[0],
+      searchQuery: searchQuery || null,
+      restaurantId: restaurantId || null,
+      _sourceId: sourceId // Add a unique ID to track this request
+    });
+    
+    // Log the request ID for debugging
+    console.debug(`[OrderManager] Quiet API request sent with ID: ${sourceId}`);
+  }, [
+    currentPage,
+    ordersPerPage,
+    selectedStatus,
+    sortNewestFirst,
+    getDateRange,
+    searchQuery,
+    restaurantId
+  ]);
+
+  // ----------------------------------
+  // Setup WebSocket connection - only on component mount
   // ----------------------------------
   useEffect(() => {
-    // 1) Initial fetch with full loading state
-    fetchOrders();
-
-    // 2) Track current order IDs to detect new ones
+    // Track current order IDs to detect new ones
     const currentOrderIds = new Set(orders.map((o) => o.id));
     
-    // Start WebSocket connection
-    const { startWebSocketConnection, stopWebSocketConnection, startOrderPolling, stopOrderPolling } = useOrderStore.getState();
+    // Get store functions directly to avoid stale references
+    const { startWebSocketConnection, stopWebSocketConnection, stopOrderPolling } = useOrderStore.getState();
     
-    // Start WebSocket connection
-    startWebSocketConnection();
+    console.debug('[OrderManager:WebSocket] Setting up WebSocket connection on component mount');
+    console.debug(`[OrderManager:WebSocket] Current pagination state: page=${currentPage}, ordersPerPage=${ordersPerPage}`);
+    console.debug(`[OrderManager:WebSocket] Current store metadata: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+    
+    // Initialize WebSocket connection with current pagination settings
+    const initializeWebSocket = () => {
+      // Only start WebSocket connection if not already connected
+      // This prevents conflicts with AdminDashboard which also establishes connections
+      const { websocketConnected } = useOrderStore.getState();
+      if (!websocketConnected) {
+        console.debug('[OrderManager:WebSocket] Starting WebSocket connection (not already connected)');
+        console.debug(`[OrderManager:WebSocket] Current store metadata before connection: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+        // Start WebSocket connection
+        // The WebSocket service will get pagination parameters from the store's metadata
+        startWebSocketConnection();
+      } else {
+        console.debug('[OrderManager:WebSocket] WebSocket already connected');
+        console.debug(`[OrderManager:WebSocket] Current store metadata with existing connection: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+        // Even if already connected, we can update the pagination state in the orderStore
+        // The orderStore will handle updating the WebSocket service with current pagination
+      }
+    };
+    
+    // Initialize WebSocket on component mount
+    initializeWebSocket();
     
     // Handle new orders from WebSocket or polling
     const unsubscribeFromStore = useOrderStore.subscribe((state) => {
@@ -128,6 +290,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       const newOrderIds = storeOrders
         .filter((o) => !currentOrderIds.has(o.id))
         .map((o) => o.id);
+
+      // Check if metadata has changed unexpectedly (possible WebSocket issue)
+      if (state.metadata && state.metadata.total_pages > 100) {
+        console.warn(`[OrderManager:Pagination] ⚠️ Detected suspicious metadata update: total_pages=${state.metadata.total_pages}, total_count=${state.metadata.total_count}`);
+        console.warn('[OrderManager:Pagination] This may be caused by a WebSocket update affecting pagination metadata');
+        
+        // Force a refresh of the current page to get correct metadata
+        console.debug('[OrderManager:Pagination] Forcing refresh to restore correct pagination metadata');
+        fetchOrdersWithParams(Date.now(), currentPage);
+        return;
+      }
 
       if (newOrderIds.length > 0) {
         // Mark them as new
@@ -157,19 +330,112 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         stopWebSocketConnection();
       } else {
         // Refresh once, then start WebSocket again
-        fetchOrdersQuietly();
-        startWebSocketConnection();
+        fetchOrdersWithParamsQuietly();
+        initializeWebSocket();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      stopWebSocketConnection();
+      // Don't disconnect WebSocket when changing pages - only when component unmounts completely
+      // This prevents the WebSocket connection from being repeatedly closed and reopened
+      if (document.visibilityState !== 'visible') {
+        console.debug('[OrderManager] Stopping WebSocket connection on component unmount');
+        stopWebSocketConnection();
+      }
       stopOrderPolling();
       unsubscribeFromStore();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchOrders, fetchOrdersQuietly]);
+  }, []); // Only run on component mount and unmount
+  
+
+
+  // Effect to fetch orders when page or filters change
+  useEffect(() => {
+    console.debug(`[OrderManager:Pagination] 🔄 Filter/page changed - currentPage: ${currentPage}, previous page: ${useOrderStore.getState().metadata.page}`);
+    console.debug(`[OrderManager:Pagination] Dependencies changed: ordersPerPage=${ordersPerPage}, selectedStatus=${selectedStatus}, sortNewestFirst=${sortNewestFirst}, dateFilter=${dateFilter}, searchQuery=${searchQuery}`);
+    
+    // Record the timestamp of this page change to prevent race conditions
+    const changeTimestamp = Date.now();
+    const previousTimestamp = lastPageChangeRef.current;
+    lastPageChangeRef.current = changeTimestamp;
+    
+    console.debug(`[OrderManager:Pagination] Page change timestamp: ${changeTimestamp}, previous: ${previousTimestamp}, diff: ${changeTimestamp - previousTimestamp}ms`);
+    
+    // Capture the current page value to ensure we use the correct page in the API call
+    // This prevents issues with stale closures
+    const capturedPage = currentPage;
+    console.debug(`[OrderManager:Pagination] 📌 Captured page value: ${capturedPage}`);
+    
+    // Update the store's metadata to ensure WebSocket uses correct page
+    // This is critical for ensuring pagination works correctly
+    const previousMetadata = { ...useOrderStore.getState().metadata };
+    useOrderStore.setState(state => ({
+      metadata: {
+        ...state.metadata,
+        page: capturedPage,
+        per_page: ordersPerPage
+      },
+      _lastFetchRequestId: changeTimestamp // Use timestamp as request ID to track this specific request
+    }));
+    
+    console.debug(`[OrderManager:Pagination] Updated store metadata: previous=${JSON.stringify(previousMetadata)}, current=${JSON.stringify(useOrderStore.getState().metadata)}`);
+    
+    // Notify WebSocket service about pagination change
+    // This ensures that any real-time updates will be for the correct page
+    const { websocketConnected } = useOrderStore.getState();
+    if (websocketConnected) {
+      console.debug(`[OrderManager:Pagination] Notifying WebSocket service about page change to ${capturedPage}`);
+      // The OrderChannel subscription will be updated with the new page number
+      // This is handled internally by the WebSocket service
+    } else {
+      console.debug(`[OrderManager:Pagination] WebSocket not connected, skipping notification`);
+    }
+    
+    // Add a small delay to allow React to complete its rendering cycle
+    // This helps prevent multiple rapid API calls
+    console.debug(`[OrderManager:Pagination] Setting timeout for fetch with delay of 50ms`);
+    const timeoutId = setTimeout(() => {
+      // Only fetch if this is still the most recent page change
+      if (lastPageChangeRef.current === changeTimestamp) {
+        console.debug(`[OrderManager:Pagination] 🔍 Fetching orders after delay for page ${capturedPage}, timestamp ${changeTimestamp} is still current`);
+        // Pass the captured page to ensure we fetch the correct page
+        fetchOrdersWithParams(changeTimestamp, capturedPage);
+      } else {
+        console.debug(`[OrderManager:Pagination] ⚠️ Skipping fetch after delay - timestamp ${changeTimestamp} is no longer current (current is ${lastPageChangeRef.current})`);
+      }
+    }, 50);
+    
+    return () => {
+      console.debug(`[OrderManager:Pagination] Cleanup - clearing timeout for fetch with timestamp ${changeTimestamp}`);
+      clearTimeout(timeoutId);
+    };
+  }, [currentPage, ordersPerPage, selectedStatus, sortNewestFirst, dateFilter, searchQuery, fetchOrdersWithParams]);
+  
+  // Additional effect to force update WebSocket pagination params when page changes
+  useEffect(() => {
+    // This effect only handles page changes to ensure WebSocket has the correct page
+    console.debug(`[OrderManager:Pagination] 🔄 Page changed to ${currentPage}`);
+    
+    // Update WebSocket pagination parameters directly
+    const { websocketConnected } = useOrderStore.getState();
+    if (websocketConnected) {
+      console.debug(`[OrderManager:Pagination] 📡 Explicitly updating WebSocket pagination params to page=${currentPage}`);
+      // Use the imported websocketService instead of require
+      websocketService.updatePaginationParams({
+        page: currentPage,
+        perPage: ordersPerPage
+      });
+      
+      // Force a refresh of the current page to ensure we have correct data and metadata
+      // This prevents WebSocket updates from causing pagination issues
+      console.debug('[OrderManager:Pagination] Forcing refresh to ensure correct data for new page');
+      fetchOrdersWithParams(Date.now(), currentPage);
+    }
+  }, [currentPage, ordersPerPage, fetchOrdersWithParams]);
+  
+
 
   // ----------------------------------
   // Collapsible / Multi-select logic
@@ -404,139 +670,106 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }
   }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
 
-  // ----------------------------------
-  // Date / Search / Filter
-  // ----------------------------------
-  const getDateRange = useCallback(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  // Server-side search is now handled by the API
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
 
-    const weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-
-    const lastWeekStart = new Date(weekStart);
-    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-
-    const lastWeekEnd = new Date(weekStart);
-    lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
-
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
-    switch (dateFilter) {
-      case 'today':
-        return { start: today, end: tomorrow };
-      case 'yesterday':
-        return { start: yesterday, end: today };
-      case 'thisWeek':
-        return { start: weekStart, end: tomorrow };
-      case 'lastWeek':
-        return { start: lastWeekStart, end: lastWeekEnd };
-      case 'thisMonth':
-        return { start: monthStart, end: tomorrow };
-      case 'custom':
-        return { start: customStartDate, end: customEndDate };
-      default:
-        return { start: today, end: tomorrow };
-    }
-  }, [dateFilter, customStartDate, customEndDate]);
-
-  // Simple search function
-  const searchOrders = useCallback((order: any, query: string) => {
-    if (!query) return true;
-
-    const searchLower = query.toLowerCase();
-
-    // Search in ID
-    if (String(order.id).includes(searchLower)) return true;
-
-    // Customer name
-    if (order.contact_name && order.contact_name.toLowerCase().includes(searchLower)) return true;
-
-    // Email
-    if (order.contact_email && order.contact_email.toLowerCase().includes(searchLower)) return true;
-
-    // Phone
-    if (order.contact_phone && order.contact_phone.toLowerCase().includes(searchLower)) return true;
-
-    // Special instructions
-    const instructions = (order.special_instructions || order.specialInstructions || '').toLowerCase();
-    if (instructions.includes(searchLower)) return true;
-
-    // Order items
-    if (order.items && order.items.length > 0) {
-      return order.items.some((item: any) => {
-        if (item.name.toLowerCase().includes(searchLower)) return true;
-        if (item.notes && item.notes.toLowerCase().includes(searchLower)) return true;
-        return false;
-      });
-    }
-
-    return false;
-  }, []);
-
-  // Combined filtering + sorting
-  const filteredOrders = useMemo(() => {
-    // 1) Sort
-    const sorted = [...orders].sort((a, b) => {
-      const dateA = new Date(a.created_at || a.createdAt || Date.now());
-      const dateB = new Date(b.created_at || b.createdAt || Date.now());
-      return sortNewestFirst ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
-    });
-
-    // 2) Date range
-    const { start, end } = getDateRange();
-    const dateFiltered = sorted.filter((ord) => {
-      const d = new Date(ord.created_at || ord.createdAt || Date.now());
-      return d >= start && d < end;
-    });
-
-    // 3) Status filter
-    const statusFiltered =
-      selectedStatus === 'all'
-        ? dateFiltered
-        : dateFiltered.filter((o) => o.status === selectedStatus);
-
-    // 4) Search
-    return searchQuery
-      ? statusFiltered.filter((ord) => searchOrders(ord, searchQuery))
-      : statusFiltered;
-  }, [orders, sortNewestFirst, selectedStatus, searchQuery, getDateRange, searchOrders]);
-
-  // Pagination
-  const totalOrders = filteredOrders.length;
-  const totalPages = Math.ceil(totalOrders / ordersPerPage);
-  const indexOfLastOrder = currentPage * ordersPerPage;
-  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
-
-  // When filters change, reset to page 1
+  // Get orders directly from store - server handles filtering, sorting, and pagination
+  const currentOrders = orders;
+  
+  // Get metadata from store
+  const { metadata } = useOrderStore();
+  // const totalOrders = metadata.total_count; // Not directly used in the component
+  const totalPages = metadata.total_pages;
+  
+  // Add a useEffect to log when orders change and verify page synchronization
   useEffect(() => {
+    console.debug(`[OrderManager:Pagination] Orders updated, count: ${orders.length}, current page: ${currentPage}`);
+    console.debug(`[OrderManager:Pagination] Store metadata: ${JSON.stringify(metadata)}`);
+    console.debug(`[OrderManager:Pagination] Calculated totalPages: ${totalPages}`);
+    
+    // Verify page synchronization
+    if (metadata.page !== currentPage) {
+      console.warn(`[OrderManager:Pagination] ⚠️ PAGE MISMATCH: Store metadata page (${metadata.page}) does not match component state (${currentPage})`);
+    }
+    
+    // Reset page changing state when orders are updated
+    if (isPageChanging && orders.length > 0) {
+      // Small delay to allow for smooth transition
+      setTimeout(() => {
+        setIsPageChanging(false);
+        setPreviousOrders([]);
+      }, 300);
+    }
+  }, [orders, currentPage, metadata, totalPages, isPageChanging]);
+
+  // When filters change, reset to page 1 and fetch orders
+  useEffect(() => {
+    console.debug('[OrderManager] Filters changed, resetting to page 1');
+    
+    // Stop any ongoing polling to prevent race conditions
+    const { stopOrderPolling } = useOrderStore.getState();
+    stopOrderPolling();
+    
+    // Generate a unique timestamp for this filter change to prevent race conditions
+    const filterChangeTimestamp = Date.now();
+    lastPageChangeRef.current = filterChangeTimestamp;
+    
+    // Reset to page 1
     setCurrentPage(1);
-  }, [selectedStatus, sortNewestFirst, searchQuery, dateFilter]);
+    
+    // Reset the request tracking ID to ensure we start fresh
+    useOrderStore.setState(state => ({
+      metadata: {
+        ...state.metadata,
+        page: 1, // Force page 1
+        per_page: ordersPerPage
+      },
+      _lastFetchRequestId: filterChangeTimestamp // Use timestamp as request ID
+    }));
+    
+    // Check if WebSocket is connected
+    const { websocketConnected } = useOrderStore.getState();
+    if (websocketConnected) {
+      console.debug('[OrderManager] Notifying WebSocket about filter change and page reset');
+      // The metadata update above will ensure WebSocket has the correct page number
+    }
+    
+    // We need to wait for the next render cycle when currentPage is updated to 1
+    const timeoutId = setTimeout(() => {
+      // Only fetch if this is still the most recent filter change
+      if (lastPageChangeRef.current === filterChangeTimestamp) {
+        console.debug('[OrderManager] Fetching orders after filter change');
+        fetchOrdersWithParams(filterChangeTimestamp);
+        
+        // Check if we need to restart polling (only if WebSocket is not connected)
+        setTimeout(() => {
+          const { startOrderPolling, websocketConnected } = useOrderStore.getState();
+          if (!websocketConnected) {
+            console.debug('[OrderManager] Restarting polling after filter change (WebSocket not connected)');
+            startOrderPolling();
+          } else {
+            console.debug('[OrderManager] WebSocket is connected, not starting polling after filter change');
+          }
+        }, 500);
+      }
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [selectedStatus, sortNewestFirst, searchQuery, dateFilter, fetchOrdersWithParams, ordersPerPage]);
 
   // If the parent sets a selectedOrderId => expand that order
   // (And scroll to it if it's in the list)
   useEffect(() => {
     if (selectedOrderId && !isStatusUpdateInProgress) {
+      // Show it
+      setSelectedStatus('all');
+      setSearchQuery('');
+      
+      // Fetch the order details if needed
       const found = orders.find((o) => Number(o.id) === selectedOrderId);
+      
       if (found) {
-        // Show it
-        setSelectedStatus('all');
-        setSearchQuery('');
-
-        // Figure out which page it's on
-        const idx = filteredOrders.findIndex((o) => Number(o.id) === selectedOrderId);
-        if (idx >= 0) {
-          const targetPage = Math.floor(idx / ordersPerPage) + 1;
-          setCurrentPage(targetPage);
-        }
-
         // Expand
         setExpandedOrders((prev) => {
           const updated = new Set(prev);
@@ -557,14 +790,21 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             elem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         }, 100);
+      } else {
+        // If the order is not in the current page, we need to search for it
+        // Reset filters and fetch all orders to find it
+        fetchOrders({
+          page: 1,
+          perPage: 100, // Fetch more orders to increase chance of finding it
+          searchQuery: String(selectedOrderId)
+        });
       }
     }
   }, [
     selectedOrderId,
     orders,
     isStatusUpdateInProgress,
-    filteredOrders,
-    ordersPerPage,
+    fetchOrders
   ]);
 
   // For the "view details" modal
@@ -638,15 +878,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setEditingOrder(null);
   }
 
-  // Toggle sort
-  const toggleSortDirection = () => {
-    setSortNewestFirst(!sortNewestFirst);
-  };
-
-  // Show/hide order actions (if needed on mobile)
-  const toggleOrderActions = (orderId: number) => {
-    setShowOrderActions(showOrderActions === orderId ? null : orderId);
-  };
+  // These functions are called directly in the JSX
 
   // Single-order action buttons for CollapsibleOrderCard
   const renderOrderActions = (order: any) => {
@@ -841,7 +1073,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             />
 
             <div className="text-sm text-gray-500 font-medium ml-3 whitespace-nowrap">
-              {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+              {metadata.total_count} {metadata.total_count === 1 ? 'order' : 'orders'} found
             </div>
           </div>
         </div>
@@ -933,37 +1165,101 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               </div>
             ))}
           </div>
-        ) : filteredOrders.length === 0 ? (
+        ) : metadata.total_count === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-4 text-center">
             <p className="text-gray-500">No orders found matching your filters</p>
           </div>
         ) : (
           <div>
-            {/* CollapsibleOrderCard list */}
-            <div className="space-y-4 mb-6">
-              {currentOrders.map((order) => (
-                <CollapsibleOrderCard
-                  key={order.id}
-                  order={order}
-                  isExpanded={expandedOrders.has(order.id)}
-                  onToggleExpand={() => toggleOrderExpand(order.id)}
-                  isNew={newOrders.has(order.id)}
-                  isSelected={selectedOrders.has(order.id)}
-                  isHighlighted={highlightedOrderId === order.id}
-                  onSelectChange={(sel) => toggleOrderSelection(order.id, sel)}
-                  renderActions={() => renderOrderActions(order)}
-                  getStatusBadgeColor={getStatusBadgeColor}
-                  formatDate={formatDate}
-                  requiresAdvanceNotice={requiresAdvanceNotice}
-                />
-              ))}
+            {/* CollapsibleOrderCard list with smooth transitions */}
+            <div className="space-y-4 mb-6 relative">
+              {/* Show previous orders during page transition for smoother experience */}
+              {isPageChanging && previousOrders.length > 0 && (
+                <div className="absolute inset-0 z-10 transition-opacity duration-300" 
+                     style={{ opacity: isPageChanging ? 0.3 : 0 }}>
+                  {previousOrders.map((order) => (
+                    <div key={`prev-${order.id}`} className="mb-4">
+                      <CollapsibleOrderCard
+                        order={order}
+                        isExpanded={expandedOrders.has(order.id)}
+                        onToggleExpand={() => toggleOrderExpand(order.id)}
+                        isNew={newOrders.has(order.id)}
+                        isSelected={selectedOrders.has(order.id)}
+                        isHighlighted={highlightedOrderId === order.id}
+                        onSelectChange={(sel) => toggleOrderSelection(order.id, sel)}
+                        renderActions={() => renderOrderActions(order)}
+                        getStatusBadgeColor={getStatusBadgeColor}
+                        formatDate={formatDate}
+                        requiresAdvanceNotice={requiresAdvanceNotice}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Current orders with fade-in effect */}
+              <div className={`transition-opacity duration-300 ${isPageChanging ? 'opacity-0' : 'opacity-100'}`}>
+                {currentOrders.map((order) => (
+                  <CollapsibleOrderCard
+                    key={order.id}
+                    order={order}
+                    isExpanded={expandedOrders.has(order.id)}
+                    onToggleExpand={() => toggleOrderExpand(order.id)}
+                    isNew={newOrders.has(order.id)}
+                    isSelected={selectedOrders.has(order.id)}
+                    isHighlighted={highlightedOrderId === order.id}
+                    onSelectChange={(sel) => toggleOrderSelection(order.id, sel)}
+                    renderActions={() => renderOrderActions(order)}
+                    getStatusBadgeColor={getStatusBadgeColor}
+                    formatDate={formatDate}
+                    requiresAdvanceNotice={requiresAdvanceNotice}
+                  />
+                ))}
+              </div>
             </div>
 
             {/* Pagination controls */}
             {totalPages > 1 && (
               <div className="flex justify-center items-center space-x-2 mt-6 pb-4">
                 <button
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  onClick={() => {
+                    // Prevent multiple rapid clicks
+                    const now = Date.now();
+                    const timeSinceLastChange = now - lastPageChangeRef.current;
+                    if (timeSinceLastChange < 300) {
+                      console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
+                      return;
+                    }
+                    
+                    // Save current orders for smooth transition
+                    if (orders.length > 0) {
+                      setPreviousOrders(orders);
+                      setIsPageChanging(true);
+                    }
+                    
+                    // Calculate the new page number
+                    const newPage = Math.max(currentPage - 1, 1);
+                    console.log(`[OrderManager:Pagination] ⬅️ Changing to previous page: ${currentPage} → ${newPage}`);
+                    console.log(`[OrderManager:Pagination] Current metadata before page change: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+                    
+                    // Generate a unique timestamp for this page change
+                    const pageChangeTimestamp = now;
+                    lastPageChangeRef.current = pageChangeTimestamp;
+                    
+                    // Immediately update store metadata to ensure consistency
+                    // This helps prevent race conditions with the useEffect
+                    useOrderStore.setState(state => ({
+                      metadata: {
+                        ...state.metadata,
+                        page: newPage
+                      },
+                      _lastFetchRequestId: pageChangeTimestamp
+                    }));
+                    
+                    // Update the page state - the useEffect will handle the API call
+                    console.log(`[OrderManager:Pagination] Setting currentPage to ${newPage} with timestamp ${pageChangeTimestamp}`);
+                    setCurrentPage(newPage);
+                  }}
                   disabled={currentPage === 1}
                   className={`px-4 py-2 rounded-md text-sm font-medium ${
                     currentPage === 1
@@ -980,7 +1276,42 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                     <button
                       key={page}
-                      onClick={() => setCurrentPage(page)}
+                      onClick={() => {
+                        // Prevent multiple rapid clicks
+                        const now = Date.now();
+                        const timeSinceLastChange = now - lastPageChangeRef.current;
+                        if (timeSinceLastChange < 300) {
+                          console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
+                          return;
+                        }
+                        
+                        // Save current orders for smooth transition
+                        if (orders.length > 0) {
+                          setPreviousOrders(orders);
+                          setIsPageChanging(true);
+                        }
+                        
+                        console.log(`[OrderManager:Pagination] 🔢 Changing to page: ${currentPage} → ${page}`);
+                        console.log(`[OrderManager:Pagination] Current metadata before direct page change: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+                        
+                        // Generate a unique timestamp for this page change
+                        const pageChangeTimestamp = now;
+                        lastPageChangeRef.current = pageChangeTimestamp;
+                        
+                        // Immediately update store metadata to ensure consistency
+                        // This helps prevent race conditions with the useEffect
+                        useOrderStore.setState(state => ({
+                          metadata: {
+                            ...state.metadata,
+                            page: page
+                          },
+                          _lastFetchRequestId: pageChangeTimestamp
+                        }));
+                        
+                        // Update the page state - the useEffect will handle the API call
+                        console.log(`[OrderManager:Pagination] Setting currentPage to ${page} with timestamp ${pageChangeTimestamp}`);
+                        setCurrentPage(page);
+                      }}
                       className={`w-10 h-10 flex items-center justify-center rounded-md text-sm font-medium ${
                         currentPage === page
                           ? 'bg-[#c1902f] text-white'
@@ -1002,7 +1333,45 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 </div>
 
                 <button
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  onClick={() => {
+                    // Prevent multiple rapid clicks
+                    const now = Date.now();
+                    const timeSinceLastChange = now - lastPageChangeRef.current;
+                    if (timeSinceLastChange < 300) {
+                      console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
+                      return;
+                    }
+                    
+                    // Save current orders for smooth transition
+                    if (orders.length > 0) {
+                      setPreviousOrders(orders);
+                      setIsPageChanging(true);
+                    }
+                    
+                    // Calculate the new page number
+                    const newPage = Math.min(currentPage + 1, totalPages);
+                    console.log(`[OrderManager:Pagination] ➡️ Changing to next page: ${currentPage} → ${newPage}`);
+                    console.log(`[OrderManager:Pagination] Current metadata before page change: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+                    console.log(`[OrderManager:Pagination] Total pages: ${totalPages}, calculated from metadata: ${useOrderStore.getState().metadata.total_pages}`);
+                    
+                    // Generate a unique timestamp for this page change
+                    const pageChangeTimestamp = now;
+                    lastPageChangeRef.current = pageChangeTimestamp;
+                    
+                    // Immediately update store metadata to ensure consistency
+                    // This helps prevent race conditions with the useEffect
+                    useOrderStore.setState(state => ({
+                      metadata: {
+                        ...state.metadata,
+                        page: newPage
+                      },
+                      _lastFetchRequestId: pageChangeTimestamp
+                    }));
+                    
+                    // Update the page state - the useEffect will handle the API call
+                    console.log(`[OrderManager:Pagination] Setting currentPage to ${newPage} with timestamp ${pageChangeTimestamp}`);
+                    setCurrentPage(newPage);
+                  }}
                   disabled={currentPage === totalPages}
                   className={`px-4 py-2 rounded-md text-sm font-medium ${
                     currentPage === totalPages

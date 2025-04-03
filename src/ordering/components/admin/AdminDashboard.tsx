@@ -596,13 +596,22 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
           role: user.role
         });
         
-        // Clear any existing connections first
-        useOrderStore.getState().stopWebSocketConnection();
+        // Check if WebSocket is already connected
+        const { websocketConnected } = useOrderStore.getState();
+        
+        if (websocketConnected) {
+          console.log('[WebSocket] Connection already established, skipping initialization');
+          return;
+        }
         
         // Wait for cleanup before establishing new connections
         wsCleanupTimeout = setTimeout(() => {
           console.log('[WebSocket] Establishing new connections');
+          // First connect to the restaurant channel
           connectWebSocket();
+          
+          // Then connect to the order channel
+          // The orderStore will check if it's already connected
           useOrderStore.getState().startWebSocketConnection();
         }, 500);
       }
@@ -617,7 +626,10 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
       if (wsCleanupTimeout) {
         clearTimeout(wsCleanupTimeout);
       }
-      useOrderStore.getState().stopWebSocketConnection();
+      // Only disconnect if component is unmounting
+      if (document.visibilityState !== 'hidden') {
+        useOrderStore.getState().stopWebSocketConnection();
+      }
     };
   }, [user, USE_WEBSOCKETS]);
   
@@ -738,32 +750,43 @@ useEffect(() => {
 
 // Simplified polling setup - only used when WebSockets are not available
 useEffect(() => {
+  // Get the WebSocket connection status directly from orderStore
+  const orderStoreWebSocketConnected = useOrderStore.getState().websocketConnected;
+  
   // Skip if not an admin user or if WebSockets are working
   if (!user ||
       (user.role !== 'admin' && user.role !== 'super_admin') ||
-      (USE_WEBSOCKETS && isConnected)) {
+      (USE_WEBSOCKETS && (isConnected || orderStoreWebSocketConnected))) {
+    // If WebSockets are connected, clear any existing polling interval
+    if (USE_WEBSOCKETS && (isConnected || orderStoreWebSocketConnected) && pollingIntervalRef.current) {
+      console.log('[Polling] WebSocket is connected, clearing polling interval');
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
     return;
   }
 
   console.log('[Polling] Setting up polling fallback', {
     useWebsockets: USE_WEBSOCKETS,
     isConnected,
+    orderStoreWebSocketConnected,
     hasPollingInterval: !!pollingIntervalRef.current
   });
   
   // Function to check for new orders
   const checkForNewOrders = async () => {
+    // Get the latest WebSocket connection status from orderStore
+    const currentOrderStoreWebSocketConnected = useOrderStore.getState().websocketConnected;
+    
     // Double-check WebSocket status before polling
-    if (USE_WEBSOCKETS && isConnected) {
+    if (USE_WEBSOCKETS && (isConnected || currentOrderStoreWebSocketConnected)) {
       console.debug('[Polling] WebSocket is connected, skipping polling');
-      // Double-check that we're subscribed to the order channel
-      if (user?.restaurant_id && !useOrderStore.getState().websocketConnected) {
-        console.debug('[Polling] WebSocket is connected but orderStore is not, reconnecting');
-        // Force restart the order store WebSocket connection
-        useOrderStore.getState().stopWebSocketConnection();
-        setTimeout(() => {
-          useOrderStore.getState().startWebSocketConnection();
-        }, 100);
+      
+      // If polling interval exists but WebSockets are connected, clear the interval
+      if (pollingIntervalRef.current) {
+        console.debug('[Polling] WebSocket is connected, clearing polling interval');
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
       return;
     }
