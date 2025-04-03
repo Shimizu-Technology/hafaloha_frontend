@@ -1,6 +1,6 @@
 // src/ordering/components/admin/settings/RestaurantSettings.tsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { Input, LoadingSpinner, SettingsHeader } from '../../../../shared/components/ui';
 import { Settings } from 'lucide-react';
@@ -115,6 +115,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
   const [spinnerPreview, setSpinnerPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { fetchRestaurant } = useRestaurantStore();
+  const hasLoadedRef = useRef<boolean>(false);
 
   // Helper function to update notification channel settings
   function updateNotificationChannel(
@@ -154,7 +155,10 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
   }, [heroPreview, spinnerPreview]);
 
   useEffect(() => {
-    fetchRestaurantData();
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      fetchRestaurantData();
+    }
   }, []);
 
   async function fetchRestaurantData() {

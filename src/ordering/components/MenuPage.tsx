@@ -9,8 +9,8 @@ import { MenuItemSkeletonGrid } from '../../shared/components/ui/SkeletonLoader'
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 
 export function MenuPage() {
-  const { menuItems, fetchMenuItems, fetchMenus, loading, error, currentMenuId } = useMenuStore();
-  const { categories, fetchCategoriesForMenu } = useCategoryStore();
+  const { menuItems, fetchMenuItems, fetchMenus, loading, error, currentMenuId, websocketConnected: menuWebsocketConnected } = useMenuStore();
+  const { categories, fetchCategoriesForMenu, websocketConnected: categoriesWebsocketConnected } = useCategoryStore();
   const { restaurant } = useRestaurantStore();
   
   // Track initial loading state to prevent flickering during refreshes
@@ -31,20 +31,38 @@ export function MenuPage() {
 
   // Second useEffect to fetch menu items and categories once we have currentMenuId
   useEffect(() => {
-    // Fetch menu items
-    fetchMenuItems().then(() => {
+    const loadData = async () => {
+      console.debug('MenuPage: Loading data with WebSocket status:', { 
+        menuWebsocketConnected, 
+        categoriesWebsocketConnected,
+        hasMenuItems: menuItems.length > 0,
+        currentMenuId
+      });
+      
+      // Fetch menu items - the fetchMenuItems function now checks if we already have data and WebSocket is connected
+      await fetchMenuItems();
+      
       // If this is the first load, set initialLoading to false
       if (!initialLoadComplete.current && menuItems.length > 0) {
         setInitialLoading(false);
         initialLoadComplete.current = true;
       }
-    });
+      
+      // Fetch categories if we have a menu ID - the function now checks if we already have data and WebSocket is connected
+      if (currentMenuId) {
+        await fetchCategoriesForMenu(currentMenuId, restaurant?.id);
+      }
+    };
     
-    // Fetch categories if we have a menu ID
-    if (currentMenuId) {
-      fetchCategoriesForMenu(currentMenuId, restaurant?.id);
-    }
-  }, [fetchMenuItems, currentMenuId, fetchCategoriesForMenu, restaurant, menuItems.length]);
+    loadData();
+    
+    // Create a cleanup function to handle component unmounting
+    return () => {
+      console.debug('MenuPage: Cleaning up');
+    };
+    
+    // Add the WebSocket connection status to the dependency array to prevent unnecessary fetches
+  }, [fetchMenuItems, currentMenuId, fetchCategoriesForMenu, restaurant, menuWebsocketConnected, categoriesWebsocketConnected]);
 
   // Combine filters: category, featured, seasonal, day-specific availability, and hidden status
   const filteredItems = useMemo(() => {

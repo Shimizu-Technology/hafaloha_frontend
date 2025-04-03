@@ -1,15 +1,11 @@
-import React, { useEffect } from 'react';
+// src/ordering/componenets/location/PickupInfor.tsx
 import { MapPin, Clock, Phone } from 'lucide-react';
 import { useRestaurantStore } from '../../../shared/store/restaurantStore';
 import { formatPhoneNumber } from '../../../shared/utils/formatters';
 
 export function PickupInfo() {
-  const { restaurant, fetchRestaurant, loading } = useRestaurantStore();
-  
-  useEffect(() => {
-    // Always fetch restaurant data to ensure it's up to date
-    fetchRestaurant();
-  }, [fetchRestaurant]);
+  // No need to fetch restaurant data here as it's already being handled by RestaurantProvider
+  const { restaurant } = useRestaurantStore();
   
   // Use custom pickup location if available, otherwise use regular address
   const hasCustomLocation = !!restaurant?.custom_pickup_location;

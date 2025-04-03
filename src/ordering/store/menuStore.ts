@@ -5,6 +5,7 @@ import { handleApiError } from '../../shared/utils/errorHandler';
 import { MenuItem, Category } from '../types/menu';
 import { apiClient } from '../../shared/api/apiClient';
 import { menuItemsApi } from '../../shared/api/endpoints/menuItems';
+import { websocketService } from '../../shared/services/websocketService';
 
 interface MenuState {
   menus: Menu[];
@@ -14,9 +15,10 @@ interface MenuState {
   loading: boolean;
   error: string | null;
   
-  // Inventory polling state
+  // Inventory update state
   inventoryPolling: boolean;
   inventoryPollingInterval: number | null;
+  websocketConnected: boolean;
   
   // Actions
   fetchMenus: () => Promise<void>;
@@ -43,13 +45,12 @@ interface MenuState {
   
   // Inventory polling actions
   startInventoryPolling: (menuItemId?: number | string) => void;
+  startInventoryPollingFallback: (menuItemId?: number | string) => void;
   stopInventoryPolling: () => void;
+  startMenuItemsWebSocket: () => void;
   
   // Get individual menu item with fresh data
   getMenuItemById: (id: number | string) => Promise<MenuItem | null>;
-  
-  // Copy a menu item to another menu
-  copyMenuItem: (itemId: string, targetMenuId: number, categoryIds: number[]) => Promise<MenuItem | null>;
 }
 
 export const useMenuStore = create<MenuState>((set, get) => ({
@@ -60,9 +61,10 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   loading: false,
   error: null,
   
-  // Inventory polling state
+  // Inventory update state
   inventoryPolling: false,
   inventoryPollingInterval: null,
+  websocketConnected: false,
 
   fetchMenus: async () => {
     set({ loading: true, error: null });
@@ -202,8 +204,16 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   },
 
   fetchMenuItems: async () => {
+    // If we already have menu items and WebSocket is connected, don't fetch again
+    const state = get();
+    if (state.menuItems.length > 0 && state.websocketConnected) {
+      console.debug('Skipping menu items fetch - using WebSocket updates');
+      return;
+    }
+
     set({ loading: true, error: null });
     try {
+      console.debug('Fetching menu items from API');
       // Use the menuItemsApi to get menu items with stock information
       const menuItems = await menuItemsApi.getAll({ include_stock: true });
       
@@ -215,6 +225,15 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       }));
       
       set({ menuItems: processedItems, loading: false });
+      
+      // Only try to start WebSocket if we have restaurant ID
+      const restaurantId = localStorage.getItem('restaurantId');
+      if (restaurantId) {
+        // Start WebSocket connection for real-time updates
+        get().startMenuItemsWebSocket();
+      } else {
+        console.debug('Restaurant ID not available yet, skipping WebSocket setup for menu items');
+      }
     } catch (error) {
       const errorMessage = handleApiError(error);
       set({ error: errorMessage, loading: false });
@@ -449,13 +468,149 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     }
   },
   
-  // Start polling for inventory updates
+  // Start real-time inventory updates using WebSockets with polling fallback
   startInventoryPolling: (menuItemId?: number | string) => {
     // First stop any existing polling
     get().stopInventoryPolling();
     
+    // Try to connect via WebSocket first
+    const restaurantId = localStorage.getItem('restaurantId');
+    if (!restaurantId) {
+      console.error('No restaurant ID found for WebSocket connection');
+      return get().startInventoryPollingFallback(menuItemId);
+    }
+    
+    // Set up WebSocket handlers for inventory updates
+    try {
+      // Subscribe to the inventory channel
+      websocketService.subscribe({
+        channel: 'InventoryChannel',
+        received: (data) => {
+          // Handle inventory updates
+          if (data.type === 'inventory_update') {
+            const updatedItem = data.item;
+            
+            // Update the specific item in our store
+            set(state => ({
+              menuItems: state.menuItems.map(item => 
+                item.id === updatedItem.id ? { ...item, ...updatedItem } : item
+              )
+            }));
+          }
+        },
+        connected: () => {
+          console.debug('Connected to inventory channel');
+          set({ websocketConnected: true });
+        },
+        disconnected: () => {
+          console.debug('Disconnected from inventory channel');
+          set({ websocketConnected: false });
+          
+          // Fall back to polling if WebSocket disconnects
+          get().startInventoryPollingFallback(menuItemId);
+        }
+      });
+    } catch (error) {
+      console.error('Error connecting to WebSocket for inventory updates:', error);
+      // Fall back to polling if WebSocket connection fails
+      get().startInventoryPollingFallback(menuItemId);
+    }
+  },
+  
+  // Start WebSocket connection for real-time menu item updates
+  startMenuItemsWebSocket: () => {
+    // Check if we're already connected to avoid duplicate subscriptions
+    if (get().websocketConnected) {
+      console.debug('Already connected to menu items channel');
+      return;
+    }
+
+    const restaurantId = localStorage.getItem('restaurantId');
+    if (!restaurantId) {
+      console.debug('No restaurant ID found for WebSocket connection - will retry when available');
+      
+      // Set up a listener for when restaurant data becomes available
+      const checkForRestaurantId = () => {
+        const id = localStorage.getItem('restaurantId');
+        if (id) {
+          console.debug('Restaurant ID now available, connecting to WebSocket');
+          window.removeEventListener('storage', checkForRestaurantId);
+          get().startMenuItemsWebSocket();
+        }
+      };
+      
+      // Listen for localStorage changes
+      window.addEventListener('storage', checkForRestaurantId);
+      
+      // Also check again after a short delay in case the ID is set by the current window
+      setTimeout(() => {
+        if (!get().websocketConnected && localStorage.getItem('restaurantId')) {
+          get().startMenuItemsWebSocket();
+        }
+      }, 2000);
+      
+      return;
+    }
+    
+    try {
+      console.debug('Subscribing to menu items channel with restaurant ID:', restaurantId);
+      // Set websocketConnected to true immediately to prevent duplicate API calls
+      set({ websocketConnected: true });
+      
+      // Subscribe to the menu items channel
+      websocketService.subscribe({
+        channel: 'MenuItemsChannel',
+        params: { restaurant_id: restaurantId },
+        received: (data) => {
+          console.debug('Received menu items update via WebSocket', data.type);
+          // Handle menu item updates
+          if (data.type === 'menu_item_update') {
+            const updatedItem = data.item;
+            
+            // Update the specific item in our store
+            set(state => ({
+              menuItems: state.menuItems.map(item => 
+                item.id === updatedItem.id ? { ...item, ...updatedItem } : item
+              )
+            }));
+          } else if (data.type === 'menu_item_created') {
+            // Add the new item to our store
+            const newItem = data.item;
+            set(state => ({
+              menuItems: [...state.menuItems, {
+                ...newItem,
+                image: newItem.image_url || '/placeholder-food.jpg'
+              }]
+            }));
+          } else if (data.type === 'menu_item_deleted') {
+            // Remove the item from our store
+            const deletedItemId = data.item_id;
+            set(state => ({
+              menuItems: state.menuItems.filter(item => item.id !== deletedItemId)
+            }));
+          }
+        },
+        connected: () => {
+          console.debug('Connected to menu items channel');
+          set({ websocketConnected: true });
+        },
+        disconnected: () => {
+          console.debug('Disconnected from menu items channel');
+          set({ websocketConnected: false });
+        }
+      });
+    } catch (error) {
+      console.error('Error connecting to WebSocket for menu item updates:', error);
+      set({ websocketConnected: false });
+    }
+  },
+  
+  // Fallback to traditional polling if WebSockets aren't available
+  startInventoryPollingFallback: (menuItemId?: number | string) => {
+    console.debug('Falling back to inventory polling');
+    
     // Set polling flag to true
-    set({ inventoryPolling: true });
+    set({ inventoryPolling: true, websocketConnected: false });
     
     // Start a new polling interval
     const intervalId = window.setInterval(async () => {
@@ -525,12 +680,22 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   stopInventoryPolling: () => {
     const { inventoryPollingInterval } = get();
     
+    // Unsubscribe from WebSocket channel
+    try {
+      websocketService.unsubscribe('InventoryChannel');
+    } catch (error) {
+      console.error('Error unsubscribing from inventory channel:', error);
+    }
+    
+    // Clear any polling interval
     if (inventoryPollingInterval !== null) {
       window.clearInterval(inventoryPollingInterval);
-      set({
-        inventoryPollingInterval: null,
-        inventoryPolling: false
-      });
     }
+    
+    set({
+      inventoryPollingInterval: null,
+      inventoryPolling: false,
+      websocketConnected: false
+    });
   }
 }));

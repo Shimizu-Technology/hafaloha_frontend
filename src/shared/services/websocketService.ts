@@ -29,6 +29,19 @@ export interface WebSocketCallbacks {
   onDisconnected?: () => void;
 }
 
+// Define types for channel subscription
+export interface ChannelSubscription {
+  channel: string;
+  received?: (data: any) => void;
+  connected?: () => void;
+  disconnected?: () => void;
+  rejected?: (data?: any) => void;
+  params?: Record<string, any>;
+}
+
+// Define type for connection change callback
+export type ConnectionChangeCallback = (connected: boolean) => void;
+
 class WebSocketService {
   private socket: WebSocket | null = null;
   private callbacks: WebSocketCallbacks = {};
@@ -43,6 +56,12 @@ class WebSocketService {
   private lastConnectionAttempt: number | null = null;
   private minReconnectDelay: number = 1000;
   private maxReconnectDelay: number = 5000;
+  
+  // Channel subscriptions
+  private subscriptions: Map<string, ChannelSubscription> = new Map();
+  
+  // Connection change callbacks
+  private connectionChangeCallbacks: ConnectionChangeCallback[] = [];
   
   private log(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: any) {
     const timestamp = new Date().toISOString();
@@ -69,6 +88,44 @@ class WebSocketService {
         console.error(logMessage, data ? data : '');
         break;
     }
+  }
+
+  /**
+   * Register a callback to be called when the WebSocket connection status changes
+   * @param callback Function to call when connection status changes
+   */
+  public onConnectionChange(callback: ConnectionChangeCallback): void {
+    this.log('debug', 'Registering connection change callback');
+    if (!this.connectionChangeCallbacks.includes(callback)) {
+      this.connectionChangeCallbacks.push(callback);
+    }
+  }
+
+  /**
+   * Remove a previously registered connection change callback
+   * @param callback The callback function to remove
+   */
+  public offConnectionChange(callback: ConnectionChangeCallback): void {
+    this.log('debug', 'Removing connection change callback');
+    const index = this.connectionChangeCallbacks.indexOf(callback);
+    if (index !== -1) {
+      this.connectionChangeCallbacks.splice(index, 1);
+    }
+  }
+
+  /**
+   * Notify all registered callbacks about a connection status change
+   * @param connected Whether the WebSocket is now connected
+   */
+  private notifyConnectionChange(connected: boolean): void {
+    this.log('debug', `Notifying connection change: ${connected ? 'connected' : 'disconnected'}`);
+    this.connectionChangeCallbacks.forEach(callback => {
+      try {
+        callback(connected);
+      } catch (error) {
+        this.log('error', 'Error in connection change callback', error);
+      }
+    });
   }
 
   // Initialize the WebSocket connection
@@ -261,6 +318,9 @@ class WebSocketService {
       this.log('debug', 'Executing onConnected callback');
       this.callbacks.onConnected();
     }
+    
+    // Notify connection change listeners that we're connected
+    this.notifyConnectionChange(true);
   }
 
   // Handle WebSocket message event
@@ -276,6 +336,43 @@ class WebSocketService {
         // Just acknowledge them silently
         this.log('debug', `Received ${data.type} message, acknowledging silently`);
         return;
+      }
+      
+      // Handle channel-specific messages
+      if (data.identifier && data.message) {
+        try {
+          const identifier = JSON.parse(data.identifier);
+          const channelName = identifier.channel;
+          
+          // Find the subscription for this channel
+          const subscription = this.subscriptions.get(channelName);
+          if (subscription && subscription.received) {
+            subscription.received(data.message);
+          }
+          
+          // Direct handling of order messages for better reliability
+          // This ensures that even if the subscription isn't properly set up,
+          // we still process the message
+          if (channelName === 'OrderChannel' && this.callbacks.onNewOrder && data.message.type === 'new_order') {
+            this.log('info', 'Directly handling new order message', {
+              orderId: data.message.order?.id,
+              channelName
+            });
+            this.callbacks.onNewOrder(data.message.order);
+          }
+          
+          if (channelName === 'OrderChannel' && this.callbacks.onOrderUpdated && data.message.type === 'order_updated') {
+            this.log('info', 'Directly handling order update message', {
+              orderId: data.message.order?.id,
+              channelName
+            });
+            this.callbacks.onOrderUpdated(data.message.order);
+          }
+          
+          return;
+        } catch (error) {
+          this.log('error', 'Error processing channel message', { error });
+        }
       }
       
       if (data.type === 'welcome') {
@@ -375,6 +472,9 @@ class WebSocketService {
       this.callbacks.onDisconnected();
     }
     
+    // Notify connection change listeners that we're disconnected
+    this.notifyConnectionChange(false);
+    
     if (this.isActive) {
       this.log('info', 'Service is active, attempting reconnection');
       this.attemptReconnect();
@@ -465,6 +565,11 @@ class WebSocketService {
   // Subscribe to the order channel
   private subscribeToOrderChannel(): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN || !this.restaurantId) {
+      this.log('warn', 'Cannot subscribe to OrderChannel - socket not ready', {
+        socketExists: !!this.socket,
+        readyState: this.socket?.readyState,
+        restaurantId: this.restaurantId
+      });
       return;
     }
     
@@ -477,11 +582,39 @@ class WebSocketService {
     };
     
     const subscriptionStr = JSON.stringify(subscription);
-    this.log('debug', 'Sending subscription request', {
+    this.log('info', 'Sending OrderChannel subscription request', {
       channel: 'OrderChannel',
-      restaurant_id: this.restaurantId
+      restaurant_id: this.restaurantId,
+      readyState: this.socket.readyState
     });
     this.socket.send(subscriptionStr);
+    
+    // Register a subscription handler for this channel
+    this.subscribe({
+      channel: 'OrderChannel',
+      params: { restaurant_id: this.restaurantId },
+      received: (message) => {
+        this.log('debug', 'OrderChannel message received via subscription', {
+          type: message.type,
+          orderId: message.order?.id
+        });
+        
+        if (message.type === 'new_order' && this.callbacks.onNewOrder) {
+          this.callbacks.onNewOrder(message.order);
+        } else if (message.type === 'order_updated' && this.callbacks.onOrderUpdated) {
+          this.callbacks.onOrderUpdated(message.order);
+        }
+      },
+      connected: () => {
+        this.log('info', 'OrderChannel subscription connected');
+      },
+      disconnected: () => {
+        this.log('warn', 'OrderChannel subscription disconnected');
+      },
+      rejected: () => {
+        this.log('error', 'OrderChannel subscription rejected');
+      }
+    });
   }
 
   // Subscribe to the inventory channel
@@ -556,6 +689,99 @@ class WebSocketService {
   // Check if the WebSocket is connected
   public isConnected(): boolean {
     return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
+  }
+  
+  /**
+   * Subscribe to a specific ActionCable channel
+   * @param subscription The channel subscription details
+   */
+  public subscribe(subscription: ChannelSubscription): void {
+    if (!this.isConnected()) {
+      this.log('warn', `Cannot subscribe to ${subscription.channel} - WebSocket not connected`);
+      
+      // Get restaurant ID from localStorage
+      const restaurantId = localStorage.getItem('restaurantId');
+      if (!restaurantId) {
+        this.log('error', 'No restaurant ID available for WebSocket connection');
+        if (subscription.rejected) {
+          subscription.rejected(new Error('No restaurant ID available'));
+        }
+        return;
+      }
+      
+      // Connect with restaurant ID and callbacks
+      this.connect(restaurantId, {
+        onConnected: () => {
+          this.log('info', `Connected, now subscribing to ${subscription.channel}`);
+          this.subscribe(subscription);
+        },
+        onError: (err: Error) => {
+          if (subscription.rejected) {
+            subscription.rejected(err);
+          }
+        }
+      });
+      return;
+    }
+    
+    const identifier = JSON.stringify({
+      channel: subscription.channel,
+      ...subscription.params
+    });
+    
+    // Store the subscription
+    this.subscriptions.set(subscription.channel, subscription);
+    
+    // Send the subscription command
+    if (this.socket) {
+      this.log('debug', `Subscribing to ${subscription.channel}`);
+      this.socket.send(JSON.stringify({
+        command: 'subscribe',
+        identifier
+      }));
+      
+      if (subscription.connected) {
+        subscription.connected();
+      }
+    }
+  }
+  
+  /**
+   * Unsubscribe from a specific ActionCable channel
+   * @param channelName The name of the channel to unsubscribe from
+   */
+  public unsubscribe(channelName: string): void {
+    const subscription = this.subscriptions.get(channelName);
+    if (!subscription) {
+      this.log('warn', `Cannot unsubscribe from ${channelName} - not subscribed`);
+      return;
+    }
+    
+    if (!this.isConnected()) {
+      this.log('warn', `Cannot unsubscribe from ${channelName} - WebSocket not connected`);
+      return;
+    }
+    
+    const identifier = JSON.stringify({
+      channel: subscription.channel,
+      ...subscription.params
+    });
+    
+    // Send the unsubscribe command
+    if (this.socket) {
+      this.log('debug', `Unsubscribing from ${channelName}`);
+      this.socket.send(JSON.stringify({
+        command: 'unsubscribe',
+        identifier
+      }));
+      
+      if (subscription.disconnected) {
+        subscription.disconnected();
+      }
+    }
+    
+    // Remove the subscription
+    this.subscriptions.delete(channelName);
   }
 }
 

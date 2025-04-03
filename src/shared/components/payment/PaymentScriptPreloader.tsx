@@ -30,6 +30,9 @@ export function PaymentScriptPreloader() {
     if (isLoading || !restaurant || hasPreloaded.current) {
       return;
     }
+    
+    // Set hasPreloaded to true immediately to prevent multiple attempts
+    hasPreloaded.current = true;
 
     const loadPaymentScript = async () => {
       try {

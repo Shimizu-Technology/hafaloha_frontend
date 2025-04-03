@@ -157,15 +157,20 @@ export function MenuManager({
   
   // For item-specific polling when editing
   const [editItemPollingActive, setEditItemPollingActive] = useState(false);
-  const [polledItemId, setPolledItemId] = useState<number | null>(null);
 
-  // On mount => fetch items (admin) + categories + menus and start inventory polling
+  // On mount => fetch items (admin) + categories + menus and start WebSocket connection
   useEffect(() => {
     fetchAllMenuItemsForAdmin();
     fetchMenus();
     
-    // Start automatic polling for inventory updates
-    startInventoryPolling();
+    // Start WebSocket connection for real-time menu item updates instead of polling
+    const restaurantId = localStorage.getItem('restaurantId');
+    if (restaurantId) {
+      console.debug('Starting WebSocket connection for menu items');
+      useMenuStore.getState().startMenuItemsWebSocket();
+    } else {
+      console.debug('No restaurant ID available, will connect to WebSocket when available');
+    }
     
     // Clean up when the component unmounts
     return () => {
@@ -174,7 +179,6 @@ export function MenuManager({
   }, [
     fetchAllMenuItemsForAdmin,
     fetchMenus,
-    startInventoryPolling,
     stopInventoryPolling
   ]);
   
@@ -353,7 +357,6 @@ export function MenuManager({
     
     // Start polling for this specific item's inventory updates if tracking is on
     if (item.enable_stock_tracking) {
-      setPolledItemId(Number(item.id));
       setEditItemPollingActive(true);
       startInventoryPolling(item.id);
     }
@@ -1110,7 +1113,7 @@ export function MenuManager({
                   if (editItemPollingActive) {
                     stopInventoryPolling();
                     setEditItemPollingActive(false);
-                    setPolledItemId(null);
+                    // No longer tracking polledItemId
                   }
                   setIsEditing(false);
                   setEditingItem(null);
@@ -1782,7 +1785,7 @@ export function MenuManager({
                     if (editItemPollingActive) {
                       stopInventoryPolling();
                       setEditItemPollingActive(false);
-                      setPolledItemId(null);
+                      // No longer need to reset polledItemId
                     }
                     setIsEditing(false);
                     setEditingItem(null);

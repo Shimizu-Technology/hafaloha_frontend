@@ -1,6 +1,5 @@
 // src/shared/components/navigation/Footer.tsx
 
-import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter } from 'lucide-react';
 import { useRestaurantStore } from '../../store/restaurantStore';
@@ -8,13 +7,10 @@ import { formatPhoneNumber } from '../../utils/formatters';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
-  const { restaurant, fetchRestaurant } = useRestaurantStore();
+  const { restaurant } = useRestaurantStore();
   
-  useEffect(() => {
-    if (!restaurant) {
-      fetchRestaurant();
-    }
-  }, [restaurant, fetchRestaurant]);
+  // No need to fetch restaurant data here as it's already being handled by RestaurantProvider
+  // This prevents duplicate API calls
 
   return (
     <footer className="bg-gray-800 text-white">
