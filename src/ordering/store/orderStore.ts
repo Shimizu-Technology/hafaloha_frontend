@@ -596,7 +596,8 @@ export const useOrderStore = create<OrderStore>()(
         paymentMethod = 'credit_card',
         vipCode,
         staffModal = false,
-        paymentDetails = null
+        paymentDetails = null,
+        staffOrderParams = {}
       ) => {
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
@@ -644,7 +645,8 @@ export const useOrderStore = create<OrderStore>()(
               payment_method: paymentMethod,
               vip_code: vipCode,
               staff_modal: staffModal,
-              payment_details: paymentDetails
+              payment_details: paymentDetails,
+              ...staffOrderParams // Include staff order parameters
             },
           };
 

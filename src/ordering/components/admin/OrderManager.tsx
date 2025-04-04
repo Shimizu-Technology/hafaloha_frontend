@@ -1177,8 +1177,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               {isPageChanging && previousOrders.length > 0 && (
                 <div className="absolute inset-0 z-10 transition-opacity duration-300" 
                      style={{ opacity: isPageChanging ? 0.3 : 0 }}>
-                  {previousOrders.map((order) => (
-                    <div key={`prev-${order.id}`} className="mb-4">
+                  {previousOrders.map((order, index) => (
+                    <div key={`previous-${order.id}-${index}`} className="mb-4">
                       <CollapsibleOrderCard
                         order={order}
                         isExpanded={expandedOrders.has(order.id)}
@@ -1200,20 +1200,21 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               {/* Current orders with fade-in effect */}
               <div className={`transition-opacity duration-300 ${isPageChanging ? 'opacity-0' : 'opacity-100'}`}>
                 {currentOrders.map((order) => (
-                  <CollapsibleOrderCard
-                    key={order.id}
-                    order={order}
-                    isExpanded={expandedOrders.has(order.id)}
-                    onToggleExpand={() => toggleOrderExpand(order.id)}
-                    isNew={newOrders.has(order.id)}
-                    isSelected={selectedOrders.has(order.id)}
-                    isHighlighted={highlightedOrderId === order.id}
-                    onSelectChange={(sel) => toggleOrderSelection(order.id, sel)}
-                    renderActions={() => renderOrderActions(order)}
-                    getStatusBadgeColor={getStatusBadgeColor}
-                    formatDate={formatDate}
-                    requiresAdvanceNotice={requiresAdvanceNotice}
-                  />
+                  <div key={`order-${order.id}-${order.updated_at}`} className="mb-4">
+                    <CollapsibleOrderCard
+                      order={order}
+                      isExpanded={expandedOrders.has(order.id)}
+                      onToggleExpand={() => toggleOrderExpand(order.id)}
+                      isNew={newOrders.has(order.id)}
+                      isSelected={selectedOrders.has(order.id)}
+                      isHighlighted={highlightedOrderId === order.id}
+                      onSelectChange={(sel) => toggleOrderSelection(order.id, sel)}
+                      renderActions={() => renderOrderActions(order)}
+                      getStatusBadgeColor={getStatusBadgeColor}
+                      formatDate={formatDate}
+                      requiresAdvanceNotice={requiresAdvanceNotice}
+                    />
+                  </div>
                 ))}
               </div>
             </div>

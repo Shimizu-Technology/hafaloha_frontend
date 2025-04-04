@@ -964,7 +964,21 @@ export function CollapsibleOrderCard({
                               )}
                             </>
                           ) : (
-                            <>${Number(item.price * item.quantity).toFixed(2)}</>
+                            <>
+                              {/* Show original price and discounted price for staff orders */}
+                              {order.is_staff_order && item.pre_discount_price && item.pre_discount_price !== item.price ? (
+                                <>
+                                  <span className="line-through text-gray-400 mr-2">
+                                    ${Number(item.pre_discount_price * item.quantity).toFixed(2)}
+                                  </span>
+                                  <span className="font-medium">
+                                    ${Number(item.price * item.quantity).toFixed(2)}
+                                  </span>
+                                </>
+                              ) : (
+                                <>${Number(item.price * item.quantity).toFixed(2)}</>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>

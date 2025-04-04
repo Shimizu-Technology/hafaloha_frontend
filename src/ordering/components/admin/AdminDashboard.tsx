@@ -7,6 +7,7 @@ import { PromoManager } from './PromoManager';
 import { AnalyticsManager } from './AnalyticsManager';
 import { SettingsManager } from './SettingsManager';
 import MerchandiseManager from './MerchandiseManager';
+import { StaffManagement } from './StaffManagement';
 import RestaurantSelector from './RestaurantSelector';
 import NotificationContainer from '../../../shared/components/notifications/NotificationContainer';
 import {
@@ -20,7 +21,8 @@ import {
   ShoppingCart,
   AlertCircle,
   Bell,
-  Package
+  Package,
+  Users
 } from 'lucide-react';
 import AcknowledgeAllButton from '../../../shared/components/notifications/AcknowledgeAllButton';
 import { api } from '../../lib/api';
@@ -34,7 +36,7 @@ import { useOrderStore } from '../../store/orderStore';
 import { calculateAvailableQuantity } from '../../utils/inventoryUtils';
 import useWebSocket from '../../../shared/hooks/useWebSocket';
 
-type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise';
+type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise' | 'staff';
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
@@ -49,12 +51,13 @@ export function AdminDashboard() {
     { id: 'menu',      label: 'Menu',      icon: LayoutGrid },
     { id: 'merchandise', label: 'Merchandise', icon: ShoppingCart },
     { id: 'promos',    label: 'Promos',    icon: Tag },
+    { id: 'staff',     label: 'Staff',     icon: Users },
     { id: 'settings',  label: 'Settings',  icon: Sliders },
   ] as const;
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const stored = localStorage.getItem('adminTab');
-    if (stored && ['analytics','orders','menu','merchandise','promos','settings'].includes(stored)) {
+    if (stored && ['analytics','orders','menu','merchandise','promos','staff','settings'].includes(stored)) {
       return stored as Tab;
     }
     return 'analytics';
@@ -974,6 +977,10 @@ useEffect(() => {
             
             <div className={`transition-opacity duration-300 ${activeTab === 'merchandise' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
               {activeTab === 'merchandise' && <MerchandiseManager />}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'staff' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'staff' && <StaffManagement />}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>

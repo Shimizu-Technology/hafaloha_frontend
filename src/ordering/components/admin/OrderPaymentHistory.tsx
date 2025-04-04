@@ -1,6 +1,7 @@
 // src/ordering/components/admin/OrderPaymentHistory.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { apiClient } from '../../../shared/api/apiClient';
 
 interface RefundedItem {
   id: number;
@@ -26,7 +27,33 @@ interface OrderPaymentHistoryProps {
   payments: OrderPayment[];
 }
 
+interface StaffMember {
+  id: number;
+  name: string;
+  position: string;
+  user_id: number;
+}
+
 export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  
+  useEffect(() => {
+    // Fetch staff members to map IDs to names
+    const fetchStaffMembers = async () => {
+      try {
+        const response = await apiClient.get('/staff_members');
+        if (response.data && Array.isArray(response.data)) {
+          setStaffMembers(response.data);
+        } else if (response.data && Array.isArray(response.data.staff_members)) {
+          setStaffMembers(response.data.staff_members);
+        }
+      } catch (error) {
+        console.error('Error fetching staff members:', error);
+      }
+    };
+    
+    fetchStaffMembers();
+  }, []);
   // Calculate totals
   const totalPaid = payments
     .filter(p => p.payment_type !== 'refund')
@@ -236,11 +263,44 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
                                 {/* Display any other fields that might be in payment_details */}
                                 {Object.entries(payment.payment_details)
                                   .filter(([key]) => !['status', 'test_mode', 'amount', 'payment_date', 'transaction_id', 'notes', 'error_handled'].includes(key))
-                                  .map(([key, value]) => (
-                                    <div key={key}>
-                                      <span className="font-medium">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {String(value)}
-                                    </div>
-                                  ))
+                                  .map(([key, value]) => {
+                                    // Special handling for staffOrderParams
+                                    if (key === 'staffOrderParams' && typeof value === 'object' && value !== null) {
+                                      return (
+                                        <div key={key} className="mt-2">
+                                          <span className="font-medium">Staff Order Parameters:</span>
+                                          <div className="pl-4 mt-1 border-l-2 border-gray-200">
+                                            {Object.entries(value).map(([paramKey, paramValue]) => {
+                                              // Format staff member IDs to show names
+                                              if (paramKey === 'staff_member_id' || paramKey === 'created_by_staff_id') {
+                                                const staffId = Number(paramValue);
+                                                const staffMember = staffMembers.find(staff => staff.id === staffId);
+                                                return (
+                                                  <div key={paramKey} className="text-sm">
+                                                    <span className="font-medium">{paramKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> 
+                                                    {staffMember ? `${staffMember.name} (ID: ${staffId})` : `ID: ${staffId}`}
+                                                  </div>
+                                                );
+                                              }
+                                              
+                                              // For other parameters
+                                              return (
+                                                <div key={paramKey} className="text-sm">
+                                                  <span className="font-medium">{paramKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {String(paramValue)}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                    // For all other fields
+                                    return (
+                                      <div key={key}>
+                                        <span className="font-medium">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {String(value)}
+                                      </div>
+                                    );
+                                  })
                                 }
                               </div>
                             </div>
