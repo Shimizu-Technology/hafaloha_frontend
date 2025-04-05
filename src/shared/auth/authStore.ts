@@ -164,21 +164,15 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     
     // Role helper methods
     isSuperAdmin: () => {
-      console.log('[AuthStore] isSuperAdmin check - user:', get().user);
-      console.log('[AuthStore] isSuperAdmin check - role:', get().user?.role);
       // Check for 'super_admin' role
       return get().user?.role === 'super_admin';
     },
     
     isAdmin: () => {
-      console.log('[AuthStore] isAdmin check - user:', get().user);
-      console.log('[AuthStore] isAdmin check - role:', get().user?.role);
       return get().user?.role === 'admin';
     },
     
     isStaff: () => {
-      console.log('[AuthStore] isStaff check - user:', get().user);
-      console.log('[AuthStore] isStaff check - role:', get().user?.role);
       return get().user?.role === 'staff';
     },
     

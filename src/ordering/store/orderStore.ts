@@ -3,7 +3,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../lib/api';
 import type { Order, OrderItem } from '../types/order';
-import websocketService from '../../shared/services/websocketService';
+import webSocketManager, { NotificationType } from '../../shared/services/WebSocketManager';
+import pollingManager, { PollingResourceType } from '../../shared/services/PollingManager';
 import { useAuthStore } from './authStore';
 
 /** CartItem for local cart usage. */
@@ -49,10 +50,11 @@ interface OrderStore {
   error: string | null;
   websocketConnected: boolean;
   pollingInterval: number | null;
+  connectionCheckInterval: NodeJS.Timeout | null;
   _lastFetchRequestId: number;
 
   // WebSocket methods
-  startWebSocketConnection: () => void;
+  startWebSocketConnection: () => boolean | void;
   stopWebSocketConnection: () => void;
   handleNewOrder: (order: Order) => void;
   handleOrderUpdate: (order: Order) => void;
@@ -118,6 +120,7 @@ export const useOrderStore = create<OrderStore>()(
       error: null,
       websocketConnected: false,
       pollingInterval: null,
+      connectionCheckInterval: null,
       
       // ---------------------------------------------------------
       // WebSocket Methods
@@ -131,7 +134,7 @@ export const useOrderStore = create<OrderStore>()(
           
           // Even if already connected, update pagination params to ensure WebSocket has current state
           const currentMetadata = get().metadata;
-          websocketService.updatePaginationParams({
+          webSocketManager.updatePaginationParams({
             page: paginationParams?.page || currentMetadata.page,
             perPage: paginationParams?.perPage || currentMetadata.per_page
           });
@@ -163,151 +166,86 @@ export const useOrderStore = create<OrderStore>()(
         // Get current pagination state to send to WebSocket
         const currentMetadata = get().metadata;
         
-        // Immediately set websocketConnected to true to prevent race conditions
-        // This will be set to false if connection fails
-        set({ websocketConnected: true });
-        
-        // Track reconnection attempts
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 3;
-        
-        // Define callbacks for WebSocket events
-        const callbacks = {
-          onNewOrder: (order: Order) => {
-            get().handleNewOrder(order);
-          },
-          onOrderUpdated: (order: Order) => {
-            get().handleOrderUpdate(order);
-          },
-          onConnected: () => {
-            // Reset reconnection attempts on successful connection
-            reconnectAttempts = 0;
-            
-            // Ensure websocketConnected is true
-            set({ websocketConnected: true });
-            
-            // Send current pagination state to WebSocket service
-            websocketService.updatePaginationParams({
-              page: currentMetadata.page,
-              perPage: currentMetadata.per_page
-            });
-            
-            // Stop polling when WebSocket is connected
-            get().stopOrderPolling();
-            console.debug('[OrderStore] WebSocket connected, polling stopped');
-          },
-          onDisconnected: () => {
-            const wasConnected = get().websocketConnected;
-            set({ websocketConnected: false });
-            console.debug('[OrderStore] WebSocket disconnected');
-            
-            // Attempt to reconnect a few times before falling back to polling
-            if (wasConnected && reconnectAttempts < maxReconnectAttempts) {
-              reconnectAttempts++;
-              console.debug(`[OrderStore] Attempting WebSocket reconnection (${reconnectAttempts}/${maxReconnectAttempts})`);
-              
-              // Exponential backoff for reconnection attempts
-              const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 10000);
-              
-              setTimeout(() => {
-                // Try to reconnect if we're still disconnected
-                if (!get().websocketConnected) {
-                  // Attempt to reconnect with current pagination state
-                  const currentState = get().metadata;
-                  // Use connect instead of reconnect since reconnect is not available
-                  const user = useAuthStore.getState().user;
-                  if (user?.restaurant_id) {
-                    websocketService.connect(user.restaurant_id, {
-                      onNewOrder: (order) => get().handleNewOrder(order),
-                      onOrderUpdated: (order) => get().handleOrderUpdate(order),
-                      onConnected: () => set({ websocketConnected: true }),
-                      onDisconnected: () => set({ websocketConnected: false }),
-                      onError: (error) => console.error('[OrderStore] WebSocket error:', error)
-                    });
-                    
-                    // Update pagination parameters after connection
-                    websocketService.updatePaginationParams({
-                      page: currentState.page,
-                      perPage: currentState.per_page
-                    });
-                  }
-                }
-              }, backoffTime);
-            } else if (wasConnected) {
-              // If we've exceeded reconnection attempts, fall back to polling
-              console.debug('[OrderStore] WebSocket reconnection failed, falling back to polling');
-              
-              // Add a small delay to ensure we don't have race conditions
-              setTimeout(() => {
-                // Double-check we're still not connected before starting polling
-                if (!get().websocketConnected) {
-                  // Use current page from metadata when starting polling
-                  get().startOrderPolling();
-                }
-              }, 500);
-            }
-          },
-          onError: (error: any) => {
-            console.error('[OrderStore] WebSocket error:', error);
-            set({ websocketConnected: false }); // Ensure we mark as disconnected on error
-            
-            // Attempt to reconnect on error if we haven't exceeded the limit
-            if (reconnectAttempts < maxReconnectAttempts) {
-              reconnectAttempts++;
-              console.debug(`[OrderStore] Attempting WebSocket reconnection after error (${reconnectAttempts}/${maxReconnectAttempts})`);
-              
-              // Exponential backoff for reconnection attempts
-              const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 10000);
-              
-              setTimeout(() => {
-                // Try to reconnect if we're still disconnected
-                if (!get().websocketConnected) {
-                  // Attempt to reconnect with current pagination state
-                  const currentState = get().metadata;
-                  // Use connect instead of reconnect since reconnect is not available
-                  const user = useAuthStore.getState().user;
-                  if (user?.restaurant_id) {
-                    websocketService.connect(user.restaurant_id, {
-                      onNewOrder: (order) => get().handleNewOrder(order),
-                      onOrderUpdated: (order) => get().handleOrderUpdate(order),
-                      onConnected: () => set({ websocketConnected: true }),
-                      onDisconnected: () => set({ websocketConnected: false }),
-                      onError: (error) => console.error('[OrderStore] WebSocket error:', error)
-                    });
-                    
-                    // Update pagination parameters after connection
-                    websocketService.updatePaginationParams({
-                      page: currentState.page,
-                      perPage: currentState.per_page
-                    });
-                  }
-                }
-              }, backoffTime);
-            } else {
-              // Only start polling if we're not already polling and have exceeded reconnection attempts
-              setTimeout(() => {
-                if (!get().websocketConnected) {
-                  // Use current page from metadata when starting polling
-                  get().startOrderPolling();
-                }
-              }, 500);
-            }
-          }
-        };
-        
-        // Connect to WebSocket
-        console.debug('[OrderStore] Connecting to WebSocket', { 
+        // Initialize the WebSocketManager with the restaurant ID
+        console.debug('[OrderStore] Initializing WebSocketManager', { 
           restaurantId: user.restaurant_id,
           currentPage: get().metadata.page 
         });
-        websocketService.connect(user.restaurant_id, callbacks);
+        
+        // Initialize the WebSocketManager
+        webSocketManager.initialize(user.restaurant_id);
+        
+        // Register handlers for order notifications
+        webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order: Order) => {
+          get().handleNewOrder(order);
+        });
+        
+        webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, (order: Order) => {
+          get().handleOrderUpdate(order);
+        });
+        
+        // Update pagination parameters
+        webSocketManager.updatePaginationParams({
+          page: currentMetadata.page,
+          perPage: currentMetadata.per_page
+        });
+        
+        // Set connection status
+        set({ websocketConnected: true });
+        
+        // Stop polling when WebSocket is connected
+        get().stopOrderPolling();
+        
+        // Set up a connection status check interval
+        const connectionCheckInterval = setInterval(() => {
+          const isConnected = webSocketManager.isConnected();
+          
+          // If connection status has changed, update our state
+          if (isConnected !== get().websocketConnected) {
+            console.debug(`[OrderStore] WebSocket connection status changed: ${isConnected ? 'connected' : 'disconnected'}`);
+            set({ websocketConnected: isConnected });
+            
+            // If disconnected, start polling
+            if (!isConnected && !get().pollingInterval) {
+              console.debug('[OrderStore] WebSocket disconnected, starting polling');
+              get().startOrderPolling();
+            }
+            // If connected, stop polling
+            else if (isConnected && get().pollingInterval) {
+              console.debug('[OrderStore] WebSocket connected, stopping polling');
+              get().stopOrderPolling();
+            }
+          }
+        }, 5000); // Check every 5 seconds
+        
+        // Store the interval ID so we can clear it later
+        set({ connectionCheckInterval });
+        
+        console.debug('[OrderStore] WebSocket connection initialized');
+        
+        // Return the connection status
+        return webSocketManager.isConnected();
       },
       
       stopWebSocketConnection: () => {
         if (get().websocketConnected) {
           console.debug('[OrderStore] Stopping WebSocket connection');
-          websocketService.disconnect('orderStore');
-          set({ websocketConnected: false });
+          
+          // Unregister handlers
+          webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, get().handleNewOrder);
+          webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, get().handleOrderUpdate);
+          
+          // Clear connection check interval if it exists
+          const { connectionCheckInterval } = get();
+          if (connectionCheckInterval) {
+            clearInterval(connectionCheckInterval);
+          }
+          
+          // Update connection status
+          set({ websocketConnected: false, connectionCheckInterval: null });
+          
+          // Note: We don't actually disconnect the WebSocketManager here
+          // as other components might be using it. We just unregister our handlers.
         }
       },
       
@@ -361,28 +299,43 @@ export const useOrderStore = create<OrderStore>()(
         const existingOrderIndex = get().orders.findIndex((o: Order) => o.id === order.id);
         
         if (existingOrderIndex === -1) {
-          // Only add the new order if we're on page 1
-          // This prevents new orders from affecting pagination on other pages
+          // Get current metadata and page
           const { metadata } = get();
-          if (metadata.page === 1) {
+          const currentPage = metadata.page;
+          
+          // Always add new orders to the list if we're on page 1
+          if (currentPage === 1) {
             console.debug('[OrderStore] Adding new order to page 1');
             
-            // IMPORTANT: Create a shallow copy of the current state to avoid modifying metadata
-            // This is the root cause of the pagination issues - we need to preserve the original metadata
+            // Create a shallow copy of the current state
             const currentOrders = [...get().orders];
             
             // Add the new order to the beginning of the array
             currentOrders.unshift(order);
             
-            // Update only the orders array, explicitly preserving the existing metadata
+            // Update the orders array and increment total_count in metadata
             set({
               orders: currentOrders,
-              // Explicitly keep the same metadata to prevent pagination issues
-              metadata: { ...get().metadata }
+              metadata: {
+                ...get().metadata,
+                total_count: get().metadata.total_count + 1,
+                // Recalculate total_pages if needed
+                total_pages: Math.ceil((get().metadata.total_count + 1) / get().metadata.per_page)
+              }
             });
           } else {
-            console.debug(`[OrderStore] Not adding new order to page ${metadata.page}, only updating page 1 would show this`);
-            // Don't modify the current page's orders
+            console.debug(`[OrderStore] On page ${currentPage}, refreshing orders to include new order`);
+            
+            // If we're not on page 1, refresh the current page to maintain consistency
+            // This ensures the order counts and pagination are updated correctly
+            const currentParams = {
+              page: currentPage,
+              perPage: metadata.per_page,
+              _sourceId: 'websocket_new_order'
+            };
+            
+            // Fetch orders quietly to update the list without showing loading state
+            get().fetchOrdersQuietly(currentParams);
           }
         }
       },
@@ -459,7 +412,7 @@ export const useOrderStore = create<OrderStore>()(
       },
       
       // ---------------------------------------------------------
-      // Polling Methods (Fallback)
+      // Polling Methods (Fallback) - Using centralized PollingManager
       // ---------------------------------------------------------
       startOrderPolling: () => {
         // First stop any existing polling
@@ -481,157 +434,123 @@ export const useOrderStore = create<OrderStore>()(
         // Log that we're falling back to polling
         console.debug('[OrderStore] Starting polling for orders (WebSocket fallback)');
         
-        // Track WebSocket connection attempts to avoid infinite reconnection loops
-        let reconnectionAttempts = 0;
-        const MAX_RECONNECTION_ATTEMPTS = 3;
-        
         // Try to reconnect WebSocket before falling back to polling
         console.debug('[OrderStore] Attempting WebSocket connection before polling');
-        tryWebSocketConnection();
         
-        // Function to attempt WebSocket connection
-        function tryWebSocketConnection() {
-          // Don't attempt if we've already tried too many times
-          if (reconnectionAttempts >= MAX_RECONNECTION_ATTEMPTS) {
-            console.debug(`[OrderStore] Maximum WebSocket reconnection attempts (${MAX_RECONNECTION_ATTEMPTS}) reached, proceeding with polling`);
-            setupPollingInterval();
-            return;
-          }
-          
-          reconnectionAttempts++;
-          console.debug(`[OrderStore] WebSocket connection attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS}`);
-          
-          try {
-            // Attempt to connect to WebSocket
-            // We've already checked that user and restaurant_id exist above, but TypeScript doesn't know that
-            const restaurantId = user?.restaurant_id || '';
-            websocketService.connect(restaurantId, {
-              onConnected: () => {
-                console.debug('[OrderStore] WebSocket connected successfully, canceling polling setup');
-                set({ websocketConnected: true });
-                get().stopOrderPolling();
-                
-                // Reset reconnection attempts on successful connection
-                reconnectionAttempts = 0;
-              },
-              onDisconnected: () => {
-                console.debug(`[OrderStore] WebSocket disconnected (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`);
-                set({ websocketConnected: false });
-                
-                // Try again or proceed with polling
-                if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
-                  setTimeout(tryWebSocketConnection, 1000); // Wait 1 second before retrying
-                } else {
-                  console.debug('[OrderStore] WebSocket reconnection failed, proceeding with polling');
-                  setupPollingInterval();
-                }
-              },
-              onError: () => {
-                console.debug(`[OrderStore] WebSocket connection error (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`);
-                set({ websocketConnected: false });
-                
-                // Try again or proceed with polling
-                if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
-                  setTimeout(tryWebSocketConnection, 1000); // Wait 1 second before retrying
-                } else {
-                  console.debug('[OrderStore] WebSocket reconnection error, proceeding with polling');
-                  setupPollingInterval();
-                }
-              }
-            });
-            
-            // Set a timeout to ensure we don't wait too long for WebSocket
-            setTimeout(() => {
-              if (!get().websocketConnected && !get().pollingInterval) {
-                console.debug(`[OrderStore] WebSocket connection timed out (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`);
-                
-                // Try again or proceed with polling
-                if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
-                  tryWebSocketConnection();
-                } else {
-                  console.debug('[OrderStore] WebSocket reconnection timed out, proceeding with polling');
-                  setupPollingInterval();
-                }
-              }
-            }, 3000);
-          } catch (error) {
-            console.error(`[OrderStore] Error attempting WebSocket connection (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS}):`, error);
-            
-            // Try again or proceed with polling
-            if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
-              setTimeout(tryWebSocketConnection, 1000); // Wait 1 second before retrying
-            } else {
-              console.debug('[OrderStore] WebSocket reconnection failed after error, proceeding with polling');
-              setupPollingInterval();
-            }
-          }
+        // Initialize WebSocketManager
+        webSocketManager.initialize(user.restaurant_id);
+        
+        // Register handlers for order notifications
+        webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order: Order) => {
+          get().handleNewOrder(order);
+        });
+        
+        webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, (order: Order) => {
+          get().handleOrderUpdate(order);
+        });
+        
+        // Check if connected
+        const isConnected = webSocketManager.isConnected();
+        
+        if (isConnected) {
+          console.debug('[OrderStore] WebSocket connected successfully, no need for polling');
+          set({ websocketConnected: true });
+          return;
         }
         
-        // Function to set up the polling interval
-        function setupPollingInterval() {
-          // Final check to ensure WebSocket isn't connected
-          if (get().websocketConnected) {
-            console.debug('[OrderStore] WebSocket connected during setup, canceling polling');
+        // If WebSocket connection failed, start polling using the PollingManager
+        console.debug('[OrderStore] WebSocket connection failed, proceeding with polling');
+        
+        // Get the current metadata to ensure we poll with the correct page
+        const { metadata } = get();
+        
+        // Create polling handler function
+        const handlePollingResults = (data: any) => {
+          if (!data || !data.orders) {
+            console.debug('[OrderStore] Polling returned no data');
             return;
           }
           
-          // Track how many polls have occurred
-          let pollCount = 0;
-          
-          // Start a new polling interval
-          const intervalId = window.setInterval(async () => {
-            pollCount++;
-            
-            // Double-check WebSocket status before each poll
-            if (get().websocketConnected) {
-              console.debug('[OrderStore] WebSocket is now connected, stopping polling');
-              get().stopOrderPolling();
-              return;
+          // Update the store with the polling results
+          set({
+            orders: data.orders || [],
+            metadata: {
+              total_count: data.total_count || 0,
+              page: data.page || 1,
+              per_page: data.per_page || 10,
+              total_pages: data.total_pages || Math.ceil((data.total_count || 0) / (data.per_page || 10))
             }
-            
-            // Get the current metadata to ensure we poll with the correct page
-            const { metadata } = get();
-            console.debug(`[OrderStore] Polling for orders on page ${metadata.page} (poll #${pollCount})`);
-            
-            // Use the current page from metadata when polling
-            await get().fetchOrdersQuietly({
+          });
+          
+          console.debug(`[OrderStore] Updated orders from polling: ${data.orders.length} orders`);
+        };
+        
+        // Start polling using the centralized PollingManager
+        const pollingId = pollingManager.startPolling(
+          PollingResourceType.ORDERS,
+          handlePollingResults,
+          {
+            interval: 30000, // 30 seconds
+            params: {
               page: metadata.page,
-              perPage: metadata.per_page,
-              _sourceId: 'polling' // Mark this request as coming from polling
-            });
-            
-            // After polling, check if WebSocket has reconnected
-            if (get().websocketConnected) {
-              console.debug('[OrderStore] WebSocket reconnected after polling, stopping polling');
-              get().stopOrderPolling();
-              return;
-            }
-            
-            // Periodically try to reconnect WebSocket during polling
-            // Every 5th poll (approximately every 2.5 minutes), try to reconnect
-            if (pollCount % 5 === 0) {
-              console.debug(`[OrderStore] Periodic WebSocket reconnection attempt during polling (poll #${pollCount})`);
-              reconnectionAttempts = 0; // Reset the counter for a fresh set of attempts
-              tryWebSocketConnection();
-            }
-          }, 30000); // Poll every 30 seconds
+              per_page: metadata.per_page
+            },
+            sourceId: 'orderStore'
+          }
+        );
+        
+        // Store the polling ID so we can stop it later
+        set({ pollingInterval: pollingId as any });
+        
+        // Set up a connection status check interval to stop polling if WebSocket connects
+        const connectionCheckInterval = setInterval(() => {
+          const isConnected = webSocketManager.isConnected();
           
-          // Store the interval ID so we can clear it later
-          set({ pollingInterval: intervalId });
-        }
+          // If WebSocket is now connected, stop polling
+          if (isConnected && !get().websocketConnected) {
+            console.debug('[OrderStore] WebSocket is now connected, stopping polling');
+            set({ websocketConnected: true });
+            get().stopOrderPolling();
+          }
+          // If WebSocket disconnected, make sure polling is active
+          else if (!isConnected && get().websocketConnected) {
+            console.debug('[OrderStore] WebSocket disconnected, ensuring polling is active');
+            set({ websocketConnected: false });
+            
+            // Only start polling if we don't already have an active polling interval
+            if (!get().pollingInterval) {
+              get().startOrderPolling();
+            }
+          }
+        }, 5000); // Check every 5 seconds
+        
+        // Store the interval ID so we can clear it later
+        set({ connectionCheckInterval });
       },
       
       stopOrderPolling: () => {
-        const { pollingInterval, websocketConnected } = get();
+        const { pollingInterval, websocketConnected, connectionCheckInterval } = get();
         
         console.debug('[OrderStore] Stopping order polling', {
           hasPollingInterval: pollingInterval !== null,
           websocketConnected
         });
         
+        // Clear the connection check interval if it exists
+        if (connectionCheckInterval) {
+          clearInterval(connectionCheckInterval);
+          set({ connectionCheckInterval: null });
+        }
+        
+        // Stop polling using the centralized PollingManager
         if (pollingInterval !== null) {
-          console.debug('[OrderStore] Clearing order polling interval');
-          window.clearInterval(pollingInterval);
+          console.debug('[OrderStore] Stopping polling through PollingManager');
+          // Convert the polling interval to string if it's a number (for backward compatibility)
+          const pollingId = typeof pollingInterval === 'number' 
+            ? String(pollingInterval) 
+            : pollingInterval as string;
+            
+          pollingManager.stopPolling(pollingId);
           set({ pollingInterval: null });
         }
         
@@ -640,31 +559,28 @@ export const useOrderStore = create<OrderStore>()(
           const user = useAuthStore.getState().user;
           if (user?.restaurant_id) {
             console.debug('[OrderStore] Attempting to establish WebSocket connection after stopping polling');
-            // Use a slight delay to ensure the polling is fully stopped
-            setTimeout(() => {
-              // Double-check that WebSocket is still not connected
-              if (!get().websocketConnected && !get().pollingInterval) {
-                try {
-                  const restaurantId = user.restaurant_id || '';
-                  websocketService.connect(restaurantId, {
-                    onConnected: () => {
-                      console.debug('[OrderStore] WebSocket connected successfully after stopping polling');
-                      set({ websocketConnected: true });
-                    },
-                    onDisconnected: () => {
-                      console.debug('[OrderStore] WebSocket disconnected after stopping polling');
-                      set({ websocketConnected: false });
-                    },
-                    onError: (error) => {
-                      console.debug('[OrderStore] WebSocket connection error after stopping polling:', error);
-                      set({ websocketConnected: false });
-                    }
-                  });
-                } catch (error) {
-                  console.error('[OrderStore] Error attempting WebSocket connection after stopping polling:', error);
-                }
-              }
-            }, 500);
+            
+            // Initialize the WebSocketManager
+            webSocketManager.initialize(user.restaurant_id);
+            
+            // Register handlers for order notifications
+            webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order: Order) => {
+              get().handleNewOrder(order);
+            });
+            
+            webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, (order: Order) => {
+              get().handleOrderUpdate(order);
+            });
+            
+            // Get connection status
+            const isConnected = webSocketManager.isConnected();
+            set({ websocketConnected: isConnected });
+            
+            if (isConnected) {
+              console.debug('[OrderStore] WebSocket connected successfully after stopping polling');
+            } else {
+              console.debug('[OrderStore] WebSocket connection failed after stopping polling');
+            }
           }
         }
       },

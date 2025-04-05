@@ -1,14 +1,14 @@
 // src/shared/hooks/useWebSocket.ts
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import websocketService, { WebSocketCallbacks } from '../services/websocketService';
+import webSocketManager, { NotificationType, NotificationHandler } from '../services/WebSocketManager';
 import { useAuthStore } from '../../ordering/store/authStore';
 
 interface UseWebSocketOptions {
   autoConnect?: boolean;
-  onNewOrder?: (order: any) => void;
-  onOrderUpdated?: (order: any) => void;
-  onLowStock?: (item: any) => void;
+  onNewOrder?: NotificationHandler;
+  onOrderUpdated?: NotificationHandler;
+  onLowStock?: NotificationHandler;
   onError?: (error: any) => void;
   onConnected?: () => void;
   onDisconnected?: () => void;
@@ -41,27 +41,27 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRes
       setError(error);
       return;
     }
-
-    const callbacks: WebSocketCallbacks = {
-      onNewOrder: options.onNewOrder,
-      onOrderUpdated: options.onOrderUpdated,
-      onLowStock: options.onLowStock,
-      onError: (err) => {
-        setError(err instanceof Error ? err : new Error(String(err)));
-        if (options.onError) options.onError(err);
-      },
-      onConnected: () => {
-        setIsConnected(true);
-        setError(null);
-        if (options.onConnected) options.onConnected();
-      },
-      onDisconnected: () => {
-        setIsConnected(false);
-        if (options.onDisconnected) options.onDisconnected();
-      }
-    };
-
-    websocketService.connect(user.restaurant_id, callbacks);
+    
+    // Initialize the WebSocketManager
+    webSocketManager.initialize(user.restaurant_id);
+    
+    // Register handlers for notifications
+    if (options.onNewOrder) {
+      webSocketManager.registerHandler(NotificationType.NEW_ORDER, options.onNewOrder);
+    }
+    
+    if (options.onOrderUpdated) {
+      webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, options.onOrderUpdated);
+    }
+    
+    if (options.onLowStock) {
+      webSocketManager.registerHandler(NotificationType.LOW_STOCK, options.onLowStock);
+    }
+    
+    // Update connection status
+    setIsConnected(true);
+    setError(null);
+    if (options.onConnected) options.onConnected();
   }, [
     user?.restaurant_id,
     options.onNewOrder,
@@ -76,10 +76,25 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRes
   const disconnect = useCallback((source: string = 'manual') => {
     if (isConnected) {
       console.debug('[WebSocket] Disconnecting', { source });
-      websocketService.disconnect(source);
+      
+      // Unregister handlers
+      if (options.onNewOrder) {
+        webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, options.onNewOrder);
+      }
+      
+      if (options.onOrderUpdated) {
+        webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, options.onOrderUpdated);
+      }
+      
+      if (options.onLowStock) {
+        webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, options.onLowStock);
+      }
+      
+      // We don't actually disconnect the WebSocketManager here, as other components might be using it
+      // We just unregister our handlers and update our local state
       setIsConnected(false);
     }
-  }, [isConnected]);
+  }, [isConnected, options.onNewOrder, options.onOrderUpdated, options.onLowStock]);
 
   // Ref to track if we're in cleanup phase
   const isCleaningUp = useRef(false);
@@ -90,8 +105,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRes
     if (isCleaningUp.current) {
       return;
     }
-
-    let connectTimer: NodeJS.Timeout | null = null;
 
     // Only connect if we have a user with a restaurant_id and autoConnect is not explicitly false
     if (options.autoConnect !== false && user?.restaurant_id && !isConnected) {
@@ -107,13 +120,26 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRes
       console.debug('[WebSocket] Initiating immediate connection');
       connect();
       
-      // Add a retry mechanism in case the first attempt fails
-      connectTimer = setTimeout(() => {
-        if (!isCleaningUp.current && !isConnected) {
-          console.debug('[WebSocket] First connection attempt failed, retrying...');
-          connect();
+      // Check connection status after a short delay
+      const connectionCheckTimer = setTimeout(() => {
+        if (!isCleaningUp.current) {
+          const isWsConnected = webSocketManager.isConnected();
+          console.debug('[WebSocket] Connection check:', { isWsConnected });
+          
+          // Update our local state based on the WebSocketManager's state
+          setIsConnected(isWsConnected);
+          
+          // If not connected, try again
+          if (!isWsConnected) {
+            console.debug('[WebSocket] Connection not established, retrying...');
+            connect();
+          }
         }
       }, 2000);
+      
+      return () => {
+        clearTimeout(connectionCheckTimer);
+      };
     } else {
       console.debug('[WebSocket] Connection criteria NOT met', {
         autoConnect: options.autoConnect,
@@ -122,19 +148,18 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRes
         isConnected
       });
     }
-    
-    // Cleanup function
+  }, [connect, options.autoConnect, user?.restaurant_id, isConnected]);
+  
+  // Cleanup when component unmounts
+  useEffect(() => {
     return () => {
       isCleaningUp.current = true;
-      if (connectTimer) {
-        clearTimeout(connectTimer);
-      }
       if (isConnected) {
         console.debug('[WebSocket] Cleaning up connection');
         disconnect('cleanup');
       }
     };
-  }, [connect, disconnect, options.autoConnect, user?.restaurant_id]);
+  }, [disconnect, isConnected]);
 
   return {
     isConnected,

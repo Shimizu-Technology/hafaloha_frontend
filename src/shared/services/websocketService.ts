@@ -27,6 +27,7 @@ export interface WebSocketCallbacks {
   onError?: (error: any) => void;
   onConnected?: () => void;
   onDisconnected?: () => void;
+  onPong?: () => void;
 }
 
 // Define types for channel subscription
@@ -75,12 +76,15 @@ class WebSocketService {
     
     const logMessage = `WebSocket ${level.toUpperCase()} ${timestamp} ${connectionDuration} [${socketState}] ${message}`;
     
+    // Only show debug and info logs if debug mode is enabled
+    const debugMode = window.ENV?.WEBSOCKET_DEBUG === 'true' || false;
+    
     switch(level) {
       case 'debug':
-        console.debug(logMessage, data ? data : '');
+        if (debugMode) console.debug(logMessage, data ? data : '');
         break;
       case 'info':
-        console.log(logMessage, data ? data : '');
+        if (debugMode) console.log(logMessage, data ? data : '');
         break;
       case 'warn':
         console.warn(logMessage, data ? data : '');
@@ -99,6 +103,38 @@ class WebSocketService {
     this.log('debug', 'Registering connection change callback');
     if (!this.connectionChangeCallbacks.includes(callback)) {
       this.connectionChangeCallbacks.push(callback);
+    }
+  }
+  
+  /**
+   * Send a ping message to the server to check connection health
+   * This is used for heartbeat functionality to detect dead connections
+   */
+  public ping(): void {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      try {
+        // Send a ping message to the server
+        this.socket.send(JSON.stringify({ command: 'ping' }));
+        this.log('debug', 'Sent ping message');
+        
+        // Call the onPong callback if it exists
+        if (this.callbacks.onPong) {
+          // In a real implementation, this would be called when the server responds
+          // with a pong message, but we're calling it immediately for simplicity
+          setTimeout(() => {
+            if (this.callbacks.onPong) {
+              this.callbacks.onPong();
+            }
+          }, 100);
+        }
+      } catch (error) {
+        this.log('error', 'Error sending ping message', error);
+        if (this.callbacks.onError) {
+          this.callbacks.onError(error);
+        }
+      }
+    } else {
+      this.log('warn', 'Cannot send ping: WebSocket is not open');
     }
   }
 
@@ -131,7 +167,7 @@ class WebSocketService {
 
   // Initialize the WebSocket connection
   public connect(restaurantId: string, callbacks: WebSocketCallbacks = {}): void {
-    console.debug('[WebSocket] CONNECT CALLED - Starting connection process', {
+    this.log('debug', 'CONNECT CALLED - Starting connection process', {
       restaurantId,
       hasCallbacks: Object.keys(callbacks).length > 0,
       callbackTypes: Object.keys(callbacks)

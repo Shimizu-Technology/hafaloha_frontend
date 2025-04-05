@@ -4,14 +4,15 @@ import {
   getUnacknowledgedNotifications,
   acknowledgeNotification,
   acknowledgeAllNotifications,
-  getNotificationCount,
+  // getNotificationCount, // Commented out unused import
   getNotificationStats,
   takeActionOnNotification,
   RestockActionResponse
 } from '../../shared/api/endpoints/notifications';
 import { handleApiError } from '../../shared/utils/errorHandler';
-import websocketService from '../../shared/services/websocketService';
 import { useAuthStore } from './authStore';
+import notificationStorageService from '../../shared/services/NotificationStorageService';
+import { webSocketManager, NotificationType, ConnectionStatus } from '../../shared/services/WebSocketManager';
 
 interface NotificationStoreState {
   notifications: Notification[];
@@ -19,6 +20,7 @@ interface NotificationStoreState {
   error: string | null;
   websocketConnected: boolean;
   pollingInterval: number | null;
+  fetchInProgress: boolean;
   stats: {
     orderCount: number;
     lowStockCount: number;
@@ -55,6 +57,7 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
   error: null,
   websocketConnected: false,
   pollingInterval: null,
+  fetchInProgress: false,
   stats: {
     orderCount: 0,
     lowStockCount: 0,
@@ -77,52 +80,149 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       return;
     }
     
-    // Define callbacks for WebSocket events
-    const callbacks = {
-      onNotification: (notification: Notification) => {
-        get().handleNewNotification(notification);
-      },
-      onConnected: () => {
-        set({ websocketConnected: true });
-        console.debug('[NotificationStore] WebSocket connected');
-      },
-      onDisconnected: () => {
-        set({ websocketConnected: false });
-        console.debug('[NotificationStore] WebSocket disconnected');
-        
-        // Fallback to polling if WebSocket disconnects
-        get().startNotificationPolling();
-      },
-      onError: (error: any) => {
-        console.error('[NotificationStore] WebSocket error:', error);
-        
-        // Fallback to polling on error
-        get().startNotificationPolling();
-      }
-    };
+    // Check if already connected
+    if (get().websocketConnected) {
+      console.debug('[NotificationStore] WebSocket already connected, skipping initialization');
+      return;
+    }
     
-    // Connect to WebSocket
-    websocketService.connect(user.restaurant_id, callbacks);
+    console.debug('[NotificationStore] Initializing WebSocket connection for restaurant:', user.restaurant_id);
+    
+    // Initialize the WebSocketManager
+    webSocketManager.initialize(user.restaurant_id);
+    
+    // Register handlers for notifications
+    webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order) => {
+      console.log('[ORDER_DEBUG] NotificationStore received new order notification:', order);
+      
+      // Convert order to notification format if needed
+      const notification = typeof order.id === 'undefined' ? order : {
+        id: order.id,
+        title: `New Order #${order.order_number || order.id}`,
+        body: `New order from ${order.customer_name || 'Customer'}`,
+        notification_type: 'order',
+        resource_type: 'Order',
+        resource_id: order.id,
+        admin_path: `/admin/orders/${order.id}`,
+        acknowledged: false,
+        created_at: order.created_at || new Date().toISOString(),
+        updated_at: order.updated_at || new Date().toISOString(),
+        metadata: {
+          order_id: order.id,
+          customer_name: order.customer_name,
+          total: order.total
+        }
+      };
+      
+      console.log('[ORDER_DEBUG] Converted order to notification format:', notification);
+      
+      // Process the notification
+      console.log('[ORDER_DEBUG] Calling handleNewNotification for order:', order.id);
+      get().handleNewNotification(notification as Notification);
+    });
+    
+    webSocketManager.registerHandler(NotificationType.LOW_STOCK, (item) => {
+      console.debug('[NotificationStore] Received low stock notification:', item);
+      
+      // Convert item to notification format if needed
+      const notification = typeof item.id === 'undefined' ? item : {
+        id: item.id,
+        title: `Low Stock Alert`,
+        body: `${item.name || 'Item'} is running low on stock`,
+        notification_type: 'low_stock',
+        resource_type: 'MerchandiseVariant',
+        resource_id: item.id,
+        admin_path: `/admin/inventory/${item.id}`,
+        acknowledged: false,
+        created_at: item.created_at || new Date().toISOString(),
+        updated_at: item.updated_at || new Date().toISOString(),
+        metadata: {
+          variant_id: item.id,
+          item_id: item.merchandise_id,
+          stock_quantity: item.stock_quantity,
+          threshold: item.threshold
+        }
+      };
+      
+      // Process the notification
+      get().handleNewNotification(notification as Notification);
+    });
+    
+    // Register status handler
+    webSocketManager.registerStatusHandler((status) => {
+      const isConnected = status === ConnectionStatus.CONNECTED;
+      
+      // If connection status has changed, update our state
+      if (isConnected !== get().websocketConnected) {
+        console.debug(`[NotificationStore] WebSocket connection status changed: ${status}`);
+        set({ websocketConnected: isConnected });
+        
+        // If disconnected, start polling
+        if (!isConnected && !get().pollingInterval) {
+          console.debug('[NotificationStore] WebSocket disconnected, starting polling');
+          get().startNotificationPolling();
+        }
+        // If connected, stop polling
+        else if (isConnected && get().pollingInterval) {
+          console.debug('[NotificationStore] WebSocket connected, stopping polling');
+          get().stopNotificationPolling();
+        }
+        
+        // If connected, fetch missed notifications
+        if (isConnected) {
+          notificationStorageService.fetchMissedNotifications().then(missedNotifications => {
+            console.debug(`[NotificationStore] Fetched ${missedNotifications.length} missed notifications`);
+            
+            // Process each missed notification
+            missedNotifications.forEach(notification => {
+              if (!notification.acknowledged && !notification.acknowledgedLocally) {
+                get().handleNewNotification(notification as Notification);
+              }
+            });
+          });
+        }
+      }
+    });
   },
   
   stopWebSocketConnection: () => {
-    if (get().websocketConnected) {
-      websocketService.disconnect('notificationStore');
-      set({ websocketConnected: false });
-    }
+    console.debug('[NotificationStore] Stopping WebSocket connection');
+    
+    // Unregister handlers from WebSocketManager
+    webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, get().handleNewNotification);
+    webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, get().handleNewNotification);
+    
+    // Update connection status
+    set({ websocketConnected: false });
   },
   
   handleNewNotification: (notification: Notification) => {
-    if (!notification || !notification.id) return;
+    if (!notification || !notification.id) {
+      console.error('[ORDER_DEBUG] handleNewNotification received invalid notification:', notification);
+      return;
+    }
     
-    console.debug('[NotificationStore] Received new notification via WebSocket:', notification.id);
+    console.log('[ORDER_DEBUG] handleNewNotification processing notification:', {
+      id: notification.id,
+      type: notification.notification_type,
+      resourceType: notification.resource_type,
+      resourceId: notification.resource_id,
+      title: notification.title
+    });
     
     // Check if we already have this notification
     const existingNotificationIndex = get().notifications.findIndex(n => n.id === notification.id);
     
-    if (existingNotificationIndex === -1) {
-      // Add the new notification to the store
-      set(state => ({
+    if (existingNotificationIndex !== -1) {
+      console.log(`[ORDER_DEBUG] Notification ${notification.id} already exists in store, skipping`);
+      return;
+    }
+    
+    console.log(`[ORDER_DEBUG] Adding new notification ${notification.id} to store`);
+    
+    // Add the new notification to the store
+    set(state => {
+      const newState = {
         notifications: [notification, ...state.notifications],
         // Update stats
         stats: {
@@ -133,8 +233,15 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
           lowStockCount: notification.notification_type === 'low_stock' ? state.stats.lowStockCount + 1 : state.stats.lowStockCount,
           outOfStockCount: notification.notification_type === 'out_of_stock' ? state.stats.outOfStockCount + 1 : state.stats.outOfStockCount,
         }
-      }));
-    }
+      };
+      
+      console.log('[ORDER_DEBUG] Updated notification store state:', {
+        notificationCount: newState.notifications.length,
+        stats: newState.stats
+      });
+      
+      return newState;
+    });
   },
   
   // ---------------------------------------------------------
@@ -144,11 +251,24 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
     // First stop any existing polling
     get().stopNotificationPolling();
     
+    // Don't start polling if WebSocket is connected
+    if (get().websocketConnected) {
+      console.debug('[NotificationStore] WebSocket connected, not starting polling');
+      return;
+    }
+    
     // Log that we're falling back to polling
     console.debug('[NotificationStore] Starting polling for notifications (WebSocket fallback)');
     
     // Start a new polling interval
     const intervalId = window.setInterval(async () => {
+      // Double-check WebSocket status before polling
+      if (get().websocketConnected) {
+        console.debug('[NotificationStore] WebSocket now connected, stopping polling');
+        get().stopNotificationPolling();
+        return;
+      }
+      
       console.debug('[NotificationStore] Polling for notifications');
       await get().fetchNotifications();
       await get().fetchStats();
@@ -166,44 +286,96 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       set({ pollingInterval: null });
     }
   },
-
+  
   fetchNotifications: async (hours = 24, type?: string) => {
+    // Prevent duplicate fetch calls
+    if (get().fetchInProgress) {
+      console.debug('[NotificationStore] Fetch already in progress, skipping duplicate call');
+      return get().notifications;
+    }
+    
     try {
-      set({ loading: true, error: null });
+      set({ loading: true, error: null, fetchInProgress: true });
       
-      console.debug('Fetching notifications with params:', { type, hours });
-      const notifications = await getUnacknowledgedNotifications(type, hours);
+      console.debug('[NotificationStore] Fetching notifications with params:', { type, hours });
       
-      console.debug('Raw notifications response:', {
-        isArray: Array.isArray(notifications),
-        type: typeof notifications,
-        value: notifications,
-        keys: notifications ? Object.keys(notifications) : null
+      // First, try to get notifications from the storage service
+      let storedNotifications = notificationStorageService.getNotifications({ 
+        onlyUnacknowledged: true,
+        type
+      });
+      
+      console.debug('[NotificationStore] Stored notifications:', {
+        count: storedNotifications.length,
+        notifications: storedNotifications
+      });
+      
+      // If we need to refresh from server or we don't have enough stored notifications,
+      // fetch from the API and update our storage
+      const serverNotifications = await getUnacknowledgedNotifications(type, hours);
+      
+      console.debug('[NotificationStore] Server notifications response:', {
+        isArray: Array.isArray(serverNotifications),
+        type: typeof serverNotifications,
+        value: serverNotifications,
+        keys: serverNotifications ? Object.keys(serverNotifications) : null
       });
       
       // Ensure notifications is always an array
-      const safeNotifications = Array.isArray(notifications) ? notifications : [];
+      const safeServerNotifications = Array.isArray(serverNotifications) ? serverNotifications : [];
       
-      if (!Array.isArray(notifications)) {
+      if (!Array.isArray(serverNotifications)) {
         console.warn('API returned non-array notifications:', {
-          type: typeof notifications,
-          value: notifications,
-          keys: notifications ? Object.keys(notifications) : null
+          type: typeof serverNotifications,
+          value: serverNotifications,
+          keys: serverNotifications ? Object.keys(serverNotifications) : null
         });
       }
       
-      set({ notifications: safeNotifications, loading: false });
-      return safeNotifications;
+      // Store the fetched notifications
+      safeServerNotifications.forEach(notification => {
+        notificationStorageService.addNotification(notification, {
+          syncedWithServer: true
+        });
+      });
+      
+      // Use the server notifications for the UI
+      set({ notifications: safeServerNotifications, loading: false });
+      return safeServerNotifications;
     } catch (error) {
       const errorMessage = handleApiError(error, 'Failed to fetch notifications');
       set({ error: errorMessage, loading: false, notifications: [] });
+      
+      // If server fetch fails, fall back to stored notifications
+      const storedNotifications = notificationStorageService.getNotifications({ 
+        onlyUnacknowledged: true,
+        type
+      });
+      
+      if (storedNotifications.length > 0) {
+        console.debug('Falling back to stored notifications:', {
+          count: storedNotifications.length
+        });
+        set({ notifications: storedNotifications as Notification[], loading: false });
+        return storedNotifications as Notification[];
+      }
+      
       return [];
     }
   },
 
   acknowledgeOne: async (id: number) => {
     try {
-      await acknowledgeNotification(id);
+      // First, mark the notification as acknowledged in our local storage
+      notificationStorageService.acknowledgeNotification(id);
+      
+      // Then, try to acknowledge on the server
+      try {
+        await acknowledgeNotification(id);
+      } catch (serverError) {
+        // If server acknowledgment fails, the NotificationStorageService will retry later
+        console.warn(`[NotificationStore] Server acknowledgment failed for notification ${id}, will retry later:`, serverError);
+      }
       
       // Update local state
       set(state => {
