@@ -4,10 +4,11 @@ This document provides a comprehensive overview of the authentication and author
 
 ## Overview
 
-Hafaloha implements a secure, token-based authentication system with role-based access control. The system provides:
+Hafaloha implements a secure, token-based authentication system with comprehensive role-based access control. The system provides:
 
 - **JWT-based Authentication**: Secure, stateless authentication using JSON Web Tokens
-- **Role-based Authorization**: Different access levels for customers, staff, admins, and super admins
+- **Role-based Authorization**: Granular access levels for customers, staff, admins, and super admins
+- **Policy-based Permissions**: Fine-grained access control using Pundit policies
 - **Multi-tenant Security**: Data isolation between different restaurant tenants
 - **Password Security**: Secure password storage with bcrypt hashing
 - **Token Refresh**: Automatic token refresh for persistent sessions
@@ -95,14 +96,14 @@ sequenceDiagram
 
 ### Role-Based Access Control
 
-Hafaloha implements role-based access control with the following roles:
+Hafaloha implements a comprehensive role-based access control system with the following roles:
 
 1. **Customer**: Regular users who can place orders and make reservations
-2. **Staff**: Restaurant employees who can view and manage orders
-3. **Admin**: Restaurant administrators with full access to restaurant settings
-4. **Super Admin**: Platform administrators who can manage multiple restaurants
+2. **Staff**: Restaurant employees who can view and manage orders with limited administrative access
+3. **Admin**: Restaurant administrators with broad access to restaurant settings and management
+4. **Super Admin**: Platform administrators who can manage multiple restaurants and system-wide settings
 
-Each role has progressively more permissions:
+Each role has progressively more permissions, forming a hierarchical structure:
 
 ```mermaid
 graph TD
@@ -119,15 +120,34 @@ graph TD
 | Place Order | ✓ | ✓ | ✓ | ✓ |
 | Make Reservation | ✓ | ✓ | ✓ | ✓ |
 | View Own Orders | ✓ | ✓ | ✓ | ✓ |
-| View All Orders | ✗ | ✓ | ✓ | ✓ |
-| Manage Orders | ✗ | ✓ | ✓ | ✓ |
+| View All Orders | ✗ | Partial* | ✓ | ✓ |
+| Manage Orders | ✗ | Partial* | ✓ | ✓ |
 | View Inventory | ✗ | ✓ | ✓ | ✓ |
-| Manage Inventory | ✗ | ✗ | ✓ | ✓ |
+| Manage Inventory | ✗ | ✓ | ✓ | ✓ |
 | Manage Menu | ✗ | ✗ | ✓ | ✓ |
 | Manage Staff | ✗ | ✗ | ✓ | ✓ |
+| Manage Users | ✗ | ✗ | Partial** | ✓ |
 | Manage Restaurant Settings | ✗ | ✗ | ✓ | ✓ |
 | Access Multiple Restaurants | ✗ | ✗ | ✗ | ✓ |
 | Manage Platform Settings | ✗ | ✗ | ✗ | ✓ |
+
+*Staff can only see and manage online orders and orders they created  
+**Admins can manage staff and customer users, but not super admins
+
+### Policy-Based Authorization
+
+Hafaloha uses Pundit for fine-grained, policy-based authorization. Each resource type has its own policy class that defines permissions based on the user's role and relationship to the resource. This approach provides several benefits:
+
+1. **Consistent Authorization Logic**: Authorization rules are centralized in policy classes
+2. **Granular Permissions**: Access can be controlled at the individual action level
+3. **Context-Aware Rules**: Permissions can consider both the user's role and the specific resource
+4. **Automatic Scope Filtering**: Database queries are automatically filtered based on permissions
+
+Key policy classes include:
+
+- **OrderPolicy**: Controls who can view, create, update, and manage orders
+- **UserPolicy**: Manages user administration permissions
+- **MenuItemPolicy**: Controls menu management permissions
 
 ### Multi-tenant Authorization
 
@@ -142,38 +162,268 @@ The authorization system enforces data isolation between restaurant tenants:
 
 ### User Model
 
+The User model has been enhanced with role-specific helper methods that make authorization checks more readable and maintainable:
+
 ```ruby
 # app/models/user.rb
 class User < ApplicationRecord
-  apply_default_scope
-  belongs_to :restaurant
+  belongs_to :restaurant, optional: true
   
   has_secure_password
   
-  validates :email, presence: true, uniqueness: { scope: :restaurant_id }
-  validates :password, length: { minimum: 8 }, if: -> { password.present? }
+  validates :email, presence: true, uniqueness: { case_sensitive: false }
+  validates :password_digest, presence: true, unless: :skip_password_validation
+  validates :first_name, presence: true
+  validates :last_name, presence: true
   
-  enum role: {
-    customer: 'customer',
-    staff: 'staff',
-    admin: 'admin',
-    super_admin: 'super_admin'
-  }
+  # Role validation
+  validates :role, inclusion: { in: %w[super_admin admin staff customer] }
   
-  # Check if user has a specific role or higher
-  def has_role?(required_role)
-    case required_role.to_s
-    when 'customer'
-      true # All users have at least customer role
-    when 'staff'
-      staff? || admin? || super_admin?
-    when 'admin'
-      admin? || super_admin?
-    when 'super_admin'
-      super_admin?
-    else
-      false
+  # Role helper methods
+  def super_admin?
+    role == "super_admin"
+  end
+  
+  def admin?
+    role == "admin"
+  end
+  
+  def staff?
+    role == "staff"
+  end
+  
+  def customer?
+    role == "customer"
+  end
+  
+  def admin_or_above?
+    role.in?(["admin", "super_admin"])
+  end
+  
+  def staff_or_above?
+    role.in?(["staff", "admin", "super_admin"])
+  end
+  
+  # Other methods...
+end
+```
+
+### Pundit Policies
+
+Hafaloha uses Pundit to implement policy-based authorization. Each resource has its own policy class that defines permissions based on the user's role and relationship to the resource.
+
+#### Application Policy
+
+The base policy class that all other policies inherit from:
+
+```ruby
+# app/policies/application_policy.rb
+class ApplicationPolicy
+  attr_reader :user, :record
+
+  def initialize(user, record)
+    @user = user
+    @record = record
+  end
+  
+  # Role-based helper methods
+  def super_admin?
+    user && user.super_admin?
+  end
+  
+  def admin?
+    user && user.admin?
+  end
+  
+  def staff?
+    user && user.staff?
+  end
+  
+  def admin_or_above?
+    user && user.admin_or_above?
+  end
+  
+  def staff_or_above?
+    user && user.staff_or_above?
+  end
+
+  # Default permissions (deny by default)
+  def index?
+    false
+  end
+
+  def show?
+    false
+  end
+
+  def create?
+    false
+  end
+
+  def update?
+    false
+  end
+
+  def destroy?
+    false
+  end
+
+  class Scope
+    def initialize(user, scope)
+      @user = user
+      @scope = scope
     end
+
+    def resolve
+      raise NoMethodError, "You must define #resolve in #{self.class}"
+    end
+
+    private
+
+    attr_reader :user, :scope
+  end
+end
+```
+
+#### Order Policy
+
+The Order policy controls who can view, create, update, and manage orders:
+
+```ruby
+# app/policies/order_policy.rb
+class OrderPolicy < ApplicationPolicy
+  class Scope < Scope
+    def resolve
+      if user.admin_or_above?
+        # Admins and super admins can see all orders
+        scope.all
+      elsif user.staff? && user.staff_member.present?
+        # Staff can see orders they created AND customer orders
+        staff_id = user.staff_member.id
+        
+        # Staff can see orders they created OR customer orders
+        # Customer orders are identified by staff_created: false AND is_staff_order: false
+        scope.where(
+          "(created_by_staff_id = :staff_id) OR (staff_created = :is_customer_created AND is_staff_order = :is_customer_order)", 
+          staff_id: staff_id, 
+          is_customer_created: false,
+          is_customer_order: false
+        )
+      else
+        # Regular customers can only see their own orders
+        scope.where(user_id: user.id)
+      end
+    end
+  end
+
+  def index?
+    # Anyone can view a list of orders they're allowed to see
+    true
+  end
+
+  def show?
+    # Admins can see any order
+    # Staff can see orders they created or any non-staff order
+    # Customers can only see their own orders
+    admin_or_above? || 
+    record.user_id == user.id || 
+    (staff? && (record.created_by_staff_id == user.staff_member&.id || !record.staff_created))
+  end
+
+  def update?
+    # Admins can update any order
+    # Staff can update orders they created
+    # Customers cannot update orders
+    admin_or_above? || 
+    (staff? && record.created_by_staff_id == user.staff_member&.id)
+  end
+
+  def destroy?
+    # Only admins can destroy orders
+    admin_or_above?
+  end
+
+  def acknowledge?
+    # Admins can acknowledge any order
+    # Staff can acknowledge any non-staff order or orders they created
+    admin_or_above? || 
+    (staff? && (record.created_by_staff_id == user.staff_member&.id || !record.staff_created))
+  end
+
+  def unacknowledge?
+    # Same permissions as acknowledge
+    acknowledge?
+  end
+end
+```
+
+#### User Policy
+
+The User policy controls who can view, create, update, and manage users:
+
+```ruby
+# app/policies/user_policy.rb
+class UserPolicy < ApplicationPolicy
+  class Scope < Scope
+    def resolve
+      if user.super_admin?
+        # Super admins can see all users
+        scope.all
+      elsif user.admin?
+        # Admins can see all users except super admins
+        scope.where.not(role: 'super_admin')
+      elsif user.staff?
+        # Staff can only see themselves and customers
+        scope.where(id: user.id).or(scope.where(role: 'customer'))
+      else
+        # Regular customers can only see themselves
+        scope.where(id: user.id)
+      end
+    end
+  end
+
+  def index?
+    # Only admins and above can list users
+    admin_or_above?
+  end
+
+  def show?
+    # Admins can see any user (except super_admins for regular admins)
+    # Staff and customers can only see themselves
+    super_admin? || 
+    (admin? && record.role != 'super_admin') || 
+    record.id == user.id
+  end
+
+  def create?
+    # Only admins and above can create users
+    admin_or_above?
+  end
+
+  def update?
+    # Super admins can update any user
+    # Admins can update any user except super admins
+    # Staff and customers can only update themselves
+    super_admin? || 
+    (admin? && record.role != 'super_admin') || 
+    record.id == user.id
+  end
+
+  def destroy?
+    # Super admins can delete any user except themselves
+    # Admins can delete staff and customers
+    # Staff and customers cannot delete users
+    (super_admin? && record.id != user.id) || 
+    (admin? && record.role.in?(['staff', 'customer']))
+  end
+
+  # For role assignment
+  def assign_role?
+    # Super admins can assign any role except super_admin
+    # Admins can assign staff and customer roles
+    # Staff and customers cannot assign roles
+    super_admin? || 
+    (admin? && record.role.in?(['staff', 'customer']))
   end
 end
 ```
@@ -346,59 +596,161 @@ end
 
 ### Auth Store
 
+The authentication store has been enhanced with role-based helper methods that make permission checks more readable and consistent throughout the application:
+
 ```tsx
 // src/shared/auth/authStore.ts
-import create from 'zustand';
-import { persist } from 'zustand/middleware';
-import { login, refreshToken, logout } from '../api/endpoints/auth';
-import { User } from '../types/user';
+import { create } from 'zustand';
+import { isTokenExpired, getRestaurantId } from '../utils/jwt';
+import type { User, LoginCredentials, SignupData, AuthResponse } from '../types/auth';
 
-interface AuthState {
+interface AuthStore {
   user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
   
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  refreshToken: () => Promise<void>;
-  setUser: (user: User) => void;
-  hasRole: (role: string) => boolean;
+  // Core auth actions
+  login: (credentials: LoginCredentials) => Promise<void>;
+  signup: (data: SignupData) => Promise<void>;
+  logout: () => void;
+  
+  // Helper methods
+  setUserFromResponse: (response: AuthResponse) => void;
+  updateUser: (updatedUser: User) => void;
+  
+  // JWT token helpers
+  getToken: () => string | null;
+  isAuthenticated: () => boolean;
+  
+  // Role helpers
+  isSuperAdmin: () => boolean;
+  isAdmin: () => boolean;
+  isStaff: () => boolean;
+  isCustomer: () => boolean;
+  isAdminOrAbove: () => boolean;
+  isStaffOrAbove: () => boolean;
 }
 
-export const useAuthStore = create<AuthState>(
-  persist(
-    (set, get) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
+export const useAuthStore = create<AuthStore>((set, get) => {
+  return {
+    user: null,
+    isLoading: false,
+    error: null,
+    
+    // Core auth methods implementation...
+    
+    // Role helper methods
+    isSuperAdmin: () => {
+      // Check for 'super_admin' role
+      return get().user?.role === 'super_admin';
+    },
+    
+    isAdmin: () => {
+      return get().user?.role === 'admin';
+    },
+    
+    isStaff: () => {
+      return get().user?.role === 'staff';
+    },
+    
+    isCustomer: () => {
+      return get().user?.role === 'customer' || !get().user?.role;
+    },
+    
+    isAdminOrAbove: () => {
+      return get().isSuperAdmin() || get().isAdmin();
+    },
+    
+    isStaffOrAbove: () => {
+      return get().isStaff() || get().isAdmin() || get().isSuperAdmin();
+    },
+    
+    // Other methods...
+  };
+});
+```
+
+### Role-Based UI Components
+
+The frontend implements conditional rendering based on user roles to ensure that users only see UI elements they have permission to access. This is implemented using the role helper methods from the auth store:
+
+```tsx
+// Example of conditional rendering in a navigation component
+import { useAuthStore } from '../../auth';
+
+const MainNavigation: React.FC = () => {
+  const { isSuperAdmin, isAdmin, isStaff, isStaffOrAbove } = useAuthStore();
+  
+  return (
+    <nav>
+      {/* Everyone can see these links */}
+      <Link to="/menu">Menu</Link>
+      <Link to="/orders">My Orders</Link>
       
-      login: async (email, password) => {
-        set({ isLoading: true, error: null });
-        try {
-          const response = await login(email, password);
-          set({
-            user: response.user,
-            token: response.token,
-            isAuthenticated: true,
-            isLoading: false
-          });
-        } catch (error) {
-          set({
-            error: error.message,
-            isLoading: false,
-            isAuthenticated: false
-          });
-        }
-      },
+      {/* Only staff and above can see these links */}
+      {isStaffOrAbove() && (
+        <>
+          <Link to="/admin/orders">Order Management</Link>
+          <Link to="/admin/inventory">Inventory</Link>
+        </>
+      )}
       
-      logout: async () => {
-        set({ isLoading: true });
-        try {
-          await logout();
+      {/* Only admins and above can see these links */}
+      {isAdmin() && (
+        <>
+          <Link to="/admin/menu">Menu Management</Link>
+          <Link to="/admin/staff">Staff Management</Link>
+          <Link to="/admin/settings">Settings</Link>
+        </>
+      )}
+      
+      {/* Only super admins can see these links */}
+      {isSuperAdmin() && (
+        <Link to="/admin/restaurants">Restaurant Management</Link>
+      )}
+    </nav>
+  );
+};
+```
+
+For more complex permission requirements, a reusable `RoleBasedComponent` is available:
+
+```tsx
+// src/shared/components/RoleBasedComponent.tsx
+import React from 'react';
+import { useAuthStore } from '../../auth';
+
+interface RoleBasedComponentProps {
+  requiredRole: 'customer' | 'staff' | 'admin' | 'super_admin';
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}
+
+const RoleBasedComponent: React.FC<RoleBasedComponentProps> = ({
+  requiredRole,
+  children,
+  fallback = null
+}) => {
+  const { isSuperAdmin, isAdmin, isStaff } = useAuthStore();
+  
+  const hasRequiredRole = () => {
+    switch (requiredRole) {
+      case 'super_admin':
+        return isSuperAdmin();
+      case 'admin':
+        return isAdmin() || isSuperAdmin();
+      case 'staff':
+        return isStaff() || isAdmin() || isSuperAdmin();
+      case 'customer':
+        return true; // Everyone has at least customer role
+      default:
+        return false;
+    }
+  };
+  
+  return hasRequiredRole() ? <>{children}</> : <>{fallback}</>;
+};
+```
           set({
             user: null,
             token: null,

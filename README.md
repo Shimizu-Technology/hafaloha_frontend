@@ -19,7 +19,9 @@ Frontend web application for the Hafaloha restaurant management system.
 - Order payment history and refund functionality
 - Store credit system for customers
 - Stock management dashboard for inventory control
-- Role-based authentication and authorization
+- Staff discount system (50% for on-duty, 30% for off-duty)
+- House account system for staff payroll deduction
+- Comprehensive role-based access control (RBAC) with four distinct roles (customer, staff, admin, super_admin)
 - Multi-tenant architecture with restaurant context
 
 ## Documentation
@@ -36,6 +38,7 @@ Frontend web application for the Hafaloha restaurant management system.
 - [Payment Processing](docs/payment_processing.md) - Overview of payment handling
 - [PayPal Integration](docs/paypal_integration.md) - PayPal SDK implementation
 - [Stripe Integration](docs/stripe_integration.md) - Stripe Elements and webhooks
+- [Staff Discount and House Account System](docs/staff_discount_house_account_system.md) - Staff discounts and house account management
 
 ### Access Control
 
@@ -46,6 +49,7 @@ Frontend web application for the Hafaloha restaurant management system.
 - [Pushover Integration](docs/pushover_integration.md) - Real-time push notifications via Pushover
 - [Web Push Integration](docs/web_push_integration.md) - Browser-based push notifications for PWA
 - [WebSocket Integration](docs/websocket_integration.md) - Real-time updates using WebSockets
+- [Order Notification System](docs/order_notification_system.md) - Comprehensive documentation of the notification system including WebSocket connections, deduplication, and fallback mechanisms
 - [Order Notification Consistency](../hafaloha_api/docs/order_notification_consistency.md) - Ensuring consistent order notifications across devices and sessions
 
 ## Tech Stack
