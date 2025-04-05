@@ -18,7 +18,7 @@ interface User {
   updated_at: string;
 }
 
-type RoleFilter = 'all' | 'admin' | 'customer';
+type RoleFilter = 'all' | 'super_admin' | 'admin' | 'staff' | 'customer';
 
 // For sorting
 type SortBy = 'created_at' | 'email';
@@ -168,7 +168,9 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
                        transition-colors duration-200"
           >
             <option value="all">All Roles</option>
+            <option value="super_admin">Super Admin</option>
             <option value="admin">Admin</option>
+            <option value="staff">Staff</option>
             <option value="customer">Customer</option>
           </select>
 

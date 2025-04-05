@@ -1,9 +1,8 @@
 // src/shared/auth/ProtectedRoute.tsx
 
-import React, { ReactNode } from 'react';
+import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from './authStore';
-import { config } from '../config';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -30,8 +29,9 @@ export function ProtectedRoute({
     return <Navigate to={redirectPath} replace />;
   }
   
-  // If adminOnly is true, check if user has admin role
-  if (adminOnly && user?.role !== 'admin') {
+  // If adminOnly is true, check if user has admin or super_admin role
+  if (adminOnly && user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'staff') {
+    console.log('[ProtectedRoute] User role not authorized for admin route:', user?.role);
     return <Navigate to="/" replace />;
   }
   

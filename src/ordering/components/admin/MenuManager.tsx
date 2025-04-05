@@ -55,8 +55,9 @@ interface MenuItemFormData {
 }
 
 /**
- * We removed 'required' from the OptionGroup model & UI, so the interface
- * no longer has a `required` property. We rely on min_select > 0 to indicate "required".
+ * Option group interface for menu items
+ * Kept for future use and type consistency with backend models
+ * @deprecated Currently not used directly but maintained for API compatibility
  */
 interface OptionGroup {
   id: number;
@@ -109,18 +110,17 @@ export function MenuManager({
     menus,
     menuItems,
     currentMenuId,
-    loading,
     fetchMenus,
     fetchAllMenuItemsForAdmin,
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
     setActiveMenu,
-    startInventoryPolling,
+    startMenuItemsWebSocket,
     stopInventoryPolling
   } = useMenuStore();
 
-  const { categories, fetchCategories, fetchCategoriesForMenu, loading: categoriesLoading } = useCategoryStore();
+  const { categories, fetchCategoriesForMenu } = useCategoryStore();
 
   // The currently selected menu ID for filtering
   const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null);
@@ -166,14 +166,25 @@ export function MenuManager({
     // Start WebSocket connection for real-time menu item updates instead of polling
     const restaurantId = localStorage.getItem('restaurantId');
     if (restaurantId) {
-      console.debug('Starting WebSocket connection for menu items');
+      console.debug('[MenuManager] Starting WebSocket connection for menu items');
+      // Explicitly stop any existing polling before starting WebSocket
+      stopInventoryPolling();
       useMenuStore.getState().startMenuItemsWebSocket();
+      
+      // Double-check that polling is stopped after WebSocket connection
+      setTimeout(() => {
+        if (useMenuStore.getState().inventoryPollingInterval !== null) {
+          console.debug('[MenuManager] Stopping lingering inventory polling after WebSocket connection');
+          stopInventoryPolling();
+        }
+      }, 1000);
     } else {
-      console.debug('No restaurant ID available, will connect to WebSocket when available');
+      console.debug('[MenuManager] No restaurant ID available, will connect to WebSocket when available');
     }
     
     // Clean up when the component unmounts
     return () => {
+      console.debug('[MenuManager] Component unmounting, stopping inventory polling');
       stopInventoryPolling();
     };
   }, [
@@ -186,17 +197,31 @@ export function MenuManager({
   useEffect(() => {
     if (selectedMenuItemId) {
       const item = menuItems.find((mi) => mi.id === selectedMenuItemId);
-      if (item) handleEdit(item);
+      if (item) {
+        // Make sure we're using WebSockets and not polling
+        if (useMenuStore.getState().inventoryPollingInterval !== null) {
+          console.debug(`[MenuManager] Stopping inventory polling before editing item ${selectedMenuItemId}`);
+          stopInventoryPolling();
+        }
+        handleEdit(item);
+      }
     }
-  }, [selectedMenuItemId, menuItems]);
+  }, [selectedMenuItemId, menuItems, stopInventoryPolling]);
   
   // Handle openInventoryForItem from props (for opening inventory modal from notifications)
   useEffect(() => {
     if (openInventoryForItem) {
       const item = menuItems.find((mi) => mi.id === openInventoryForItem);
-      if (item) handleManageInventory(item);
+      if (item) {
+        // Make sure we're using WebSockets and not polling
+        if (useMenuStore.getState().inventoryPollingInterval !== null) {
+          console.debug(`[MenuManager] Stopping inventory polling before managing inventory for item ${openInventoryForItem}`);
+          stopInventoryPolling();
+        }
+        handleManageInventory(item);
+      }
     }
-  }, [openInventoryForItem, menuItems]);
+  }, [openInventoryForItem, menuItems, stopInventoryPolling]);
 
   // Set the current menu as the default selected menu
   useEffect(() => {
@@ -358,7 +383,8 @@ export function MenuManager({
     // Start polling for this specific item's inventory updates if tracking is on
     if (item.enable_stock_tracking) {
       setEditItemPollingActive(true);
-      startInventoryPolling(item.id);
+      // Use WebSocket for real-time updates instead of polling
+      startMenuItemsWebSocket();
     }
   };
 
@@ -427,8 +453,20 @@ export function MenuManager({
     }
   }, [menuItems, isEditing, editItemPollingActive, editingItem]);
 
-  /** Manage inventory => show the modal. */
+  /** Manage inventory => show the modal and ensure WebSocket connection. */
   const handleManageInventory = (item: MenuItem) => {
+    // First ensure any existing polling is stopped
+    stopInventoryPolling();
+    
+    // Make sure WebSocket connection is active
+    const { websocketConnected } = useMenuStore.getState();
+    if (!websocketConnected) {
+      console.debug(`[MenuManager] Starting WebSocket connection for inventory updates`);
+      useMenuStore.getState().startMenuItemsWebSocket();
+    } else {
+      console.debug(`[MenuManager] WebSocket already connected for inventory updates`);
+    }
+    
     setInventoryModalItem(item);
     setInventoryModalOpen(true);
   };
@@ -437,13 +475,26 @@ export function MenuManager({
     const itemBeforeClosing = inventoryModalItem;
     setInventoryModalItem(null);
 
+    // Ensure polling is stopped when modal is closed
+    if (useMenuStore.getState().inventoryPollingInterval !== null) {
+      console.debug('[MenuManager] Stopping inventory polling on modal close');
+      stopInventoryPolling();
+    }
+
     // If the parent component needs to reset e.g. "openInventoryForItem"
     if (onInventoryModalClose) {
       onInventoryModalClose();
     }
     
-    // Force a refresh to get updated inventory/tracking data
-    fetchAllMenuItemsForAdmin();
+    // Force a refresh to get updated inventory/tracking data using WebSocket if possible
+    if (useMenuStore.getState().websocketConnected) {
+      console.debug('[MenuManager] Using WebSocket for inventory refresh');
+      // The WebSocket will handle updates, but we'll fetch once to ensure we have the latest data
+      fetchAllMenuItemsForAdmin();
+    } else {
+      console.debug('[MenuManager] Using API call for inventory refresh');
+      fetchAllMenuItemsForAdmin();
+    }
   };
 
   // Use our loading overlay hook

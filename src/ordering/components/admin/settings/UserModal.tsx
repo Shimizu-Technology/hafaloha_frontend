@@ -267,7 +267,9 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
                          p-2 text-base transition-colors duration-200"
             >
               <option value="customer">Customer</option>
+              <option value="staff">Staff</option>
               <option value="admin">Admin</option>
+              <option value="super_admin">Super Admin</option>
             </select>
           </div>
         </div>

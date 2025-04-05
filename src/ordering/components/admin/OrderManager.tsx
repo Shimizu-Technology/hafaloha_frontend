@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useOrderStore } from '../../store/orderStore';
+import { useAuthStore } from '../../../shared/auth';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 import websocketService from '../../../shared/services/websocketService';
 import { AdminEditOrderModal } from './AdminEditOrderModal';
@@ -17,6 +18,7 @@ import { RefundModal } from './RefundModal';
 import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
+import { api } from '../../../shared/api';
 import toastUtils from '../../../shared/utils/toastUtils';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded' | 'partially_refunded';
@@ -28,6 +30,9 @@ interface OrderManagerProps {
 }
 
 export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId }: OrderManagerProps) {
+  // Get user role from auth store
+  const { isSuperAdmin, isAdmin, isStaff, user } = useAuthStore();
+  
   const {
     orders,
     fetchOrders,
@@ -53,6 +58,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   
   // date filter
   const [dateFilter, setDateFilter] = useState<DateFilterOption>('today');
+  
+  // staff filter for admin users
+  const [staffFilter, setStaffFilter] = useState<string | null>(null);
+  const [staffMembers, setStaffMembers] = useState<Array<{id: string, name: string}>>([]);
   
   // pagination transition states
   const [isPageChanging, setIsPageChanging] = useState(false);
@@ -111,6 +120,73 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [batchOrdersToCancel, setBatchOrdersToCancel] = useState<any[]>([]);
   const [isBatchCancel, setIsBatchCancel] = useState(false);
 
+  // ----------------------------------
+  // Fetch Staff Members for Admin Filter
+  // ----------------------------------
+  useEffect(() => {
+    // Only fetch staff members if user is admin or super admin
+    if (isSuperAdmin() || isAdmin()) {
+      const fetchStaffMembers = async () => {
+        try {
+          const response = await api.get('/staff_members');
+          if (response && Array.isArray(response)) {
+            // Format staff members for dropdown
+            const formattedStaff = response.map(staff => ({
+              id: staff.id.toString(),
+              name: `${staff.first_name} ${staff.last_name}`
+            }));
+            setStaffMembers(formattedStaff);
+          }
+        } catch (error) {
+          console.error('Failed to fetch staff members:', error);
+        }
+      };
+      
+      fetchStaffMembers();
+    }
+  }, [isSuperAdmin, isAdmin]);
+  
+  // Set current staff member ID for staff users
+  const [currentStaffMemberId, setCurrentStaffMemberId] = useState<string | null>(null);
+  
+  // Get current staff member ID for staff users
+  useEffect(() => {
+    if (isStaff() && user) {
+      const fetchCurrentStaffMember = async () => {
+        try {
+          // Fetch the staff member record for the current user
+          const response: any = await api.get(`/staff_members`, {
+            params: { user_id: user.id }
+          });
+          
+          let staffMemberData = null;
+          // Handle different response formats
+          if (response) {
+            if (response.data && response.data.staff_members && response.data.staff_members.length > 0) {
+              // New format with pagination
+              staffMemberData = response.data.staff_members[0];
+            } else if (Array.isArray(response) && response.length > 0) {
+              // Old format without pagination
+              staffMemberData = response[0];
+            } else if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+              // Another possible format
+              staffMemberData = response.data[0];
+            }
+          }
+          
+          if (staffMemberData && staffMemberData.id) {
+            console.log(`Found staff record for current user: ID: ${staffMemberData.id}`);
+            setCurrentStaffMemberId(staffMemberData.id.toString());
+          }
+        } catch (error) {
+          console.error('Failed to fetch current staff member:', error);
+        }
+      };
+      
+      fetchCurrentStaffMember();
+    }
+  }, [isStaff, user]);
+  
   // ----------------------------------
   // Date / Search / Filter
   // ----------------------------------
@@ -188,7 +264,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     console.log(`[OrderManager:Pagination] ⚠️ Using page ${pageToFetch} for this request (${pageToFetch === currentPage ? 'matches' : 'DIFFERS FROM'} component state)`);
     
     // Make the API request with explicit parameters
-    fetchOrders({
+    // Add staff filter parameter for admin users
+    const params: any = {
       page: pageToFetch, // Use the captured page parameter
       perPage: ordersPerPage,
       status: selectedStatus !== 'all' ? selectedStatus : null,
@@ -199,14 +276,27 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       searchQuery: searchQuery || null,
       restaurantId: restaurantId || null,
       _sourceId: sourceId // Add a unique ID to track this request
-    });
+    };
+    
+    // Handle different user roles
+    if ((isSuperAdmin() || isAdmin()) && staffFilter) {
+      // Admin filtering by specific staff member
+      params.staff_member_id = staffFilter;
+      params.endpoint = 'staff'; // Use the staff orders endpoint
+    } else if (isStaff() && currentStaffMemberId) {
+      // Staff users - backend policy will filter to show only their created orders and customer orders
+      // We don't need to add any specific parameters as the backend policy handles this
+      console.log(`Staff user viewing orders - backend policy will filter appropriately`);
+    }
+    
+    fetchOrders(params);
     
     // Log the request ID for debugging
     console.debug(`[OrderManager:Pagination] API request sent with ID: ${sourceId} for page ${pageToFetch}`);
     
     return sourceId; // Return the source ID for potential future reference
   }, [/* deliberately NOT including currentPage to avoid stale closures */
-      ordersPerPage, selectedStatus, sortNewestFirst, getDateRange, searchQuery, restaurantId]);
+      ordersPerPage, selectedStatus, sortNewestFirst, getDateRange, searchQuery, restaurantId, staffFilter, isSuperAdmin, isAdmin]);
 
   // Fetch orders quietly with current filter parameters (for background updates)
   const fetchOrdersWithParamsQuietly = useCallback(() => {
@@ -223,7 +313,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Create a unique source ID for tracking this request
     const sourceId = `quiet-update-${Date.now()}`;
     
-    fetchOrdersQuietly({
+    // Add staff filter parameter for admin users
+    const params: any = {
       page: currentPage,
       perPage: ordersPerPage,
       status: selectedStatus !== 'all' ? selectedStatus : null,
@@ -234,7 +325,20 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       searchQuery: searchQuery || null,
       restaurantId: restaurantId || null,
       _sourceId: sourceId // Add a unique ID to track this request
-    });
+    };
+    
+    // Handle different user roles
+    if ((isSuperAdmin() || isAdmin()) && staffFilter) {
+      // Admin filtering by specific staff member
+      params.staff_member_id = staffFilter;
+      params.endpoint = 'staff'; // Use the staff orders endpoint
+    } else if (isStaff() && currentStaffMemberId) {
+      // Staff users - backend policy will filter to show only their created orders and customer orders
+      // We don't need to add any specific parameters as the backend policy handles this
+      console.log(`Staff user viewing orders - backend policy will filter appropriately`);
+    }
+    
+    fetchOrdersQuietly(params);
     
     // Log the request ID for debugging
     console.debug(`[OrderManager] Quiet API request sent with ID: ${sourceId}`);
@@ -245,7 +349,11 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     sortNewestFirst,
     getDateRange,
     searchQuery,
-    restaurantId
+    restaurantId,
+    currentStaffMemberId,
+    staffFilter,
+    isSuperAdmin,
+    isAdmin
   ]);
 
   // ----------------------------------
@@ -262,8 +370,14 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     console.debug(`[OrderManager:WebSocket] Current pagination state: page=${currentPage}, ordersPerPage=${ordersPerPage}`);
     console.debug(`[OrderManager:WebSocket] Current store metadata: ${JSON.stringify(useOrderStore.getState().metadata)}`);
     
+    // Explicitly stop any existing polling to ensure WebSockets are prioritized
+    stopOrderPolling();
+    
     // Initialize WebSocket connection with current pagination settings
     const initializeWebSocket = () => {
+      // First, always stop polling to ensure WebSockets are prioritized
+      stopOrderPolling();
+      
       // Only start WebSocket connection if not already connected
       // This prevents conflicts with AdminDashboard which also establishes connections
       const { websocketConnected } = useOrderStore.getState();
@@ -273,6 +387,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         // Start WebSocket connection
         // The WebSocket service will get pagination parameters from the store's metadata
         startWebSocketConnection();
+        
+        // Double-check polling is stopped after WebSocket connection attempt
+        setTimeout(() => stopOrderPolling(), 500);
       } else {
         console.debug('[OrderManager:WebSocket] WebSocket already connected');
         console.debug(`[OrderManager:WebSocket] Current store metadata with existing connection: ${JSON.stringify(useOrderStore.getState().metadata)}`);
@@ -286,6 +403,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     
     // Handle new orders from WebSocket or polling
     const unsubscribeFromStore = useOrderStore.subscribe((state) => {
+      // Check WebSocket status on each store update and ensure polling is stopped if connected
+      if (state.websocketConnected && state.pollingInterval !== null) {
+        console.debug('[OrderManager:WebSocket] WebSocket connected but polling still active - stopping polling');
+        stopOrderPolling();
+      }
+      
       const storeOrders = state.orders;
       const newOrderIds = storeOrders
         .filter((o) => !currentOrderIds.has(o.id))
@@ -329,14 +452,33 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       if (document.hidden) {
         stopWebSocketConnection();
       } else {
+        // First stop any polling that might be running
+        stopOrderPolling();
         // Refresh once, then start WebSocket again
         fetchOrdersWithParamsQuietly();
-        initializeWebSocket();
+        // Short delay to ensure the fetch completes before WebSocket reconnects
+        setTimeout(() => {
+          initializeWebSocket();
+        }, 300);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Check WebSocket status every 30 seconds to ensure polling is stopped if WebSocket is connected
+    const websocketCheckInterval = setInterval(() => {
+      const { websocketConnected, pollingInterval } = useOrderStore.getState();
+      if (websocketConnected && pollingInterval !== null) {
+        console.debug('[OrderManager:WebSocket] Periodic check: WebSocket connected but polling still active - stopping polling');
+        stopOrderPolling();
+      }
+    }, 30000);
+
     return () => {
+      // Clean up all intervals and event listeners
+      clearInterval(websocketCheckInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribeFromStore();
+      
       // Don't disconnect WebSocket when changing pages - only when component unmounts completely
       // This prevents the WebSocket connection from being repeatedly closed and reopened
       if (document.visibilityState !== 'visible') {
@@ -1061,6 +1203,28 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             />
           </div>
 
+          {/* Staff Filter - Only visible to admin and super_admin */}
+          {(isSuperAdmin() || isAdmin()) && staffMembers.length > 0 && (
+            <div className="w-full mt-2">
+              <select
+                value={staffFilter || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setStaffFilter(value === '' ? null : value);
+                  setCurrentPage(1); // Reset to first page when changing filter
+                }}
+                className="w-full border border-gray-300 rounded-md px-3 py-2
+                          text-sm focus:outline-none focus:ring-1 focus:ring-[#c1902f]
+                          transition-colors duration-200"
+              >
+                <option value="">All Staff Orders</option>
+                {staffMembers.map(staff => (
+                  <option key={staff.id} value={staff.id}>{staff.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Sort + total # */}
           <div className="w-full flex items-center justify-between">
             <MobileSelect
@@ -1078,7 +1242,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           </div>
         </div>
 
-        {/* Status filter buttons */}
+        {/* Staff message explaining what orders they can see */}
+      {isStaff() && !isSuperAdmin() && !isAdmin() && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <p className="text-sm text-blue-800">
+            You are viewing orders you created and orders placed by customers.
+          </p>
+        </div>
+      )}
+      
+      {/* Status filter buttons */}
         <div className="relative mt-2">
           <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1 pb-2 -mb-1 snap-x touch-pan-x">
             <button

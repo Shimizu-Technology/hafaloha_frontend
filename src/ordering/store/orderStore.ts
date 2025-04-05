@@ -315,6 +315,47 @@ export const useOrderStore = create<OrderStore>()(
         if (!order || !order.id) return;
         
         console.debug('[OrderStore] Received new order via WebSocket:', order.id);
+        console.debug('[OrderStore] Order staff info:', {
+          created_by_staff_id: order.created_by_staff_id,
+          is_staff_order: order.is_staff_order,
+          staff_created: order.staff_created
+        });
+        
+        // Get current user info from authStore
+        const authState = useAuthStore.getState();
+        const { isStaff, isAdmin, isSuperAdmin, user } = authState;
+        
+        // Skip filtering for admin and super admin users - they see all orders
+        if (isAdmin() || isSuperAdmin()) {
+          console.debug('[OrderStore] Admin user - showing all orders');
+        }
+        // Apply policy filtering for staff users
+        else if (isStaff()) {
+          // Get staff ID from user object (safely with type checking)
+          const staffId = (user as any)?.staff_member?.id;
+          
+          if (staffId) {
+            // Convert both IDs to strings for comparison to avoid type mismatches
+            const orderStaffId = String(order.created_by_staff_id || '');
+            const currentStaffId = String(staffId);
+            
+            // Check if this is a customer order (not staff-created and not a staff order)
+            const isCustomerOrder = order.staff_created === false && order.is_staff_order === false;
+            
+            // Staff can see orders they created OR customer orders
+            if (orderStaffId === currentStaffId) {
+              console.debug(`[OrderStore] Showing order ${order.id} - created by current staff ${currentStaffId}`);
+            } else if (isCustomerOrder) {
+              console.debug(`[OrderStore] Showing order ${order.id} - this is a customer order`);
+            } else {
+              console.debug(`[OrderStore] Filtering out order ${order.id} - not created by current staff and not a customer order`);
+              return; // Skip this order as it wasn't created by this staff member and is not a customer order
+            }
+          } else {
+            console.debug('[OrderStore] Staff user without staff_member ID, unable to filter orders properly');
+            return; // To be safe, don't show the order if we can't determine the staff ID
+          }
+        }
         
         // Check if we already have this order
         const existingOrderIndex = get().orders.findIndex((o: Order) => o.id === order.id);
@@ -350,6 +391,47 @@ export const useOrderStore = create<OrderStore>()(
         if (!order || !order.id) return;
         
         console.debug('[OrderStore] Received order update via WebSocket:', order.id);
+        console.debug('[OrderStore] Order update staff info:', {
+          created_by_staff_id: order.created_by_staff_id,
+          is_staff_order: order.is_staff_order,
+          staff_created: order.staff_created
+        });
+        
+        // Get current user info from authStore
+        const authState = useAuthStore.getState();
+        const { isStaff, isAdmin, isSuperAdmin, user } = authState;
+        
+        // Skip filtering for admin and super admin users - they see all orders
+        if (isAdmin() || isSuperAdmin()) {
+          console.debug('[OrderStore] Admin user - showing all order updates');
+        }
+        // Apply policy filtering for staff users
+        else if (isStaff()) {
+          // Get staff ID from user object (safely with type checking)
+          const staffId = (user as any)?.staff_member?.id;
+          
+          if (staffId) {
+            // Convert both IDs to strings for comparison to avoid type mismatches
+            const orderStaffId = String(order.created_by_staff_id || '');
+            const currentStaffId = String(staffId);
+            
+            // Check if this is a customer order (not staff-created and not a staff order)
+            const isCustomerOrder = order.staff_created === false && order.is_staff_order === false;
+            
+            // Staff can see orders they created OR customer orders
+            if (orderStaffId === currentStaffId) {
+              console.debug(`[OrderStore] Showing order update ${order.id} - created by current staff ${currentStaffId}`);
+            } else if (isCustomerOrder) {
+              console.debug(`[OrderStore] Showing order update ${order.id} - this is a customer order`);
+            } else {
+              console.debug(`[OrderStore] Filtering out order update ${order.id} - not created by current staff and not a customer order`);
+              return; // Skip this order update as it wasn't created by this staff member and is not a customer order
+            }
+          } else {
+            console.debug('[OrderStore] Staff user without staff_member ID, unable to filter order updates properly');
+            return; // To be safe, don't show the order update if we can't determine the staff ID
+          }
+        }
         
         // Check if this order is in our current view
         const orderExists = get().orders.some((o: Order) => o.id === order.id);
@@ -383,46 +465,207 @@ export const useOrderStore = create<OrderStore>()(
         // First stop any existing polling
         get().stopOrderPolling();
         
-        // Check if WebSocket is connected - if so, don't start polling
+        // Triple-check if WebSocket is connected - if so, don't start polling
         if (get().websocketConnected) {
           console.debug('[OrderStore] WebSocket is connected, not starting polling');
+          return;
+        }
+        
+        // Check if user has WebSocket capability
+        const user = useAuthStore.getState().user;
+        if (!user?.restaurant_id) {
+          console.debug('[OrderStore] No restaurant ID available, cannot start polling');
           return;
         }
         
         // Log that we're falling back to polling
         console.debug('[OrderStore] Starting polling for orders (WebSocket fallback)');
         
-        // Start a new polling interval
-        const intervalId = window.setInterval(async () => {
-          // Double-check WebSocket status before each poll
-          if (get().websocketConnected) {
-            console.debug('[OrderStore] WebSocket is now connected, stopping polling');
-            get().stopOrderPolling();
+        // Track WebSocket connection attempts to avoid infinite reconnection loops
+        let reconnectionAttempts = 0;
+        const MAX_RECONNECTION_ATTEMPTS = 3;
+        
+        // Try to reconnect WebSocket before falling back to polling
+        console.debug('[OrderStore] Attempting WebSocket connection before polling');
+        tryWebSocketConnection();
+        
+        // Function to attempt WebSocket connection
+        function tryWebSocketConnection() {
+          // Don't attempt if we've already tried too many times
+          if (reconnectionAttempts >= MAX_RECONNECTION_ATTEMPTS) {
+            console.debug(`[OrderStore] Maximum WebSocket reconnection attempts (${MAX_RECONNECTION_ATTEMPTS}) reached, proceeding with polling`);
+            setupPollingInterval();
             return;
           }
           
-          // Get the current metadata to ensure we poll with the correct page
-          const { metadata } = get();
-          console.debug(`[OrderStore] Polling for orders on page ${metadata.page}`);
+          reconnectionAttempts++;
+          console.debug(`[OrderStore] WebSocket connection attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS}`);
           
-          // Use the current page from metadata when polling
-          await get().fetchOrdersQuietly({
-            page: metadata.page,
-            perPage: metadata.per_page,
-            _sourceId: 'polling' // Mark this request as coming from polling
-          });
-        }, 30000); // Poll every 30 seconds
+          try {
+            // Attempt to connect to WebSocket
+            // We've already checked that user and restaurant_id exist above, but TypeScript doesn't know that
+            const restaurantId = user?.restaurant_id || '';
+            websocketService.connect(restaurantId, {
+              onConnected: () => {
+                console.debug('[OrderStore] WebSocket connected successfully, canceling polling setup');
+                set({ websocketConnected: true });
+                get().stopOrderPolling();
+                
+                // Reset reconnection attempts on successful connection
+                reconnectionAttempts = 0;
+              },
+              onDisconnected: () => {
+                console.debug(`[OrderStore] WebSocket disconnected (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`);
+                set({ websocketConnected: false });
+                
+                // Try again or proceed with polling
+                if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
+                  setTimeout(tryWebSocketConnection, 1000); // Wait 1 second before retrying
+                } else {
+                  console.debug('[OrderStore] WebSocket reconnection failed, proceeding with polling');
+                  setupPollingInterval();
+                }
+              },
+              onError: () => {
+                console.debug(`[OrderStore] WebSocket connection error (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`);
+                set({ websocketConnected: false });
+                
+                // Try again or proceed with polling
+                if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
+                  setTimeout(tryWebSocketConnection, 1000); // Wait 1 second before retrying
+                } else {
+                  console.debug('[OrderStore] WebSocket reconnection error, proceeding with polling');
+                  setupPollingInterval();
+                }
+              }
+            });
+            
+            // Set a timeout to ensure we don't wait too long for WebSocket
+            setTimeout(() => {
+              if (!get().websocketConnected && !get().pollingInterval) {
+                console.debug(`[OrderStore] WebSocket connection timed out (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`);
+                
+                // Try again or proceed with polling
+                if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
+                  tryWebSocketConnection();
+                } else {
+                  console.debug('[OrderStore] WebSocket reconnection timed out, proceeding with polling');
+                  setupPollingInterval();
+                }
+              }
+            }, 3000);
+          } catch (error) {
+            console.error(`[OrderStore] Error attempting WebSocket connection (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS}):`, error);
+            
+            // Try again or proceed with polling
+            if (reconnectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
+              setTimeout(tryWebSocketConnection, 1000); // Wait 1 second before retrying
+            } else {
+              console.debug('[OrderStore] WebSocket reconnection failed after error, proceeding with polling');
+              setupPollingInterval();
+            }
+          }
+        }
         
-        // Store the interval ID so we can clear it later
-        set({ pollingInterval: intervalId });
+        // Function to set up the polling interval
+        function setupPollingInterval() {
+          // Final check to ensure WebSocket isn't connected
+          if (get().websocketConnected) {
+            console.debug('[OrderStore] WebSocket connected during setup, canceling polling');
+            return;
+          }
+          
+          // Track how many polls have occurred
+          let pollCount = 0;
+          
+          // Start a new polling interval
+          const intervalId = window.setInterval(async () => {
+            pollCount++;
+            
+            // Double-check WebSocket status before each poll
+            if (get().websocketConnected) {
+              console.debug('[OrderStore] WebSocket is now connected, stopping polling');
+              get().stopOrderPolling();
+              return;
+            }
+            
+            // Get the current metadata to ensure we poll with the correct page
+            const { metadata } = get();
+            console.debug(`[OrderStore] Polling for orders on page ${metadata.page} (poll #${pollCount})`);
+            
+            // Use the current page from metadata when polling
+            await get().fetchOrdersQuietly({
+              page: metadata.page,
+              perPage: metadata.per_page,
+              _sourceId: 'polling' // Mark this request as coming from polling
+            });
+            
+            // After polling, check if WebSocket has reconnected
+            if (get().websocketConnected) {
+              console.debug('[OrderStore] WebSocket reconnected after polling, stopping polling');
+              get().stopOrderPolling();
+              return;
+            }
+            
+            // Periodically try to reconnect WebSocket during polling
+            // Every 5th poll (approximately every 2.5 minutes), try to reconnect
+            if (pollCount % 5 === 0) {
+              console.debug(`[OrderStore] Periodic WebSocket reconnection attempt during polling (poll #${pollCount})`);
+              reconnectionAttempts = 0; // Reset the counter for a fresh set of attempts
+              tryWebSocketConnection();
+            }
+          }, 30000); // Poll every 30 seconds
+          
+          // Store the interval ID so we can clear it later
+          set({ pollingInterval: intervalId });
+        }
       },
       
       stopOrderPolling: () => {
-        const { pollingInterval } = get();
+        const { pollingInterval, websocketConnected } = get();
+        
+        console.debug('[OrderStore] Stopping order polling', {
+          hasPollingInterval: pollingInterval !== null,
+          websocketConnected
+        });
         
         if (pollingInterval !== null) {
+          console.debug('[OrderStore] Clearing order polling interval');
           window.clearInterval(pollingInterval);
           set({ pollingInterval: null });
+        }
+        
+        // If WebSocket is not connected, try to connect now that polling is stopped
+        if (!websocketConnected) {
+          const user = useAuthStore.getState().user;
+          if (user?.restaurant_id) {
+            console.debug('[OrderStore] Attempting to establish WebSocket connection after stopping polling');
+            // Use a slight delay to ensure the polling is fully stopped
+            setTimeout(() => {
+              // Double-check that WebSocket is still not connected
+              if (!get().websocketConnected && !get().pollingInterval) {
+                try {
+                  const restaurantId = user.restaurant_id || '';
+                  websocketService.connect(restaurantId, {
+                    onConnected: () => {
+                      console.debug('[OrderStore] WebSocket connected successfully after stopping polling');
+                      set({ websocketConnected: true });
+                    },
+                    onDisconnected: () => {
+                      console.debug('[OrderStore] WebSocket disconnected after stopping polling');
+                      set({ websocketConnected: false });
+                    },
+                    onError: (error) => {
+                      console.debug('[OrderStore] WebSocket connection error after stopping polling:', error);
+                      set({ websocketConnected: false });
+                    }
+                  });
+                } catch (error) {
+                  console.error('[OrderStore] Error attempting WebSocket connection after stopping polling:', error);
+                }
+              }
+            }, 500);
+          }
         }
       },
 
@@ -596,8 +839,7 @@ export const useOrderStore = create<OrderStore>()(
         paymentMethod = 'credit_card',
         vipCode,
         staffModal = false,
-        paymentDetails = null,
-        staffOrderParams = {}
+        paymentDetails = null
       ) => {
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
@@ -632,6 +874,9 @@ export const useOrderStore = create<OrderStore>()(
             }
           }
 
+          // Extract staffOrderParams from paymentDetails if present
+          const staffOrderParams = paymentDetails?.staffOrderParams || {};
+          
           const payload = {
             order: {
               items: foodItems,
@@ -646,7 +891,8 @@ export const useOrderStore = create<OrderStore>()(
               vip_code: vipCode,
               staff_modal: staffModal,
               payment_details: paymentDetails,
-              ...staffOrderParams // Include staff order parameters
+              // Include staff order parameters, especially created_by_staff_id
+              ...staffOrderParams
             },
           };
 

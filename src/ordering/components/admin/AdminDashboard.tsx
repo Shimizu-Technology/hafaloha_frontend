@@ -1,6 +1,6 @@
 // src/ordering/components/admin/AdminDashboard.tsx
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MenuManager } from './MenuManager';
 import { OrderManager } from './OrderManager';
 import { PromoManager } from './PromoManager';
@@ -17,9 +17,7 @@ import {
   Tag,
   Sliders,
   X as XIcon,
-  CheckCircle,
   ShoppingCart,
-  AlertCircle,
   Bell,
   Package,
   Users
@@ -28,8 +26,9 @@ import AcknowledgeAllButton from '../../../shared/components/notifications/Ackno
 import { api } from '../../lib/api';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { useAuthStore } from '../../store/authStore';
+import { Navigate } from 'react-router-dom';
 import useNotificationStore from '../../store/notificationStore';
-import { Order, OrderManagerProps, ManagerProps } from '../../types/order';
+import { Order } from '../../types/order';
 import { MenuItem } from '../../types/menu';
 import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
@@ -40,27 +39,64 @@ type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandis
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
+  const authStore = useAuthStore();
   const [currentRestaurantId, setCurrentRestaurantId] = useState<string | undefined>(
     user?.restaurant_id
   );
+  
+  // Add console logs to debug role checks
+  console.log('[AdminDashboard] User:', user);
+  console.log('[AdminDashboard] User role:', user?.role);
+  
+  // Direct role check as a fallback
+  const directRoleCheck = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'staff';
+  console.log('[AdminDashboard] Direct role check:', directRoleCheck);
+  
+  // Redirect if user doesn't have access - use direct role check as a fallback
+  const hasAccess = user && (directRoleCheck || authStore.isSuperAdmin() || authStore.isAdmin() || authStore.isStaff());
+  console.log('[AdminDashboard] hasAccess:', hasAccess);
+  
+  if (!hasAccess) {
+    console.log('[AdminDashboard] Redirecting to home page due to lack of access');
+    return <Navigate to="/" replace />;
+  }
 
-  // List of tabs
+  // List of tabs with role-based access controls
   const tabs = [
-    { id: 'analytics', label: 'Analytics', icon: BarChart2 },
-    { id: 'orders',    label: 'Orders',    icon: ShoppingBag },
-    { id: 'menu',      label: 'Menu',      icon: LayoutGrid },
-    { id: 'merchandise', label: 'Merchandise', icon: ShoppingCart },
-    { id: 'promos',    label: 'Promos',    icon: Tag },
-    { id: 'staff',     label: 'Staff',     icon: Users },
-    { id: 'settings',  label: 'Settings',  icon: Sliders },
+    // Analytics - visible to admin and super_admin only
+    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'analytics', label: 'Analytics', icon: BarChart2 }] : []),
+    // Orders - visible to all admin roles (including staff)
+    { id: 'orders', label: 'Orders', icon: ShoppingBag },
+    // Menu - visible to admin and super_admin only
+    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'menu', label: 'Menu', icon: LayoutGrid }] : []),
+    // Merchandise - visible to admin and super_admin only
+    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'merchandise', label: 'Merchandise', icon: ShoppingCart }] : []),
+    // Promos - visible to admin and super_admin only
+    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'promos', label: 'Promos', icon: Tag }] : []),
+    // Staff - visible to admin and super_admin only
+    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'staff', label: 'Staff', icon: Users }] : []),
+    // Settings - visible to admin and super_admin
+    ...((authStore.isSuperAdmin() || authStore.isAdmin()) ? [{ id: 'settings', label: 'Settings', icon: Sliders }] : []),
   ] as const;
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const stored = localStorage.getItem('adminTab');
     if (stored && ['analytics','orders','menu','merchandise','promos','staff','settings'].includes(stored)) {
-      return stored as Tab;
+      // Check if the user has access to the stored tab
+      if (
+        (stored === 'analytics' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'orders') ||
+        (stored === 'menu' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'merchandise' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'promos' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'staff' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'settings' && authStore.isSuperAdmin())
+      ) {
+        return stored as Tab;
+      }
     }
-    return 'analytics';
+    // Default to orders for staff, analytics for admin/super_admin
+    return authStore.isStaff() ? 'orders' : 'analytics';
   });
 
   function handleTabClick(id: Tab) {
@@ -94,7 +130,7 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
   // Stock notification states
   const [showStockNotifications, setShowStockNotifications] = useState(false);
   const [stockAlertCount, setStockAlertCount] = useState(0);
-  const { getStockAlerts, hasUnacknowledgedNotifications, fetchNotifications } = useNotificationStore();
+  const { getStockAlerts, fetchNotifications } = useNotificationStore();
   const { menuItems } = useMenuStore();
   
   // Track acknowledged low stock items with their quantities to avoid showing the same notification repeatedly
@@ -104,7 +140,7 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
   });
   
   // For editing menu item and inventory management
-  const [selectedMenuItemId, setSelectedMenuItemId] = useState<string | null>(null);
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [openInventoryForItem, setOpenInventoryForItem] = useState<string | null>(null);
   
   // Loading and success states for acknowledge all button
@@ -177,7 +213,7 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
     
     // Handle both snake_case and camelCase date formats
     const createdAtStr = new Date(order.created_at || order.createdAt || Date.now()).toLocaleString();
-    const itemCount = order.items?.length || 0;
+    const itemCount = order.items?.length || 0; // eslint-disable-line @typescript-eslint/no-unused-vars
     const totalPrice = (order.total ?? 0).toFixed(2);
     const contactName = (order as any).contact_name || 'N/A';
 
@@ -581,7 +617,7 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
     setShowStockNotifications(false);
   };
   
-  // Single WebSocket connection management
+  // Single WebSocket connection management with improved connection handling
   useEffect(() => {
     // Only run for admin users
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
@@ -590,6 +626,7 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
     }
     
     let wsCleanupTimeout: NodeJS.Timeout;
+    let wsCheckInterval: NodeJS.Timeout;
     
     const initializeWebSocket = () => {
       if (USE_WEBSOCKETS && user?.restaurant_id) {
@@ -598,6 +635,13 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
           restaurantId: user.restaurant_id,
           role: user.role
         });
+        
+        // First, ensure any polling is stopped
+        if (pollingIntervalRef.current) {
+          console.log('[WebSocket] Clearing existing polling interval before WebSocket connection');
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
         
         // Check if WebSocket is already connected
         const { websocketConnected } = useOrderStore.getState();
@@ -616,6 +660,15 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
           // Then connect to the order channel
           // The orderStore will check if it's already connected
           useOrderStore.getState().startWebSocketConnection();
+          
+          // Double-check that polling is stopped after WebSocket connection
+          setTimeout(() => {
+            if (pollingIntervalRef.current) {
+              console.log('[WebSocket] Clearing polling interval after WebSocket connection');
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+            }
+          }, 1000);
         }, 500);
       }
     };
@@ -623,18 +676,49 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
     // Initialize WebSocket connection
     initializeWebSocket();
     
+    // Set up an interval to periodically check WebSocket status and restart if needed
+    wsCheckInterval = setInterval(() => {
+      // Only check if WebSockets should be enabled
+      if (USE_WEBSOCKETS && user?.restaurant_id) {
+        const { websocketConnected } = useOrderStore.getState();
+        const localWebSocketConnected = isConnected;
+        
+        console.debug('[WebSocket] Periodic connection check:', {
+          localWebSocketConnected,
+          orderStoreWebSocketConnected: websocketConnected,
+          hasPollingInterval: !!pollingIntervalRef.current
+        });
+        
+        // If WebSocket should be connected but isn't, try to reconnect
+        if (!websocketConnected || !localWebSocketConnected) {
+          console.log('[WebSocket] Connection lost, attempting to reconnect');
+          initializeWebSocket();
+        }
+        
+        // If WebSocket is connected but polling is still running, stop polling
+        if ((websocketConnected || localWebSocketConnected) && pollingIntervalRef.current) {
+          console.log('[WebSocket] WebSocket connected but polling still active - stopping polling');
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      }
+    }, 30000); // Check every 30 seconds
+    
     // Cleanup function
     return () => {
       console.log('[WebSocket] Cleaning up connections');
       if (wsCleanupTimeout) {
         clearTimeout(wsCleanupTimeout);
       }
+      if (wsCheckInterval) {
+        clearInterval(wsCheckInterval);
+      }
       // Only disconnect if component is unmounting
       if (document.visibilityState !== 'hidden') {
         useOrderStore.getState().stopWebSocketConnection();
       }
     };
-  }, [user, USE_WEBSOCKETS]);
+  }, [user, USE_WEBSOCKETS, isConnected]);
   
   // Effect to check for low stock items and display notifications
   useEffect(() => {
@@ -668,10 +752,12 @@ console.log('[AdminDashboard] WEBSOCKET CONFIG:', { USE_WEBSOCKETS, WEBSOCKET_DE
     });
   }, [menuItems, acknowledgedLowStockItems, user, calculateAvailableQuantity, displayLowStockNotification]);
 
-// SIMPLIFIED POLLING IMPLEMENTATION
+// SIMPLIFIED POLLING IMPLEMENTATION WITH WEBSOCKET PRIORITY
 // Use a ref to track if the component is mounted and to store the polling interval
 const mountedRef = useRef(false);
 const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+// Track when we last checked WebSocket status to avoid excessive checks
+const lastWebSocketCheckRef = useRef<number>(Date.now());
 
 // This effect runs once on mount to check for unacknowledged orders
 useEffect(() => {
@@ -756,6 +842,14 @@ useEffect(() => {
   // Get the WebSocket connection status directly from orderStore
   const orderStoreWebSocketConnected = useOrderStore.getState().websocketConnected;
   
+  // Log current WebSocket status for debugging
+  console.log('[AdminDashboard] WebSocket status check:', {
+    localWebSocketConnected: isConnected,
+    orderStoreWebSocketConnected,
+    useWebsockets: USE_WEBSOCKETS,
+    hasPollingInterval: !!pollingIntervalRef.current
+  });
+  
   // Skip if not an admin user or if WebSockets are working
   if (!user ||
       (user.role !== 'admin' && user.role !== 'super_admin') ||
@@ -781,6 +875,9 @@ useEffect(() => {
     // Get the latest WebSocket connection status from orderStore
     const currentOrderStoreWebSocketConnected = useOrderStore.getState().websocketConnected;
     
+    // Update last check timestamp
+    lastWebSocketCheckRef.current = Date.now();
+    
     // Double-check WebSocket status before polling
     if (USE_WEBSOCKETS && (isConnected || currentOrderStoreWebSocketConnected)) {
       console.debug('[Polling] WebSocket is connected, skipping polling');
@@ -791,6 +888,22 @@ useEffect(() => {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
+      
+      // If WebSocket is connected but we're still in this function, something might be wrong
+      // Force reconnect the WebSocket to ensure it's working properly
+      if (Date.now() - lastWebSocketCheckRef.current > 60000) { // Only force reconnect if it's been more than a minute
+        console.debug('[WebSocket] Force reconnecting WebSocket to ensure proper connection');
+        if (isConnected) {
+          // Reconnect local WebSocket
+          connectWebSocket();
+        }
+        if (currentOrderStoreWebSocketConnected) {
+          // Reconnect order store WebSocket
+          useOrderStore.getState().stopWebSocketConnection();
+          setTimeout(() => useOrderStore.getState().startWebSocketConnection(), 500);
+        }
+      }
+      
       return;
     }
     
@@ -926,7 +1039,7 @@ useEffect(() => {
               {tabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
-                  onClick={() => handleTabClick(id)}
+                  onClick={() => handleTabClick(id as Tab)}
                   className={`
                     flex-shrink-0 whitespace-nowrap px-4 py-4 border-b-2
                     text-center font-medium text-sm

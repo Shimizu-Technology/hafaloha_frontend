@@ -10,7 +10,7 @@ export interface User {
   last_name?: string;
   name?: string; // Computed from first_name + last_name or provided directly
   phone?: string;
-  role?: string;
+  role?: 'super_admin' | 'admin' | 'staff' | 'customer' | string;
   restaurant_id?: string;
   phone_verified?: boolean;
 }

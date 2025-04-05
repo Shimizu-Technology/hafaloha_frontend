@@ -3,10 +3,12 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth';
-import { User, LogOut, ShoppingCart, Calendar, Menu as MenuIcon } from 'lucide-react';
+import { useAuthStore } from '../../auth';
+import { User, LogOut, ShoppingCart, Calendar, Menu as MenuIcon, Settings, ClipboardList, Users } from 'lucide-react';
 
 export function MainNavigation() {
   const { user, logout } = useAuth();
+  const { isSuperAdmin, isAdmin, isStaff } = useAuthStore();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
@@ -61,6 +63,34 @@ export function MainNavigation() {
               >
                 Reservations
               </Link>
+              
+              {/* Admin Dashboard Link - Only visible to admin and super_admin */}
+              {user && (isSuperAdmin() || isAdmin()) && (
+                <Link
+                  to="/admin"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    location.pathname.startsWith('/admin')
+                      ? 'border-[#c1902f] text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  Admin
+                </Link>
+              )}
+              
+              {/* Staff Orders Link - Only visible to staff */}
+              {user && isStaff() && (
+                <Link
+                  to="/staff-orders"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    location.pathname === '/staff-orders'
+                      ? 'border-[#c1902f] text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  Staff Orders
+                </Link>
+              )}
             </div>
           </div>
 
@@ -160,6 +190,40 @@ export function MainNavigation() {
             >
               Reservations
             </Link>
+            
+            {/* Admin Dashboard Link - Only visible to admin and super_admin */}
+            {user && (isSuperAdmin() || isAdmin()) && (
+              <Link
+                to="/admin"
+                className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                  location.pathname.startsWith('/admin')
+                    ? 'border-[#c1902f] text-[#c1902f] bg-[#c1902f]/10'
+                    : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                }`}
+              >
+                <div className="flex items-center">
+                  <Settings className="h-5 w-5 mr-2" />
+                  Admin
+                </div>
+              </Link>
+            )}
+            
+            {/* Staff Orders Link - Only visible to staff */}
+            {user && isStaff() && (
+              <Link
+                to="/staff-orders"
+                className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                  location.pathname === '/staff-orders'
+                    ? 'border-[#c1902f] text-[#c1902f] bg-[#c1902f]/10'
+                    : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                }`}
+              >
+                <div className="flex items-center">
+                  <ClipboardList className="h-5 w-5 mr-2" />
+                  Staff Orders
+                </div>
+              </Link>
+            )}
 
             {isOrderingApp && (
               <Link
@@ -226,6 +290,33 @@ export function MainNavigation() {
                 >
                   Your Profile
                 </Link>
+                
+                {/* Admin Settings Link - Only visible to admin and super_admin */}
+                {(isSuperAdmin() || isAdmin()) && (
+                  <Link
+                    to="/admin/settings"
+                    className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                  >
+                    <div className="flex items-center">
+                      <Settings className="h-5 w-5 mr-2" />
+                      Admin Settings
+                    </div>
+                  </Link>
+                )}
+                
+                {/* User Management Link - Only visible to admin and super_admin */}
+                {(isSuperAdmin() || isAdmin()) && (
+                  <Link
+                    to="/admin/users"
+                    className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                  >
+                    <div className="flex items-center">
+                      <Users className="h-5 w-5 mr-2" />
+                      User Management
+                    </div>
+                  </Link>
+                )}
+                
                 <button
                   onClick={logout}
                   className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"

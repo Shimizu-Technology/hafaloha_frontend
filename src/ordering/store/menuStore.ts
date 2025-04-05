@@ -519,21 +519,24 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   
   // Start WebSocket connection for real-time menu item updates
   startMenuItemsWebSocket: () => {
+    // First, ensure any existing polling is stopped
+    get().stopInventoryPolling();
+    
     // Check if we're already connected to avoid duplicate subscriptions
     if (get().websocketConnected) {
-      console.debug('Already connected to menu items channel');
+      console.debug('[MenuStore] Already connected to menu items channel');
       return;
     }
 
     const restaurantId = localStorage.getItem('restaurantId');
     if (!restaurantId) {
-      console.debug('No restaurant ID found for WebSocket connection - will retry when available');
+      console.debug('[MenuStore] No restaurant ID found for WebSocket connection - will retry when available');
       
       // Set up a listener for when restaurant data becomes available
       const checkForRestaurantId = () => {
         const id = localStorage.getItem('restaurantId');
         if (id) {
-          console.debug('Restaurant ID now available, connecting to WebSocket');
+          console.debug('[MenuStore] Restaurant ID now available, connecting to WebSocket');
           window.removeEventListener('storage', checkForRestaurantId);
           get().startMenuItemsWebSocket();
         }
@@ -553,16 +556,22 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     }
     
     try {
-      console.debug('Subscribing to menu items channel with restaurant ID:', restaurantId);
+      console.debug('[MenuStore] Subscribing to menu items channel with restaurant ID:', restaurantId);
       // Set websocketConnected to true immediately to prevent duplicate API calls
       set({ websocketConnected: true });
+      
+      // Double-check that polling is stopped before WebSocket connection
+      if (get().inventoryPollingInterval !== null) {
+        console.debug('[MenuStore] Stopping inventory polling before WebSocket connection');
+        get().stopInventoryPolling();
+      }
       
       // Subscribe to the menu items channel
       websocketService.subscribe({
         channel: 'MenuItemsChannel',
         params: { restaurant_id: restaurantId },
         received: (data) => {
-          console.debug('Received menu items update via WebSocket', data.type);
+          console.debug('[MenuStore] Received menu items update via WebSocket', data.type);
           // Handle menu item updates
           if (data.type === 'menu_item_update') {
             const updatedItem = data.item;
@@ -573,6 +582,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
                 item.id === updatedItem.id ? { ...item, ...updatedItem } : item
               )
             }));
+            console.debug(`[MenuStore] Updated menu item ${updatedItem.id} via WebSocket`);
           } else if (data.type === 'menu_item_created') {
             // Add the new item to our store
             const newItem = data.item;
@@ -582,49 +592,155 @@ export const useMenuStore = create<MenuState>((set, get) => ({
                 image: newItem.image_url || '/placeholder-food.jpg'
               }]
             }));
+            console.debug(`[MenuStore] Added new menu item via WebSocket`);
           } else if (data.type === 'menu_item_deleted') {
             // Remove the item from our store
             const deletedItemId = data.item_id;
             set(state => ({
               menuItems: state.menuItems.filter(item => item.id !== deletedItemId)
             }));
+            console.debug(`[MenuStore] Removed menu item ${deletedItemId} via WebSocket`);
           }
         },
         connected: () => {
-          console.debug('Connected to menu items channel');
+          console.debug('[MenuStore] Connected to menu items channel');
           set({ websocketConnected: true });
+          
+          // Ensure polling is stopped when WebSocket is connected
+          if (get().inventoryPollingInterval !== null) {
+            console.debug('[MenuStore] Stopping inventory polling after WebSocket connection');
+            get().stopInventoryPolling();
+          }
+          
+          // Double-check that polling is stopped after connection
+          setTimeout(() => {
+            if (get().inventoryPollingInterval !== null) {
+              console.debug('[MenuStore] Stopping lingering inventory polling after WebSocket connection');
+              get().stopInventoryPolling();
+            }
+          }, 1000);
         },
         disconnected: () => {
-          console.debug('Disconnected from menu items channel');
+          console.debug('[MenuStore] Disconnected from menu items channel');
           set({ websocketConnected: false });
+          
+          // Try to reconnect before falling back to polling
+          console.debug('[MenuStore] Attempting to reconnect WebSocket before falling back to polling');
+          setTimeout(() => {
+            // Check if we're still disconnected before starting polling
+            if (!get().websocketConnected && get().inventoryPollingInterval === null) {
+              console.debug('[MenuStore] WebSocket reconnection failed, falling back to polling');
+              get().startInventoryPollingFallback();
+            }
+          }, 3000);
         }
       });
     } catch (error) {
-      console.error('Error connecting to WebSocket for menu item updates:', error);
+      console.error('[MenuStore] Error connecting to WebSocket for menu item updates:', error);
       set({ websocketConnected: false });
+      
+      // Try to reconnect before falling back to polling
+      console.debug('[MenuStore] Attempting to reconnect WebSocket after error before falling back to polling');
+      setTimeout(() => {
+        // Check if we're still disconnected before starting polling
+        if (!get().websocketConnected && get().inventoryPollingInterval === null) {
+          console.debug('[MenuStore] WebSocket reconnection failed after error, falling back to polling');
+          get().startInventoryPollingFallback();
+        }
+      }, 3000);
     }
   },
   
   // Fallback to traditional polling if WebSockets aren't available
   startInventoryPollingFallback: (menuItemId?: number | string) => {
-    console.debug('Falling back to inventory polling');
+    console.debug('[MenuStore] Considering fallback to inventory polling');
     
-    // Set polling flag to true
-    set({ inventoryPolling: true, websocketConnected: false });
-    
-    // Start a new polling interval
-    const intervalId = window.setInterval(async () => {
-      // If we have a specific menu item ID, just fetch that one
-      if (menuItemId) {
-        await get().getMenuItemById(menuItemId);
-      } else {
-        // Otherwise refresh all menu items
-        await get().fetchAllMenuItemsForAdmin();
+    // First, try to establish a WebSocket connection instead of polling
+    if (!get().websocketConnected) {
+      console.debug('[MenuStore] Attempting to establish WebSocket connection before falling back to polling');
+      try {
+        // Try to start WebSocket connection first
+        get().startMenuItemsWebSocket();
+        
+        // Give the WebSocket a moment to connect before deciding to poll
+        setTimeout(() => {
+          if (get().websocketConnected) {
+            console.debug('[MenuStore] WebSocket connected successfully, no need for polling');
+            return;
+          } else {
+            console.debug('[MenuStore] WebSocket connection attempt failed, proceeding with polling');
+            // Continue with polling setup below if the WebSocket didn't connect
+            setupPolling();
+          }
+        }, 2000); // Wait 2 seconds for WebSocket to connect
+        
+        return; // Exit early while we wait to see if WebSocket connects
+      } catch (error) {
+        console.error('[MenuStore] Error attempting WebSocket connection:', error);
+        // Continue with polling if WebSocket connection attempt fails
       }
-    }, 10000); // Poll every 10 seconds
+    } else {
+      console.debug('[MenuStore] WebSocket is already connected, not starting polling');
+      return;
+    }
     
-    // Store the interval ID so we can clear it later
-    set({ inventoryPollingInterval: intervalId });
+    // Setup polling function that will be called if WebSocket fails
+    function setupPolling() {
+      // Double-check WebSocket status before setting up polling
+      if (get().websocketConnected) {
+        console.debug('[MenuStore] WebSocket is now connected, not starting polling');
+        return;
+      }
+      
+      // Check if polling is already active
+      if (get().inventoryPollingInterval !== null) {
+        console.debug('[MenuStore] Polling already active, not starting another interval');
+        return;
+      }
+      
+      // Set polling flag to true
+      set({ inventoryPolling: true });
+      
+      // Start a new polling interval
+      const intervalId = window.setInterval(async () => {
+        // Double-check WebSocket status before each poll
+        if (get().websocketConnected) {
+          console.debug('[MenuStore] WebSocket is now connected, stopping polling');
+          get().stopInventoryPolling();
+          return;
+        }
+        
+        console.debug(`[MenuStore] Polling for inventory updates${menuItemId ? ` for item ${menuItemId}` : ''}`);
+        
+        // If we have a specific menu item ID, just fetch that one
+        if (menuItemId) {
+          await get().getMenuItemById(menuItemId);
+        } else {
+          // Otherwise refresh all menu items
+          await get().fetchAllMenuItemsForAdmin();
+        }
+        
+        // Check WebSocket status after polling
+        if (get().websocketConnected) {
+          console.debug('[MenuStore] WebSocket connected after polling, stopping polling');
+          get().stopInventoryPolling();
+        }
+        
+        // Periodically try to reconnect WebSocket
+        if (!get().websocketConnected && Math.random() < 0.2) { // 20% chance each poll interval
+          console.debug('[MenuStore] Attempting to re-establish WebSocket connection during polling cycle');
+          get().startMenuItemsWebSocket();
+        }
+      }, 10000); // Poll every 10 seconds
+      
+      // Store the interval ID so we can clear it later
+      set({ inventoryPollingInterval: intervalId });
+    }
+    
+    // Call setupPolling immediately if we didn't try WebSocket connection
+    if (!get().websocketConnected) {
+      setupPolling();
+    }
   },
   
   // Stop polling for inventory updates
@@ -678,24 +794,36 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   },
   
   stopInventoryPolling: () => {
-    const { inventoryPollingInterval } = get();
+    const { inventoryPollingInterval, websocketConnected } = get();
     
-    // Unsubscribe from WebSocket channel
-    try {
-      websocketService.unsubscribe('InventoryChannel');
-    } catch (error) {
-      console.error('Error unsubscribing from inventory channel:', error);
-    }
+    // Log the current state for debugging
+    console.debug('[MenuStore] Stopping inventory polling', {
+      hasPollingInterval: inventoryPollingInterval !== null,
+      websocketConnected
+    });
     
     // Clear any polling interval
     if (inventoryPollingInterval !== null) {
+      console.debug('[MenuStore] Clearing inventory polling interval');
       window.clearInterval(inventoryPollingInterval);
+      
+      set({
+        inventoryPollingInterval: null,
+        inventoryPolling: false
+      });
     }
     
-    set({
-      inventoryPollingInterval: null,
-      inventoryPolling: false,
-      websocketConnected: false
-    });
+    // Important: Do NOT set websocketConnected to false here
+    // We want to keep the WebSocket connection if it's already established
+    // Only unsubscribe from the inventory channel if we're explicitly told to
+    // and we're not connected to the WebSocket
+    if (!websocketConnected) {
+      try {
+        console.debug('[MenuStore] Unsubscribing from inventory channel');
+        websocketService.unsubscribe('InventoryChannel');
+      } catch (error) {
+        console.error('[MenuStore] Error unsubscribing from inventory channel:', error);
+      }
+    }
   }
 }));

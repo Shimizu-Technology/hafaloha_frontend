@@ -1878,14 +1878,17 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         console.log(`Using staff ID ${finalCreatedByStaffId} as the creator of this order`);
       }
       
+      // Always include created_by_staff_id regardless of whether it's a staff order or not
       const staffOrderParams = isStaffOrder ? {
         is_staff_order: true,
         staff_member_id: staffMemberId,
         staff_on_duty: staffOnDuty,
         use_house_account: useHouseAccount,
-        created_by_staff_id: finalCreatedByStaffId, // Use the validated staff ID
+        created_by_staff_id: finalCreatedByStaffId,
         pre_discount_total: preDiscountTotal
-      } : {};
+      } : {
+        created_by_staff_id: finalCreatedByStaffId // Track creator even for customer orders
+      };
       
       console.log('Final staff order parameters:', staffOrderParams);
       

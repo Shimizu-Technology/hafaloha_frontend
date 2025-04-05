@@ -1,5 +1,5 @@
 // src/shared/components/navigation/Header.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   ShoppingCart,
   Menu as MenuIcon,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth';
+import { useAuthStore } from '../../auth';
 import toastUtils from '../../utils/toastUtils';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatPhoneNumber } from '../../utils/formatters';
@@ -69,7 +70,11 @@ function useCartItems() {
 
 export function Header() {
   const { user, logout: signOut } = useAuth();
+  const authStore = useAuthStore();
   const { restaurant } = useRestaurantStore();
+  
+  // Check if user has admin access
+  const hasAdminAccess = user && (authStore.isSuperAdmin() || authStore.isAdmin() || authStore.isStaff());
   const location = useLocation();
 
   // Cart items - will only have items in the ordering app context
@@ -141,7 +146,7 @@ export function Header() {
   }, [isMobileMenuOpen]);
 
   // Admin check
-  const isAdmin = user?.role === 'admin';
+  // Using the role helper methods from useAuthStore instead of direct role check
 
   // Display name
   const firstName = user?.first_name || user?.email?.split('@')[0] || 'Guest';
@@ -264,12 +269,13 @@ export function Header() {
                 {isDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 
                                 border border-gray-100 animate-fadeIn">
-                    {/* Admin Tools if isAdmin */}
-                    {isAdmin && (
+                    {/* Admin Tools if user has admin access */}
+                    {hasAdminAccess && (
                       <>
                         <div className="px-4 py-2 text-xs font-semibold text-gray-500 bg-gray-50">
                           Admin Tools
                         </div>
+                        {/* Reservations Dashboard - visible to all admin roles */}
                         <Link
                           to="/reservations/dashboard"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#c1902f]
@@ -278,6 +284,8 @@ export function Header() {
                         >
                           Manage Reservations
                         </Link>
+                        
+                        {/* Admin Dashboard - visible to all admin roles */}
                         <Link
                           to="/admin"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#c1902f]
@@ -286,6 +294,8 @@ export function Header() {
                         >
                           Admin Dashboard
                         </Link>
+                        
+                        {/* Staff Orders link removed - staff can use Admin Dashboard */}
                         <hr className="my-1 border-gray-100" />
                       </>
                     )}
@@ -473,7 +483,7 @@ export function Header() {
             
             {user ? (
               <>
-                {isAdmin && (
+                {hasAdminAccess && (
                   <>
                     <Link
                       to="/reservations/dashboard"

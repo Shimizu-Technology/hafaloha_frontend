@@ -33,12 +33,13 @@ export default function RestaurantSelector({ onRestaurantChange }: RestaurantSel
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.get('/admin/restaurants');
-      setRestaurants(response.restaurants || []);
+      const response = await api.get<Restaurant[]>('/admin/restaurants');
+      const restaurantList = Array.isArray(response) ? response : [];
+      setRestaurants(restaurantList);
       
       // If we have restaurants and no selection yet, select the first one
-      if (response.restaurants?.length > 0 && !selectedRestaurantId) {
-        const initialRestaurantId = user?.restaurant_id || response.restaurants[0].id;
+      if (restaurantList.length > 0 && !selectedRestaurantId) {
+        const initialRestaurantId = user?.restaurant_id || restaurantList[0].id;
         setSelectedRestaurantId(initialRestaurantId);
         if (onRestaurantChange) {
           onRestaurantChange(initialRestaurantId);

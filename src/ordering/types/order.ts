@@ -43,6 +43,8 @@ export interface Order {
   transaction_id?: string;
   restaurant_id?: string;
   staff_created?: boolean; // Flag to indicate if order was created by staff
+  created_by_staff_id?: number | string | null; // ID of the staff member who created this order
+  is_staff_order?: boolean; // Flag to indicate if this is a staff order (vs customer order)
   error?: string; // For error handling in optimistic updates
   global_last_acknowledged_at?: string; // Timestamp when any admin acknowledged the order
 }

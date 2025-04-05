@@ -3,7 +3,6 @@
 import { create } from 'zustand';
 import { isTokenExpired, getRestaurantId } from '../utils/jwt';
 import type { User, LoginCredentials, SignupData, AuthResponse } from '../types/auth';
-import { config } from '../config';
 import { loginUser as loginUserApi, signupUser as signupUserApi, verifyPhone as verifyPhoneApi, resendVerificationCode as resendCodeApi } from '../api/endpoints/auth';
 
 interface AuthStore {
@@ -27,6 +26,13 @@ interface AuthStore {
   // JWT token helpers
   getToken: () => string | null;
   isAuthenticated: () => boolean;
+  
+  // Role helpers
+  isSuperAdmin: () => boolean;
+  isAdmin: () => boolean;
+  isStaff: () => boolean;
+  isCustomer: () => boolean;
+  isAdminOrAbove: () => boolean;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => {
@@ -154,6 +160,36 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       const token = localStorage.getItem('token');
       if (!token) return false;
       return !isTokenExpired(token);
+    },
+    
+    // Role helper methods
+    isSuperAdmin: () => {
+      console.log('[AuthStore] isSuperAdmin check - user:', get().user);
+      console.log('[AuthStore] isSuperAdmin check - role:', get().user?.role);
+      // Check for 'super_admin' role
+      return get().user?.role === 'super_admin';
+    },
+    
+    isAdmin: () => {
+      console.log('[AuthStore] isAdmin check - user:', get().user);
+      console.log('[AuthStore] isAdmin check - role:', get().user?.role);
+      return get().user?.role === 'admin';
+    },
+    
+    isStaff: () => {
+      console.log('[AuthStore] isStaff check - user:', get().user);
+      console.log('[AuthStore] isStaff check - role:', get().user?.role);
+      return get().user?.role === 'staff';
+    },
+    
+    isCustomer: () => {
+      console.log('[AuthStore] isCustomer check - user:', get().user);
+      console.log('[AuthStore] isCustomer check - role:', get().user?.role);
+      return get().user?.role === 'customer' || !get().user?.role;
+    },
+    
+    isAdminOrAbove: () => {
+      return get().isSuperAdmin() || get().isAdmin();
     }
   };
 
