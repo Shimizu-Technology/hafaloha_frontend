@@ -56,7 +56,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // search query
   const [searchQuery, setSearchQuery] = useState('');
   
-  // date filter
+  // date filter - default to today
   const [dateFilter, setDateFilter] = useState<DateFilterOption>('today');
   
   // staff filter for admin users
@@ -70,8 +70,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // pagination transition states
   const [isPageChanging, setIsPageChanging] = useState(false);
   const [previousOrders, setPreviousOrders] = useState<any[]>([]);
-  const [customStartDate, setCustomStartDate] = useState<Date>(new Date());
-  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
+  // Initialize custom date range to today's date in Guam timezone
+  const todayInGuam = new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' }));
+  const [customStartDate, setCustomStartDate] = useState<Date>(todayInGuam);
+  const [customEndDate, setCustomEndDate] = useState<Date>(todayInGuam);
   
   // expanded order cards
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
@@ -236,26 +238,69 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // ----------------------------------
   // Date / Search / Filter
   // ----------------------------------
+  // Helper function to create dates in Guam timezone (UTC+10)
+  const createGuamDate = useCallback((year?: number, month?: number, day?: number, hours: number = 0, minutes: number = 0, seconds: number = 0) => {
+    // Get the current date in Guam timezone
+    const nowInGuam = new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' }));
+    
+    // Use provided values or defaults from current Guam date
+    const y = year !== undefined ? year : nowInGuam.getFullYear();
+    const m = month !== undefined ? month : nowInGuam.getMonth();
+    const d = day !== undefined ? day : nowInGuam.getDate();
+    
+    // Format with explicit UTC+10 timezone
+    const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}+10:00`;
+    return new Date(dateStr);
+  }, []);
+  
   const getDateRange = useCallback(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-
-    const lastWeekStart = new Date(weekStart);
-    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-
-    const lastWeekEnd = new Date(weekStart);
-    lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
-
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    // Create dates in Guam timezone
+    const today = createGuamDate(undefined, undefined, undefined, 0, 0, 0);
+    
+    const tomorrow = createGuamDate(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + 1,
+      0, 0, 0
+    );
+    
+    const yesterday = createGuamDate(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - 1,
+      0, 0, 0
+    );
+    
+    // Get day of week in Guam timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      timeZone: 'Pacific/Guam'
+    });
+    const dayOfWeek = new Date(formatter.format(today)).getDay();
+    
+    const weekStart = createGuamDate(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - dayOfWeek,
+      0, 0, 0
+    );
+    
+    const lastWeekStart = createGuamDate(
+      weekStart.getFullYear(),
+      weekStart.getMonth(),
+      weekStart.getDate() - 7,
+      0, 0, 0
+    );
+    
+    const lastWeekEnd = createGuamDate(
+      weekStart.getFullYear(),
+      weekStart.getMonth(),
+      weekStart.getDate() - 1,
+      23, 59, 59
+    );
+    
+    // Get first day of month in Guam timezone
+    const monthStart = createGuamDate(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
 
     switch (dateFilter) {
       case 'today':
@@ -315,8 +360,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       status: selectedStatus !== 'all' ? selectedStatus : null,
       sortBy: 'created_at',
       sortDirection: sortNewestFirst ? 'desc' : 'asc',
-      dateFrom: start.toISOString().split('T')[0],
-      dateTo: end.toISOString().split('T')[0],
+      // Format dates with explicit Guam timezone (UTC+10)
+      dateFrom: `${start.toISOString().split('T')[0]}T00:00:00+10:00`,
+      dateTo: `${end.toISOString().split('T')[0]}T23:59:59+10:00`,
       searchQuery: searchQuery || null,
       restaurantId: restaurantId || null,
       _sourceId: sourceId // Add a unique ID to track this request
@@ -368,8 +414,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       status: selectedStatus !== 'all' ? selectedStatus : null,
       sortBy: 'created_at',
       sortDirection: sortNewestFirst ? 'desc' : 'asc',
-      dateFrom: start.toISOString().split('T')[0],
-      dateTo: end.toISOString().split('T')[0],
+      // Format dates with explicit Guam timezone (UTC+10)
+      dateFrom: `${start.toISOString().split('T')[0]}T00:00:00+10:00`,
+      dateTo: `${end.toISOString().split('T')[0]}T23:59:59+10:00`,
       searchQuery: searchQuery || null,
       restaurantId: restaurantId || null,
       _sourceId: sourceId // Add a unique ID to track this request

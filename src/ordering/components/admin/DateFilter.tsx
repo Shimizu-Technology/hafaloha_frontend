@@ -42,7 +42,10 @@ export function DateFilter({
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
           value={startDate ? formatDateForInput(startDate) : ''}
           onChange={(e) => {
-            const newStartDate = e.target.value ? new Date(e.target.value) : new Date();
+            // When parsing a date string without time, it's interpreted in local timezone
+            // Add the Guam timezone offset to ensure correct interpretation
+            const dateStr = e.target.value ? `${e.target.value}T00:00:00+10:00` : new Date().toISOString();
+            const newStartDate = new Date(dateStr);
             if (onDateRangeChange && endDate) {
               onDateRangeChange(newStartDate, endDate);
             }
@@ -54,7 +57,10 @@ export function DateFilter({
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
           value={endDate ? formatDateForInput(endDate) : ''}
           onChange={(e) => {
-            const newEndDate = e.target.value ? new Date(e.target.value) : new Date();
+            // When parsing a date string without time, it's interpreted in local timezone
+            // Add the Guam timezone offset to ensure correct interpretation
+            const dateStr = e.target.value ? `${e.target.value}T23:59:59+10:00` : new Date().toISOString();
+            const newEndDate = new Date(dateStr);
             if (onDateRangeChange && startDate) {
               onDateRangeChange(startDate, newEndDate);
             }
@@ -64,11 +70,16 @@ export function DateFilter({
     );
   };
 
-  // Helper to format date for input element
+  // Helper to format date for input element - using Guam timezone (UTC+10)
   const formatDateForInput = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    // First convert the date to Guam timezone
+    const dateInGuam = new Date(date.toLocaleString('en-US', { timeZone: 'Pacific/Guam' }));
+    
+    // Format as YYYY-MM-DD directly
+    const year = dateInGuam.getFullYear();
+    const month = String(dateInGuam.getMonth() + 1).padStart(2, '0');
+    const day = String(dateInGuam.getDate()).padStart(2, '0');
+    
     return `${year}-${month}-${day}`;
   };
 

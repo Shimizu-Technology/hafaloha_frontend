@@ -82,12 +82,20 @@ interface AnalyticsManagerProps {
 
 export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   // ----- 1) Date Range States + Preset -----
-  // Default to last 30 days
-  const defaultStart = new Date();
-  defaultStart.setDate(defaultStart.getDate() - 30);
+  // Default to today's date for both start and end
+  // Create a date object that's explicitly in Guam timezone
+  const todayInGuam = new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' }));
 
-  const [startDate, setStartDate] = useState(defaultStart.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // Format dates in YYYY-MM-DD format in Guam timezone (UTC+10)
+  const formatDateForGuam = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [startDate, setStartDate] = useState(formatDateForGuam(todayInGuam));
+  const [endDate, setEndDate] = useState(formatDateForGuam(todayInGuam));
   const [selectedPreset, setSelectedPreset] = useState<PresetRange>(null);
   
   // Time inputs for specific time ranges
@@ -191,8 +199,9 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         start = new Date('1970-01-01');
         break;
     }
-    setStartDate(start.toISOString().split('T')[0]);
-    setEndDate(now.toISOString().split('T')[0]);
+    // Format dates for Guam timezone
+    setStartDate(formatDateForGuam(start));
+    setEndDate(formatDateForGuam(now));
     setSelectedPreset(preset);
     
     // Reset time preset to custom when using date presets
@@ -239,18 +248,45 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         return setTimePreset('custom');
     }
     
-    // Update states
-    setStartDate(start.toISOString().split('T')[0]);
-    setEndDate(now.toISOString().split('T')[0]);
+    // Update states with dates formatted for Guam timezone
+    setStartDate(formatDateForGuam(start));
+    setEndDate(formatDateForGuam(now));
     setTimeGranularity(granularity);
     setTimePreset(preset);
     setSelectedPreset(null); // Reset date preset when using time presets
     
     // For hour/minute level presets, we need to include the time component
     if (['30min', '1h', '3h', '6h', '12h', '24h'].includes(preset)) {
-      // Format with time component for API
-      const startWithTime = start.toISOString();
-      const endWithTime = now.toISOString();
+      // Format with time component for API, ensuring timezone is preserved
+      // Convert to ISO string but adjust for Guam timezone (UTC+10)
+      const formatDateTimeForGuam = (date: Date): string => {
+        // Create a formatter that explicitly uses Guam timezone
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZone: 'Pacific/Guam'
+        });
+        
+        const parts = formatter.formatToParts(date);
+        const dateParts: Record<string, string> = {};
+        
+        parts.forEach(part => {
+          if (part.type !== 'literal') {
+            dateParts[part.type] = part.value;
+          }
+        });
+        
+        // Format as YYYY-MM-DDThh:mm:ss
+        return `${dateParts.year}-${dateParts.month}-${dateParts.day}T${dateParts.hour}:${dateParts.minute}:${dateParts.second}`;
+      };
+      
+      const startWithTime = formatDateTimeForGuam(start);
+      const endWithTime = formatDateTimeForGuam(now);
       
       // Store full datetime for these short timeframes
       setStartDateWithTime(startWithTime);
@@ -312,14 +348,16 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       // Determine which date format to use based on filters
       if (['30min', '1h', '3h', '6h', '12h', '24h'].includes(timePreset)) {
         // For short time presets, use the datetime with time component
+        // These already have the correct Guam timezone formatting from applyTimePreset
         apiStartDate = startDateWithTime || startDate;
         apiEndDate = endDateWithTime || endDate;
       } else if (useTimeFilter) {
-        // For custom time filter, combine date and time
-        apiStartDate = `${startDate}T${startTime}:00`;
-        apiEndDate = `${endDate}T${endTime}:00`;
+        // For custom time filter, combine date and time with explicit Guam timezone indicator
+        // This ensures the backend knows we're sending Guam time
+        apiStartDate = `${startDate}T${startTime}:00+10:00`;
+        apiEndDate = `${endDate}T${endTime}:00+10:00`;
       } else {
-        // Otherwise use just the date
+        // Otherwise use just the date - these are already formatted for Guam
         apiStartDate = startDate;
         apiEndDate = endDate;
       }
