@@ -40,6 +40,11 @@ export interface OrderQueryParams {
   dateTo?: string | null;
   searchQuery?: string | null;
   restaurantId?: string | null;
+  endpoint?: string; // Used to determine which API endpoint to call (e.g., 'staff' for /orders/staff)
+  online_orders_only?: string; // Used to filter for online orders only
+  staff_member_id?: string; // Used to filter by staff member
+  user_id?: string; // Used to filter by user
+  include_online_orders?: string; // Used to include online orders with user orders
   _sourceId?: string; // Track the source of the request for debugging
 }
 
@@ -627,13 +632,25 @@ export const useOrderStore = create<OrderStore>()(
           if (searchQuery) queryParams.append('search', searchQuery);
           if (restaurantId) queryParams.append('restaurant_id', restaurantId);
           
+          // Include all other parameters from the params object
+          // This ensures parameters like online_orders_only, staff_member_id, etc. are included
+          Object.entries(params).forEach(([key, value]) => {
+            // Skip parameters we've already handled and internal parameters (those starting with _)
+            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+              queryParams.append(key, String(value));
+            }
+          });
+          
+          // Determine the correct endpoint based on the endpoint parameter
+          const endpoint = params.endpoint === 'staff' ? '/orders/staff' : '/orders';
+          
           const response = await api.get<{
             orders: Order[];
             total_count: number;
             page: number;
             per_page: number;
             total_pages: number;
-          }>(`/orders?${queryParams.toString()}`);
+          }>(`${endpoint}?${queryParams.toString()}`);
           
           const metadata = {
             total_count: response.total_count || 0,
@@ -697,6 +714,15 @@ export const useOrderStore = create<OrderStore>()(
           if (searchQuery) queryParams.append('search', searchQuery);
           if (restaurantId) queryParams.append('restaurant_id', restaurantId);
           
+          // Include all other parameters from the params object
+          // This ensures parameters like online_orders_only, staff_member_id, etc. are included
+          Object.entries(params).forEach(([key, value]) => {
+            // Skip parameters we've already handled and internal parameters (those starting with _)
+            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+              queryParams.append(key, String(value));
+            }
+          });
+          
           // Update metadata before the request to ensure any WebSocket updates
           // that arrive while we're waiting for the response use the correct page
           set(state => ({
@@ -707,13 +733,16 @@ export const useOrderStore = create<OrderStore>()(
             }
           }));
           
+          // Determine the correct endpoint based on the endpoint parameter
+          const endpoint = params.endpoint === 'staff' ? '/orders/staff' : '/orders';
+          
           const response = await api.get<{
             orders: Order[];
             total_count: number;
             page: number;
             per_page: number;
             total_pages: number;
-          }>(`/orders?${queryParams.toString()}`);
+          }>(`${endpoint}?${queryParams.toString()}`);
           
           // Check if this request is still the most recent one
           // If not, discard the results to prevent race conditions

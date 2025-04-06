@@ -66,6 +66,9 @@ export function AdminDashboard() {
   // Redirect if user doesn't have access - use direct role check as a fallback
   const hasAccess = user && (directRoleCheck || authStore.isSuperAdmin() || authStore.isAdmin() || authStore.isStaff());
   
+  // Check if user is staff only (not admin or super_admin)
+  const isStaffOnly = user && authStore.isStaff() && !authStore.isAdmin() && !authStore.isSuperAdmin();
+  
   if (!hasAccess) {
     return <Navigate to="/" replace />;
   }
@@ -89,6 +92,12 @@ export function AdminDashboard() {
   ] as const;
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
+    // For staff users, always default to orders tab
+    if (isStaffOnly) {
+      return 'orders';
+    }
+    
+    // For admin/super_admin, check stored preference
     const stored = localStorage.getItem('adminTab');
     if (stored && ['analytics','orders','menu','merchandise','promos','staff','settings'].includes(stored)) {
       // Check if the user has access to the stored tab
@@ -99,7 +108,7 @@ export function AdminDashboard() {
         (stored === 'merchandise' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'promos' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'staff' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
-        (stored === 'settings' && authStore.isSuperAdmin())
+        (stored === 'settings' && (authStore.isSuperAdmin() || authStore.isAdmin()))
       ) {
         return stored as Tab;
       }
@@ -1283,9 +1292,13 @@ useEffect(() => {
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {isStaffOnly ? 'Order Management Dashboard' : 'Admin Dashboard'}
+              </h1>
               <p className="mt-2 text-sm text-gray-600">
-                Manage orders, menu items, promotions, and more
+                {isStaffOnly 
+                  ? 'Create, view, and manage customer orders' 
+                  : 'Manage orders, menu items, promotions, and more'}
               </p>
             </div>
             
@@ -1337,24 +1350,35 @@ useEffect(() => {
           {/* Tab navigation */}
           <div className="border-b border-gray-200 overflow-x-auto">
             <nav className="flex -mb-px" role="tablist">
-              {tabs.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => handleTabClick(id as Tab)}
-                  className={`
-                    flex-shrink-0 whitespace-nowrap px-4 py-4 border-b-2
-                    text-center font-medium text-sm
-                    ${
-                      activeTab === id
-                        ? 'border-[#c1902f] text-[#c1902f]'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  <Icon className="h-5 w-5 mx-auto mb-1" />
-                  {label}
-                </button>
-              ))}
+              {/* For staff users, simplify the UI by only showing the Orders tab */}
+              {isStaffOnly ? (
+                <div className="flex-shrink-0 whitespace-nowrap px-4 py-4 border-b-2 border-[#c1902f] text-center font-medium text-sm text-[#c1902f]">
+                  <div className="flex items-center">
+                    <ShoppingBag className="h-5 w-5 mx-auto mb-1" />
+                    Order Management
+                  </div>
+                </div>
+              ) : (
+                // Regular tab navigation for admin/super_admin users
+                tabs.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => handleTabClick(id as Tab)}
+                    className={`
+                      flex-shrink-0 whitespace-nowrap px-4 py-4 border-b-2
+                      text-center font-medium text-sm
+                      ${
+                        activeTab === id
+                          ? 'border-[#c1902f] text-[#c1902f]'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }
+                    `}
+                  >
+                    <Icon className="h-5 w-5 mx-auto mb-1" />
+                    {label}
+                  </button>
+                ))
+              )}
             </nav>
           </div>
 

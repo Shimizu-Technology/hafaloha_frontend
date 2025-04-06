@@ -9,6 +9,7 @@ interface DateFilterProps {
   startDate?: Date;
   endDate?: Date;
   onDateRangeChange?: (startDate: Date, endDate: Date) => void;
+  className?: string;
 }
 
 export function DateFilter({ 
@@ -16,7 +17,8 @@ export function DateFilter({
   onOptionChange, 
   startDate, 
   endDate, 
-  onDateRangeChange 
+  onDateRangeChange,
+  className
 }: DateFilterProps) {
   const dateOptions = [
     { value: 'today', label: 'Today' },
@@ -39,7 +41,7 @@ export function DateFilter({
       <div className="mt-2 flex space-x-2">
         <input
           type="date"
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm h-12 shadow-sm"
           value={startDate ? formatDateForInput(startDate) : ''}
           onChange={(e) => {
             // When parsing a date string without time, it's interpreted in local timezone
@@ -54,7 +56,7 @@ export function DateFilter({
         <span className="self-center text-gray-500">to</span>
         <input
           type="date"
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm h-12 shadow-sm"
           value={endDate ? formatDateForInput(endDate) : ''}
           onChange={(e) => {
             // When parsing a date string without time, it's interpreted in local timezone
@@ -90,6 +92,7 @@ export function DateFilter({
         value={selectedOption}
         onChange={handleDateOptionChange}
         placeholder="Select date range"
+        className={className}
       />
       {renderCustomDatePicker()}
     </div>

@@ -145,8 +145,9 @@ export function Header() {
     };
   }, [isMobileMenuOpen]);
 
-  // Admin check
-  // Using the role helper methods from useAuthStore instead of direct role check
+  // Role checks
+  const isStaffOnly = user && authStore.isStaff() && !authStore.isAdmin() && !authStore.isSuperAdmin();
+  const isAdminOrAbove = user && (authStore.isAdmin() || authStore.isSuperAdmin());
 
   // Display name
   const firstName = user?.first_name || user?.email?.split('@')[0] || 'Guest';
@@ -273,17 +274,20 @@ export function Header() {
                     {hasAdminAccess && (
                       <>
                         <div className="px-4 py-2 text-xs font-semibold text-gray-500 bg-gray-50">
-                          Admin Tools
+                          {isStaffOnly ? 'Staff Tools' : 'Admin Tools'}
                         </div>
-                        {/* Reservations Dashboard - visible to all admin roles */}
-                        <Link
-                          to="/reservations/dashboard"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#c1902f]
-                                   transition-colors duration-150"
-                          onClick={() => setIsDropdownOpen(false)}
-                        >
-                          Manage Reservations
-                        </Link>
+                        
+                        {/* Reservations Dashboard - only visible to admin and super_admin */}
+                        {isAdminOrAbove && (
+                          <Link
+                            to="/reservations/dashboard"
+                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#c1902f]
+                                     transition-colors duration-150"
+                            onClick={() => setIsDropdownOpen(false)}
+                          >
+                            Manage Reservations
+                          </Link>
+                        )}
                         
                         {/* Admin Dashboard - visible to all admin roles */}
                         <Link
@@ -292,10 +296,11 @@ export function Header() {
                                    transition-colors duration-150"
                           onClick={() => setIsDropdownOpen(false)}
                         >
-                          Admin Dashboard
+                          {isStaffOnly ? 'Order Management' : 'Admin Dashboard'}
                         </Link>
                         
-                        {/* Staff Orders link removed - staff can use Admin Dashboard */}
+
+                        
                         <hr className="my-1 border-gray-100" />
                       </>
                     )}
@@ -485,22 +490,29 @@ export function Header() {
               <>
                 {hasAdminAccess && (
                   <>
-                    <Link
-                      to="/reservations/dashboard"
-                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700
-                               hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Manage Reservations
-                    </Link>
+                    {/* Reservations Dashboard - only visible to admin and super_admin */}
+                    {isAdminOrAbove && (
+                      <Link
+                        to="/reservations/dashboard"
+                        className="block px-3 py-2 rounded-md text-base font-medium text-gray-700
+                                 hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        Manage Reservations
+                      </Link>
+                    )}
+                    
+                    {/* Admin Dashboard - visible to all admin roles */}
                     <Link
                       to="/admin"
                       className="block px-3 py-2 rounded-md text-base font-medium text-gray-700
                                hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Admin Dashboard
+                      {isStaffOnly ? 'Order Management' : 'Admin Dashboard'}
                     </Link>
+                    
+
                   </>
                 )}
 

@@ -61,11 +61,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   
   // staff filter for admin users
   const [staffFilter, setStaffFilter] = useState<string | null>(null);
-  const [staffMembers, setStaffMembers] = useState<Array<{id: string, name: string}>>([]);
+  const [staffMembers, setStaffMembers] = useState<Array<{id: string, name: string, type: 'staff' | 'user'}>>([]);
   
-  // user filter for admin users
-  const [userFilter, setUserFilter] = useState<string | null>(null);
-  const [users, setUsers] = useState<Array<{id: string, name: string}>>([]);
+  // user filter for admin users - keeping state but not using in UI
+  const [userFilter] = useState<string | null>(null);
   
   // pagination transition states
   const [isPageChanging, setIsPageChanging] = useState(false);
@@ -134,17 +133,27 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     if (isSuperAdmin() || isAdmin()) {
       const fetchStaffMembers = async () => {
         try {
-          const response = await api.get('/staff_members');
+          // Fetch only staff and admin users who have created orders
+          const response = await api.get('/orders/creators');
+          
+          // Define interfaces for type safety
+          interface StaffOption {
+            id: string; // This will be in the format 'user_123'
+            name: string;
+            type: 'user';
+            role: string;
+          }
+          
+          // Check if response is an array
           if (response && Array.isArray(response)) {
-            // Format staff members for dropdown
-            const formattedStaff = response.map(staff => ({
-              id: staff.id.toString(),
-              name: `${staff.first_name} ${staff.last_name}`
-            }));
-            setStaffMembers(formattedStaff);
+            // The response is already formatted correctly
+            setStaffMembers(response as StaffOption[]);
+
+          } else {
+            console.error('Unexpected response format from /orders/creators');
           }
         } catch (error) {
-          console.error('Failed to fetch staff members:', error);
+          console.error('Failed to fetch order creators:', error);
         }
       };
       
@@ -152,47 +161,24 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }
   }, [isSuperAdmin, isAdmin]);
   
-  // ----------------------------------
-  // Fetch Users for Creator Filter
-  // ----------------------------------
-  useEffect(() => {
-    // Only fetch users if user is admin or super admin
-    if (isSuperAdmin() || isAdmin()) {
-      const fetchUsers = async () => {
-        try {
-          const response = await api.get('/users');
-          if (response) {
-            let usersList = [];
-            
-            // Handle different response formats
-            if (Array.isArray(response)) {
-              // Direct array response
-              usersList = response;
-            } else if (typeof response === 'object') {
-              // Object response with data property
-              const responseData = response as any;
-              if (responseData.data && Array.isArray(responseData.data)) {
-                usersList = responseData.data;
-              } else if (responseData.data && responseData.data.users && Array.isArray(responseData.data.users)) {
-                usersList = responseData.data.users;
-              }
-            }
-            
-            // Format users for dropdown
-            const formattedUsers = usersList.map((user: any) => ({
-              id: user.id.toString(),
-              name: user.name || user.email || `User ${user.id}`
-            }));
-            setUsers(formattedUsers);
-          }
-        } catch (error) {
-          console.error('Failed to fetch users:', error);
-        }
-      };
-      
-      fetchUsers();
-    }
-  }, [isSuperAdmin, isAdmin]);
+  // User filter removed as requested - search bar is used instead
+  
+  // State for showing only online orders (customer orders)
+  const [onlineOrdersOnly, setOnlineOrdersOnly] = useState<boolean>(false);
+  
+  // Handle toggling the online orders filter
+  const handleToggleOnlineOrders = useCallback(() => {
+    setOnlineOrdersOnly(prevState => {
+      const newState = !prevState;
+      // Only clear staff filter if turning on online orders
+      if (newState) {
+        setStaffFilter(null);
+      }
+      // Reset to first page
+      setCurrentPage(1);
+      return newState;
+    });
+  }, [setStaffFilter, setCurrentPage]);
   
   // Set current staff member ID for staff users
   const [currentStaffMemberId, setCurrentStaffMemberId] = useState<string | null>(null);
@@ -254,21 +240,31 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   }, []);
   
   const getDateRange = useCallback(() => {
-    // Create dates in Guam timezone
+    // Create dates in Guam timezone with proper day boundaries
+    // For 'today', start at 00:00:00 and end at 23:59:59
     const today = createGuamDate(undefined, undefined, undefined, 0, 0, 0);
     
-    const tomorrow = createGuamDate(
+    const todayEnd = createGuamDate(
       today.getFullYear(),
       today.getMonth(),
-      today.getDate() + 1,
-      0, 0, 0
+      today.getDate(),
+      23, 59, 59
     );
+    
+    // We no longer need the tomorrow variable since we're using proper end-of-day timestamps
     
     const yesterday = createGuamDate(
       today.getFullYear(),
       today.getMonth(),
       today.getDate() - 1,
       0, 0, 0
+    );
+    
+    const yesterdayEnd = createGuamDate(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - 1,
+      23, 59, 59
     );
     
     // Get day of week in Guam timezone
@@ -304,19 +300,26 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
     switch (dateFilter) {
       case 'today':
-        return { start: today, end: tomorrow };
+        // For today, use today at 00:00:00 to today at 23:59:59
+        return { start: today, end: todayEnd };
       case 'yesterday':
-        return { start: yesterday, end: today };
+        // For yesterday, use yesterday at 00:00:00 to yesterday at 23:59:59
+        return { start: yesterday, end: yesterdayEnd };
       case 'thisWeek':
-        return { start: weekStart, end: tomorrow };
+        // For this week, use week start at 00:00:00 to today at 23:59:59
+        return { start: weekStart, end: todayEnd };
       case 'lastWeek':
+        // For last week, use last week start at 00:00:00 to last week end at 23:59:59
         return { start: lastWeekStart, end: lastWeekEnd };
       case 'thisMonth':
-        return { start: monthStart, end: tomorrow };
+        // For this month, use month start at 00:00:00 to today at 23:59:59
+        return { start: monthStart, end: todayEnd };
       case 'custom':
+        // For custom range, use the custom dates with proper time boundaries
         return { start: customStartDate, end: customEndDate };
       default:
-        return { start: today, end: tomorrow };
+        // Default to today
+        return { start: today, end: todayEnd };
     }
   }, [dateFilter, customStartDate, customEndDate]);
 
@@ -360,9 +363,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       status: selectedStatus !== 'all' ? selectedStatus : null,
       sortBy: 'created_at',
       sortDirection: sortNewestFirst ? 'desc' : 'asc',
-      // Format dates with explicit Guam timezone (UTC+10)
-      dateFrom: `${start.toISOString().split('T')[0]}T00:00:00+10:00`,
-      dateTo: `${end.toISOString().split('T')[0]}T23:59:59+10:00`,
+      // Send the full ISO string with timezone information
+      // This ensures proper date boundaries are respected
+      dateFrom: start.toISOString(),
+      dateTo: end.toISOString(),
       searchQuery: searchQuery || null,
       restaurantId: restaurantId || null,
       _sourceId: sourceId // Add a unique ID to track this request
@@ -370,14 +374,28 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     
     // Handle different user roles
     if (isSuperAdmin() || isAdmin()) {
-      if (staffFilter) {
+      // Always use the staff orders endpoint for admin users
+      params.endpoint = 'staff';
+      
+      if (onlineOrdersOnly) {
+        // Admin filtering for online orders only (customer orders)
+        params.online_orders_only = 'true';
+        // Explicitly clear other filter parameters to avoid conflicts
+        delete params.staff_member_id;
+        delete params.user_id;
+        delete params.include_online_orders;
+      } else if (staffFilter) {
         // Admin filtering by specific staff member
         params.staff_member_id = staffFilter;
-        params.endpoint = 'staff'; // Use the staff orders endpoint
+        // Ensure online orders filter is off
+        delete params.online_orders_only;
       } else if (userFilter) {
         // Admin filtering by specific user
         params.user_id = userFilter;
-        params.endpoint = 'staff'; // Use the staff orders endpoint
+        // Include online orders with user orders if requested
+        params.include_online_orders = 'true';
+        // Ensure online orders filter is off
+        delete params.online_orders_only;
       }
     } else if (isStaff() && currentStaffMemberId) {
       // Staff users - backend policy will filter to show only their created orders and customer orders
@@ -385,14 +403,18 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       // Staff user viewing orders - backend policy will filter appropriately
     }
     
+    // Log the parameters being sent to the API
+
+    
     fetchOrders(params);
     
     // Log the request ID for debugging
+
     // API request sent for order pagination
     
     return sourceId; // Return the source ID for potential future reference
   }, [/* deliberately NOT including currentPage to avoid stale closures */
-      ordersPerPage, selectedStatus, sortNewestFirst, getDateRange, searchQuery, restaurantId, staffFilter, isSuperAdmin, isAdmin]);
+      ordersPerPage, selectedStatus, sortNewestFirst, getDateRange, searchQuery, restaurantId, staffFilter, onlineOrdersOnly, isSuperAdmin, isAdmin]);
 
   // Fetch orders quietly with current filter parameters (for background updates)
   const fetchOrdersWithParamsQuietly = useCallback(() => {
@@ -414,9 +436,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       status: selectedStatus !== 'all' ? selectedStatus : null,
       sortBy: 'created_at',
       sortDirection: sortNewestFirst ? 'desc' : 'asc',
-      // Format dates with explicit Guam timezone (UTC+10)
-      dateFrom: `${start.toISOString().split('T')[0]}T00:00:00+10:00`,
-      dateTo: `${end.toISOString().split('T')[0]}T23:59:59+10:00`,
+      // Send the full ISO string with timezone information
+      // This ensures proper date boundaries are respected
+      dateFrom: start.toISOString(),
+      dateTo: end.toISOString(),
       searchQuery: searchQuery || null,
       restaurantId: restaurantId || null,
       _sourceId: sourceId // Add a unique ID to track this request
@@ -424,14 +447,28 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     
     // Handle different user roles
     if (isSuperAdmin() || isAdmin()) {
-      if (staffFilter) {
+      // Always use the staff orders endpoint for admin users
+      params.endpoint = 'staff';
+      
+      if (onlineOrdersOnly) {
+        // Admin filtering for online orders only (customer orders)
+        params.online_orders_only = 'true';
+        // Explicitly clear other filter parameters to avoid conflicts
+        delete params.staff_member_id;
+        delete params.user_id;
+        delete params.include_online_orders;
+      } else if (staffFilter) {
         // Admin filtering by specific staff member
         params.staff_member_id = staffFilter;
-        params.endpoint = 'staff'; // Use the staff orders endpoint
+        // Ensure online orders filter is off
+        delete params.online_orders_only;
       } else if (userFilter) {
         // Admin filtering by specific user
         params.user_id = userFilter;
-        params.endpoint = 'staff'; // Use the staff orders endpoint
+        // Include online orders with user orders if requested
+        params.include_online_orders = 'true';
+        // Ensure online orders filter is off
+        delete params.online_orders_only;
       }
     } else if (isStaff() && currentStaffMemberId) {
       // Staff users - backend policy will filter to show only their created orders and customer orders
@@ -453,6 +490,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     restaurantId,
     currentStaffMemberId,
     staffFilter,
+    userFilter,
+    onlineOrdersOnly,
     isSuperAdmin,
     isAdmin
   ]);
@@ -835,7 +874,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     reason: paymentReason,
                     email: orderObj.contact_email
                   });
-                  console.log(`Store credit added for order ${orderId}`);
+
                 } catch (error) {
                   console.error(`Error adding store credit for order ${orderId}:`, error);
                   toastUtils.error(`Failed to add store credit for order #${orderId}`);
@@ -848,7 +887,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     new_total: 0, // Set to 0 for cancellation
                     reason: paymentReason
                   });
-                  console.log(`Order total adjusted for order ${orderId}`);
+
                 } catch (error) {
                   console.error(`Error adjusting total for order ${orderId}:`, error);
                   toastUtils.error(`Failed to adjust total for order #${orderId}`);
@@ -998,7 +1037,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }, 100);
     
     return () => clearTimeout(timeoutId);
-  }, [selectedStatus, sortNewestFirst, searchQuery, dateFilter, fetchOrdersWithParams, ordersPerPage]);
+  }, [selectedStatus, sortNewestFirst, searchQuery, dateFilter, onlineOrdersOnly, fetchOrdersWithParams, ordersPerPage]);
 
   // If the parent sets a selectedOrderId => expand that order
   // (And scroll to it if it's in the list)
@@ -1277,9 +1316,60 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
       {/* Top Filters (Date, Search, Sort) */}
       <div className="mb-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Main Filter Row */}
+        <div className="flex flex-col space-y-4">
+          {/* First Row - Staff Filter and Online Orders Toggle */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Staff Filter - Only visible to admin and super_admin */}
+            {(isSuperAdmin() || isAdmin()) && (
+              <div className="w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Staff Filter</label>
+                <MobileSelect
+                  options={[
+                    { value: '', label: `All Staff ${staffMembers.length ? `(${staffMembers.length})` : '(Loading...)'}` },
+                    ...staffMembers.map(staff => ({
+                      value: staff.id, // The id already includes the 'user_' prefix from the backend
+                      label: staff.name
+                    }))
+                  ]}
+                  value={staffFilter || ''}
+                  onChange={(value) => {
+                    setStaffFilter(value === '' ? null : value);
+                    // Only clear online orders filter if a staff member is selected
+                    if (value !== '') {
+                      setOnlineOrdersOnly(false);
+                    }
+                    setCurrentPage(1); // Reset to first page when changing filter
+                  }}
+                  className="w-full h-12 shadow-sm border-gray-300 rounded-md"
+                  placeholder="Select staff member"
+                />
+              </div>
+            )}
+            
+            {/* Online Orders Only Button */}
+            {(isSuperAdmin() || isAdmin()) && (
+              <div className="w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Online Orders</label>
+                <button
+                  onClick={handleToggleOnlineOrders}
+                  className={`w-full py-2 px-4 border rounded-md text-sm font-medium transition-colors duration-200 h-12 shadow-sm ${onlineOrdersOnly 
+                    ? 'bg-[#c1902f] text-white border-[#c1902f]' 
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'}`}
+                  aria-pressed={onlineOrdersOnly}
+                >
+                  {onlineOrdersOnly ? '✓ Showing Online Orders Only' : 'Show Online Orders Only'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Second Row - Date Filter, Search, and Sort */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Date Filter */}
           <div className="w-full">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
             <DateFilter
               selectedOption={dateFilter}
               onOptionChange={setDateFilter}
@@ -1289,80 +1379,36 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 setCustomStartDate(start);
                 setCustomEndDate(end);
               }}
+              className="w-full h-12 shadow-sm border-gray-300 rounded-md"
             />
           </div>
 
           {/* Search */}
           <div className="w-full">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search Orders</label>
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Search orders..."
-              className="w-full"
+              placeholder="Search by order #, name, email, or phone"
+              className="w-full h-12 shadow-sm border-gray-300 rounded-md"
             />
           </div>
 
-          {/* Staff Filter - Only visible to admin and super_admin */}
-          {(isSuperAdmin() || isAdmin()) && staffMembers.length > 0 && (
-            <div className="w-full mt-2">
-              <select
-                value={staffFilter || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setStaffFilter(value === '' ? null : value);
-                  setUserFilter(null); // Clear user filter when staff filter is selected
-                  setCurrentPage(1); // Reset to first page when changing filter
-                }}
-                className="w-full border border-gray-300 rounded-md px-3 py-2
-                          text-sm focus:outline-none focus:ring-1 focus:ring-[#c1902f]
-                          transition-colors duration-200"
-              >
-                <option value="">All Staff Orders</option>
-                {staffMembers.map(staff => (
-                  <option key={staff.id} value={staff.id}>{staff.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          {/* User Filter - Only visible to admin and super_admin */}
-          {(isSuperAdmin() || isAdmin()) && users.length > 0 && (
-            <div className="w-full mt-2">
-              <select
-                value={userFilter || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setUserFilter(value === '' ? null : value);
-                  setStaffFilter(null); // Clear staff filter when user filter is selected
-                  setCurrentPage(1); // Reset to first page when changing filter
-                }}
-                className="w-full border border-gray-300 rounded-md px-3 py-2
-                          text-sm focus:outline-none focus:ring-1 focus:ring-[#c1902f]
-                          transition-colors duration-200"
-              >
-                <option value="">Filter by Creator</option>
-                {users.map(user => (
-                  <option key={user.id} value={user.id}>{user.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Sort + total # */}
-          <div className="w-full flex items-center justify-between">
+          {/* Sort Dropdown */}
+          <div className="w-full">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sort Orders</label>
             <MobileSelect
               options={[
-                { value: 'newest', label: 'Sort: Newest First' },
-                { value: 'oldest', label: 'Sort: Oldest First' }
+                { value: 'newest', label: 'Newest First' },
+                { value: 'oldest', label: 'Oldest First' }
               ]}
               value={sortNewestFirst ? 'newest' : 'oldest'}
-              onChange={(val) => setSortNewestFirst(val === 'newest')}
+              onChange={(value) => setSortNewestFirst(value === 'newest')}
+              className="w-full h-12 shadow-sm border-gray-300 rounded-md"
             />
-
-            <div className="text-sm text-gray-500 font-medium ml-3 whitespace-nowrap">
-              {metadata.total_count} {metadata.total_count === 1 ? 'order' : 'orders'} found
-            </div>
           </div>
+
+          {/* We're removing the order count from here and moving it above the status filter buttons */}
         </div>
 
         {/* Staff message explaining what orders they can see */}
@@ -1374,6 +1420,18 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         </div>
       )}
       
+      {/* Order count display and filter section header */}
+      <div className="flex justify-between items-center mt-6 mb-3 border-b border-gray-200 pb-2">
+        <div className="flex items-center">
+          <div className="text-lg font-medium text-gray-800">
+            Orders
+          </div>
+          <div className="ml-2 px-2.5 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
+            {metadata.total_count}
+          </div>
+        </div>
+      </div>
+      
       {/* Status filter buttons */}
         <div className="relative mt-2">
           <div className="flex flex-nowrap space-x-2 overflow-x-auto py-1 px-1 scrollbar-hide -mx-1 pb-2 -mb-1 snap-x touch-pan-x">
@@ -1383,10 +1441,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 if (setSelectedOrderId) setSelectedOrderId(null);
               }}
               className={`
-                whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start
+                whitespace-nowrap px-6 py-3 rounded-md text-sm font-medium min-w-[100px] flex-shrink-0 snap-start transition-colors duration-200 shadow-sm border
                 ${selectedStatus === 'all'
-                  ? 'bg-[#c1902f] text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
                 }
               `}
             >
@@ -1400,10 +1458,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   if (setSelectedOrderId) setSelectedOrderId(null);
                 }}
                 className={`
-                  whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start
+                  whitespace-nowrap px-6 py-3 rounded-md text-sm font-medium min-w-[100px] flex-shrink-0 snap-start transition-colors duration-200 shadow-sm border
                   ${selectedStatus === status
-                    ? 'bg-[#c1902f] text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#c1902f] text-white border-[#c1902f]'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
                   }
                 `}
               >
@@ -1536,8 +1594,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     
                     // Calculate the new page number
                     const newPage = Math.max(currentPage - 1, 1);
-                    console.log(`[OrderManager:Pagination] ⬅️ Changing to previous page: ${currentPage} → ${newPage}`);
-                    console.log(`[OrderManager:Pagination] Current metadata before page change: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+
+
                     
                     // Generate a unique timestamp for this page change
                     const pageChangeTimestamp = now;
@@ -1554,7 +1612,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     }));
                     
                     // Update the page state - the useEffect will handle the API call
-                    console.log(`[OrderManager:Pagination] Setting currentPage to ${newPage} with timestamp ${pageChangeTimestamp}`);
+
                     setCurrentPage(newPage);
                   }}
                   disabled={currentPage === 1}
@@ -1588,8 +1646,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                           setIsPageChanging(true);
                         }
                         
-                        console.log(`[OrderManager:Pagination] 🔢 Changing to page: ${currentPage} → ${page}`);
-                        console.log(`[OrderManager:Pagination] Current metadata before direct page change: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+
+
                         
                         // Generate a unique timestamp for this page change
                         const pageChangeTimestamp = now;
@@ -1606,7 +1664,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                         }));
                         
                         // Update the page state - the useEffect will handle the API call
-                        console.log(`[OrderManager:Pagination] Setting currentPage to ${page} with timestamp ${pageChangeTimestamp}`);
+
                         setCurrentPage(page);
                       }}
                       className={`w-10 h-10 flex items-center justify-center rounded-md text-sm font-medium ${
@@ -1647,9 +1705,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     
                     // Calculate the new page number
                     const newPage = Math.min(currentPage + 1, totalPages);
-                    console.log(`[OrderManager:Pagination] ➡️ Changing to next page: ${currentPage} → ${newPage}`);
-                    console.log(`[OrderManager:Pagination] Current metadata before page change: ${JSON.stringify(useOrderStore.getState().metadata)}`);
-                    console.log(`[OrderManager:Pagination] Total pages: ${totalPages}, calculated from metadata: ${useOrderStore.getState().metadata.total_pages}`);
+
+
+
                     
                     // Generate a unique timestamp for this page change
                     const pageChangeTimestamp = now;
@@ -1666,7 +1724,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     }));
                     
                     // Update the page state - the useEffect will handle the API call
-                    console.log(`[OrderManager:Pagination] Setting currentPage to ${newPage} with timestamp ${pageChangeTimestamp}`);
+
                     setCurrentPage(newPage);
                   }}
                   disabled={currentPage === totalPages}
