@@ -404,7 +404,7 @@ export function RefundModal({
         };
       });
       
-      console.log('Sending inventory actions:', inventoryActionsForAPI);
+      // Inventory actions are now sent to the API
       
       await orderPaymentsApi.createRefund(orderId, {
         amount: refundAmount,

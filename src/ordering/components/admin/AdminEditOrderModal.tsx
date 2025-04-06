@@ -1632,9 +1632,8 @@ export function AdminEditOrderModal({
       // Update status based on refund state
       if (allItemsRefunded) {
         setLocalStatus('refunded');
-      } else if (sumRefundsLocal > 0) {
-        setLocalStatus('partially_refunded');
       }
+      // No longer changing status for partial refunds
       
       // Recalculate max refundable amount after refund
       const newMaxRefundable = calculateMaxRefundableAmount(payments);
@@ -2179,8 +2178,7 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
       completed: 'bg-gray-100 text-gray-800',
       cancelled: 'bg-red-100 text-red-800',
       confirmed: 'bg-purple-100 text-purple-800',
-      refunded: 'bg-purple-100 text-purple-800',
-      partially_refunded: 'bg-orange-100 text-orange-800',
+      refunded: 'bg-purple-100 text-purple-800'
     };
     return colors[status] || 'bg-gray-200 text-gray-800';
   }
@@ -3290,11 +3288,7 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
                           { value: 'ready', label: 'Ready' },
                           { value: 'completed', label: 'Completed' },
                           { value: 'cancelled', label: 'Cancelled' },
-                          { value: 'refunded', label: 'Refunded' },
-                          {
-                            value: 'partially_refunded',
-                            label: 'Partially Refunded',
-                          },
+                          { value: 'refunded', label: 'Refunded' }
                         ].map((option) => (
                           <li
                             key={option.value}

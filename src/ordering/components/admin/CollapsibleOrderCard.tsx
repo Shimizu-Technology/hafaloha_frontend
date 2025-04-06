@@ -224,7 +224,7 @@ function detectOrderHasRefunds(order: any): {
 } {
   
   // Check for refund status
-  const hasRefundStatus = order.status === 'refunded' || order.status === 'partially_refunded';
+  const hasRefundStatus = order.status === 'refunded';
   // Check for refund amount in order_payments
   const refunds = (order.order_payments || []).filter((p: any) => p.payment_type === 'refund');
   if (refunds.length > 0) {
@@ -246,10 +246,14 @@ function detectOrderHasRefunds(order: any): {
   // Determine if it's a full refund
   const isFullRefund = (hasRefundStatus && order.status === 'refunded') || 
                        (refundAmount > 0 && Math.abs(netAmount) < 0.01);
+                       
+  // Determine if it's a partial refund (has refund amount but not a full refund)
+  const isPartiallyRefunded = refundAmount > 0 && !isFullRefund;
   
   const result = {
     hasRefund: hasRefundStatus || refundAmount > 0,
     isFullRefund,
+    isPartiallyRefunded,
     refundAmount,
     originalAmount: originalTotal
   };

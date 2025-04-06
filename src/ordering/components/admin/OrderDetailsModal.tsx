@@ -11,7 +11,6 @@ export function OrderDetailsModal({
   onClose
 }: OrderDetailsModalProps) {
   const isRefunded = order.status === 'refunded';
-  const isPartiallyRefunded = order.status === 'partially_refunded';
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4 animate-fadeIn">
       <div className="bg-white rounded-lg shadow-md max-w-lg w-full p-4 relative animate-slideUp">
@@ -29,13 +28,9 @@ export function OrderDetailsModal({
 
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-bold">Order #{order.id}</h3>
-          {(isRefunded || isPartiallyRefunded) && (
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-              isRefunded 
-                ? 'bg-purple-100 text-purple-800' 
-                : 'bg-orange-100 text-orange-800'
-            }`}>
-              {isRefunded ? 'Refunded' : 'Partial Refund'}
+          {isRefunded && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              Refunded
             </span>
           )}
         </div>
@@ -112,11 +107,9 @@ export function OrderDetailsModal({
             <p className="font-medium">
               Total: ${Number(order.total || 0).toFixed(2)}
             </p>
-            {(isRefunded || isPartiallyRefunded) && (
+            {isRefunded && (
               <p className="text-sm text-gray-600">
-                {isRefunded 
-                  ? 'This order has been fully refunded.' 
-                  : 'This order has been partially refunded.'}
+                This order has been fully refunded.
               </p>
             )}
           </div>

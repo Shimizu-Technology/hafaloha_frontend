@@ -21,7 +21,7 @@ import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPa
 import { api } from '../../../shared/api';
 import toastUtils from '../../../shared/utils/toastUtils';
 
-type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded' | 'partially_refunded';
+type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded';
 
 interface OrderManagerProps {
   selectedOrderId?: number | null;
@@ -1050,8 +1050,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       completed: 'bg-gray-100 text-gray-800',
       cancelled: 'bg-red-100 text-red-800',
       confirmed: 'bg-purple-100 text-purple-800',
-      refunded: 'bg-purple-100 text-purple-800',
-      partially_refunded: 'bg-orange-100 text-orange-800'
+      refunded: 'bg-purple-100 text-purple-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -1077,17 +1076,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // Single-order action buttons for CollapsibleOrderCard
   const renderOrderActions = (order: any) => {
-    // Check if order is refunded or partially refunded
-    const isRefunded = order.status === 'refunded' || order.status === 'partially_refunded';
+    // Check if order is refunded
+    const isRefunded = order.status === 'refunded';
     
     // Calculate net amount and refund info for display
     const netAmount = Number(order.total || 0) - (order.total_refunded || 0);
     const refundInfo = isRefunded ? (
       <div className="text-sm">
         <span className="font-medium">
-          {order.status === 'refunded' ? 'Fully Refunded' : 'Partially Refunded'}
+          {'Fully Refunded'}
         </span>
-        {order.status === 'partially_refunded' && (
+        {order.total_refunded > 0 && (
           <span className="ml-1">
             (${order.total_refunded?.toFixed(2) || '0.00'})
           </span>
@@ -1346,7 +1345,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             >
               All Orders
             </button>
-            {(['pending', 'preparing', 'ready', 'completed', 'cancelled', 'refunded', 'partially_refunded'] as const).map((status) => (
+            {(['pending', 'preparing', 'ready', 'completed', 'cancelled', 'refunded'] as const).map((status) => (
               <button
                 key={status}
                 onClick={() => {
@@ -1737,7 +1736,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               if (isFullRefund) {
                 await updateOrderStatusQuietly(orderToRefund.id, 'refunded');
               } else if (total_refunded > 0) {
-                await updateOrderStatusQuietly(orderToRefund.id, 'partially_refunded');
+                // Keep original status and apply refund without changing status
+                // Only change to refunded if all items were refunded
               }
               
               // Refresh orders to get the updated data
