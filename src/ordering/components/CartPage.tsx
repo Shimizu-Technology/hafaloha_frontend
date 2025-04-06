@@ -6,6 +6,8 @@ import { useOrderStore, CartItem } from '../store/orderStore';
 import { CartSkeletonList } from '../../shared/components/ui/SkeletonLoader';
 import { useMenuStore } from '../store/menuStore';
 import { CustomizationModal } from './CustomizationModal';
+import OptimizedImage from '../../shared/components/ui/OptimizedImage';
+import { getImageDimensionsForContext } from '../../shared/utils/imageUtils';
 
 export function CartPage() {
   const navigate = useNavigate();
@@ -81,10 +83,11 @@ export function CartPage() {
                              space-y-4 sm:space-y-0 sm:space-x-4 py-6 border-b"
                   >
                   {/* Image */}
-                  <img
+                  <OptimizedImage
                     src={(item as any).image || '/placeholder-food.jpg'}
                     alt={item.name}
                     className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
+                    options={getImageDimensionsForContext('cart')}
                   />
 
                   <div className="flex-1 min-w-0">

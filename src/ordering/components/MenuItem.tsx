@@ -1,11 +1,13 @@
 // src/ordering/components/MenuItem.tsx
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useOrderStore } from '../store/orderStore';
 import { CustomizationModal } from './CustomizationModal';
 import type { MenuItem as MenuItemType } from '../types/menu';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
+import OptimizedImage from '../../shared/components/ui/OptimizedImage';
+import { getImageDimensionsForContext } from '../../shared/utils/imageUtils';
 
 // Helper function to format available days for display
 function formatAvailableDays(days?: (number | string)[]): string {
@@ -36,6 +38,7 @@ function formatAvailableDays(days?: (number | string)[]): string {
 
 interface MenuItemProps {
   item: MenuItemType;
+  // index is optional and used by parent components for keying
   index?: number;
 }
 
@@ -49,6 +52,7 @@ export function MenuItem({ item, index }: MenuItemProps) {
   const stockStatus = deriveStockStatus(item);
   const isOutOfStock = stockStatus === 'out_of_stock';
   const isLowStock = stockStatus === 'low_stock';
+  // Calculate available quantity (used in low stock badge display)
   const availableQuantity = calculateAvailableQuantity(item);
 
   function handleQuickAdd() {
@@ -108,13 +112,17 @@ export function MenuItem({ item, index }: MenuItemProps) {
           ${isOutOfStock ? 'opacity-70' : ''}
         `}
       >
-        <img
+        <OptimizedImage
           src={item.image}
           alt={item.name}
           className="w-full h-48 object-cover"
           width="400"
           height="192"
-          loading="eager"
+          priority={item.featured} // Priority loading for featured items
+          placeholder="blur"
+          options={item.featured 
+            ? getImageDimensionsForContext('featured') 
+            : getImageDimensionsForContext('menuItem')}
         />
 
         <div className="p-4 flex flex-col flex-1">
