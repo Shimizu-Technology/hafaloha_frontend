@@ -226,100 +226,98 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // ----------------------------------
   // Helper function to create dates in Guam timezone (UTC+10)
   const createGuamDate = useCallback((year?: number, month?: number, day?: number, hours: number = 0, minutes: number = 0, seconds: number = 0) => {
-    // Get the current date in Guam timezone
-    const nowInGuam = new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' }));
-    
-    // Use provided values or defaults from current Guam date
-    const y = year !== undefined ? year : nowInGuam.getFullYear();
-    const m = month !== undefined ? month : nowInGuam.getMonth();
-    const d = day !== undefined ? day : nowInGuam.getDate();
-    
-    // Format with explicit UTC+10 timezone
-    const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}+10:00`;
-    return new Date(dateStr);
+    try {
+      // Create a new date object
+      const date = new Date();
+      
+      // Convert to Guam timezone
+      const guamOffset = 10 * 60; // UTC+10 in minutes
+      const localOffset = date.getTimezoneOffset();
+      const totalOffset = localOffset + guamOffset;
+      
+      // Adjust the date to Guam timezone
+      date.setMinutes(date.getMinutes() + totalOffset);
+      
+      // Set the provided values
+      if (year !== undefined) date.setFullYear(year);
+      if (month !== undefined) date.setMonth(month);
+      if (day !== undefined) date.setDate(day);
+      date.setHours(hours, minutes, seconds, 0);
+      
+      return date;
+    } catch (error) {
+      console.error('Error creating Guam date:', error);
+      // Return current date as fallback
+      return new Date();
+    }
   }, []);
   
   const getDateRange = useCallback(() => {
-    // Create dates in Guam timezone with proper day boundaries
-    // For 'today', start at 00:00:00 and end at 23:59:59
-    const today = createGuamDate(undefined, undefined, undefined, 0, 0, 0);
-    
-    const todayEnd = createGuamDate(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-      23, 59, 59
-    );
-    
-    // We no longer need the tomorrow variable since we're using proper end-of-day timestamps
-    
-    const yesterday = createGuamDate(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() - 1,
-      0, 0, 0
-    );
-    
-    const yesterdayEnd = createGuamDate(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() - 1,
-      23, 59, 59
-    );
-    
-    // Get day of week in Guam timezone
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-      timeZone: 'Pacific/Guam'
-    });
-    const dayOfWeek = new Date(formatter.format(today)).getDay();
-    
-    const weekStart = createGuamDate(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() - dayOfWeek,
-      0, 0, 0
-    );
-    
-    const lastWeekStart = createGuamDate(
-      weekStart.getFullYear(),
-      weekStart.getMonth(),
-      weekStart.getDate() - 7,
-      0, 0, 0
-    );
-    
-    const lastWeekEnd = createGuamDate(
-      weekStart.getFullYear(),
-      weekStart.getMonth(),
-      weekStart.getDate() - 1,
-      23, 59, 59
-    );
-    
-    // Get first day of month in Guam timezone
-    const monthStart = createGuamDate(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
+    try {
+      // Get current date in Guam timezone
+      const now = new Date();
+      const guamDate = new Date(now.toLocaleString('en-US', { timeZone: 'Pacific/Guam' }));
+      
+      // Extract date components
+      const year = guamDate.getFullYear();
+      const month = guamDate.getMonth();
+      const date = guamDate.getDate();
+      const dayOfWeek = guamDate.getDay(); // 0 is Sunday, 6 is Saturday
+      
+      // Create today's start and end
+      const today = new Date(year, month, date, 0, 0, 0);
+      const todayEnd = new Date(year, month, date, 23, 59, 59);
+      
+      // Create yesterday's start and end
+      const yesterday = new Date(year, month, date - 1, 0, 0, 0);
+      const yesterdayEnd = new Date(year, month, date - 1, 23, 59, 59);
+      
+      // Calculate this week's start (Sunday)
+      const weekStart = new Date(year, month, date - dayOfWeek, 0, 0, 0);
+      
+      // Calculate last week's start and end
+      // Start: Sunday of previous week
+      const lastWeekStart = new Date(year, month, date - dayOfWeek - 7, 0, 0, 0);
+      // End: Saturday of previous week
+      const lastWeekEnd = new Date(year, month, date - dayOfWeek - 1, 23, 59, 59);
+      
+      // Get first day of month
+      const monthStart = new Date(year, month, 1, 0, 0, 0);
 
-    switch (dateFilter) {
-      case 'today':
-        // For today, use today at 00:00:00 to today at 23:59:59
-        return { start: today, end: todayEnd };
-      case 'yesterday':
-        // For yesterday, use yesterday at 00:00:00 to yesterday at 23:59:59
-        return { start: yesterday, end: yesterdayEnd };
-      case 'thisWeek':
-        // For this week, use week start at 00:00:00 to today at 23:59:59
-        return { start: weekStart, end: todayEnd };
-      case 'lastWeek':
-        // For last week, use last week start at 00:00:00 to last week end at 23:59:59
-        return { start: lastWeekStart, end: lastWeekEnd };
-      case 'thisMonth':
-        // For this month, use month start at 00:00:00 to today at 23:59:59
-        return { start: monthStart, end: todayEnd };
-      case 'custom':
-        // For custom range, use the custom dates with proper time boundaries
-        return { start: customStartDate, end: customEndDate };
-      default:
-        // Default to today
-        return { start: today, end: todayEnd };
+      // Handle different date filter options
+      switch (dateFilter) {
+        case 'today':
+          // For today, use today at 00:00:00 to today at 23:59:59
+          return { start: today, end: todayEnd };
+        case 'yesterday':
+          // For yesterday, use yesterday at 00:00:00 to yesterday at 23:59:59
+          return { start: yesterday, end: yesterdayEnd };
+        case 'thisWeek':
+          // For this week, use week start at 00:00:00 to today at 23:59:59
+          return { start: weekStart, end: todayEnd };
+        case 'lastWeek':
+          // For last week, use last week start at 00:00:00 to last week end at 23:59:59
+          return { start: lastWeekStart, end: lastWeekEnd };
+        case 'thisMonth':
+          // For this month, use month start at 00:00:00 to today at 23:59:59
+          return { start: monthStart, end: todayEnd };
+        case 'custom':
+          // For custom range, use the custom dates with proper time boundaries
+          return { 
+            start: customStartDate || today, 
+            end: customEndDate || todayEnd 
+          };
+        default:
+          // Default to today
+          return { start: today, end: todayEnd };
+      }
+    } catch (error) {
+      console.error('Error calculating date range:', error);
+      // Fallback to a safe default - today
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      return { start: startOfToday, end: endOfToday };
     }
   }, [dateFilter, customStartDate, customEndDate]);
 
