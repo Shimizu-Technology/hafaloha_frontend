@@ -370,6 +370,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       _sourceId: sourceId // Add a unique ID to track this request
     };
     
+    // Debug log for date range parameters
+    console.log('Date Range Debug:', {
+      dateFilter,
+      customStartDate: customStartDate?.toISOString(),
+      customEndDate: customEndDate?.toISOString(),
+      calculatedStart: start.toISOString(),
+      calculatedEnd: end.toISOString(),
+      currentDateInGuam: new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' })).toISOString()
+    });
+    
     // Handle different user roles
     if (isSuperAdmin() || isAdmin()) {
       // Always use the staff orders endpoint for admin users
