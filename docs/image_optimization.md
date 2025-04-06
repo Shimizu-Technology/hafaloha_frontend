@@ -4,6 +4,8 @@
 
 Hafaloha uses Netlify's Image CDN service to optimize image loading performance throughout the application. This document outlines the implementation details, configuration, and best practices for image handling.
 
+The implementation leverages modern web techniques including responsive images with `srcset` and `sizes` attributes, lazy loading, and automatic format selection to provide the best possible user experience.
+
 ## Architecture
 
 ### Image Storage and Delivery Flow
@@ -17,6 +19,65 @@ Hafaloha uses Netlify's Image CDN service to optimize image loading performance 
 │ S3 Bucket  │───>│ Netlify   │───>│ Netlify Image   │───>│ Browser  │
 │ (Storage)  │    │ CDN       │    │ Transformation  │    │          │
 └────────────┘    └───────────┘    └─────────────────┘    └──────────┘
+```
+
+### Key Benefits
+
+1. **Performance**: Faster load times via optimized formats (AVIF/WebP), compression, and CDN caching
+2. **Automation**: No need to pre-process images into multiple formats/sizes
+3. **Modern Formats**: Automatic AVIF/WebP negotiation with `fm=auto`
+4. **Responsiveness**: Integration with `srcset`/`sizes` for optimal image delivery
+5. **Cost-Effective**: Leverages Netlify's existing CDN infrastructure
+
+## Implementation
+
+### Components
+
+The image optimization implementation consists of the following components:
+
+1. **ResponsiveImage.tsx**: A component that implements responsive images using `srcset` and `sizes` attributes
+   - Generates multiple image URLs with different width parameters
+   - Creates appropriate `srcset` and `sizes` attributes for optimal browser selection
+   - Handles fallback images and loading priorities
+
+2. **OptimizedImage.tsx**: A wrapper component that provides a simple API for image optimization
+   - Determines appropriate image dimensions based on context (menu item, hero, cart)
+   - Uses ResponsiveImage for CDN-enabled environments
+   - Falls back to standard image tags when CDN is not available
+   - Maintains backward compatibility with existing code
+
+3. **imageUtils.ts**: Utility functions for image URL transformation
+   - `getNetlifyImageUrl`: Transforms S3 URLs into Netlify Image CDN URLs
+   - `isNetlifyImageCdnAvailable`: Detects if the Netlify Image CDN is available
+   - `getImageDimensionsForContext`: Provides appropriate dimensions for different contexts
+
+### Usage Examples
+
+#### Basic Usage
+
+```tsx
+<OptimizedImage 
+  src="https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu-items/spam-musubi.jpg"
+  alt="Spam Musubi"
+  options={{ context: 'menuItem' }}
+/>
+```
+
+#### Advanced Usage with Custom Options
+
+```tsx
+<OptimizedImage 
+  src="https://hafaloha.s3.ap-southeast-2.amazonaws.com/hero/banner.jpg"
+  alt="Hero Banner"
+  priority={true} // Load with high priority
+  options={{
+    width: 1600,
+    height: 900,
+    format: 'auto',
+    quality: 80,
+    fit: 'cover'
+  }}
+/>
 ```
 
 ## Configuration
