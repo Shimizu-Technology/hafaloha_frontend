@@ -64,8 +64,9 @@ class WebSocketManager {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private heartbeatInterval: NodeJS.Timeout | null = null;
-  private lastHeartbeatResponse: number = 0;
-  private heartbeatTimeoutMs: number = 30000; // 30 seconds
+  // We no longer need these variables since we're using a simpler connection check
+  // private lastHeartbeatResponse: number = 0;
+  // private heartbeatTimeoutMs: number = 30000; // 30 seconds
   
   // Private constructor to enforce singleton pattern
   private constructor() {
@@ -169,8 +170,9 @@ class WebSocketManager {
         this.scheduleReconnect();
       },
       onPong: () => {
-        // Update last heartbeat response time
-        this.lastHeartbeatResponse = Date.now();
+        // We no longer need to track heartbeat responses
+        // Just log that we received a pong
+        console.debug('[WebSocketManager] Received pong response');
       }
     };
     
@@ -559,31 +561,20 @@ class WebSocketManager {
     // Clear any existing heartbeat interval
     this.stopHeartbeat();
     
-    // Set the initial heartbeat response time
-    this.lastHeartbeatResponse = Date.now();
-    
-    // Start a new heartbeat interval
+    // Start a new heartbeat interval that only checks connection status
+    // without sending ping commands
     this.heartbeatInterval = setInterval(() => {
-      // Send a ping to the server
-      try {
-        websocketService.ping();
-      } catch (error) {
-        const typedError = error instanceof Error ? error : new Error(String(error));
-        console.error('[WebSocketManager] Error sending ping:', typedError);
-      }
-      
-      // Check if we've received a pong response within the timeout period
-      const now = Date.now();
-      if (now - this.lastHeartbeatResponse > this.heartbeatTimeoutMs) {
-        console.error('[WebSocketManager] Heartbeat timeout - connection is dead');
-        this.logConnectionEvent('Heartbeat timeout - connection is dead');
+      // Check if the WebSocket is still connected
+      if (!websocketService.isConnected()) {
+        console.error('[WebSocketManager] Connection check failed - WebSocket is disconnected');
+        this.logConnectionEvent('Connection check failed - WebSocket is disconnected');
         
         // Force disconnect and reconnect
-        this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('Heartbeat timeout'));
+        this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('Connection check failed'));
         this.disconnect();
         this.scheduleReconnect();
       }
-    }, 15000); // Send heartbeat every 15 seconds
+    }, 15000); // Check connection every 15 seconds
   }
   
   /**
