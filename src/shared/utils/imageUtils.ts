@@ -64,12 +64,17 @@ export function getNetlifyImageUrl(sourceUrl: string | undefined | null, options
  * @returns boolean indicating if Netlify Image CDN is available
  */
 export function isNetlifyImageCdnAvailable(): boolean {
-  // In development, the Netlify Image CDN is only available when using Netlify Dev
-  // In production on Netlify, it's always available
-  const isNetlifyProduction = process.env.NETLIFY === 'true';
-  const isNetlifyDev = process.env.NETLIFY_DEV === 'true';
+  // For production builds, always enable the Netlify Image CDN
+  // This ensures the CDN is used when deployed to Netlify
+  if (import.meta.env.PROD) {
+    return true;
+  }
   
-  return isNetlifyProduction || isNetlifyDev;
+  // In development, check if we're running on Netlify Dev
+  // This can be determined by checking for specific environment variables
+  const isNetlifyDev = import.meta.env.VITE_NETLIFY_DEV === 'true';
+  
+  return isNetlifyDev;
 }
 
 /**
