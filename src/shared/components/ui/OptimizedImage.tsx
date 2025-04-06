@@ -47,6 +47,11 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
     }
 
     try {
+      // TEMPORARY FIX: Always use original URL until we resolve Netlify CDN issues
+      setImageSrc(sourceUrl);
+      
+      // Original code commented out until fixed:
+      /*
       // Check if Netlify Image CDN is available
       if (isNetlifyImageCdnAvailable()) {
         // Transform the URL to use Netlify Image CDN
@@ -56,6 +61,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
         // Fall back to original URL if Netlify Image CDN is not available
         setImageSrc(sourceUrl);
       }
+      */
     } catch (error) {
       console.error("Error processing image URL:", error);
       setImageSrc(sourceUrl); // Fall back to original URL
