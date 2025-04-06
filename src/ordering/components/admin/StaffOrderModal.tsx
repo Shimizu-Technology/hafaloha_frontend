@@ -1502,6 +1502,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   const [staffOnDuty, setStaffOnDuty] = useState(false);
   const [useHouseAccount, setUseHouseAccount] = useState(false);
   const [createdByStaffId, setCreatedByStaffId] = useState<number | null>(null);
+  const [createdByUserId, setCreatedByUserId] = useState<number | null>(null);
   
 
   const [preDiscountTotal, setPreDiscountTotal] = useState(0);
@@ -1532,10 +1533,18 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   // For item customization
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   
-  // Fetch current user's staff member record to auto-set the createdByStaffId
+  // Fetch current user's staff member record to auto-set the createdByStaffId and createdByUserId
   useEffect(() => {
     const { user } = useAuthStore.getState();
     console.log('Current user from auth store:', user);
+    
+    // Set the created_by_user_id from the current user
+    if (user && user.id) {
+      // Convert string id to number if needed
+      const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
+      setCreatedByUserId(userId);
+      console.log(`Set createdByUserId to current user ID: ${userId}`);
+    }
     
     async function fetchCurrentUserStaffRecord() {
       if (user && user.id) {
@@ -1878,16 +1887,18 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         console.log(`Using staff ID ${finalCreatedByStaffId} as the creator of this order`);
       }
       
-      // Always include created_by_staff_id regardless of whether it's a staff order or not
+      // Always include created_by_staff_id and created_by_user_id regardless of whether it's a staff order or not
       const staffOrderParams = isStaffOrder ? {
         is_staff_order: true,
         staff_member_id: staffMemberId,
         staff_on_duty: staffOnDuty,
         use_house_account: useHouseAccount,
         created_by_staff_id: finalCreatedByStaffId,
+        created_by_user_id: createdByUserId,
         pre_discount_total: preDiscountTotal
       } : {
-        created_by_staff_id: finalCreatedByStaffId // Track creator even for customer orders
+        created_by_staff_id: finalCreatedByStaffId, // Track creator even for customer orders
+        created_by_user_id: createdByUserId // Always track the user who created the order
       };
       
       console.log('Final staff order parameters:', staffOrderParams);

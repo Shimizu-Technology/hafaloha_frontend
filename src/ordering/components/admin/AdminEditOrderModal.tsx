@@ -1163,65 +1163,35 @@ export function AdminEditOrderModal({
   }
 
   /**
-   * Match a refunded item to an order item using various matching strategies
+   * Match a refunded item to an order item using strict matching strategies
+   * This function is used to match refunded items to order items
+   * It has been updated to use more strict matching to prevent incorrect matches
    */
   function matchRefundedItemToOrderItem(refundKey: string, orderItems: OrderItem[]): OrderItem | undefined {
-    // Try exact ID match first
+    // If it's a generic refund key (refund_123), just return undefined immediately
+    if (refundKey.startsWith('refund_')) return undefined;
+    
+    // Try exact ID match first (most reliable)
     const idMatch = orderItems.find(item => 
-      item.id && String(item.id).toLowerCase() === refundKey.toLowerCase()
+      item.id && String(item.id) === refundKey
     );
     if (idMatch) return idMatch;
     
-    // Try name match (normalize the refundKey if it's a name-based key)
-    const normalizedKey = refundKey.replace(/_/g, ' ');
+    // Try case-insensitive ID match
+    const caseInsensitiveIdMatch = orderItems.find(item => 
+      item.id && String(item.id).toLowerCase() === refundKey.toLowerCase()
+    );
+    if (caseInsensitiveIdMatch) return caseInsensitiveIdMatch;
+    
+    // Try exact name match (normalize the refundKey if it's a name-based key)
+    const normalizedKey = refundKey.replace(/_/g, ' ').trim();
     const nameMatch = orderItems.find(item => 
-      item.name.toLowerCase() === normalizedKey.toLowerCase()
+      item.name.toLowerCase().trim() === normalizedKey.toLowerCase()
     );
     if (nameMatch) return nameMatch;
     
-    // If it's a generic refund key (refund_123), just return undefined
-    if (refundKey.startsWith('refund_')) return undefined;
-    
-    // Try partial name match as last resort
-    const partialMatch = orderItems.find(item => 
-      normalizedKey.toLowerCase().includes(item.name.toLowerCase()) ||
-      item.name.toLowerCase().includes(normalizedKey.toLowerCase())
-    );
-    
-    if (partialMatch) return partialMatch;
-    
-    // Try matching by first word of item name (common for items like "Cali Poke")
-    const firstWordMatch = orderItems.find(item => {
-      const firstWord = item.name.split(' ')[0].toLowerCase();
-      return normalizedKey.toLowerCase().includes(firstWord) || 
-             firstWord.includes(normalizedKey.toLowerCase());
-    });
-    
-    // Try matching by removing common words like "Bowl", "Plate", etc.
-    if (!firstWordMatch) {
-      const commonWords = ['bowl', 'plate', 'combo', 'special', 'regular', 'large', 'small', 'medium'];
-      const filteredItems = orderItems.filter(item => {
-        const itemWords = item.name.toLowerCase().split(' ');
-        const keyWords = normalizedKey.toLowerCase().split(' ');
-        
-        // Remove common words from both
-        const filteredItemWords = itemWords.filter(word => !commonWords.includes(word));
-        const filteredKeyWords = keyWords.filter(word => !commonWords.includes(word));
-        
-        // Check if any significant words match
-        return filteredItemWords.some(word => 
-          filteredKeyWords.some(keyWord => 
-            word.includes(keyWord) || keyWord.includes(word)
-          )
-        );
-      });
-      
-      if (filteredItems.length > 0) {
-        return filteredItems[0]; // Return the first match
-      }
-    }
-    
-    return firstWordMatch;
+    // No match found with strict criteria
+    return undefined;
   }
 
   /**
@@ -1240,7 +1210,7 @@ export function AdminEditOrderModal({
         let refundInfo: typeof refundTracker[string] | undefined;
         let matchedKey = '';
         
-        // 1. Try direct key matching first
+        // 1. Try direct key matching first - this is the most reliable method
         for (const key of possibleKeys) {
           if (refundTracker[key]) {
             refundInfo = refundTracker[key];
@@ -1249,11 +1219,12 @@ export function AdminEditOrderModal({
           }
         }
         
-        // 2. If no direct match, try to find by matching function
-        if (!refundInfo) {
+        // 2. If no direct match, try to find by exact ID match
+        if (!refundInfo && item.id) {
+          const itemId = String(item.id);
           for (const key in refundTracker) {
-            const matchedItem = matchRefundedItemToOrderItem(key, [item]);
-            if (matchedItem) {
+            // Check if the key contains the item ID as a whole number
+            if (key === itemId) {
               refundInfo = refundTracker[key];
               matchedKey = key;
               break;
@@ -1261,16 +1232,15 @@ export function AdminEditOrderModal({
           }
         }
         
-        // 3. Try fuzzy matching by checking if the name contains parts of any refund key
+        // 3. Try exact name match (more strict than fuzzy matching)
         if (!refundInfo) {
+          const normalizedItemName = item.name.toLowerCase().trim();
           for (const key in refundTracker) {
             if (key.startsWith('refund_')) continue; // Skip generic entries
             
-            const refundItemName = key.replace(/_/g, ' ');
-            if (
-              item.name.toLowerCase().includes(refundItemName) || 
-              refundItemName.includes(item.name.toLowerCase())
-            ) {
+            const refundItemName = key.replace(/_/g, ' ').toLowerCase().trim();
+            // Only match if names are exactly the same
+            if (normalizedItemName === refundItemName) {
               refundInfo = refundTracker[key];
               matchedKey = key;
               break;
@@ -2931,6 +2901,15 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
             <div className="text-gray-900">
               {new Date(order.createdAt).toLocaleString()}
             </div>
+
+            {order.created_by_user_id && (
+              <>
+                <div className="text-gray-500">Created By</div>
+                <div className="text-gray-900">
+                  {order.created_by_user_name || `User ID: ${order.created_by_user_id}`}
+                </div>
+              </>
+            )}
 
             {order.contact_name && (
               <>

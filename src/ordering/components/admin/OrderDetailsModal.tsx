@@ -1,5 +1,4 @@
 // src/ordering/components/admin/OrderDetailsModal.tsx
-import React from 'react';
 import { OrderPaymentHistory } from './OrderPaymentHistory';
 
 interface OrderDetailsModalProps {
@@ -43,6 +42,19 @@ export function OrderDetailsModal({
         <p className="text-xs text-gray-500 mb-3">
           Placed: {new Date(order.createdAt).toLocaleString()}
         </p>
+        
+        {/* Order Creator Information */}
+        <div className="text-xs text-gray-500 mb-3">
+          {order.created_by_user_id && (
+            <p>Created by User: {order.created_by_user_name || `ID: ${order.created_by_user_id}`}</p>
+          )}
+          {order.created_by_staff_id && (
+            <p>Created by Staff: {order.created_by_staff_name || `ID: ${order.created_by_staff_id}`}</p>
+          )}
+          {!order.created_by_user_id && !order.created_by_staff_id && (
+            <p>Created by: Customer</p>
+          )}
+        </div>
 
         <p className="font-medium mb-2 text-sm">Items:</p>
         <div className="space-y-2 mb-4">

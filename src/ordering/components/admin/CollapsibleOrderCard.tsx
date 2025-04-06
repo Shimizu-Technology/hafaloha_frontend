@@ -686,9 +686,30 @@ export function CollapsibleOrderCard({
               <h3 className="text-base font-medium text-gray-900">Order #{order.id}</h3>
             </div>
             {order.createdAt && (
-              <p className="text-xs text-gray-500">
-                {new Date(order.createdAt).toLocaleString()}
-              </p>
+              <div>
+                <p className="text-xs text-gray-500">
+                  {new Date(order.createdAt).toLocaleString()}
+                </p>
+                {/* Order Creator Information */}
+                <p className="text-xs text-gray-500">
+                  {order.created_by_user_id && (
+                    <span className="inline-flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      Created by: {order.created_by_user_name || `User ${order.created_by_user_id}`}
+                    </span>
+                  )}
+                  {!order.created_by_user_id && order.created_by_staff_id && (
+                    <span className="inline-flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      Created by: {order.created_by_staff_name || `Staff ${order.created_by_staff_id}`}
+                    </span>
+                  )}
+                </p>
+              </div>
             )}
           </div>
         </div>

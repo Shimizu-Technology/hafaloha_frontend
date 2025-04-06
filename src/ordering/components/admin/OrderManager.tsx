@@ -63,6 +63,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [staffFilter, setStaffFilter] = useState<string | null>(null);
   const [staffMembers, setStaffMembers] = useState<Array<{id: string, name: string}>>([]);
   
+  // user filter for admin users
+  const [userFilter, setUserFilter] = useState<string | null>(null);
+  const [users, setUsers] = useState<Array<{id: string, name: string}>>([]);
+  
   // pagination transition states
   const [isPageChanging, setIsPageChanging] = useState(false);
   const [previousOrders, setPreviousOrders] = useState<any[]>([]);
@@ -143,6 +147,48 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       };
       
       fetchStaffMembers();
+    }
+  }, [isSuperAdmin, isAdmin]);
+  
+  // ----------------------------------
+  // Fetch Users for Creator Filter
+  // ----------------------------------
+  useEffect(() => {
+    // Only fetch users if user is admin or super admin
+    if (isSuperAdmin() || isAdmin()) {
+      const fetchUsers = async () => {
+        try {
+          const response = await api.get('/users');
+          if (response) {
+            let usersList = [];
+            
+            // Handle different response formats
+            if (Array.isArray(response)) {
+              // Direct array response
+              usersList = response;
+            } else if (typeof response === 'object') {
+              // Object response with data property
+              const responseData = response as any;
+              if (responseData.data && Array.isArray(responseData.data)) {
+                usersList = responseData.data;
+              } else if (responseData.data && responseData.data.users && Array.isArray(responseData.data.users)) {
+                usersList = responseData.data.users;
+              }
+            }
+            
+            // Format users for dropdown
+            const formattedUsers = usersList.map((user: any) => ({
+              id: user.id.toString(),
+              name: user.name || user.email || `User ${user.id}`
+            }));
+            setUsers(formattedUsers);
+          }
+        } catch (error) {
+          console.error('Failed to fetch users:', error);
+        }
+      };
+      
+      fetchUsers();
     }
   }, [isSuperAdmin, isAdmin]);
   
@@ -279,10 +325,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     };
     
     // Handle different user roles
-    if ((isSuperAdmin() || isAdmin()) && staffFilter) {
-      // Admin filtering by specific staff member
-      params.staff_member_id = staffFilter;
-      params.endpoint = 'staff'; // Use the staff orders endpoint
+    if (isSuperAdmin() || isAdmin()) {
+      if (staffFilter) {
+        // Admin filtering by specific staff member
+        params.staff_member_id = staffFilter;
+        params.endpoint = 'staff'; // Use the staff orders endpoint
+      } else if (userFilter) {
+        // Admin filtering by specific user
+        params.user_id = userFilter;
+        params.endpoint = 'staff'; // Use the staff orders endpoint
+      }
     } else if (isStaff() && currentStaffMemberId) {
       // Staff users - backend policy will filter to show only their created orders and customer orders
       // We don't need to add any specific parameters as the backend policy handles this
@@ -328,10 +380,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     };
     
     // Handle different user roles
-    if ((isSuperAdmin() || isAdmin()) && staffFilter) {
-      // Admin filtering by specific staff member
-      params.staff_member_id = staffFilter;
-      params.endpoint = 'staff'; // Use the staff orders endpoint
+    if (isSuperAdmin() || isAdmin()) {
+      if (staffFilter) {
+        // Admin filtering by specific staff member
+        params.staff_member_id = staffFilter;
+        params.endpoint = 'staff'; // Use the staff orders endpoint
+      } else if (userFilter) {
+        // Admin filtering by specific user
+        params.user_id = userFilter;
+        params.endpoint = 'staff'; // Use the staff orders endpoint
+      }
     } else if (isStaff() && currentStaffMemberId) {
       // Staff users - backend policy will filter to show only their created orders and customer orders
       // We don't need to add any specific parameters as the backend policy handles this
@@ -1211,6 +1269,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 onChange={(e) => {
                   const value = e.target.value;
                   setStaffFilter(value === '' ? null : value);
+                  setUserFilter(null); // Clear user filter when staff filter is selected
                   setCurrentPage(1); // Reset to first page when changing filter
                 }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2
@@ -1220,6 +1279,29 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 <option value="">All Staff Orders</option>
                 {staffMembers.map(staff => (
                   <option key={staff.id} value={staff.id}>{staff.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* User Filter - Only visible to admin and super_admin */}
+          {(isSuperAdmin() || isAdmin()) && users.length > 0 && (
+            <div className="w-full mt-2">
+              <select
+                value={userFilter || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setUserFilter(value === '' ? null : value);
+                  setStaffFilter(null); // Clear staff filter when user filter is selected
+                  setCurrentPage(1); // Reset to first page when changing filter
+                }}
+                className="w-full border border-gray-300 rounded-md px-3 py-2
+                          text-sm focus:outline-none focus:ring-1 focus:ring-[#c1902f]
+                          transition-colors duration-200"
+              >
+                <option value="">Filter by Creator</option>
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
                 ))}
               </select>
             </div>

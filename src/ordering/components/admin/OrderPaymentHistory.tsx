@@ -34,8 +34,17 @@ interface StaffMember {
   user_id: number;
 }
 
+interface User {
+  id: number;
+  name?: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   
   useEffect(() => {
     // Fetch staff members to map IDs to names
@@ -52,7 +61,24 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
       }
     };
     
+    // Fetch users to map user IDs to names
+    const fetchUsers = async () => {
+      try {
+        const response = await apiClient.get('/users');
+        if (response && Array.isArray(response)) {
+          setUsers(response);
+        } else if (response && response.data && Array.isArray(response.data)) {
+          setUsers(response.data);
+        } else if (response && response.data && response.data.users && Array.isArray(response.data.users)) {
+          setUsers(response.data.users);
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    };
+    
     fetchStaffMembers();
+    fetchUsers();
   }, []);
   // Calculate totals
   const totalPaid = payments
@@ -126,18 +152,20 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
   };
 
   // Helper function to get refunded items from either direct property or payment_details
-  const getRefundedItems = (payment: OrderPayment) => {
+  const getRefundedItems = (payment: OrderPayment): RefundedItem[] => {
     // First check if refunded_items is directly on the payment
-    if (payment.refunded_items && payment.refunded_items.length > 0) {
+    if (payment.refunded_items && Array.isArray(payment.refunded_items) && payment.refunded_items.length > 0) {
       return payment.refunded_items;
     }
     
     // Then check if it's in payment_details
-    if (payment.payment_details && payment.payment_details.refunded_items) {
+    if (payment.payment_details && payment.payment_details.refunded_items && 
+        Array.isArray(payment.payment_details.refunded_items) && 
+        payment.payment_details.refunded_items.length > 0) {
       return payment.payment_details.refunded_items;
     }
     
-    return null;
+    return [];
   };
 
   return (
@@ -260,9 +288,20 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
                                 {payment.payment_details.error_handled && (
                                   <div><span className="font-medium">Error Handled:</span> {payment.payment_details.error_handled}</div>
                                 )}
+                                {payment.payment_details.created_by_user_id && (
+                                  <div>
+                                    <span className="font-medium">Created By User:</span> {
+                                      (() => {
+                                        const userId = Number(payment.payment_details.created_by_user_id);
+                                        const user = users.find(user => user.id === userId);
+                                        return user ? `${user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.name || user.email} (ID: ${userId})` : `ID: ${userId}`;
+                                      })()
+                                    }
+                                  </div>
+                                )}
                                 {/* Display any other fields that might be in payment_details */}
                                 {Object.entries(payment.payment_details)
-                                  .filter(([key]) => !['status', 'test_mode', 'amount', 'payment_date', 'transaction_id', 'notes', 'error_handled'].includes(key))
+                                  .filter(([key]) => !['status', 'test_mode', 'amount', 'payment_date', 'transaction_id', 'notes', 'error_handled', 'created_by_user_id'].includes(key))
                                   .map(([key, value]) => {
                                     // Special handling for staffOrderParams
                                     if (key === 'staffOrderParams' && typeof value === 'object' && value !== null) {
@@ -279,6 +318,18 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
                                                   <div key={paramKey} className="text-sm">
                                                     <span className="font-medium">{paramKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> 
                                                     {staffMember ? `${staffMember.name} (ID: ${staffId})` : `ID: ${staffId}`}
+                                                  </div>
+                                                );
+                                              }
+                                              
+                                              // Format user IDs to show names
+                                              if (paramKey === 'created_by_user_id') {
+                                                const userId = Number(paramValue);
+                                                const user = users.find(user => user.id === userId);
+                                                return (
+                                                  <div key={paramKey} className="text-sm">
+                                                    <span className="font-medium">Created By User:</span> 
+                                                    {user ? `${user.name || user.email} (ID: ${userId})` : `ID: ${userId}`}
                                                   </div>
                                                 );
                                               }
