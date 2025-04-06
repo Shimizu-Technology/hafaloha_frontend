@@ -28,12 +28,9 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
   // Safely handle no option_groups
   const optionGroups = item.option_groups || [];
 
-  // Debug: Log option groups and their options to see price values
+  // Initialize selections based on option groups
   useEffect(() => {
-    console.log('Option groups:', optionGroups);
-    optionGroups.forEach(group => {
-      console.log(`Group ${group.name} options:`, group.options);
-    });
+    // Option groups initialization logic
   }, [optionGroups]);
 
   // Initialize selections with pre-selected options and set first group as expanded
@@ -115,7 +112,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
           .map(id => {
             const option = group.options.find(o => o.id === id);
             // Debug: Log the option and its price
-            console.log('Option found:', option);
+            // Option found and being processed
             
             // Try different ways to access the price
             const price = option ? 
@@ -124,11 +121,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                typeof (option as any).additional_price_float === 'number' ? (option as any).additional_price_float : 
                2.0) : 0;
             
-            console.log(`Option ${option?.name} price:`, {
-              additional_price: option?.additional_price,
-              additional_price_float: (option as any).additional_price_float,
-              computed_price: price
-            });
+            // Price calculation for option
             
             return option ? {
               id,
@@ -200,7 +193,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
         
         for (const opt of paidOptions) {
           sum += opt.price;
-          console.log(`Adding price ${opt.price} for ${opt.name}, new sum: ${sum}`);
+          // Adding option price to total sum
         }
       }
     }

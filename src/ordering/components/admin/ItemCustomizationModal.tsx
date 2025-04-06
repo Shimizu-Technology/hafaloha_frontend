@@ -22,13 +22,8 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
   // Force re-render when selections change to update price calculations
   const [, forceUpdate] = useState({});
 
-  // Debug: Log option groups and their options to see price values
-  useEffect(() => {
-    console.log('Option groups:', item.option_groups);
-    item.option_groups?.forEach(group => {
-      console.log(`Group ${group.name} options:`, group.options);
-    });
-  }, [item.option_groups]);
+  // This effect was previously used for debugging option groups
+  // Now removed to clean up console logs
 
   // Initialize selected options for required option groups
   useEffect(() => {

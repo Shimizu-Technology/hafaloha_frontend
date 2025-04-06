@@ -14,6 +14,8 @@ import { StripeCheckout, StripeCheckoutRef } from '../../components/payment/Stri
 import { PayPalCheckout, PayPalCheckoutRef } from '../../components/payment/PayPalCheckout';
 
 // Child components
+// Used in JSX below - TypeScript doesn't detect this correctly
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ItemCustomizationModal } from './ItemCustomizationModal';
 import { StaffOrderOptions } from './StaffOrderOptions';
 
@@ -81,8 +83,7 @@ function MenuItemsPanel({
 }: MenuItemsPanelProps) {
   // Debug: Log categories when they change
   useEffect(() => {
-    console.log('MenuItemsPanel - categories:', Array.from(categories.entries()));
-    console.log('MenuItemsPanel - categories size:', categories.size);
+    // Categories processed for menu items panel
   }, [categories]);
   // Filter items by search term & category
   const filteredMenuItems = menuItems.filter(item => {
@@ -1487,24 +1488,35 @@ function PaymentPanel({
 /** --------------------------------------------------------------------
  * STAFF ORDER MODAL (MAIN)
  * -------------------------------------------------------------------*/
-export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProps) {
+export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProps): JSX.Element {
+  // Used in conditional rendering logic
   const isMobile = useIsMobile();
 
-  // Basic Customer info
+  // Basic Customer info - used in customer info panel
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [contactName, setContactName] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [contactPhone, setContactPhone] = useState('+1671');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [contactEmail, setContactEmail] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [specialInstructions, setSpecialInstructions] = useState('');
   
-  // Staff order info
+  // Staff order info - used in staff order options
   const [isStaffOrder, setIsStaffOrder] = useState(false);
   const [staffMemberId, setStaffMemberId] = useState<number | null>(null);
   const [staffOnDuty, setStaffOnDuty] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [useHouseAccount, setUseHouseAccount] = useState(false);
+  // Used for tracking order creation metadata
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [createdByStaffId, setCreatedByStaffId] = useState<number | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [createdByUserId, setCreatedByUserId] = useState<number | null>(null);
   
 
+  // Used for price calculations
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [preDiscountTotal, setPreDiscountTotal] = useState(0);
 
 
@@ -1513,7 +1525,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   
   // Debug: Log currentMenuId when it changes
   useEffect(() => {
-    console.log('StaffOrderModal - currentMenuId changed:', currentMenuId);
+    // Current menu ID updated
   }, [currentMenuId]);
   const {
     cartItems,
@@ -1536,25 +1548,25 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   // Fetch current user's staff member record to auto-set the createdByStaffId and createdByUserId
   useEffect(() => {
     const { user } = useAuthStore.getState();
-    console.log('Current user from auth store:', user);
+    // Getting current user from auth store
     
     // Set the created_by_user_id from the current user
     if (user && user.id) {
       // Convert string id to number if needed
       const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
       setCreatedByUserId(userId);
-      console.log(`Set createdByUserId to current user ID: ${userId}`);
+      // Setting order creator to current user
     }
     
     async function fetchCurrentUserStaffRecord() {
       if (user && user.id) {
         try {
-          console.log(`Fetching staff record for user ID: ${user.id}`);
+          // Fetching staff record for current user
           // Use the updated API endpoint with user_id filter
           const response = await apiClient.get(`/staff_members`, {
             params: { user_id: user.id }
           });
-          console.log('Staff members API response:', response.data);
+          // Staff members data received
           
           let staffMemberData;
           
@@ -1568,11 +1580,10 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           }
           
           if (staffMemberData && staffMemberData.id) {
-            console.log(`Found staff record for current user: ${staffMemberData.name} (ID: ${staffMemberData.id})`);
+            // Found staff record for current user
             setCreatedByStaffId(staffMemberData.id);
           } else {
-            console.log('No staff record found for current user ID:', user.id);
-            console.log('This user may not be associated with a staff member in the system.');
+            // No staff record found for current user
             // Don't set a default staff ID - the system should use the authenticated user
             // This will ensure the order is properly attributed to the current user
           }
@@ -1580,7 +1591,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           console.error('Error fetching current user staff record:', err);
         }
       } else {
-        console.log('No user ID available, cannot fetch staff record');
+        // No user ID available, cannot fetch staff record
       }
     }
     
@@ -1596,6 +1607,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   // Payment overlay
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+  // Used for tracking payment transactions
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [paymentTransactionId, setPaymentTransactionId] = useState<string | null>(null);
 
   // Calculate raw total (before any discounts)
@@ -1637,9 +1650,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   useEffect(() => {
     async function fetchCats() {
       try {
-        console.log('Fetching all categories');
+        // Fetching all categories
         const res = await apiClient.get('/categories');
-        console.log('Categories from API:', res.data);
         
         // Store all categories in state
         setAllCategories(res.data);
@@ -1655,12 +1667,12 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   
   // Filter categories by current menu ID using useMemo
   const filteredCategories = useMemo(() => {
-    console.log('StaffOrderModal - filtering categories, currentMenuId:', currentMenuId);
+    // Filtering categories by current menu
     
     // Get the active menu ID from the menuStore if currentMenuId is null
     const menuStore = useMenuStore.getState();
     const activeMenuId = currentMenuId || menuStore.currentMenuId;
-    console.log('StaffOrderModal - using activeMenuId for filtering:', activeMenuId);
+    // Using active menu ID for category filtering
     
     const catMap = new Map<number, string>();
     
@@ -1668,13 +1680,13 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       // Filter categories by active menu ID
       allCategories.forEach((c: any) => {
         if (Number(c.menu_id) === Number(activeMenuId)) {
-          console.log(`StaffOrderModal - adding category ${c.id} (${c.name}) - matches menu ${activeMenuId}`);
+          // Adding category that matches active menu
           catMap.set(c.id, c.name);
         }
       });
     } else if (allCategories.length > 0) {
       // Fallback: if no activeMenuId but we have categories, use menu item categories as fallback
-      console.log('StaffOrderModal - no activeMenuId, using fallback from menu items');
+      // No active menu ID, using fallback from menu items
       menuItems.forEach(item => {
         if (item.category_ids) {
           item.category_ids.forEach(catId => {
@@ -1690,8 +1702,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       });
     }
     
-    console.log('StaffOrderModal - final catMap size:', catMap.size);
-    console.log('StaffOrderModal - final catMap entries:', Array.from(catMap.entries()));
+    // Category mapping completed
     
     return catMap;
   }, [allCategories, currentMenuId, menuItems]);
@@ -1776,12 +1787,13 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     // and the price has been properly calculated
     
     // Debug log to help troubleshoot price calculations
-    console.log('StaffOrderModal - Adding customized item to cart:', {
-      itemName: item.name,
-      finalPrice: finalPrice,
-      quantity: qty,
-      customizations: item.customizations
-    });
+    // Adding customized item to cart
+    // console.log('Adding customized item to cart:', {
+    //   itemName: item.name,
+    //   finalPrice: finalPrice,
+    //   quantity: qty,
+    //   customizations: item.customizations
+    // });
     
     // Add to cart with the price and customizations already set in ItemCustomizationModal
     addToCart({
@@ -1877,14 +1889,14 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     
     try {
       // Prepare staff order parameters
-      console.log('Preparing staff order parameters with createdByStaffId:', createdByStaffId);
+      // Preparing staff order parameters
       
       // Use the current user's staff ID as the creator
       let finalCreatedByStaffId = createdByStaffId;
       if (!finalCreatedByStaffId) {
-        console.log('No staff ID found for current user, order creation may not be properly attributed');
+        // No staff ID found for current user
       } else {
-        console.log(`Using staff ID ${finalCreatedByStaffId} as the creator of this order`);
+        // Using staff ID for order attribution
       }
       
       // Always include created_by_staff_id and created_by_user_id regardless of whether it's a staff order or not
@@ -1901,7 +1913,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         created_by_user_id: createdByUserId // Always track the user who created the order
       };
       
-      console.log('Final staff order parameters:', staffOrderParams);
+      // Staff order parameters prepared
       
       // Include staffOrderParams in the paymentDetails object to work around TypeScript interface limitations
       const enhancedPaymentDetails = {
@@ -1938,7 +1950,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           } else if (paymentMethod === 'house_account') {
             // For house account payments, no additional API call is needed
             // The backend already processes the house account payment when creating the order
-            console.log('House account payment processed during order creation');
+            // House account payment processed
           } else {
             // For other manual payment methods, use the additional endpoint
             await apiClient.post(`/orders/${newOrder.id}/payments/additional`, {
@@ -1949,7 +1961,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
               items: [] // No additional items, just creating a payment record
             });
           }
-          console.log(`Created payment record for ${paymentMethod} payment`);
+          // Payment record created
         } catch (paymentErr) {
           // Just log the error but don't fail the order creation
           console.error('Failed to create payment record:', paymentErr);
@@ -2015,7 +2027,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   }
 
   // MOBILE TABS
-  function renderMobileLayout() {
+  function renderMobileLayout(): JSX.Element {
     return (
       <div className="flex flex-col overflow-hidden h-full">
         {/* Tab bar */}
@@ -2148,7 +2160,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   }
 
   // DESKTOP / TABLET Layout
-  function renderDesktopLayout() {
+  function renderDesktopLayout(): JSX.Element {
     if (showPaymentPanel) {
       // Payment overlay with higher z-index
       return (

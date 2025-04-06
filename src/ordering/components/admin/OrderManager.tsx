@@ -221,7 +221,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           }
           
           if (staffMemberData && staffMemberData.id) {
-            console.log(`Found staff record for current user: ID: ${staffMemberData.id}`);
+            // Staff record found for current user
             setCurrentStaffMemberId(staffMemberData.id.toString());
           }
         } catch (error) {
@@ -296,18 +296,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       setIsPageChanging(true);
     }
     
-    console.log(`[OrderManager:Pagination] Fetching orders for page ${pageToFetch}, ordersPerPage=${ordersPerPage}`);
-    console.log(`[OrderManager:Pagination] Current component state page: ${currentPage}`);
-    console.log(`[OrderManager:Pagination] Current filters: status=${selectedStatus}, sortNewestFirst=${sortNewestFirst}, dateFilter=${dateFilter}`);
-    console.log(`[OrderManager:Pagination] Date range: ${start.toISOString()} to ${end.toISOString()}`);
+    // Fetching orders with pagination and filters
     
     // Create a unique source ID for tracking this request
     const sourceId = requestId ? `page-change-${requestId}` : `page-change-${Date.now()}`;
     
     // Get current store state to log
+    // Store state available for debugging if needed
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const currentStoreState = useOrderStore.getState();
-    console.log(`[OrderManager:Pagination] Current store metadata before fetch: page=${currentStoreState.metadata.page}, total_pages=${currentStoreState.metadata.total_pages}, total_count=${currentStoreState.metadata.total_count}`);
-    console.log(`[OrderManager:Pagination] ⚠️ Using page ${pageToFetch} for this request (${pageToFetch === currentPage ? 'matches' : 'DIFFERS FROM'} component state)`);
+    // Preparing to fetch with current store metadata
     
     // Make the API request with explicit parameters
     // Add staff filter parameter for admin users
@@ -338,13 +336,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     } else if (isStaff() && currentStaffMemberId) {
       // Staff users - backend policy will filter to show only their created orders and customer orders
       // We don't need to add any specific parameters as the backend policy handles this
-      console.log(`Staff user viewing orders - backend policy will filter appropriately`);
+      // Staff user viewing orders - backend policy will filter appropriately
     }
     
     fetchOrders(params);
     
     // Log the request ID for debugging
-    console.debug(`[OrderManager:Pagination] API request sent with ID: ${sourceId} for page ${pageToFetch}`);
+    // API request sent for order pagination
     
     return sourceId; // Return the source ID for potential future reference
   }, [/* deliberately NOT including currentPage to avoid stale closures */
@@ -355,9 +353,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const { start, end } = getDateRange();
     
     // Log the current page to help with debugging
-    console.debug(`[OrderManager:Pagination] Fetching orders quietly with params: page=${currentPage}, ordersPerPage=${ordersPerPage}`);
-    console.debug(`[OrderManager:Pagination] Current store metadata before quiet fetch: ${JSON.stringify(useOrderStore.getState().metadata)}`);
-    console.debug(`[OrderManager:Pagination] WebSocket connected: ${useOrderStore.getState().websocketConnected}`);
+    // Fetching orders quietly with current pagination parameters
     
     // Get the function directly from the store to avoid stale references
     const { fetchOrdersQuietly } = useOrderStore.getState();
@@ -393,13 +389,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     } else if (isStaff() && currentStaffMemberId) {
       // Staff users - backend policy will filter to show only their created orders and customer orders
       // We don't need to add any specific parameters as the backend policy handles this
-      console.log(`Staff user viewing orders - backend policy will filter appropriately`);
+      // Staff user viewing orders - backend policy will filter appropriately
     }
     
     fetchOrdersQuietly(params);
     
     // Log the request ID for debugging
-    console.debug(`[OrderManager] Quiet API request sent with ID: ${sourceId}`);
+    // Quiet API request sent
   }, [
     currentPage,
     ordersPerPage,
@@ -424,9 +420,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Get store functions directly to avoid stale references
     const { startWebSocketConnection, stopWebSocketConnection, stopOrderPolling } = useOrderStore.getState();
     
-    console.debug('[OrderManager:WebSocket] Setting up WebSocket connection on component mount');
-    console.debug(`[OrderManager:WebSocket] Current pagination state: page=${currentPage}, ordersPerPage=${ordersPerPage}`);
-    console.debug(`[OrderManager:WebSocket] Current store metadata: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+    // Setting up WebSocket connection on component mount
     
     // Explicitly stop any existing polling to ensure WebSockets are prioritized
     stopOrderPolling();
@@ -440,8 +434,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       // This prevents conflicts with AdminDashboard which also establishes connections
       const { websocketConnected } = useOrderStore.getState();
       if (!websocketConnected) {
-        console.debug('[OrderManager:WebSocket] Starting WebSocket connection (not already connected)');
-        console.debug(`[OrderManager:WebSocket] Current store metadata before connection: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+        // Starting WebSocket connection
         // Start WebSocket connection
         // The WebSocket service will get pagination parameters from the store's metadata
         startWebSocketConnection();
@@ -449,8 +442,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         // Double-check polling is stopped after WebSocket connection attempt
         setTimeout(() => stopOrderPolling(), 500);
       } else {
-        console.debug('[OrderManager:WebSocket] WebSocket already connected');
-        console.debug(`[OrderManager:WebSocket] Current store metadata with existing connection: ${JSON.stringify(useOrderStore.getState().metadata)}`);
+        // WebSocket already connected
         // Even if already connected, we can update the pagination state in the orderStore
         // The orderStore will handle updating the WebSocket service with current pagination
       }
@@ -463,7 +455,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const unsubscribeFromStore = useOrderStore.subscribe((state) => {
       // Check WebSocket status on each store update and ensure polling is stopped if connected
       if (state.websocketConnected && state.pollingInterval !== null) {
-        console.debug('[OrderManager:WebSocket] WebSocket connected but polling still active - stopping polling');
+        // WebSocket connected, stopping polling
         stopOrderPolling();
       }
       
@@ -478,7 +470,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         console.warn('[OrderManager:Pagination] This may be caused by a WebSocket update affecting pagination metadata');
         
         // Force a refresh of the current page to get correct metadata
-        console.debug('[OrderManager:Pagination] Forcing refresh to restore correct pagination metadata');
+        // Forcing refresh to restore correct pagination metadata
         fetchOrdersWithParams(Date.now(), currentPage);
         return;
       }
@@ -526,7 +518,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const websocketCheckInterval = setInterval(() => {
       const { websocketConnected, pollingInterval } = useOrderStore.getState();
       if (websocketConnected && pollingInterval !== null) {
-        console.debug('[OrderManager:WebSocket] Periodic check: WebSocket connected but polling still active - stopping polling');
+        // Periodic check: stopping polling as WebSocket is connected
         stopOrderPolling();
       }
     }, 30000);
@@ -540,7 +532,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       // Don't disconnect WebSocket when changing pages - only when component unmounts completely
       // This prevents the WebSocket connection from being repeatedly closed and reopened
       if (document.visibilityState !== 'visible') {
-        console.debug('[OrderManager] Stopping WebSocket connection on component unmount');
+        // Stopping WebSocket connection on component unmount
         stopWebSocketConnection();
       }
       stopOrderPolling();
@@ -553,23 +545,26 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // Effect to fetch orders when page or filters change
   useEffect(() => {
-    console.debug(`[OrderManager:Pagination] 🔄 Filter/page changed - currentPage: ${currentPage}, previous page: ${useOrderStore.getState().metadata.page}`);
-    console.debug(`[OrderManager:Pagination] Dependencies changed: ordersPerPage=${ordersPerPage}, selectedStatus=${selectedStatus}, sortNewestFirst=${sortNewestFirst}, dateFilter=${dateFilter}, searchQuery=${searchQuery}`);
+    // Filter or page changed, updating view
     
     // Record the timestamp of this page change to prevent race conditions
     const changeTimestamp = Date.now();
+    // Previous timestamp for tracking request timing
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const previousTimestamp = lastPageChangeRef.current;
     lastPageChangeRef.current = changeTimestamp;
     
-    console.debug(`[OrderManager:Pagination] Page change timestamp: ${changeTimestamp}, previous: ${previousTimestamp}, diff: ${changeTimestamp - previousTimestamp}ms`);
+    // Page change timestamp updated
     
     // Capture the current page value to ensure we use the correct page in the API call
     // This prevents issues with stale closures
     const capturedPage = currentPage;
-    console.debug(`[OrderManager:Pagination] 📌 Captured page value: ${capturedPage}`);
+    // Captured page value for pagination
     
     // Update the store's metadata to ensure WebSocket uses correct page
     // This is critical for ensuring pagination works correctly
+    // Previous metadata for comparison during debugging
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const previousMetadata = { ...useOrderStore.getState().metadata };
     useOrderStore.setState(state => ({
       metadata: {
@@ -580,35 +575,35 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       _lastFetchRequestId: changeTimestamp // Use timestamp as request ID to track this specific request
     }));
     
-    console.debug(`[OrderManager:Pagination] Updated store metadata: previous=${JSON.stringify(previousMetadata)}, current=${JSON.stringify(useOrderStore.getState().metadata)}`);
+    // Updated store metadata for pagination
     
     // Notify WebSocket service about pagination change
     // This ensures that any real-time updates will be for the correct page
     const { websocketConnected } = useOrderStore.getState();
     if (websocketConnected) {
-      console.debug(`[OrderManager:Pagination] Notifying WebSocket service about page change to ${capturedPage}`);
+      // Notifying WebSocket service about page change
       // The OrderChannel subscription will be updated with the new page number
       // This is handled internally by the WebSocket service
     } else {
-      console.debug(`[OrderManager:Pagination] WebSocket not connected, skipping notification`);
+      // WebSocket not connected, skipping notification
     }
     
     // Add a small delay to allow React to complete its rendering cycle
     // This helps prevent multiple rapid API calls
-    console.debug(`[OrderManager:Pagination] Setting timeout for fetch with delay of 50ms`);
+    // Setting timeout for fetch with delay
     const timeoutId = setTimeout(() => {
       // Only fetch if this is still the most recent page change
       if (lastPageChangeRef.current === changeTimestamp) {
-        console.debug(`[OrderManager:Pagination] 🔍 Fetching orders after delay for page ${capturedPage}, timestamp ${changeTimestamp} is still current`);
+        // Fetching orders after delay
         // Pass the captured page to ensure we fetch the correct page
         fetchOrdersWithParams(changeTimestamp, capturedPage);
       } else {
-        console.debug(`[OrderManager:Pagination] ⚠️ Skipping fetch after delay - timestamp ${changeTimestamp} is no longer current (current is ${lastPageChangeRef.current})`);
+        // Skipping fetch after delay - timestamp is no longer current
       }
     }, 50);
     
     return () => {
-      console.debug(`[OrderManager:Pagination] Cleanup - clearing timeout for fetch with timestamp ${changeTimestamp}`);
+      // Cleanup - clearing timeout for fetch
       clearTimeout(timeoutId);
     };
   }, [currentPage, ordersPerPage, selectedStatus, sortNewestFirst, dateFilter, searchQuery, fetchOrdersWithParams]);
@@ -616,12 +611,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // Additional effect to force update WebSocket pagination params when page changes
   useEffect(() => {
     // This effect only handles page changes to ensure WebSocket has the correct page
-    console.debug(`[OrderManager:Pagination] 🔄 Page changed to ${currentPage}`);
+    // Page changed, updating view
     
     // Update WebSocket pagination parameters directly
     const { websocketConnected } = useOrderStore.getState();
     if (websocketConnected) {
-      console.debug(`[OrderManager:Pagination] 📡 Explicitly updating WebSocket pagination params to page=${currentPage}`);
+      // Explicitly updating WebSocket pagination params
       // Use the imported websocketService instead of require
       websocketService.updatePaginationParams({
         page: currentPage,
@@ -630,7 +625,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       
       // Force a refresh of the current page to ensure we have correct data and metadata
       // This prevents WebSocket updates from causing pagination issues
-      console.debug('[OrderManager:Pagination] Forcing refresh to ensure correct data for new page');
+      // Forcing refresh to ensure correct data for new page
       fetchOrdersWithParams(Date.now(), currentPage);
     }
   }, [currentPage, ordersPerPage, fetchOrdersWithParams]);
@@ -698,7 +693,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const processInventoryActionsAndCancel = async (inventoryActions: any[]) => {
     setIsStatusUpdateInProgress(true);
     try {
-      console.log("Processing inventory actions:", inventoryActions);
+      // Processing inventory actions
       
       // Group actions by order ID for payment processing
       const actionsByOrder = new Map<string | number, any[]>();
@@ -714,7 +709,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         
         // Skip inventory processing for placeholder items (itemId = 0)
         if (action.itemId === 0) {
-          console.log('Skipping inventory processing for placeholder item');
+          // Skipping inventory processing for placeholder item
           continue;
         }
         
@@ -722,7 +717,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         if (action.action === 'mark_as_damaged') {
           // Mark items as damaged - use the orderId from the action
           // (which comes from the specific order the item belongs to)
-          console.log(`Marking item ${action.itemId} as damaged (qty: ${action.quantity})`);
+          // Marking item as damaged
           await menuItemsApi.markAsDamaged(action.itemId, {
             quantity: action.quantity,
             reason: action.reason || 'Damaged during order cancellation',
@@ -730,7 +725,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           });
         } else if (action.action === 'return_to_inventory') {
           // Explicitly return items to inventory by increasing stock
-          console.log(`Returning item ${action.itemId} to inventory (qty: ${action.quantity})`);
+          // Returning item to inventory
           // Get current item details
           const menuItem = await menuItemsApi.getById(action.itemId);
           
@@ -779,7 +774,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     items: refundItems,
                     refunded_items: refundItems
                   });
-                  console.log(`Refund processed for order ${orderId}`);
+                  // Refund processed successfully
                 } catch (error) {
                   console.error(`Error processing refund for order ${orderId}:`, error);
                   toastUtils.error(`Failed to process refund for order #${orderId}`);

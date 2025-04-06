@@ -120,7 +120,7 @@ export function AdminEditOrderModal({
   order,
   onClose,
   onSave,
-}: AdminEditOrderModalProps) {
+}: AdminEditOrderModalProps): JSX.Element {
   // ----------------------------------------------------------------
   // 1) Original vs. local items
   // ----------------------------------------------------------------
@@ -217,21 +217,17 @@ export function AdminEditOrderModal({
       const fetchPaymentsFirst = async () => {
         if (order.id) {
           try {
-            console.log('Fetching payments first for order:', order.id);
+            // Fetching payments first for order
             const resp = await orderPaymentsApi.getPayments(order.id);
             const responseData = resp as any;
             let { payments: list, total_paid, total_refunded } = responseData.data;
             
-            console.log('Initial API response for payments:', {
-              paymentCount: list?.length || 0,
-              total_paid,
-              total_refunded,
-              responseData
-            });
+            // Process initial API response for payments
+            const paymentCount = list?.length || 0;
             
             // If no payments exist but order has total, simulate an initial payment
             if (list.length === 0 && order.total > 0) {
-              console.log('No initial payments found, creating initial payment with amount:', order.total);
+              // No initial payments found, creating initial payment
               const initialPayment: OrderPaymentLocal = {
                 id: 0,
                 payment_type: 'initial',
@@ -256,12 +252,7 @@ export function AdminEditOrderModal({
               newMaxRefundable = Math.max(0, total_paid - total_refunded);
             }
             
-            console.log('Setting initial max refundable amount:', {
-              total_paid,
-              total_refunded,
-              calculatedMaxRefundable,
-              newMaxRefundable
-            });
+            // Setting initial max refundable amount
             
             // Set payments
             setPayments(list);
@@ -1285,17 +1276,17 @@ export function AdminEditOrderModal({
     async function initializePaymentsAndRefunds() {
       if (order.id) {
         try {
-          console.log('Initializing payments and refunds for order:', order.id);
+          // Initializing payments and refunds
           // Fetch payments
           const resp = await orderPaymentsApi.getPayments(order.id);
           const responseData = resp as any;
           let { payments: list, total_paid, total_refunded } = responseData.data;
           
-          console.log('Payments fetched:', list.length, 'payments found');
+          // Payments fetched successfully
           
           // If no payments exist but order has total, simulate an initial payment
           if (list.length === 0 && order.total > 0) {
-            console.log('No payments found, creating initial payment');
+            // No payments found, creating initial payment
             const initialPayment: OrderPaymentLocal = {
               id: 0,
               payment_type: 'initial',
@@ -1318,12 +1309,12 @@ export function AdminEditOrderModal({
           // Process refunds immediately
           if (list.length > 0) {
             const refundTransactions = list.filter((p: OrderPaymentLocal) => p.payment_type === 'refund');
-            console.log('Refund transactions found:', refundTransactions.length);
+            // Processing refund transactions
             
             // Always build the refund tracker, even if no refund transactions
             // This ensures we process any refunds that might exist
             const refundTracker = buildRefundTracker(list);
-            console.log('Refund tracker built:', Object.keys(refundTracker).length, 'items tracked');
+            // Refund tracker built successfully
             
             // Set the refunded items map
             setRefundedItemsMap(refundTracker);
@@ -1375,7 +1366,7 @@ export function AdminEditOrderModal({
   // This prevents race conditions between multiple useEffects
   useEffect(() => {
     if (order.id && payments.length > 0) {
-      console.log('Processing payments and refunds in unified handler');
+      // Processing payments and refunds in unified handler
       
       // 1. Build refund tracker
       const refundTracker = buildRefundTracker(payments);
@@ -1400,10 +1391,7 @@ export function AdminEditOrderModal({
       
       // 5. Recalculate max refundable amount based on all payments
       const newMaxRefundable = calculateMaxRefundableAmount(payments);
-      console.log('Recalculating max refundable amount:', {
-        newMaxRefundable,
-        payments: payments.length
-      });
+      // Recalculating max refundable amount
       setMaxRefundable(newMaxRefundable);
     }
   }, [order.id, payments]);
@@ -1411,16 +1399,12 @@ export function AdminEditOrderModal({
   // Refresh payments when switching to payments tab
   useEffect(() => {
     if (activeTab === 'payments' && order.id) {
-      console.log('Switching to payments tab, refreshing payments data');
+      // Switching to payments tab, refreshing data
       fetchPayments().then(() => {
         // After fetching payments, manually recalculate max refundable amount
         if (payments.length > 0) {
           const newMaxRefundable = calculateMaxRefundableAmount(payments);
-          console.log('Tab switch - Recalculating max refundable amount:', {
-            newMaxRefundable,
-            payments: payments.length
-          });
-          
+          // Tab switch - Recalculating max refundable amount
           setMaxRefundable(newMaxRefundable);
         }
       });
@@ -1447,18 +1431,14 @@ export function AdminEditOrderModal({
     if (!order.id) return;
     setLoadingPayments(true);
     try {
-      console.log('Fetching payments for order:', order.id);
+      // Fetching payments for order
       const resp = await orderPaymentsApi.getPayments(order.id);
       // Typically the backend returns { payments, total_paid, total_refunded, ... }
       const responseData = resp as any;
       let { payments: list, total_paid, total_refunded } = responseData.data;
 
-      console.log('API response for payments:', {
-        paymentCount: list?.length || 0,
-        total_paid,
-        total_refunded,
-        responseData
-      });
+      // Processing API response for payments
+      const paymentCount = list?.length || 0;
 
       // Check if we need to simulate an initial payment
       const hasInitialPayment = list.some((p: OrderPaymentLocal) => p.payment_type === 'initial');
@@ -1474,7 +1454,7 @@ export function AdminEditOrderModal({
           !hasFullAdditionalPayment &&
           order.total > 0 &&
           order.payment_method) {
-        console.log('Creating simulated initial payment with amount:', order.payment_amount || order.total);
+        // Creating simulated initial payment
         
         // Calculate the initial payment amount
         // If there's a payment_amount, use that, otherwise use the total
@@ -1500,7 +1480,7 @@ export function AdminEditOrderModal({
         total_paid = (total_paid || 0) + initialAmount;
         total_refunded = total_refunded || 0;
         
-        console.log('Payment list after adding initial payment:', list);
+        // Payment list updated with initial payment
       }
 
       // Calculate max refundable amount using our helper function
@@ -1512,17 +1492,13 @@ export function AdminEditOrderModal({
         newMaxRefundable = Math.max(0, total_paid - total_refunded);
       }
       
-      console.log('Setting max refundable amount:', {
-        total_paid,
-        total_refunded,
-        calculatedMaxRefundable,
-        newMaxRefundable
-      });
+      // Setting max refundable amount
+      setMaxRefundable(newMaxRefundable);
 
       // Convert "additional" payments to "initial" payments in the UI if they're the only payment for the order
       // This ensures consistent display across all payment methods
       if (list.length === 1 && list[0].payment_type === 'additional') {
-        console.log('Converting single additional payment to initial payment for UI consistency');
+        // Converting additional payment to initial payment for UI consistency
         
         // Extract cash payment details if available
         const payment = list[0];
@@ -1552,7 +1528,7 @@ export function AdminEditOrderModal({
           change_due: changeDue || orderPaymentDetails.change_due
         };
         
-        console.log('Enhanced payment details:', enhancedPaymentDetails);
+        // Payment details enhanced with additional information
         
         // Create the enhanced payment with all details preserved
         list = [{
@@ -1570,7 +1546,7 @@ export function AdminEditOrderModal({
 
       // Fallback if the API fails
       if (order.total > 0) {
-        console.log('API call failed, using order.total as fallback:', order.total);
+        // API call failed, using order.total as fallback
         setMaxRefundable(parseFloat(order.total));
         const initialPayment: OrderPaymentLocal = {
           id: 0,
@@ -1599,7 +1575,7 @@ export function AdminEditOrderModal({
     }>
   ) {
     // Log inventory actions for debugging
-    console.log('Processing inventory actions in handleRefundCreated:', inventoryActions);
+    // Processing inventory actions after refund
     
     // Process inventory actions
     inventoryActions.forEach(action => {
@@ -1607,7 +1583,7 @@ export function AdminEditOrderModal({
       const quantity = Math.max(1, action.quantity || 1); // Default to 1 if undefined or 0
       
       if (action.action === 'mark_as_damaged') {
-        console.log(`Marking ${quantity} units of item ${action.itemId} as damaged`);
+        // Marking items as damaged in inventory
         setItemsToMarkAsDamaged(prev => [
           ...prev,
           {
@@ -1617,7 +1593,7 @@ export function AdminEditOrderModal({
           }
         ]);
       } else if (action.action === 'return_to_inventory') {
-        console.log(`Returning ${quantity} units of item ${action.itemId} to inventory`);
+        // Returning items to inventory
         setItemsToReturnToInventory(prev => [
           ...prev,
           {
@@ -1662,11 +1638,7 @@ export function AdminEditOrderModal({
       
       // Recalculate max refundable amount after refund
       const newMaxRefundable = calculateMaxRefundableAmount(payments);
-      console.log('After refund - Recalculating max refundable amount:', {
-        newMaxRefundable,
-        payments: payments.length
-      });
-      
+      // After refund - Recalculating max refundable amount
       setMaxRefundable(newMaxRefundable);
       
       // Reset processing payment state since refund is complete
@@ -1701,7 +1673,7 @@ export function AdminEditOrderModal({
   }
 
   function handleAdditionalPaymentCompleted() {
-    console.log('Additional payment completed, updating items and refetchings payments');
+    // Additional payment completed, updating items and refetching payments
     
     // Mark items as paid
     setLocalItems((prev) =>
@@ -1723,11 +1695,7 @@ export function AdminEditOrderModal({
       // After fetching payments, manually recalculate max refundable amount
       if (payments.length > 0) {
         const newMaxRefundable = calculateMaxRefundableAmount(payments);
-        console.log('After payment completion - Recalculating max refundable amount:', {
-          newMaxRefundable,
-          payments: payments.length
-        });
-        
+        // After payment completion - Recalculating max refundable amount
         setMaxRefundable(newMaxRefundable);
       }
     });
@@ -1961,7 +1929,7 @@ export function AdminEditOrderModal({
       // 4) Return items to inventory (if any)
       if (itemsToReturnToInventory.length > 0) {
         try {
-          console.log('Processing items to return to inventory:', itemsToReturnToInventory);
+          // Processing items to return to inventory
           
           const inventoryCalls = itemsToReturnToInventory.map(async (i) => {
             try {
@@ -1974,7 +1942,7 @@ export function AdminEditOrderModal({
               const quantityToAdd = i.quantity || 1; // Default to 1 if undefined or 0
               const newStockLevel = currentStockLevel + quantityToAdd;
               
-              console.log(`Returning item ${i.itemId} (${menuItem.name}) to inventory: Current stock: ${currentStockLevel}, Adding: ${quantityToAdd}, New stock: ${newStockLevel}`);
+              // Returning item to inventory with updated stock levels
               
               // Update the stock level with the new total
               const updateResult = await menuItemsApi.updateStock(i.itemId, {
@@ -1983,7 +1951,7 @@ export function AdminEditOrderModal({
                 reason_details: `Items returned from refund of Order #${order.id}`,
               });
               
-              console.log(`Inventory update successful for item ${i.itemId} (${menuItem.name}). New stock level: ${updateResult.stock_quantity}`);
+              // Inventory update successful
               return updateResult;
             } catch (err) {
               console.error(`Failed to update inventory for item ${i.itemId}:`, err);
@@ -2090,7 +2058,7 @@ export function AdminEditOrderModal({
       
       // Log for debugging
       if (areAllItemsRefunded) {
-        console.log('All items are refunded, setting order status to "refunded"');
+        // All items are refunded, setting order status to "refunded"
       }
 
       const updatedOrder = {
