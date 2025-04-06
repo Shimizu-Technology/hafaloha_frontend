@@ -33,7 +33,7 @@ import {
   Sliders,
   X as XIcon,
   ShoppingCart,
-  Bell,
+  // Bell, // Commented out - not currently using stock notifications
   Package,
   Users
 } from 'lucide-react';
@@ -151,10 +151,12 @@ export function AdminDashboard() {
   
   // Stock notification states
   /* eslint-disable @typescript-eslint/no-unused-vars */
-  const [showStockNotifications, setShowStockNotifications] = useState(false);
-  const [stockAlertCount, setStockAlertCount] = useState(0);
+  // Stock notification state - commented out as not currently in use
+  // const [showStockNotifications, setShowStockNotifications] = useState(false);
+  // const [stockAlertCount, setStockAlertCount] = useState(0);
   /* eslint-enable @typescript-eslint/no-unused-vars */
-  const { getStockAlerts, fetchNotifications } = useNotificationStore();
+  // Commented out getStockAlerts as stock notifications are not currently in use
+  const { /* getStockAlerts, */ fetchNotifications } = useNotificationStore();
   const { menuItems } = useMenuStore();
   
   // Track acknowledged low stock items with their quantities to avoid showing the same notification repeatedly
@@ -847,15 +849,18 @@ export function AdminDashboard() {
     };
   }, [fetchNotifications, user, isConnected]);
   
-  // Update stock alert count when notifications change
+  // Stock alert count update - commented out as not currently in use
+  /*
   useEffect(() => {
     const stockAlerts = getStockAlerts();
     // Ensure stockAlerts is an array before accessing length
     setStockAlertCount(Array.isArray(stockAlerts) ? stockAlerts.length : 0);
   }, [getStockAlerts]);
+  */
   
   
-  // Handle stock notification view
+  // Handle stock notification view - commented out as not currently in use
+  /*
   const handleStockNotificationView = (notification: any) => {
     // Navigate to the menu tab
     setActiveTab('menu');
@@ -868,6 +873,7 @@ export function AdminDashboard() {
     // Close notification panel
     setShowStockNotifications(false);
   };
+  */
   
   // Single WebSocket connection management with improved connection handling
   useEffect(() => {
@@ -1303,34 +1309,7 @@ useEffect(() => {
             </div>
             
             <div className="flex items-center space-x-4">
-              {/* Stock notification bell */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowStockNotifications(!showStockNotifications)}
-                  className="p-2 rounded-full hover:bg-gray-100 transition-colors relative focus:outline-none"
-                >
-                  <Bell className="h-6 w-6 text-gray-500" />
-                  {stockAlertCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {stockAlertCount > 9 ? '9+' : stockAlertCount}
-                    </span>
-                  )}
-                </button>
-                
-                {/* Stock notification panel */}
-                {showStockNotifications && (
-                  <div className="absolute right-0 mt-2 z-50 w-96 max-w-[95vw]">
-                    <NotificationContainer 
-                      notificationType="low_stock"
-                      title="Stock Alerts"
-                      maxDisplayed={10} // Increased from 5 to allow more notifications
-                      onClose={() => setShowStockNotifications(false)}
-                      onView={handleStockNotificationView}
-                      className="border-t-4 border-yellow-500"
-                    />
-                  </div>
-                )}
-              </div>
+              {/* Stock notification bell and panel - commented out as not currently in use */}
               
               {/* Restaurant selector - only for super admins */}
               {user?.role === 'super_admin' && (
