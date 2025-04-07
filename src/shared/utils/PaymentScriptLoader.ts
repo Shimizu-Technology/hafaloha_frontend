@@ -102,18 +102,24 @@ export function preloadStripeScript(): void {
  */
 export async function loadStripeScript(): Promise<void> {
   try {
+    console.log('PaymentScriptLoader: loadStripeScript called');
+    
     // Check if Stripe is already available
     if ((window as any).Stripe) {
+      console.log('PaymentScriptLoader: Stripe already available in window, skipping load');
       return;
     }
     
     // Preload first (no-op if already preloaded)
+    console.log('PaymentScriptLoader: Preloading Stripe script');
     preloadStripeScript();
     
     // Then load the script
+    console.log('PaymentScriptLoader: Loading Stripe script');
     await loadScript(STRIPE_SCRIPT_URL, STRIPE_SCRIPT_ID);
+    console.log('PaymentScriptLoader: Stripe script loaded successfully');
   } catch (error) {
-    console.error('Error loading Stripe script:', error);
+    console.error('PaymentScriptLoader: Error loading Stripe script:', error);
     throw error;
   }
 }
@@ -168,19 +174,35 @@ export async function initPaymentScript(
  * @returns Stripe instance
  */
 export function getStripe(publishableKey: string): any {
+  console.log('PaymentScriptLoader: getStripe called with key:', publishableKey ? publishableKey.substring(0, 5) + '...' : 'missing');
+  
+  if (!publishableKey) {
+    console.error('PaymentScriptLoader: Stripe publishable key is missing');
+    throw new Error('Stripe publishable key is required');
+  }
+  
   if (!(window as any).Stripe) {
+    console.error('PaymentScriptLoader: Stripe.js not loaded');
     throw new Error('Stripe.js not loaded');
   }
   
   // Return cached instance if available
   if (stripeInstances[publishableKey]) {
+    console.log('PaymentScriptLoader: Returning cached Stripe instance');
     return stripeInstances[publishableKey];
   }
   
-  // Create and cache new instance
-  const stripeInstance = (window as any).Stripe(publishableKey);
-  stripeInstances[publishableKey] = stripeInstance;
-  return stripeInstance;
+  try {
+    // Create and cache new instance
+    console.log('PaymentScriptLoader: Creating new Stripe instance');
+    const stripeInstance = (window as any).Stripe(publishableKey);
+    stripeInstances[publishableKey] = stripeInstance;
+    console.log('PaymentScriptLoader: Stripe instance created successfully');
+    return stripeInstance;
+  } catch (error) {
+    console.error('PaymentScriptLoader: Error creating Stripe instance:', error);
+    throw error;
+  }
 }
 
 // Immediately preload Stripe script when this module is imported

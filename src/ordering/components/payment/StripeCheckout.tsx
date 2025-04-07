@@ -55,11 +55,37 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
 
   // Create a memoized function to initialize Stripe and create payment intent
   const initializeStripe = useCallback(async () => {
-    // Skip if in test mode
+    console.log('Initializing Stripe, test mode:', testMode);
+    
+    // Handle test mode differently
     if (testMode) {
-      if (isMounted.current) {
-        setClientSecret(`test_secret_${Math.random().toString(36).substring(2, 15)}`);
-        setStatus('ready');
+      console.log('Test mode enabled, using mock data');
+      try {
+        // In test mode, we still need to load the Stripe script for the UI
+        await loadStripeScript();
+        console.log('Stripe script loaded in test mode');
+        
+        // Use a test publishable key if none provided
+        const testKey = publishableKey || 'pk_test_TYooMQauvdEDq54NiTphI7jx';
+        console.log('Using test key:', testKey.substring(0, 5) + '...');
+        
+        // Create a Stripe instance with the test key
+        const stripeInstance = getStripe(testKey);
+        
+        if (isMounted.current) {
+          // Set mock client secret and Stripe instance
+          const mockSecret = `test_secret_${Math.random().toString(36).substring(2, 15)}`;
+          console.log('Setting mock client secret and test Stripe instance');
+          setClientSecret(mockSecret);
+          setStripe(stripeInstance);
+          setStatus('ready');
+        }
+      } catch (err) {
+        console.error('Error in test mode setup:', err);
+        if (isMounted.current) {
+          setError('Failed to initialize test payment environment');
+          setStatus('error');
+        }
       }
       return;
     }
@@ -74,26 +100,52 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     }
 
     try {
-      // Start both processes in parallel using Promise.all for better performance
-      const [_, stripeInstance] = await Promise.all([
-        // Create payment intent
-        !clientSecret ? api.post<{ client_secret: string }>('/stripe/create_intent', {
-          amount,
-          currency
-        }).then(response => {
-          if (response && response.client_secret && isMounted.current) {
-            setClientSecret(response.client_secret);
-          } else if (!response || !response.client_secret) {
-            throw new Error('No client secret returned');
-          }
-        }) : Promise.resolve(),
+      console.log('Starting Stripe initialization...');
+      
+      // Load Stripe script and create Stripe instance in parallel with payment intent
+      const [stripeInstance, intentResponse] = await Promise.all([
+        // Load Stripe script and create instance
+        (async () => {
+          console.log('Loading Stripe script...');
+          await loadStripeScript();
+          console.log('Stripe script loaded, creating instance...');
+          return getStripe(publishableKey);
+        })(),
         
-        // Load Stripe.js and initialize
-        loadStripeScript().then(() => getStripe(publishableKey))
+        // Create payment intent if needed
+        (async () => {
+          if (clientSecret) {
+            console.log('Using existing client secret');
+            return { client_secret: clientSecret };
+          }
+          
+          console.log('Creating payment intent...');
+          try {
+            const response = await api.post<{ client_secret: string }>('/stripe/create_intent', {
+              amount,
+              currency
+            });
+            console.log('Payment intent created successfully');
+            return response;
+          } catch (err) {
+            console.error('Error creating payment intent:', err);
+            throw new Error('Failed to create payment intent');
+          }
+        })()
       ]);
+      
+      console.log('Parallel initialization complete');
       
       // Update state if component is still mounted
       if (isMounted.current) {
+        if (intentResponse && intentResponse.client_secret) {
+          console.log('Setting client secret');
+          setClientSecret(intentResponse.client_secret);
+        } else if (!clientSecret) {
+          throw new Error('No client secret returned');
+        }
+        
+        console.log('Setting Stripe instance and ready status');
         setStripe(stripeInstance);
         setStatus('ready');
       }
@@ -109,50 +161,132 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
 
   // Initialize Stripe and create payment intent
   useEffect(() => {
+    console.log('Initializing Stripe with publishable key:', publishableKey ? 'present' : 'missing');
     initializeStripe();
   }, [initializeStripe]);
 
   // Initialize and mount Stripe Elements when stripe and clientSecret are ready
   useEffect(() => {
-    if (testMode || !stripe || !clientSecret || !paymentElementRef.current) {
+    console.log('Elements mount effect triggered:', {
+      testMode,
+      stripeLoaded: !!stripe,
+      clientSecretLoaded: !!clientSecret,
+      elementRefExists: !!paymentElementRef.current
+    });
+    
+    if (testMode) {
+      console.log('Test mode enabled, skipping Stripe Elements mount');
       return;
     }
     
-    // Create Elements instance with improved configuration
-    const elementsInstance = stripe.elements({
-      clientSecret,
-      appearance: {
-        theme: 'stripe',
-        variables: {
-          colorPrimary: '#c1902f',
-        },
-      },
-      // Disable save payment method option
-      paymentMethodCreation: 'manual',
-      // Minimize billing address collection
-      billingAddressCollection: 'never'
-    });
-    
-    // Create and mount the payment element
-    const paymentElement = elementsInstance.create('payment');
-    paymentElement.mount(paymentElementRef.current);
-    
-    // Update state
-    if (isMounted.current) {
-      setElements(elementsInstance);
+    if (!stripe) {
+      console.log('Stripe not loaded yet, skipping Elements mount');
+      return;
     }
     
-    // Cleanup function to unmount element when component unmounts
-    return () => {
-      paymentElement.unmount();
-    };
+    if (!clientSecret) {
+      console.log('Client secret not available yet, skipping Elements mount');
+      return;
+    }
+    
+    if (!paymentElementRef.current) {
+      console.log('Payment element ref not available, skipping Elements mount');
+      return;
+    }
+    
+    console.log('Creating Elements instance...');
+    try {
+      // First, ensure the payment element ref exists and is in the DOM
+      if (!paymentElementRef.current) {
+        console.error('Payment element ref is null');
+        throw new Error('Payment element container not found');
+      }
+      
+      // Check if the element is actually in the DOM
+      if (!document.body.contains(paymentElementRef.current)) {
+        console.error('Payment element ref is not in the DOM');
+        throw new Error('Payment element container not in DOM');
+      }
+      
+      console.log('Payment element container found in DOM, creating Elements instance');
+      
+      // Create Elements instance with improved configuration
+      const elementsInstance = stripe.elements({
+        clientSecret,
+        appearance: {
+          theme: 'stripe',
+          variables: {
+            colorPrimary: '#c1902f',
+          },
+        },
+        // Disable save payment method option
+        paymentMethodCreation: 'manual',
+        // Minimize billing address collection
+        billingAddressCollection: 'never'
+      });
+      
+      console.log('Elements instance created, mounting payment element...');
+      
+      // Create the payment element
+      const paymentElement = elementsInstance.create('payment', {
+        // Simplified options for better loading
+        fields: {
+          billingDetails: 'never'
+        },
+        wallets: {
+          applePay: 'never',
+          googlePay: 'never'
+        }
+      });
+      
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        try {
+          // Mount the payment element
+          paymentElement.mount(paymentElementRef.current);
+          console.log('Payment element mounted successfully');
+        } catch (mountError) {
+          console.error('Error mounting payment element:', mountError);
+          if (isMounted.current) {
+            setError('Failed to display payment form: ' + (mountError instanceof Error ? mountError.message : 'Unknown error'));
+            setStatus('error');
+          }
+        }
+      }, 100);
+      
+      // Update state
+      if (isMounted.current) {
+        setElements(elementsInstance);
+        console.log('Elements state updated');
+      }
+      
+      // Cleanup function to unmount element when component unmounts
+      return () => {
+        console.log('Unmounting payment element');
+        try {
+          paymentElement.unmount();
+        } catch (unmountError) {
+          console.error('Error unmounting payment element:', unmountError);
+        }
+      };
+    } catch (err) {
+      console.error('Error mounting Stripe Elements:', err);
+      setError('Failed to initialize payment form: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      setStatus('error');
+    }
   }, [stripe, clientSecret, testMode]);
 
   // Process payment function - exposed to parent via ref
   const processPayment = async (): Promise<boolean> => {
-    if (status === 'processing') return false;
+    console.log('processPayment called, current status:', status);
+    
+    if (status === 'processing') {
+      console.log('Payment already processing, ignoring duplicate call');
+      return false;
+    }
     
     if (isMounted.current) {
+      console.log('Setting status to processing');
       setStatus('processing');
     }
     
@@ -255,7 +389,11 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   const renderContent = () => {
     switch (status) {
       case 'loading':
-        return <div className="min-h-[200px] flex items-center justify-center"><StripeFieldsSkeleton /></div>;
+        return (
+          <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible">
+            <StripeFieldsSkeleton />
+          </div>
+        );
         
       case 'error':
         return (
@@ -330,11 +468,15 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
             </div>
           );
         } else if (!elements) {
-          return <div className="min-h-[200px] flex items-center justify-center"><StripeFieldsSkeleton /></div>;
+          return (
+            <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible">
+              <StripeFieldsSkeleton />
+            </div>
+          );
         } else {
           return (
-            <div className="w-full px-4 py-3">
-              <div id="payment-element" ref={paymentElementRef} className="mb-6 min-h-[200px]">
+            <div className="w-full px-4 py-3 overflow-visible">
+              <div id="payment-element" ref={paymentElementRef} className="mb-6 min-h-[200px] overflow-visible">
                 {/* Payment Element will be mounted here by the useEffect hook */}
               </div>
             </div>
@@ -344,8 +486,10 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   };
 
   return (
-    <div className="stripe-checkout-container w-full mx-auto">
-      {renderContent()}
+    <div className="stripe-checkout-container w-full mx-auto relative">
+      <div className="w-full max-w-full overflow-visible">
+        {renderContent()}
+      </div>
     </div>
   );
 });

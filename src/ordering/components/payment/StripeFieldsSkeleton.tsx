@@ -12,7 +12,12 @@ import React from 'react';
  */
 export function StripeFieldsSkeleton() {
   return (
-    <div className="stripe-skeleton animate-pulse w-full px-4 py-3 min-h-[200px] flex flex-col justify-center">
+    <div className="stripe-skeleton animate-pulse w-full px-4 py-3 min-h-[200px] flex flex-col justify-center overflow-visible">
+      {/* Loading message */}
+      <div className="mb-4 text-center text-gray-600 text-sm">
+        <p>Loading secure payment form...</p>
+      </div>
+      
       {/* Card number field skeleton */}
       <div className="mb-5">
         <div className="h-4 w-32 bg-gray-200 rounded mb-2"></div>
@@ -37,11 +42,13 @@ export function StripeFieldsSkeleton() {
         <div className="h-12 bg-gray-200 rounded-md w-full"></div>
       </div>
       
-      {/* Subtle loading indicator */}
-      <div className="flex justify-center mt-4">
-        <div className="w-8 h-1 bg-gray-200 rounded-full mx-1"></div>
-        <div className="w-8 h-1 bg-gray-300 rounded-full mx-1 animate-pulse"></div>
-        <div className="w-8 h-1 bg-gray-200 rounded-full mx-1"></div>
+      {/* Animated loading indicator */}
+      <div className="flex justify-center items-center mt-4">
+        <div className="flex space-x-2">
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        </div>
       </div>
     </div>
   );
