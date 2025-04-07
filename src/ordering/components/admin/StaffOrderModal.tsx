@@ -199,7 +199,7 @@ function MenuItemsPanel({
                             alt={item.name}
                             className="w-full h-full object-cover"
                             onError={e => {
-                              (e.target as HTMLImageElement).src = '/placeholder-food.jpg';
+                              (e.target as HTMLImageElement).src = '/placeholder-food.png';
                             }}
                           />
                         </div>

@@ -1,85 +1,83 @@
 // src/shared/utils/imageUtils.ts
 
 /**
- * Interface for Netlify Image CDN transformation options
+ * Interface for Imgix transformation options
  */
-export interface NetlifyImageOptions {
-  width?: number;
-  height?: number;
-  quality?: number;
-  format?: 'auto' | 'avif' | 'webp' | 'jpg' | 'png';
-  fit?: 'cover' | 'contain' | 'fill' | 'inside' | 'outside';
+export interface ImgixImageOptions {
+  width?: number;       // w parameter
+  height?: number;      // h parameter
+  quality?: number;     // q parameter
+  // format is usually handled by 'auto', but available if needed
+  format?: 'avif' | 'webp' | 'jpg' | 'png' | 'jp2' | 'auto'; // fm parameter
+  // Common Imgix fit options
+  fit?: 'crop' | 'clip' | 'clamp' | 'facearea' | 'fill' | 'fillmax' | 'max' | 'min' | 'scale' | 'cover'; // fit parameter
+  // Recommended: Use 'auto' for format negotiation and compression
+  auto?: string; // e.g., 'format', 'compress', 'format,compress'
+  // Add other common params like device pixel ratio if needed
+  dpr?: number;
 }
 
-/**
- * Transforms a source URL into a Netlify Image CDN URL with optimization options
- * 
- * @param sourceUrl - The original image URL (typically from S3)
- * @param options - Image transformation options
- * @returns The transformed Netlify Image CDN URL or the original URL if transformation fails
- */
-export function getNetlifyImageUrl(sourceUrl: string | undefined | null, options: NetlifyImageOptions = {}): string | undefined {
-  // Return undefined if no source URL is provided
-  if (!sourceUrl) {
-    return undefined;
-  }
+// Get the Imgix domain from environment variables
+const IMGIX_DOMAIN = import.meta.env.VITE_IMGIX_DOMAIN;
 
-  // Skip transformation for local development placeholder images
-  if (sourceUrl.startsWith('/')) {
-    return sourceUrl;
+/**
+ * Generates an Imgix URL from a source URL (likely S3)
+ * @param sourceUrl - The full HTTPS URL of the original image on S3
+ * @param options - Imgix transformation parameters
+ * @returns The generated Imgix URL string, or undefined/original if invalid input
+ */
+export function getImgixImageUrl(sourceUrl: string | undefined | null, options: ImgixImageOptions = {}): string | undefined {
+  // Basic validation and environment check
+  if (!sourceUrl || !IMGIX_DOMAIN || sourceUrl.startsWith('/')) {
+    // console.warn('Imgix URL generation skipped:', { sourceUrl, IMGIX_DOMAIN });
+    return sourceUrl || undefined; // Return original if it's local or invalid
   }
 
   try {
-    // Basic validation: Check if it looks like an HTTP(S) URL
-    new URL(sourceUrl);
+    // 1. Parse the S3 URL to get the path (key) of the image
+    const s3Url = new URL(sourceUrl);
+    const imagePath = s3Url.pathname.substring(1); // Remove the leading '/'
+
+    if (!imagePath) {
+      console.error("Could not extract path from source URL for Imgix:", sourceUrl);
+      return sourceUrl; // Fallback to original
+    }
+
+    // 2. Create URL Search Params for Imgix options
+    const params = new URLSearchParams();
+
+    // Map options to Imgix parameters
+    if (options.width) params.set('w', String(options.width));
+    if (options.height) params.set('h', String(options.height));
+    if (options.quality) params.set('q', String(options.quality));
+    if (options.fit) params.set('fit', options.fit);
+    if (options.dpr) params.set('dpr', String(options.dpr));
+
+    // Handle 'auto' parameter (RECOMMENDED) vs specific 'format'
+    if (options.auto) {
+      params.set('auto', options.auto); // e.g., 'format,compress'
+    } else if (options.format) {
+      params.set('fm', options.format); // Only set 'fm' if 'auto' isn't used
+    } else {
+      // Default to auto format if nothing else specified
+      params.set('auto', 'format');
+    }
+
+    // Set default quality only if not specified AND auto=compress isn't used
+    if (!params.has('q') && !(params.get('auto')?.includes('compress'))) {
+      params.set('q', '75'); // Default Imgix quality
+    }
+
+    // 3. Construct the final Imgix URL
+    const queryString = params.toString();
+    const imgixUrl = `https://${IMGIX_DOMAIN}/${imagePath}${queryString ? '?' + queryString : ''}`;
+
+    return imgixUrl;
+
   } catch (error) {
-    console.error("Invalid source URL for Netlify Image:", sourceUrl, error);
-    return sourceUrl; // Return original URL on error
+    console.error("Error creating Imgix URL:", { sourceUrl, options, error });
+    return sourceUrl; // Fallback to original URL on error
   }
-
-  // Create URL parameters for the Netlify Image CDN
-  const params = new URLSearchParams();
-  
-  // The source URL must be the first parameter
-  params.set('url', sourceUrl);
-
-  // Add transformation options if provided
-  if (options.width) params.set('w', String(options.width));
-  if (options.height) params.set('h', String(options.height));
-  if (options.quality) params.set('q', String(options.quality));
-  if (options.format) params.set('fm', options.format);
-  if (options.fit) params.set('fit', options.fit);
-
-  // Set defaults if not provided
-  if (!options.format) params.set('fm', 'auto'); // Use best format for browser
-  if (!options.quality && !params.has('q')) params.set('q', '80'); // Default quality 80%
-
-  // Return the Netlify Image CDN URL
-  return `/.netlify/images?${params.toString()}`;
-}
-
-/**
- * Determines if the Netlify Image CDN is available in the current environment
- * 
- * @returns boolean indicating if Netlify Image CDN is available
- */
-export function isNetlifyImageCdnAvailable(): boolean {
-  // Temporarily disable Netlify Image CDN until proper configuration is in place
-  // TODO: Re-enable once Netlify configuration is updated
-  return false;
-  
-  // Commented out original implementation for future reference
-  /*
-  // For production builds, enable the Netlify Image CDN
-  if (import.meta.env.PROD) {
-    return true;
-  }
-  
-  // In development, check if we're running on Netlify Dev
-  const isNetlifyDev = import.meta.env.VITE_NETLIFY_DEV === 'true';
-  
-  return isNetlifyDev;
-  */
 }
 
 /**
@@ -88,33 +86,36 @@ export function isNetlifyImageCdnAvailable(): boolean {
  * @param context - Where the image will be used (e.g., 'menuItem', 'hero', 'cart')
  * @returns The recommended dimensions for the given context
  */
-export function getImageDimensionsForContext(context: 'menuItem' | 'hero' | 'cart' | 'featured'): NetlifyImageOptions {
+export function getImageDimensionsForContext(context: 'menuItem' | 'hero' | 'cart' | 'featured'): ImgixImageOptions {
+  // Note: These primarily inform which widths/sizes to use in the components
+  // The actual 'width'/'height' params are usually set per size in srcset
   switch (context) {
     case 'menuItem':
       return {
-        width: 400,
-        height: 300,
-        fit: 'cover'
+        fit: 'cover',
+        auto: 'format,compress'
       };
     case 'hero':
       return {
-        width: 1920,
-        height: 1080,
-        fit: 'cover'
+        fit: 'cover',
+        auto: 'format,compress'
       };
     case 'cart':
       return {
         width: 100,
         height: 100,
-        fit: 'cover'
+        fit: 'cover',
+        auto: 'format,compress'
       };
     case 'featured':
       return {
-        width: 600,
-        height: 400,
-        fit: 'cover'
+        fit: 'cover',
+        auto: 'format,compress'
       };
     default:
-      return {};
+      return {
+        fit: 'cover',
+        auto: 'format,compress'
+      };
   }
 }

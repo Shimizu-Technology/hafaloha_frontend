@@ -7,7 +7,6 @@ import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { useSiteSettingsStore } from '../store/siteSettingsStore';
 import fallbackHero from '../assets/hafaloha_hero.webp';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
-import { getImageDimensionsForContext } from '../../shared/utils/imageUtils';
 
 export function Hero() {
   const [showReservationModal, setShowReservationModal] = useState(false);
@@ -32,8 +31,7 @@ export function Hero() {
           width="1920"
           height="1080"
           priority={true}
-          placeholder="blur"
-          options={getImageDimensionsForContext('hero')}
+          context="hero"
         />
         <div className="absolute inset-0 bg-gray-900 opacity-75" />
       </div>

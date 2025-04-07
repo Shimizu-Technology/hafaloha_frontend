@@ -7,7 +7,6 @@ import { CustomizationModal } from './CustomizationModal';
 import type { MenuItem as MenuItemType } from '../types/menu';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
-import { getImageDimensionsForContext } from '../../shared/utils/imageUtils';
 
 // Helper function to format available days for display
 function formatAvailableDays(days?: (number | string)[]): string {
@@ -42,7 +41,7 @@ interface MenuItemProps {
   index?: number;
 }
 
-export function MenuItem({ item, index }: MenuItemProps) {
+export function MenuItem({ item }: MenuItemProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
 
   const [showCustomization, setShowCustomization] = useState(false);
@@ -52,7 +51,7 @@ export function MenuItem({ item, index }: MenuItemProps) {
   const stockStatus = deriveStockStatus(item);
   const isOutOfStock = stockStatus === 'out_of_stock';
   const isLowStock = stockStatus === 'low_stock';
-  // Calculate available quantity (used in low stock badge display)
+  // Calculate available quantity (used in low stock badge display and display it in the UI)
   const availableQuantity = calculateAvailableQuantity(item);
 
   function handleQuickAdd() {
@@ -119,10 +118,7 @@ export function MenuItem({ item, index }: MenuItemProps) {
           width="400"
           height="192"
           priority={item.featured} // Priority loading for featured items
-          placeholder="blur"
-          options={item.featured 
-            ? getImageDimensionsForContext('featured') 
-            : getImageDimensionsForContext('menuItem')}
+          context={item.featured ? 'featured' : 'menuItem'}
         />
 
         <div className="p-4 flex flex-col flex-1">
@@ -138,8 +134,7 @@ export function MenuItem({ item, index }: MenuItemProps) {
             )}
             {isLowStock && (
               <div className="mt-2 inline-block bg-orange-400 text-white text-xs font-bold rounded-full px-2 py-1">
-                Low Stock {item.enable_stock_tracking && item.stock_quantity !== undefined && item.damaged_quantity !== undefined && 
-                  `(${Math.max(0, item.stock_quantity - item.damaged_quantity)} left)`}
+                Low Stock {availableQuantity > 0 && ` (${availableQuantity} left)`}
               </div>
             )}
 

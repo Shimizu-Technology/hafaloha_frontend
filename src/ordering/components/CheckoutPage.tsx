@@ -535,7 +535,7 @@ export function CheckoutPage() {
                 {cartItems.map((item) => (
                   <div key={item.id} className="flex items-center space-x-3">
                     <img
-                      src={item.image || '/placeholder-food.jpg'}
+                      src={item.image || '/placeholder-food.png'}
                       alt={item.name}
                       className="w-16 h-16 object-cover rounded-md"
                     />

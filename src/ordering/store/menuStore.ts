@@ -175,7 +175,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       const response = await apiClient.get('/menu_items?admin=true&show_all=true');
       const menuItems = response.data.map((item: any) => ({
         ...item,
-        image: item.image_url || '/placeholder-food.jpg'
+        image: item.image_url || '/placeholder-food.png'
       }));
       
       set(state => ({
@@ -221,7 +221,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       const processedItems = menuItems.map((item: any) => ({
         ...item,
         // Ensure the image property is set for compatibility
-        image: item.image_url || '/placeholder-food.jpg'
+        image: item.image_url || '/placeholder-food.png'
       }));
       
       set({ menuItems: processedItems, loading: false });
@@ -254,7 +254,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       const processedItems = menuItems.map((item: any) => ({
         ...item,
         // Ensure the image property is set for compatibility
-        image: item.image_url || '/placeholder-food.jpg'
+        image: item.image_url || '/placeholder-food.png'
       }));
       
       set({ menuItems: processedItems, loading: false });
@@ -298,7 +298,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       
       const newItem = {
         ...response.data,
-        image: response.data.image_url || '/placeholder-food.jpg'
+        image: response.data.image_url || '/placeholder-food.png'
       };
       
       set(state => ({
@@ -348,7 +348,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       
       const updatedItem = {
         ...response.data,
-        image: response.data.image_url || '/placeholder-food.jpg'
+        image: response.data.image_url || '/placeholder-food.png'
       };
       
       set(state => ({
@@ -394,7 +394,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       
       const updatedItem = {
         ...response.data,
-        image: response.data.image_url || '/placeholder-food.jpg'
+        image: response.data.image_url || '/placeholder-food.png'
       };
       
       set(state => ({
@@ -421,7 +421,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       
       const updatedItem = {
         ...response.data,
-        image: response.data.image_url || '/placeholder-food.jpg'
+        image: response.data.image_url || '/placeholder-food.png'
       };
       
       set(state => ({
@@ -455,7 +455,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       set(state => ({
         menuItems: state.menuItems.map(existingItem => 
           String(existingItem.id) === String(id) 
-            ? { ...item, image: item.image_url || existingItem.image || '/placeholder-food.jpg' }
+            ? { ...item, image: item.image_url || existingItem.image || '/placeholder-food.png' }
             : existingItem
         )
       }));
@@ -589,7 +589,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
             set(state => ({
               menuItems: [...state.menuItems, {
                 ...newItem,
-                image: newItem.image_url || '/placeholder-food.jpg'
+                image: newItem.image_url || '/placeholder-food.png'
               }]
             }));
             console.debug(`[MenuStore] Added new menu item via WebSocket`);
@@ -753,7 +753,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       // Process the items to ensure image property is set
       const processedItems = response.data.map((item: any) => ({
         ...item,
-        image: item.image_url || '/placeholder-food.jpg'
+        image: item.image_url || '/placeholder-food.png'
       }));
       
       set({ loading: false });
@@ -776,7 +776,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       
       const newItem = {
         ...response.data,
-        image: response.data.image_url || '/placeholder-food.jpg'
+        image: response.data.image_url || '/placeholder-food.png'
       };
       
       // Add the new item to our store
