@@ -59,9 +59,8 @@ export function CheckoutPage() {
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
   const [finalTotal, setFinalTotal] = useState(rawTotal);
   const [vipCodeValid, setVipCodeValid] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentProcessing, setPaymentProcessing] = useState(false);
-  const [paymentProcessed, setPaymentProcessed] = useState(false);
+  // Simplified payment states
+  const [checkoutState, setCheckoutState] = useState<'idle' | 'submitting' | 'processing' | 'completed' | 'error'>('idle');
   const [paymentTransactionId, setPaymentTransactionId] = useState<string | null>(null);
   
   // Refs for payment components
@@ -138,9 +137,8 @@ export function CheckoutPage() {
     payment_method?: string;
     payment_intent_id?: string;
   }) => {
-    setPaymentProcessing(false);
-    setPaymentProcessed(true);
     setPaymentTransactionId(details.transaction_id);
+    setCheckoutState('completed');
     
     // Get the payment processor from restaurant settings
     const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
@@ -164,8 +162,7 @@ export function CheckoutPage() {
   const handlePaymentError = (error: Error) => {
     console.error('Payment failed:', error);
     toastUtils.error(`Payment failed: ${error.message}`);
-    setPaymentProcessing(false);
-    setIsSubmitting(false);
+    setCheckoutState('error');
   };
 
   async function submitOrder(transactionId: string, paymentDetails?: any) {
@@ -180,7 +177,7 @@ export function CheckoutPage() {
         toastUtils.error(
           'Phone must be + (3 or 4 digit area code) + 7 digits, e.g. +16711234567'
         );
-        setIsSubmitting(false);
+        setCheckoutState('idle');
         return;
       }
 
@@ -227,15 +224,15 @@ export function CheckoutPage() {
     } catch (err: any) {
       console.error('Failed to create order:', err);
       toastUtils.error('Failed to place order. Please try again.');
-      setIsSubmitting(false);
+      setCheckoutState('idle');
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+    if (checkoutState !== 'idle') return;
+    setCheckoutState('submitting');
 
     try {
       // Check for VIP-only mode and attempt to validate code if not already validated
@@ -251,7 +248,7 @@ export function CheckoutPage() {
             // Reset VIP code input and validation state
             setFormData(prev => ({ ...prev, vipCode: '' }));
             setVipCodeValid(false);
-            setIsSubmitting(false);
+            setCheckoutState('idle');
             return;
           }
           
@@ -264,18 +261,18 @@ export function CheckoutPage() {
           // Reset VIP code input and validation state on error
           setFormData(prev => ({ ...prev, vipCode: '' }));
           setVipCodeValid(false);
-          setIsSubmitting(false);
+          setCheckoutState('idle');
           return;
         }
       } else if (restaurant?.vip_only_checkout && !vipCodeValid) {
         // No VIP code entered
         toastUtils.error('Please enter a valid VIP code to continue');
-        setIsSubmitting(false);
+        setCheckoutState('idle');
         return;
       }
 
       // If payment already processed (unlikely in normal flow), just submit the order
-      if (paymentProcessed && paymentTransactionId) {
+      if (paymentTransactionId) {
         // Create basic payment details for already processed payments
         const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
         const paymentDetails = {
@@ -294,44 +291,42 @@ export function CheckoutPage() {
       // Process payment based on selected payment processor
       const isStripe = restaurant?.admin_settings?.payment_gateway?.payment_processor === 'stripe';
       
-      // Set payment processing state to true to show the overlay
-      setPaymentProcessing(true);
+      // Update state to show processing
+      setCheckoutState('processing');
       
       if (isStripe && stripeRef.current) {
         // Process with Stripe
         const success = await stripeRef.current.processPayment();
         if (!success) {
-          setPaymentProcessing(false);
-          setIsSubmitting(false);
+          setCheckoutState('error');
         }
       } else if (paypalRef.current) {
         // Process with PayPal
         const success = await paypalRef.current.processPayment();
         if (!success) {
-          setPaymentProcessing(false);
-          setIsSubmitting(false);
+          setCheckoutState('error');
         }
       } else {
         // No payment processor available
         toastUtils.error('Payment processing is not available');
-        setPaymentProcessing(false);
-        setIsSubmitting(false);
+        setCheckoutState('error');
       }
       
     } catch (err: any) {
       console.error('Failed during checkout process:', err);
       toastUtils.error('Failed to process checkout. Please try again.');
-      setIsSubmitting(false);
+      setCheckoutState('error');
     }
   }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-      {/* Full-screen overlay for payment processing */}
-      {paymentProcessing && (
+      {/* Full-screen overlay for checkout states */}
+      {checkoutState === 'processing' && (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg text-center">
             <LoadingSpinner text="Processing Payment" className="mb-2" />
+            <p className="text-sm text-gray-500">Please do not refresh or close this page.</p>
           </div>
         </div>
       )}
@@ -512,12 +507,13 @@ export function CheckoutPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || (restaurant?.vip_only_checkout && !vipCodeValid)}
+                disabled={checkoutState !== 'idle' || (restaurant?.vip_only_checkout && !vipCodeValid)}
                 className={`w-full bg-[#c1902f] text-white py-3 px-4
                   rounded-md hover:bg-[#d4a43f] transition-colors duration-200
-                  ${(isSubmitting || (restaurant?.vip_only_checkout && !vipCodeValid)) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  ${(checkoutState !== 'idle' || (restaurant?.vip_only_checkout && !vipCodeValid)) ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                {isSubmitting ? 'Processing...' : (restaurant?.vip_only_checkout && !vipCodeValid) ? 'Validate VIP Code First' : 'Place Order'}
+                {checkoutState === 'submitting' || checkoutState === 'processing' ? 'Processing...' : 
+                 (restaurant?.vip_only_checkout && !vipCodeValid) ? 'Validate VIP Code First' : 'Place Order'}
               </button>
             </div>
           </form>

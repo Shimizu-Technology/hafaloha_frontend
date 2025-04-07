@@ -858,8 +858,8 @@ function PaymentPanel({
   const [paymentError, setPaymentError] = useState<string | null>(null);
   // For dynamic height adjustment
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
-  // Loading state for payment processing
-  const [isLoading, setIsLoading] = useState(false);
+  // Simplified payment state management
+  const [paymentState, setPaymentState] = useState<'idle' | 'loading' | 'processing' | 'success' | 'error'>('idle');
   
   // Manual payment details
   const [transactionId, setTransactionId] = useState('');
@@ -909,7 +909,7 @@ function PaymentPanel({
       return;
     }
     
-    setIsLoading(true);
+    setPaymentState('processing');
     
     // For now, we'll simulate the cash payment without calling the backend
     // In a real implementation, you would call the API endpoint
@@ -939,13 +939,14 @@ function PaymentPanel({
           status: 'succeeded'
         }
       });
+      
+      setPaymentState('success');
     } catch (err: any) {
       console.error('Error processing cash payment:', err);
       const errorMessage = err.response?.data?.error || 'Failed to process cash payment';
       toastUtils.error(errorMessage);
       setPaymentError(errorMessage);
-    } finally {
-      setIsLoading(false);
+      setPaymentState('error');
     }
   };
 
@@ -967,6 +968,8 @@ function PaymentPanel({
   };
 
   const handleProcessPayment = async () => {
+    if (paymentState === 'processing') return;
+    
     if (paymentMethod === 'cash') {
       handleCashPayment();
       return;
@@ -979,18 +982,29 @@ function PaymentPanel({
       handleManualPayment();
       return;
     }
+    
     // Credit Card Payment
     try {
+      setPaymentState('processing');
+      
       if (paymentProcessor === 'stripe' && stripeRef.current) {
-        await stripeRef.current.processPayment();
+        const success = await stripeRef.current.processPayment();
+        if (!success) {
+          setPaymentState('error');
+        }
       } else if (paymentProcessor === 'paypal' && paypalRef.current) {
-        await paypalRef.current.processPayment();
+        const success = await paypalRef.current.processPayment();
+        if (!success) {
+          setPaymentState('error');
+        }
       } else {
         toastUtils.error('Payment processor not configured');
+        setPaymentState('error');
       }
     } catch (error) {
       console.error('Error processing payment:', error);
       onPaymentError(error instanceof Error ? error : new Error('Payment processing failed'));
+      setPaymentState('error');
     }
   };
 
@@ -1002,24 +1016,34 @@ function PaymentPanel({
       return;
     }
     
-    // Create payment details object
-    const paymentDetails = {
-      payment_method: paymentMethod,
-      transaction_id: transactionId || `${paymentMethod}_${Date.now()}`,
-      payment_date: paymentDate,
-      staff_id: user?.id, // Capture the current user's ID
-      notes: paymentNotes || `Payment processed via ${paymentMethod}`,
-      status: 'succeeded',
-      processor: paymentMethod === 'stripe_reader' ? 'stripe' : paymentMethod
-    };
+    setPaymentState('processing');
     
-    // Call the success callback with the payment details
-    onPaymentSuccess({
-      status: 'succeeded',
-      transaction_id: paymentDetails.transaction_id,
-      amount: orderTotal.toString(),
-      payment_details: paymentDetails
-    });
+    try {
+      // Create payment details object
+      const paymentDetails = {
+        payment_method: paymentMethod,
+        transaction_id: transactionId || `${paymentMethod}_${Date.now()}`,
+        payment_date: paymentDate,
+        staff_id: user?.id, // Capture the current user's ID
+        notes: paymentNotes || `Payment processed via ${paymentMethod}`,
+        status: 'succeeded',
+        processor: paymentMethod === 'stripe_reader' ? 'stripe' : paymentMethod
+      };
+      
+      // Call the success callback with the payment details
+      onPaymentSuccess({
+        status: 'succeeded',
+        transaction_id: paymentDetails.transaction_id,
+        amount: orderTotal.toString(),
+        payment_details: paymentDetails
+      });
+      
+      setPaymentState('success');
+    } catch (error) {
+      console.error('Error processing manual payment:', error);
+      setPaymentError('Failed to process manual payment');
+      setPaymentState('error');
+    }
   };
 
   return (
@@ -1118,27 +1142,29 @@ function PaymentPanel({
             <h4 className="text-sm font-medium text-gray-700 mb-3">Credit Card Payment</h4>
             <div className="sm:flex sm:space-x-4">
               <div className="w-full">
-                {paymentProcessor === 'stripe' ? (
-                  <StripeCheckout
-                    ref={stripeRef}
-                    amount={orderTotal.toString()}
-                    publishableKey={(paymentGateway.publishable_key as string) || ""}
-                    currency="USD"
-                    testMode={testMode}
-                    onPaymentSuccess={onPaymentSuccess}
-                    onPaymentError={onPaymentError}
-                  />
-                ) : (
-                  <PayPalCheckout
-                    ref={paypalRef}
-                    amount={orderTotal.toString()}
-                    clientId={(paymentGateway.client_id as string) || "sandbox_client_id"}
-                    currency="USD"
-                    testMode={testMode}
-                    onPaymentSuccess={onPaymentSuccess}
-                    onPaymentError={onPaymentError}
-                  />
-                )}
+                <div className="w-full">
+                  {paymentProcessor === 'stripe' ? (
+                    <StripeCheckout
+                      ref={stripeRef}
+                      amount={orderTotal.toString()}
+                      publishableKey={(paymentGateway.publishable_key as string) || ""}
+                      currency="USD"
+                      testMode={testMode}
+                      onPaymentSuccess={onPaymentSuccess}
+                      onPaymentError={onPaymentError}
+                    />
+                  ) : (
+                    <PayPalCheckout
+                      ref={paypalRef}
+                      amount={orderTotal.toString()}
+                      clientId={(paymentGateway.client_id as string) || "sandbox_client_id"}
+                      currency="USD"
+                      testMode={testMode}
+                      onPaymentSuccess={onPaymentSuccess}
+                      onPaymentError={onPaymentError}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1410,7 +1436,7 @@ function PaymentPanel({
             <button
               onClick={handleProcessPayment}
               disabled={
-                isProcessing ||
+                paymentState === 'processing' || isProcessing ||
                 (paymentMethod === 'payment_link' && !customerEmail && !customerPhone) ||
                 (paymentMethod === 'cash' && (parseFloat(cashReceived || '0') < orderTotal))
               }

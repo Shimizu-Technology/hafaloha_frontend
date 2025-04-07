@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../../shared/api/apiClient';
-import { LoadingSpinner } from '../../../shared/components/ui';
 import { loadStripeScript, getStripe } from '../../../shared/utils/PaymentScriptLoader';
 import { StripeFieldsSkeleton } from './StripeFieldsSkeleton';
 
@@ -34,98 +33,92 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     onPaymentError
   } = props;
 
-  const [loading, setLoading] = useState(true);
+  // Simplified state management
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'processing'>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [processing, setProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [stripe, setStripe] = useState<any>(null);
   const [elements, setElements] = useState<any>(null);
 
-  // Use refs to track initialization state
-  const stripeLoaded = useRef(false);
-  const paymentIntentCreated = useRef(false);
-  const elementsInitialized = useRef(false);
-  const paymentElementMounted = useRef(false);
+  // Single ref for payment element
   const paymentElementRef = useRef<HTMLDivElement>(null);
+  
+  // Track if component is mounted to prevent state updates after unmount
+  const isMounted = useRef(true);
 
-  // Load Stripe.js, initialize Stripe, and create payment intent in parallel
+  // Setup cleanup on unmount
   useEffect(() => {
-    if (stripeLoaded.current || testMode) {
-      setLoading(false);
-      return;
-    }
-
-    stripeLoaded.current = true;
-    
-    if (!publishableKey) {
-      setError('Stripe publishable key is missing');
-      setLoading(false);
-      return;
-    }
-
-    // Start both processes in parallel
-    const initializeStripeAndCreateIntent = async () => {
-      try {
-        // Start loading Stripe.js
-        const stripePromise = loadStripeScript();
-        
-        // In parallel, create payment intent if needed
-        let intentPromise = Promise.resolve();
-        if (!paymentIntentCreated.current && !clientSecret && !testMode) {
-          paymentIntentCreated.current = true;
-          intentPromise = api.post<{ client_secret: string }>('/stripe/create_intent', {
-            amount,
-            currency
-          }).then(response => {
-            if (response && response.client_secret) {
-              setClientSecret(response.client_secret);
-            } else {
-              throw new Error('No client secret returned');
-            }
-          }).catch(err => {
-            setError(err.message || 'Failed to create payment intent');
-            onPaymentError(err);
-          });
-        } else if (testMode && !clientSecret) {
-          // For test mode, just create a fake client secret
-          setClientSecret(`test_secret_${Math.random().toString(36).substring(2, 15)}`);
-        }
-        
-        // Wait for Stripe to load
-        await stripePromise;
-        
-        // Initialize Stripe with publishable key
-        const stripeInstance = getStripe(publishableKey);
-        setStripe(stripeInstance);
-        
-        // Wait for both processes to complete
-        await intentPromise;
-        
-        setLoading(false);
-      } catch (err) {
-        console.error('Error initializing Stripe:', err);
-        setError('Failed to load Stripe.js');
-        setLoading(false);
-      }
+    return () => {
+      isMounted.current = false;
     };
+  }, []);
 
-    initializeStripeAndCreateIntent();
+  // Create a memoized function to initialize Stripe and create payment intent
+  const initializeStripe = useCallback(async () => {
+    // Skip if in test mode
+    if (testMode) {
+      if (isMounted.current) {
+        setClientSecret(`test_secret_${Math.random().toString(36).substring(2, 15)}`);
+        setStatus('ready');
+      }
+      return;
+    }
+    
+    // Validate publishable key
+    if (!publishableKey) {
+      if (isMounted.current) {
+        setError('Stripe publishable key is missing');
+        setStatus('error');
+      }
+      return;
+    }
+
+    try {
+      // Start both processes in parallel using Promise.all for better performance
+      const [_, stripeInstance] = await Promise.all([
+        // Create payment intent
+        !clientSecret ? api.post<{ client_secret: string }>('/stripe/create_intent', {
+          amount,
+          currency
+        }).then(response => {
+          if (response && response.client_secret && isMounted.current) {
+            setClientSecret(response.client_secret);
+          } else if (!response || !response.client_secret) {
+            throw new Error('No client secret returned');
+          }
+        }) : Promise.resolve(),
+        
+        // Load Stripe.js and initialize
+        loadStripeScript().then(() => getStripe(publishableKey))
+      ]);
+      
+      // Update state if component is still mounted
+      if (isMounted.current) {
+        setStripe(stripeInstance);
+        setStatus('ready');
+      }
+    } catch (err: any) {
+      console.error('Error initializing Stripe:', err);
+      if (isMounted.current) {
+        setError(err.message || 'Failed to initialize payment');
+        setStatus('error');
+        onPaymentError(err instanceof Error ? err : new Error(err.message || 'Unknown error'));
+      }
+    }
   }, [publishableKey, testMode, clientSecret, amount, currency, onPaymentError]);
 
-  // Keep this empty useEffect to replace the old payment intent creation
-  // This ensures we don't break any dependencies that might be expecting this effect
+  // Initialize Stripe and create payment intent
   useEffect(() => {
-    // Payment intent creation is now handled in parallel with Stripe initialization
-  }, [stripe, testMode, clientSecret, error, amount, currency, onPaymentError]);
+    initializeStripe();
+  }, [initializeStripe]);
 
-  // Initialize Stripe Elements - only once
+  // Initialize and mount Stripe Elements when stripe and clientSecret are ready
   useEffect(() => {
-    if (elementsInitialized.current || testMode || !stripe || !clientSecret) {
+    if (testMode || !stripe || !clientSecret || !paymentElementRef.current) {
       return;
     }
     
-    elementsInitialized.current = true;
-    
+    // Create Elements instance with improved configuration
     const elementsInstance = stripe.elements({
       clientSecret,
       appearance: {
@@ -139,61 +132,57 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       // Minimize billing address collection
       billingAddressCollection: 'never'
     });
-    setElements(elementsInstance);
-  }, [stripe, clientSecret, testMode]);
-
-  // Mount payment element when elements is ready
-  useEffect(() => {
-    // Skip if already mounted or if we're in test mode or if elements isn't ready
-    if (paymentElementMounted.current || testMode || !elements || !paymentElementRef.current) {
-      return;
-    }
-    
-    // Mark as mounted to prevent creating multiple elements
-    paymentElementMounted.current = true;
     
     // Create and mount the payment element
-    const paymentElement = elements.create('payment');
-    
-    // Mount the element
+    const paymentElement = elementsInstance.create('payment');
     paymentElement.mount(paymentElementRef.current);
+    
+    // Update state
+    if (isMounted.current) {
+      setElements(elementsInstance);
+    }
     
     // Cleanup function to unmount element when component unmounts
     return () => {
-      if (paymentElementMounted.current) {
-        paymentElement.unmount();
-        paymentElementMounted.current = false;
-      }
+      paymentElement.unmount();
     };
-  }, [elements, testMode]);
+  }, [stripe, clientSecret, testMode]);
 
   // Process payment function - exposed to parent via ref
   const processPayment = async (): Promise<boolean> => {
-    if (processing) return false;
+    if (status === 'processing') return false;
     
-    setProcessing(true);
+    if (isMounted.current) {
+      setStatus('processing');
+    }
     
     // Application test mode - simulate successful payment
     if (testMode) {
+      // Generate a Stripe-like test payment intent ID
+      const testId = `pi_test_${Math.random().toString(36).substring(2, 15)}`;
+      
+      // Use a shorter timeout for test mode to improve UX
       setTimeout(() => {
-        // Generate a Stripe-like test payment intent ID
-        // This format matches what Stripe would generate in their test mode
-        const testId = `pi_test_${Math.random().toString(36).substring(2, 15)}`;
-        onPaymentSuccess({
-          status: 'succeeded',
-          transaction_id: testId,
-          payment_id: testId, // Use the same ID for payment_id
-          payment_intent_id: testId, // Also include as payment_intent_id
-          amount: amount,
-        });
-        setProcessing(false);
-      }, 1000);
+        if (isMounted.current) {
+          onPaymentSuccess({
+            status: 'succeeded',
+            transaction_id: testId,
+            payment_id: testId,
+            payment_intent_id: testId,
+            amount: amount,
+          });
+          setStatus('ready');
+        }
+      }, 800);
       return true;
     }
     
     // Live mode - need stripe and elements
     if (!stripe || !elements || !clientSecret) {
-      setProcessing(false);
+      if (isMounted.current) {
+        setError('Payment system not fully initialized');
+        setStatus('error');
+      }
       return false;
     }
     
@@ -207,7 +196,10 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       });
 
       if (submitError) {
-        setError(submitError.message || 'Payment failed');
+        if (isMounted.current) {
+          setError(submitError.message || 'Payment failed');
+          setStatus('error');
+        }
         onPaymentError(new Error(submitError.message || 'Payment failed'));
         return false;
       } 
@@ -217,8 +209,8 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         onPaymentSuccess({
           status: paymentIntent.status,
           transaction_id: paymentIntent.id,
-          payment_id: paymentIntent.id, // Store payment_id for webhook lookups
-          payment_intent_id: paymentIntent.id, // Explicitly include payment_intent_id
+          payment_id: paymentIntent.id,
+          payment_intent_id: paymentIntent.id,
           amount: (paymentIntent.amount / 100).toString(), // Convert from cents
         });
         return true;
@@ -227,20 +219,27 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       // Handle other statuses
       if (paymentIntent) {
         const errorMsg = `Payment status: ${paymentIntent.status}`;
-        setError(errorMsg);
+        if (isMounted.current) {
+          setError(errorMsg);
+          setStatus('error');
+        }
         onPaymentError(new Error(errorMsg));
       } else {
-        setError('Payment failed with unknown error');
+        if (isMounted.current) {
+          setError('Payment failed with unknown error');
+          setStatus('error');
+        }
         onPaymentError(new Error('Payment failed with unknown error'));
       }
       
       return false;
     } catch (err: any) {
-      setError(err.message || 'Payment failed');
-      onPaymentError(err);
+      if (isMounted.current) {
+        setError(err.message || 'Payment failed');
+        setStatus('error');
+      }
+      onPaymentError(err instanceof Error ? err : new Error(err.message || 'Unknown error'));
       return false;
-    } finally {
-      setProcessing(false);
     }
   };
 
@@ -249,93 +248,104 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     processPayment
   }), [processPayment]);
 
-  // Show skeleton UI while loading instead of a spinner
-  if (loading) {
-    return <StripeFieldsSkeleton />;
-  }
+  // Render based on status
+  // Helper function to check if status is processing - fixes TypeScript errors
+  const isProcessing = (): boolean => status === 'processing';
 
-  if (error) {
-    return (
-      <div className="w-full px-4 py-3">
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
-          <p>Error: {error}</p>
-          <p className="mt-2">Please try another payment method or contact support.</p>
-        </div>
-      </div>
-    );
-  }
+  const renderContent = () => {
+    switch (status) {
+      case 'loading':
+        return <div className="min-h-[200px] flex items-center justify-center"><StripeFieldsSkeleton /></div>;
+        
+      case 'error':
+        return (
+          <div className="w-full px-4 py-3">
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
+              <p>Error: {error}</p>
+              <p className="mt-2">Please try another payment method or contact support.</p>
+            </div>
+          </div>
+        );
+        
+      case 'processing':
+        return (
+          <div className="w-full px-4 py-3">
+            <div className="bg-gray-50 border border-gray-200 p-4 rounded-md text-center">
+              <div className="animate-pulse flex flex-col items-center">
+                <div className="rounded-full bg-gray-300 h-10 w-10 mb-2"></div>
+                <p className="text-gray-700">Processing payment...</p>
+              </div>
+            </div>
+          </div>
+        );
+        
+      case 'ready':
+        if (testMode) {
+          return (
+            <div className="w-full px-4 py-3">
+              <div className="bg-yellow-50 border border-yellow-100 p-3 mb-4 rounded-md">
+                <p className="font-bold text-yellow-700 inline-block mr-2">TEST MODE</p>
+                <span className="text-yellow-700">Payments will be simulated without processing real cards.</span>
+              </div>
+              
+              <div className="mb-4">
+                <h3 className="font-medium mb-2">Enter your card details to complete your payment.</h3>
+              
+                {/* Card Number */}
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-medium mb-1">Card Number</label>
+                  <input 
+                    type="text"
+                    defaultValue="4111 1111 1111 1111"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="4111 1111 1111 1111 (Test Card)"
+                    readOnly={isProcessing()}
+                  />
+                </div>
+                
+                {/* Two columns for expiry and CVV */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-1">Expiration Date</label>
+                    <input
+                      type="text"
+                      defaultValue="12/25"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="MM/YY"
+                      readOnly={isProcessing()}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-1">CVV</label>
+                    <input
+                      type="text"
+                      defaultValue="123"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="123"
+                      readOnly={isProcessing()}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        } else if (!elements) {
+          return <div className="min-h-[200px] flex items-center justify-center"><StripeFieldsSkeleton /></div>;
+        } else {
+          return (
+            <div className="w-full px-4 py-3">
+              <div id="payment-element" ref={paymentElementRef} className="mb-6 min-h-[200px]">
+                {/* Payment Element will be mounted here by the useEffect hook */}
+              </div>
+            </div>
+          );
+        }
+    }
+  };
 
   return (
     <div className="stripe-checkout-container w-full mx-auto">
-      {/* Test mode view - just show test fields, no submit button */}
-      {testMode ? (
-        <div className="w-full px-4 py-3">
-          <div className="bg-yellow-50 border border-yellow-100 p-3 mb-4 rounded-md">
-            <p className="font-bold text-yellow-700 inline-block mr-2">TEST MODE</p>
-            <span className="text-yellow-700">Payments will be simulated without processing real cards.</span>
-          </div>
-          
-          <div className="mb-4">
-            <h3 className="font-medium mb-2">Enter your card details to complete your payment.</h3>
-          
-            {/* Card Number */}
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-medium mb-1">Card Number</label>
-              <input 
-                type="text"
-                defaultValue="4111 1111 1111 1111"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                placeholder="4111 1111 1111 1111 (Test Card)"
-                readOnly={processing}
-              />
-            </div>
-            
-            {/* Two columns for expiry and CVV */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-1">Expiration Date</label>
-                <input
-                  type="text"
-                  defaultValue="12/25"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="MM/YY"
-                  readOnly={processing}
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-1">CVV</label>
-                <input
-                  type="text"
-                  defaultValue="123"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="123"
-                  readOnly={processing}
-                />
-              </div>
-            </div>
-          </div>
-          
-          {/* No submit button - parent will call processPayment */}
-          
-          {/* Processing indicator removed in favor of full-screen overlay */}
-        </div>
-      ) : (
-        // Live mode with actual Stripe Elements
-        !elements ? (
-          // Show skeleton UI while elements are being initialized
-          <StripeFieldsSkeleton />
-        ) : (
-          <div className="w-full px-4 py-3">
-            <div id="payment-element" ref={paymentElementRef} className="mb-6">
-              {/* Payment Element will be mounted here by the useEffect hook */}
-            </div>
-            
-            {/* No submit button - parent will call processPayment */}
-            
-            {/* Processing indicator removed in favor of full-screen overlay */}
-          </div>
-        )
-      )}
+      {renderContent()}
     </div>
   );
 });
