@@ -1,11 +1,12 @@
 // src/ordering/components/admin/settings/UsersSettings.tsx
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { UserModal } from './UserModal';
 import { SettingsHeader } from '../../../../shared/components/ui';
 import { Users } from 'lucide-react';
+import { useAuthStore } from '../../../../shared/auth';
 
 interface User {
   id: number;
@@ -32,6 +33,7 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const isSuperAdmin = useAuthStore(state => state.isSuperAdmin());
 
   // For editing
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -69,6 +71,11 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
       if (searchTerm) params.append('search', searchTerm);
       if (filterRole !== 'all') params.append('role', filterRole);
 
+      // Add a parameter to exclude super_admin users for non-super_admin users
+      if (!isSuperAdmin) {
+        params.append('exclude_super_admin', 'true');
+      }
+
       params.append('page', String(page));
       params.append('per_page', String(perPage));
       params.append('sort_by', sortBy);
@@ -89,6 +96,12 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
   }
 
   function handleUserClick(user: User) {
+    // Prevent non-super_admin users from editing super_admin users
+    if (user.role === 'super_admin' && !isSuperAdmin) {
+      toastUtils.error('You do not have permission to edit Super Admin users.');
+      return;
+    }
+    
     setIsCreateMode(false);
     setSelectedUser(user);
     setShowModal(true);
@@ -168,7 +181,7 @@ export function UsersSettings({ restaurantId }: UsersSettingsProps) {
                        transition-colors duration-200"
           >
             <option value="all">All Roles</option>
-            <option value="super_admin">Super Admin</option>
+            {isSuperAdmin && <option value="super_admin">Super Admin</option>}
             <option value="admin">Admin</option>
             <option value="staff">Staff</option>
             <option value="customer">Customer</option>

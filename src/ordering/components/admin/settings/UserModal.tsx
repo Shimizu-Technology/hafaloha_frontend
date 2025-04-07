@@ -1,9 +1,10 @@
 // src/ordering/components/admin/settings/UserModal.tsx
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { formatPhoneNumber } from '../../../../shared/utils/formatters';
-import { AlertTriangle, X, KeyRound, Mail, Trash2 } from 'lucide-react';
+import { X, KeyRound, Mail, Trash2 } from 'lucide-react';
+import { useAuthStore } from '../../../../shared/auth';
 
 // Same phone check from SignUpForm
 // Matches +3-4 digits for country/area code, plus exactly 7 digits => total 10 or 11 digits after the plus
@@ -38,10 +39,26 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
   );
   const [role, setRole] = useState(user?.role || 'customer');
   const [loading, setLoading] = useState(false);
+  const isSuperAdmin = useAuthStore(state => state.isSuperAdmin());
+  
+  // If a non-super_admin user tries to edit a super_admin user, prevent it
+  useEffect(() => {
+    if (user?.role === 'super_admin' && !isSuperAdmin) {
+      toastUtils.error('You do not have permission to edit Super Admin users.');
+      onClose(false);
+    }
+  }, [user, isSuperAdmin, onClose]);
 
   async function handleSave() {
     setLoading(true);
     try {
+      // Prevent non-super_admin users from setting role to super_admin
+      if (role === 'super_admin' && !isSuperAdmin) {
+        toastUtils.error('Only Super Admins can create or modify Super Admin accounts.');
+        setLoading(false);
+        return;
+      }
+      
       const finalPhone = phone.trim();
       // If phone isn't blank => validate it
       if (finalPhone && !isValidPhone(finalPhone)) {
@@ -269,7 +286,7 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
               <option value="customer">Customer</option>
               <option value="staff">Staff</option>
               <option value="admin">Admin</option>
-              <option value="super_admin">Super Admin</option>
+              {isSuperAdmin && <option value="super_admin">Super Admin</option>}
             </select>
           </div>
         </div>
