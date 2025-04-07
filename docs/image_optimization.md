@@ -29,6 +29,9 @@ The implementation leverages modern web techniques including responsive images w
 4. **Responsiveness**: Integration with `srcset`/`sizes` for optimal image delivery
 5. **Advanced Image Processing**: Access to Imgix's powerful image transformation capabilities
 6. **Reliability**: Dedicated image optimization service with high availability
+7. **Perceived Performance**: Low-quality image placeholders (LQIP) with blur-up effect
+8. **Resource Prioritization**: Browser resource hints with `fetchPriority` attribute
+9. **Efficient Loading**: Enhanced lazy loading with Intersection Observer API
 
 ## Implementation
 
@@ -41,15 +44,25 @@ The image optimization implementation consists of the following components:
    - Creates appropriate `srcset` and `sizes` attributes for optimal browser selection
    - Handles fallback images and loading priorities
    - Includes error handling to fall back to original URLs if Imgix fails
+   - Implements LQIP (Low-Quality Image Placeholders) with blur-up effect
+   - Supports the `fetchPriority` attribute for resource prioritization
 
 2. **OptimizedImage.tsx**: A wrapper component that provides a simple API for image optimization
    - Uses a context-based approach for different image types (menu item, hero, cart)
    - Passes appropriate options to ResponsiveImage based on the context
    - Maintains a clean, simple API for the rest of the application
+   - Supports the `fetchPriority` attribute for resource prioritization
 
 3. **imageUtils.ts**: Utility functions for image URL transformation
    - `getImgixImageUrl`: Transforms S3 URLs into Imgix URLs with appropriate parameters
    - `getImageDimensionsForContext`: Provides appropriate dimensions for different contexts
+   - Supports blur parameter for LQIP implementation
+
+4. **useIntersectionObserver.ts**: Custom hook for enhanced lazy loading
+   - Uses the Intersection Observer API to detect when elements enter the viewport
+   - Provides a simple interface for implementing lazy loading
+   - Configurable threshold and root margin for fine-tuned control
+   - Option to trigger only once for performance optimization
 
 ### Usage Examples
 
@@ -70,6 +83,7 @@ The image optimization implementation consists of the following components:
   src="https://hafaloha.s3.ap-southeast-2.amazonaws.com/hero/banner.jpg"
   alt="Hero Banner"
   priority={true} // Load with high priority
+  fetchPriority="high" // Browser resource loading priority
   imgixOptions={{
     width: 1600,
     height: 900,
@@ -78,6 +92,27 @@ The image optimization implementation consists of the following components:
     fit: 'cover'
   }}
 />
+```
+
+#### Enhanced Lazy Loading with Intersection Observer
+
+```tsx
+function LazyLoadedImage({ src, alt }) {
+  const [ref, isVisible] = useIntersectionObserver({
+    rootMargin: '200px',
+    triggerOnce: true
+  });
+
+  return (
+    <div ref={ref} className="image-container">
+      {isVisible ? (
+        <OptimizedImage src={src} alt={alt} />
+      ) : (
+        <div className="placeholder-pulse" />
+      )}
+    </div>
+  );
+}
 ```
 
 ## Configuration
@@ -179,6 +214,39 @@ Critical images use priority loading to improve Core Web Vitals:
 - Featured menu items
 - Above-the-fold content
 
+Two mechanisms are used for priority loading:
+
+1. **React's priority prop**: Controls when the image is loaded during hydration
+2. **fetchPriority attribute**: Browser resource loading hint (high, low, auto)
+
+Example:
+```tsx
+<OptimizedImage
+  src="hero-image.jpg"
+  alt="Hero"
+  priority={true} // React priority
+  fetchPriority="high" // Browser resource priority
+/>
+```
+
+### Low-Quality Image Placeholders (LQIP)
+
+To improve perceived performance, the application uses LQIP with a blur-up effect:
+
+1. A tiny (20px wide) blurred version of the image is loaded first
+2. This placeholder is displayed with a blur filter while the full image loads
+3. When the full image loads, it fades in smoothly over the placeholder
+4. This technique gives users immediate visual feedback while the high-quality image loads
+
+### Enhanced Lazy Loading
+
+Images outside the viewport are loaded only when they come close to entering the viewport:
+
+1. The Intersection Observer API is used to detect when image containers approach the viewport
+2. Images start loading when they are within 200px of entering the viewport (configurable)
+3. This reduces initial page load time and saves bandwidth for images that may never be viewed
+4. A placeholder or skeleton UI is shown until the image loads
+
 ### Error Handling
 
 The implementation includes robust error handling:
@@ -186,6 +254,7 @@ The implementation includes robust error handling:
 - If an image fails to load via Imgix, it falls back to the original S3 URL
 - If both fail, it falls back to a local placeholder image (`/placeholder-food.png`)
 - Error events are logged to the console for debugging
+- The LQIP placeholder remains visible during loading attempts
 
 ## Troubleshooting
 
@@ -196,8 +265,83 @@ The implementation includes robust error handling:
 3. **404 errors**: Ensure S3 objects have public read access
 4. **Low quality images**: Adjust quality parameter in Imgix options
 5. **Missing environment variable**: Ensure `VITE_IMGIX_DOMAIN` is set in both development and production
+6. **LQIP not working**: Check if blur parameter is supported and CSS transitions are applied
+7. **Lazy loading issues**: Verify Intersection Observer support and rootMargin settings
+8. **fetchPriority not working**: Ensure browser supports the fetchPriority attribute
 
 ### Verification
+
+To verify the image optimization is working correctly:
+
+1. **Network Tab Analysis**:
+   - Open browser DevTools and check the Network tab
+   - Filter by "img" or the Imgix domain
+   - Verify images are loading from the Imgix domain
+   - Check for 200 status codes and appropriate content types
+
+2. **Performance Verification**:
+   - Use Lighthouse or PageSpeed Insights to measure LCP and CLS metrics
+   - Verify that critical images load quickly
+   - Check that lazy-loaded images don't contribute to initial page load time
+
+3. **Visual Inspection**:
+   - Verify LQIP blur-up effect is working on slower connections
+   - Check that images load progressively as you scroll
+   - Ensure placeholder images appear correctly when images fail to load
+
+## Advanced Techniques
+
+### Responsive Art Direction
+
+For cases where different image crops are needed at different viewport sizes:
+
+```tsx
+<picture>
+  <source
+    media="(max-width: 640px)"
+    srcSet={getImgixImageUrl(image, { width: 640, height: 480, crop: 'faces' })}
+  />
+  <source
+    media="(max-width: 1024px)"
+    srcSet={getImgixImageUrl(image, { width: 1024, height: 576, crop: 'entropy' })}
+  />
+  <OptimizedImage src={image} alt="Responsive art direction example" />
+</picture>
+```
+
+### Content-Aware Cropping
+
+Imgix provides advanced cropping options that can be used for better image composition:
+
+```tsx
+<OptimizedImage
+  src={portraitImage}
+  alt="Portrait"
+  imgixOptions={{
+    crop: 'faces',
+    fit: 'crop'
+  }}
+/>
+```
+
+### Image Preloading
+
+For absolutely critical images, consider using link preload:
+
+```tsx
+function PreloadCriticalImage({ src }) {
+  React.useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = getImgixImageUrl(src, { width: 1200, auto: 'format,compress' });
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
+  }, [src]);
+  
+  return null;
+}
+```
 
 To verify the Imgix integration is working:
 

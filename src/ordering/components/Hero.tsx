@@ -31,6 +31,7 @@ export function Hero() {
           width="1920"
           height="1080"
           priority={true}
+          fetchPriority="high"
           context="hero"
         />
         <div className="absolute inset-0 bg-gray-900 opacity-75" />

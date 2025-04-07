@@ -15,6 +15,8 @@ export interface ImgixImageOptions {
   auto?: string; // e.g., 'format', 'compress', 'format,compress'
   // Add other common params like device pixel ratio if needed
   dpr?: number;
+  // Blur effect (0-2000)
+  blur?: number;
 }
 
 // Get the Imgix domain from environment variables

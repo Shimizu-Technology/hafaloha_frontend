@@ -1,5 +1,5 @@
 // src/shared/components/ui/ResponsiveImage.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { getImgixImageUrl, ImgixImageOptions } from '../../utils/imageUtils';
 
 interface ResponsiveImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'srcSet' | 'sizes'> {
@@ -11,6 +11,7 @@ interface ResponsiveImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageEle
   imgixOptions?: Omit<ImgixImageOptions, 'width' | 'height'>;
   fallbackSrc?: string; // Local path for placeholder
   priority?: boolean; // For loading="eager" vs "lazy"
+  fetchPriority?: 'high' | 'low' | 'auto'; // Browser resource loading priority
 }
 
 /**
@@ -25,6 +26,7 @@ const ResponsiveImage: React.FC<ResponsiveImageProps> = ({
   imgixOptions = { auto: 'format,compress', fit: 'cover' }, // Default Imgix params
   fallbackSrc = '/placeholder-food.png', // Use a valid local placeholder
   priority = false,
+  fetchPriority,
   ...imgProps // Pass other img attributes like className, style, etc.
 }) => {
   // Set loading attribute based on priority
@@ -38,6 +40,7 @@ const ResponsiveImage: React.FC<ResponsiveImageProps> = ({
         src={fallbackSrc} 
         alt={alt} 
         loading={loadingAttribute}
+        fetchPriority={fetchPriority}
         {...imgProps} 
       />
     );
@@ -74,31 +77,71 @@ const ResponsiveImage: React.FC<ResponsiveImageProps> = ({
         src={fallbackSrc} // Or maybe sourceUrl if preferred?
         alt={alt} 
         loading={loadingAttribute}
+        fetchPriority={fetchPriority}
         {...imgProps} 
       />
     );
   }
 
+  // State to track if the main image has loaded
+  const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Generate a tiny placeholder image URL
+  const placeholderSrc = getImgixImageUrl(sourceUrl, {
+    ...imgixOptions,
+    width: 20,
+    blur: 15,
+    quality: 30
+  });
+
   return (
-    <img
-      src={defaultSrc} // Base src
-      srcSet={srcset}   // Responsive sources
-      sizes={sizes}     // How image relates to viewport
-      alt={alt}
-      loading={loadingAttribute} // Handle lazy/eager loading
-      // Simple onError fallback to placeholder
-      onError={(e) => {
-        console.error('Imgix image failed to load, falling back:', defaultSrc);
-        // Prevent infinite loops if the fallback also fails
-        if ((e.target as HTMLImageElement).src !== fallbackSrc) {
-          (e.target as HTMLImageElement).src = fallbackSrc;
-        }
-        // Clear srcset/sizes to prevent browser trying them again
-        (e.target as HTMLImageElement).srcset = '';
-        (e.target as HTMLImageElement).sizes = '';
-      }}
-      {...imgProps} // Spread remaining props (className, style, etc.)
-    />
+    <div className="relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
+      {/* Tiny blurred image that loads immediately */}
+      {placeholderSrc && (
+        <img
+          src={placeholderSrc}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full object-cover scale-110 blur-lg"
+          style={{
+            opacity: isLoaded ? 0 : 1,
+            transition: 'opacity 0.4s ease-in-out',
+            filter: 'blur(8px)'
+          }}
+        />
+      )}
+      
+      {/* Main image that fades in when loaded */}
+      <img
+        src={defaultSrc} // Base src
+        srcSet={srcset}   // Responsive sources
+        sizes={sizes}     // How image relates to viewport
+        alt={alt}
+        loading={loadingAttribute} // Handle lazy/eager loading
+        className={`${imgProps.className || ''} relative z-10`}
+        style={{
+          ...imgProps.style,
+          opacity: isLoaded ? 1 : 0,
+          transition: 'opacity 0.4s ease-in-out'
+        }}
+        {...(fetchPriority ? { fetchpriority: fetchPriority } : {})} // Add fetchpriority as a custom attribute
+        onLoad={() => setIsLoaded(true)}
+        // Simple onError fallback to placeholder
+        onError={(e) => {
+          console.error('Imgix image failed to load, falling back:', defaultSrc);
+          // Prevent infinite loops if the fallback also fails
+          if ((e.target as HTMLImageElement).src !== fallbackSrc) {
+            (e.target as HTMLImageElement).src = fallbackSrc;
+          }
+          // Clear srcset/sizes to prevent browser trying them again
+          (e.target as HTMLImageElement).srcset = '';
+          (e.target as HTMLImageElement).sizes = '';
+          // Still mark as loaded to hide the placeholder
+          setIsLoaded(true);
+        }}
+        {...imgProps} // Spread remaining props (className, style, etc.)
+      />
+    </div>
   );
 };
 

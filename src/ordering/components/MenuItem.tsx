@@ -7,6 +7,40 @@ import { CustomizationModal } from './CustomizationModal';
 import type { MenuItem as MenuItemType } from '../types/menu';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
+import useIntersectionObserver from '../../shared/hooks/useIntersectionObserver';
+
+// LazyMenuItemImage component for lazy-loaded images
+interface LazyMenuItemImageProps {
+  image: string | undefined | null;
+  name: string;
+  featured?: boolean;
+}
+
+function LazyMenuItemImage({ image, name, featured }: LazyMenuItemImageProps) {
+  const [ref, isVisible] = useIntersectionObserver({
+    rootMargin: '200px', // Load images 200px before they enter the viewport
+    triggerOnce: true // Only trigger once
+  });
+
+  return (
+    <div ref={ref as React.RefObject<HTMLDivElement>} className="w-full h-48 bg-gray-100">
+      {isVisible ? (
+        <OptimizedImage
+          src={image}
+          alt={name}
+          className="w-full h-full object-cover"
+          width="400"
+          height="192"
+          priority={featured} // Priority loading for featured items
+          fetchPriority={featured ? 'high' : 'auto'} // High priority for featured items
+          context={featured ? 'featured' : 'menuItem'}
+        />
+      ) : (
+        <div className="w-full h-full bg-gray-200 animate-pulse" />
+      )}
+    </div>
+  );
+}
 
 // Helper function to format available days for display
 function formatAvailableDays(days?: (number | string)[]): string {
@@ -111,14 +145,10 @@ export function MenuItem({ item }: MenuItemProps) {
           ${isOutOfStock ? 'opacity-70' : ''}
         `}
       >
-        <OptimizedImage
-          src={item.image}
-          alt={item.name}
-          className="w-full h-48 object-cover"
-          width="400"
-          height="192"
-          priority={item.featured} // Priority loading for featured items
-          context={item.featured ? 'featured' : 'menuItem'}
+        <LazyMenuItemImage 
+          image={item.image}
+          name={item.name}
+          featured={item.featured}
         />
 
         <div className="p-4 flex flex-col flex-1">

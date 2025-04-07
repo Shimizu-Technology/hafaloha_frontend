@@ -14,6 +14,7 @@ interface OptimizedImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElem
   sizes?: string;
   alt?: string;
   priority?: boolean;
+  fetchPriority?: 'high' | 'low' | 'auto';
   fallbackSrc?: string;
 }
 
@@ -26,6 +27,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   fallbackSrc = '/placeholder-food.png',
   alt = '',
   priority = false,
+  fetchPriority,
   imgixOptions: explicitImgixOptions, // Renamed to avoid clash
   context,
   widths: explicitWidths,
@@ -74,6 +76,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
         height={100}
         loading="lazy" // Carts usually off-screen initially
         onError={(e) => { if ((e.target as HTMLImageElement).src !== fallbackSrc) { (e.target as HTMLImageElement).src = fallbackSrc; }}}
+        {...(fetchPriority ? { fetchpriority: fetchPriority } : {})} // Add fetchpriority as a custom attribute
         {...imgProps}
       />
     );
@@ -97,6 +100,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
       imgixOptions={baseImgixOptions}
       fallbackSrc={fallbackSrc}
       priority={priority}
+      fetchPriority={fetchPriority}
       {...imgProps} // Pass down className, style etc.
     />
   );
