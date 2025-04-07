@@ -189,9 +189,25 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       return;
     }
     
+    // Added a more robust check for the payment element ref
     if (!paymentElementRef.current) {
-      console.log('Payment element ref not available, skipping Elements mount');
-      return;
+      console.log('Payment element ref not available, will retry in 500ms');
+      // Set a timer to retry mounting
+      const retryTimer = setTimeout(() => {
+        console.log('Retrying Elements mount after delay');
+        // Force a re-render by toggling the status
+        if (isMounted.current && status === 'ready') {
+          // Brief loading state to trigger re-render
+          setStatus('loading');
+          setTimeout(() => {
+            if (isMounted.current) {
+              setStatus('ready');
+            }
+          }, 10);
+        }
+      }, 500);
+      
+      return () => clearTimeout(retryTimer);
     }
     
     console.log('Creating Elements instance...');
@@ -382,6 +398,27 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     processPayment
   }), [processPayment]);
 
+  // Ensure payment element is rendered and positioned correctly
+  useEffect(() => {
+    // Create a small delay to ensure DOM is fully rendered before checking ref
+    const checkRefTimeout = setTimeout(() => {
+      if (status === 'ready' && stripe && clientSecret && !elements) {
+        console.log('Payment ref check - status ready but elements not created yet');
+        // Force re-render if elements haven't been created yet
+        if (isMounted.current) {
+          setStatus('loading');
+          setTimeout(() => {
+            if (isMounted.current) {
+              setStatus('ready');
+            }
+          }, 50);
+        }
+      }
+    }, 200);
+    
+    return () => clearTimeout(checkRefTimeout);
+  }, [status, stripe, clientSecret, elements]);
+
   // Render based on status
   // Helper function to check if status is processing - fixes TypeScript errors
   const isProcessing = (): boolean => status === 'processing';
@@ -390,7 +427,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     switch (status) {
       case 'loading':
         return (
-          <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible">
+          <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible" style={{ position: 'relative', zIndex: 1 }}>
             <StripeFieldsSkeleton />
           </div>
         );
@@ -469,14 +506,14 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
           );
         } else if (!elements) {
           return (
-            <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible">
+            <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible" style={{ position: 'relative', zIndex: 1 }}>
               <StripeFieldsSkeleton />
             </div>
           );
         } else {
           return (
-            <div className="w-full px-4 py-3 overflow-visible">
-              <div id="payment-element" ref={paymentElementRef} className="mb-6 min-h-[200px] overflow-visible">
+            <div className="w-full px-4 py-3 overflow-visible" style={{ position: 'relative', zIndex: 1 }}>
+              <div id="payment-element" ref={paymentElementRef} className="mb-6 min-h-[200px] overflow-visible stripe-element-container">
                 {/* Payment Element will be mounted here by the useEffect hook */}
               </div>
             </div>
@@ -485,9 +522,62 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     }
   };
 
+  // Add needed CSS to document head for Stripe Elements
+  useEffect(() => {
+    // Create style element for Stripe Elements if not already present
+    if (!document.getElementById('stripe-element-styles')) {
+      const styleTag = document.createElement('style');
+      styleTag.id = 'stripe-element-styles';
+      styleTag.innerHTML = `
+        .stripe-element-container iframe {
+          z-index: 2 !important;
+          position: relative !important;
+        }
+        .StripeElement {
+          display: block !important;
+          position: relative !important;
+          z-index: 2 !important;
+        }
+        /* Ensure stripe form is visible */
+        .stripe-checkout-container {
+          position: relative !important;
+          z-index: 1 !important;
+        }
+        /* Fix any hidden elements */
+        .__PrivateStripeElement {
+          position: relative !important;
+          z-index: 999 !important;
+        }
+      `;
+      document.head.appendChild(styleTag);
+      console.log('Added Stripe element styles to document head');
+    }
+    
+    return () => {
+      // Cleanup styles on unmount
+      const styleTag = document.getElementById('stripe-element-styles');
+      if (styleTag) {
+        document.head.removeChild(styleTag);
+      }
+    };
+  }, []);
+
   return (
-    <div className="stripe-checkout-container w-full mx-auto relative">
-      <div className="w-full max-w-full overflow-visible">
+    <div 
+      className="stripe-checkout-container w-full mx-auto overflow-visible" 
+      style={{ 
+        position: 'relative', 
+        zIndex: 1,
+        minHeight: '300px'
+      }}
+    >
+      <div 
+        className="w-full max-w-full overflow-visible" 
+        style={{ 
+          position: 'relative',
+          zIndex: 1 
+        }}
+      >
         {renderContent()}
       </div>
     </div>
