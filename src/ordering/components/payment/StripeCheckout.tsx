@@ -141,15 +141,6 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       },
       // Configure payment flow
       paymentMethodCreation: 'manual',
-      paymentMethodConfiguration: {
-        card: {
-          setupFutureUsage: false
-        },
-        wallets: {
-          applePay: 'auto',
-          googlePay: 'auto'
-        }
-      },
       // Minimize billing address collection
       billingAddressCollection: 'never'
     });
@@ -168,18 +159,14 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     
     // Create and mount the payment element with payment method configuration
     const paymentElement = elements.create('payment', {
-      // Configure payment methods
-      paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'cashapp'],
+      // Configure payment methods to prioritize card and digital wallets
+      payment_method_types: ['card', 'apple_pay', 'google_pay', 'cashapp'],
       defaultValues: {
         billingDetails: {
           name: '',
           email: '',
           phone: ''
         }
-      },
-      wallets: {
-        applePay: 'auto',
-        googlePay: 'auto'
       }
     });
     
