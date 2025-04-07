@@ -584,9 +584,9 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     <div 
       className="absolute inset-0 w-full px-4 py-3 overflow-visible" 
       style={{ 
-        zIndex: status !== 'error' ? 10 : -10,
-        opacity: status !== 'error' ? 1 : 0,
-        pointerEvents: status === 'ready' ? 'auto' : 'none'
+        zIndex: 10,
+        opacity: 1,
+        pointerEvents: 'auto'
       }}
     >
       <div 
@@ -604,7 +604,8 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         position: 'relative', 
         zIndex: 1,
         minHeight: '300px',
-        marginBottom: '30px' // Extra space at bottom to ensure full visibility
+        marginBottom: '30px', // Extra space at bottom to ensure full visibility
+        pointerEvents: testMode || status === 'error' ? 'none' : 'auto'
       }}
     >
       <div 
