@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../../shared/api/apiClient';
 import { loadStripeScript, getStripe } from '../../../shared/utils/PaymentScriptLoader';
-import { StripeFieldsSkeleton } from './StripeFieldsSkeleton';
+
 import { Stripe, StripeElements } from '@stripe/stripe-js';
 
 interface StripeCheckoutProps {
@@ -236,14 +236,17 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       
       // Create the payment element
       const paymentElement = elementsInstance.create('payment', {
-        // Simplified options for better loading
         fields: {
           billingDetails: 'never'
         },
-        wallets: {
-          applePay: 'never',
-          googlePay: 'never'
-        }
+        defaultValues: {
+          billingDetails: {
+            name: '',
+            email: '',
+            phone: ''
+          }
+        },
+        paymentMethodOrder: ['card', 'cashapp']
       });
       
       // Small delay to ensure DOM is ready
@@ -437,7 +440,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       case 'loading':
         return (
           <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible" style={{ position: 'relative', zIndex: 1 }}>
-            <StripeFieldsSkeleton />
+            <div className="text-gray-600">Loading payment form...</div>
           </div>
         );
         
@@ -516,7 +519,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         } else if (!elements) {
           return (
             <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible" style={{ position: 'relative', zIndex: 1 }}>
-              <StripeFieldsSkeleton />
+              <div className="text-gray-600">Loading payment form...</div>
             </div>
           );
         } else {
@@ -581,9 +584,9 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     <div 
       className="absolute inset-0 w-full px-4 py-3 overflow-visible" 
       style={{ 
-        zIndex: (status === 'ready' || status === 'processing') && !testMode ? 10 : -10,
-        opacity: (status === 'ready' || status === 'processing') && !testMode ? 1 : 0,
-        pointerEvents: status === 'ready' && !testMode ? 'auto' : 'none'
+        zIndex: status !== 'error' ? 10 : -10,
+        opacity: status !== 'error' ? 1 : 0,
+        pointerEvents: status === 'ready' ? 'auto' : 'none'
       }}
     >
       <div 
