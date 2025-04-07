@@ -1,8 +1,8 @@
-# Image Optimization with Netlify Image CDN
+# Image Optimization with Imgix
 
 ## Overview
 
-Hafaloha uses Netlify's Image CDN service to optimize image loading performance throughout the application. This document outlines the implementation details, configuration, and best practices for image handling.
+Hafaloha uses Imgix to optimize image loading performance throughout the application. This document outlines the implementation details, configuration, and best practices for image handling.
 
 The implementation leverages modern web techniques including responsive images with `srcset` and `sizes` attributes, lazy loading, and automatic format selection to provide the best possible user experience.
 
@@ -11,23 +11,24 @@ The implementation leverages modern web techniques including responsive images w
 ### Image Storage and Delivery Flow
 
 1. **Storage**: Images are stored in AWS S3 (`hafaloha.s3.ap-southeast-2.amazonaws.com`)
-2. **Transformation**: Netlify Image CDN fetches, optimizes, and caches images on-demand
-3. **Delivery**: Optimized images are served to users via Netlify's global CDN network
+2. **Transformation**: Imgix fetches, optimizes, and caches images on-demand
+3. **Delivery**: Optimized images are served to users via Imgix's global CDN network
 
 ```
-┌────────────┐    ┌───────────┐    ┌─────────────────┐    ┌──────────┐
-│ S3 Bucket  │───>│ Netlify   │───>│ Netlify Image   │───>│ Browser  │
-│ (Storage)  │    │ CDN       │    │ Transformation  │    │          │
-└────────────┘    └───────────┘    └─────────────────┘    └──────────┘
+┌────────────┐    ┌───────────┐    ┌──────────┐
+│ S3 Bucket  │───>│ Imgix     │───>│ Browser  │
+│ (Storage)  │    │ CDN       │    │          │
+└────────────┘    └───────────┘    └──────────┘
 ```
 
 ### Key Benefits
 
 1. **Performance**: Faster load times via optimized formats (AVIF/WebP), compression, and CDN caching
 2. **Automation**: No need to pre-process images into multiple formats/sizes
-3. **Modern Formats**: Automatic AVIF/WebP negotiation with `fm=auto`
+3. **Modern Formats**: Automatic format negotiation with `auto=format`
 4. **Responsiveness**: Integration with `srcset`/`sizes` for optimal image delivery
-5. **Cost-Effective**: Leverages Netlify's existing CDN infrastructure
+5. **Advanced Image Processing**: Access to Imgix's powerful image transformation capabilities
+6. **Reliability**: Dedicated image optimization service with high availability
 
 ## Implementation
 
@@ -39,27 +40,26 @@ The image optimization implementation consists of the following components:
    - Generates multiple image URLs with different width parameters
    - Creates appropriate `srcset` and `sizes` attributes for optimal browser selection
    - Handles fallback images and loading priorities
+   - Includes error handling to fall back to original URLs if Imgix fails
 
 2. **OptimizedImage.tsx**: A wrapper component that provides a simple API for image optimization
-   - Determines appropriate image dimensions based on context (menu item, hero, cart)
-   - Uses ResponsiveImage for CDN-enabled environments
-   - Falls back to standard image tags when CDN is not available
-   - Maintains backward compatibility with existing code
+   - Uses a context-based approach for different image types (menu item, hero, cart)
+   - Passes appropriate options to ResponsiveImage based on the context
+   - Maintains a clean, simple API for the rest of the application
 
 3. **imageUtils.ts**: Utility functions for image URL transformation
-   - `getNetlifyImageUrl`: Transforms S3 URLs into Netlify Image CDN URLs
-   - `isNetlifyImageCdnAvailable`: Detects if the Netlify Image CDN is available
+   - `getImgixImageUrl`: Transforms S3 URLs into Imgix URLs with appropriate parameters
    - `getImageDimensionsForContext`: Provides appropriate dimensions for different contexts
 
 ### Usage Examples
 
-#### Basic Usage
+#### Basic Usage with Context
 
 ```tsx
 <OptimizedImage 
   src="https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu-items/spam-musubi.jpg"
   alt="Spam Musubi"
-  options={{ context: 'menuItem' }}
+  context="menuItem"
 />
 ```
 
@@ -70,10 +70,10 @@ The image optimization implementation consists of the following components:
   src="https://hafaloha.s3.ap-southeast-2.amazonaws.com/hero/banner.jpg"
   alt="Hero Banner"
   priority={true} // Load with high priority
-  options={{
+  imgixOptions={{
     width: 1600,
     height: 900,
-    format: 'auto',
+    auto: 'format,compress',
     quality: 80,
     fit: 'cover'
   }}
@@ -84,18 +84,16 @@ The image optimization implementation consists of the following components:
 
 ### S3 Bucket Configuration
 
-The S3 bucket is configured with public read access to allow Netlify to fetch the original images:
+The S3 bucket is configured with appropriate CORS settings to allow Imgix to fetch the original images:
 
 ```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
+  "CORSRules": [
     {
-      "Sid": "PublicReadGetObject",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::hafaloha/*"
+      "AllowedOrigins": ["https://hafaloha-orders.com", "http://localhost:*"],
+      "AllowedMethods": ["GET"],
+      "MaxAgeSeconds": 3000,
+      "AllowedHeaders": ["*"]
     }
   ]
 }
@@ -122,22 +120,30 @@ The `netlify.toml` file in the frontend project root includes the following conf
 
 ### OptimizedImage Component
 
-The application uses a dedicated `OptimizedImage` React component that transforms S3 URLs to use Netlify's Image CDN:
+The application uses a dedicated `OptimizedImage` React component that transforms S3 URLs to use Imgix:
 
 ```tsx
-// Example usage
+// Example usage with context
 <OptimizedImage
   src="https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_1_1739747989.jpeg"
   alt="Menu Item"
   width={400}
   height={300}
   priority={false}
-  placeholder="blur"
-  options={{
+  context="menuItem"
+/>
+
+// Example with explicit Imgix options
+<OptimizedImage
+  src="https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_1_1739747989.jpeg"
+  alt="Menu Item"
+  width={400}
+  height={300}
+  imgixOptions={{
     width: 400,
     height: 300,
     quality: 80,
-    format: 'auto',
+    auto: 'format,compress',
     fit: 'cover'
   }}
 />
@@ -147,8 +153,7 @@ The application uses a dedicated `OptimizedImage` React component that transform
 
 The `imageUtils.ts` file provides helper functions for image optimization:
 
-- `getNetlifyImageUrl`: Transforms S3 URLs to Netlify Image CDN URLs
-- `isNetlifyImageCdnAvailable`: Detects if Netlify Image CDN is available in the current environment
+- `getImgixImageUrl`: Transforms S3 URLs to Imgix URLs with appropriate parameters
 - `getImageDimensionsForContext`: Provides appropriate dimensions for different image contexts
 
 ## Best Practices
@@ -164,6 +169,8 @@ The application uses context-specific image dimensions:
 | cart       | 100        | 100         | Cart item thumbnails          |
 | featured   | 600        | 400         | Featured item highlights      |
 
+These dimensions are defined in the `getImageDimensionsForContext` function in `imageUtils.ts`.
+
 ### Priority Loading
 
 Critical images use priority loading to improve Core Web Vitals:
@@ -172,31 +179,33 @@ Critical images use priority loading to improve Core Web Vitals:
 - Featured menu items
 - Above-the-fold content
 
-### Placeholder Strategy
+### Error Handling
 
-The application uses blur placeholders for a better user experience:
+The implementation includes robust error handling:
 
-- Hero images use blur placeholders
-- Menu items use blur placeholders
-- Other images load with standard loading
+- If an image fails to load via Imgix, it falls back to the original S3 URL
+- If both fail, it falls back to a local placeholder image (`/placeholder-food.png`)
+- Error events are logged to the console for debugging
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Images not optimized**: Check browser network tab for requests to `/.netlify/images`
+1. **Images not optimized**: Check browser network tab for requests to the Imgix domain
 2. **CORS errors**: Verify S3 bucket CORS configuration
 3. **404 errors**: Ensure S3 objects have public read access
-4. **Low quality images**: Adjust quality parameter in image options
+4. **Low quality images**: Adjust quality parameter in Imgix options
+5. **Missing environment variable**: Ensure `VITE_IMGIX_DOMAIN` is set in both development and production
 
 ### Verification
 
-To verify the Netlify Image CDN is working:
+To verify the Imgix integration is working:
 
 1. Inspect image elements in the browser
-2. Look for `src` attributes starting with `/.netlify/images?url=...`
+2. Look for `src` attributes containing the Imgix domain (`shimizu-technology.imgix.net`)
 3. Check network requests for image format (WebP/AVIF in supported browsers)
-4. Compare image file sizes before and after optimization
+4. Verify that the response headers include Imgix-specific headers
+5. Compare image file sizes before and after optimization
 
 ## Local Development
 
