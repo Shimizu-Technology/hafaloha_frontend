@@ -4,6 +4,43 @@ import { useOrderStore } from '../../store/orderStore';
 import { MerchandiseItem as MerchandiseItemType } from '../../types/merchandise';
 import { MerchandisePreviewModal } from './MerchandisePreviewModal';
 import { calculateFinalPrice } from '../../utils/merchandiseUtils';
+import OptimizedImage from '../../../shared/components/ui/OptimizedImage';
+import useIntersectionObserver from '../../../shared/hooks/useIntersectionObserver';
+
+// LazyMerchandiseImage component for lazy-loaded images with hover effect
+interface LazyMerchandiseImageProps {
+  primaryImage: string | undefined | null;
+  secondaryImage?: string | undefined | null;
+  name: string;
+  isHovered: boolean;
+}
+
+function LazyMerchandiseImage({ primaryImage, secondaryImage, name, isHovered }: LazyMerchandiseImageProps) {
+  const [ref, isVisible] = useIntersectionObserver({
+    rootMargin: '200px', // Load images 200px before they enter the viewport
+    triggerOnce: true // Only trigger once
+  });
+
+  // Determine which image to show based on hover state
+  const imageToShow = isHovered && secondaryImage ? secondaryImage : primaryImage;
+
+  return (
+    <div ref={ref as React.RefObject<HTMLDivElement>} className="w-full h-full bg-gray-100">
+      {isVisible ? (
+        <OptimizedImage
+          src={imageToShow}
+          alt={name}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          width="400"
+          height="400"
+          context="featured"
+        />
+      ) : (
+        <div className="w-full h-full bg-gray-200 animate-pulse" />
+      )}
+    </div>
+  );
+}
 
 interface MerchandiseItemProps {
   item: MerchandiseItemType;
@@ -64,10 +101,11 @@ export function MerchandiseItem({ item }: MerchandiseItemProps) {
       >
         {/* Image with hover effect */}
         <div className="relative aspect-square overflow-hidden bg-gray-100">
-          <img
-            src={isHovered && item.second_image_url ? item.second_image_url : item.image_url}
-            alt={item.name}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          <LazyMerchandiseImage 
+            primaryImage={item.image_url}
+            secondaryImage={item.second_image_url}
+            name={item.name}
+            isHovered={isHovered}
           />
           
           {/* Stock status badge */}

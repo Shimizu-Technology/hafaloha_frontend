@@ -15,6 +15,7 @@ import { PickupInfo } from './location/PickupInfo';
 import { VipCodeInput } from './VipCodeInput';
 import { PayPalCheckout, PayPalCheckoutRef } from './payment/PayPalCheckout';
 import { StripeCheckout, StripeCheckoutRef } from './payment/StripeCheckout';
+import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 
 interface CheckoutFormData {
   name: string;
@@ -534,10 +535,13 @@ export function CheckoutPage() {
               <div className="space-y-4">
                 {cartItems.map((item) => (
                   <div key={item.id} className="flex items-center space-x-3">
-                    <img
+                    <OptimizedImage
                       src={item.image || '/placeholder-food.png'}
                       alt={item.name}
                       className="w-16 h-16 object-cover rounded-md"
+                      context="cart"
+                      width="64"
+                      height="64"
                     />
                     <div className="flex-1">
                       <p className="font-medium">{item.name}</p>

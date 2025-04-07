@@ -10,6 +10,8 @@ import { api, uploadMenuItemImage } from '../../lib/api';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { Tooltip } from '../../../shared/components/ui';
 import { deriveStockStatus, calculateAvailableQuantity } from '../../utils/inventoryUtils';
+import OptimizedImage from '../../../shared/components/ui/OptimizedImage';
+import useIntersectionObserver from '../../../shared/hooks/useIntersectionObserver';
 
 // Import the Inventory Modal
 import ItemInventoryModal from './ItemInventoryModal';
@@ -18,6 +20,36 @@ import OptionGroupsModal from './OptionGroupsModal';
 
 // Import the CopyMenuItemModal component
 import { CopyMenuItemModal } from './CopyMenuItemModal';
+
+// LazyMenuManagerImage component for lazy-loaded images in the admin menu manager
+interface LazyMenuManagerImageProps {
+  image: string | undefined | null;
+  name: string;
+}
+
+function LazyMenuManagerImage({ image, name }: LazyMenuManagerImageProps) {
+  const [ref, isVisible] = useIntersectionObserver({
+    rootMargin: '200px', // Load images 200px before they enter the viewport
+    triggerOnce: true // Only trigger once
+  });
+
+  return (
+    <div ref={ref as React.RefObject<HTMLDivElement>} className="w-full h-48 bg-gray-100">
+      {isVisible ? (
+        <OptimizedImage
+          src={image}
+          alt={name}
+          className="w-full h-full object-cover"
+          width="400"
+          height="192"
+          context="menuItem"
+        />
+      ) : (
+        <div className="w-full h-full bg-gray-200 animate-pulse" />
+      )}
+    </div>
+  );
+}
 
 /**
  * Local form data for creating/updating a menu item.
@@ -966,10 +998,9 @@ export function MenuManager({
                 key={item.id}
                 className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col animate-fadeIn"
               >
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-full h-48 object-cover"
+                <LazyMenuManagerImage 
+                  image={item.image}
+                  name={item.name}
                 />
                 <div className="p-4 flex flex-col flex-1">
                   <div>

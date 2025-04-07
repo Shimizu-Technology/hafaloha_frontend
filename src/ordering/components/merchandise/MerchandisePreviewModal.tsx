@@ -5,6 +5,7 @@ import toastUtils from '../../../shared/utils/toastUtils';
 import { useOrderStore } from '../../store/orderStore';
 import { MerchandiseItem, MerchandiseVariant } from '../../types/merchandise';
 import { getSelectedVariant, calculateFinalPrice } from '../../utils/merchandiseUtils';
+import OptimizedImage from '../../../shared/components/ui/OptimizedImage';
 
 interface MerchandisePreviewModalProps {
   item: MerchandiseItem;
@@ -131,10 +132,14 @@ export function MerchandisePreviewModal({ item, onClose }: MerchandisePreviewMod
           <div className="relative bg-gray-100 flex items-center justify-center h-[300px] md:h-[500px]">
             {allImages.length > 0 ? (
               <>
-                <img
+                <OptimizedImage
                   src={allImages[currentImageIndex]}
                   alt={item.name}
                   className="max-h-full max-w-full object-contain"
+                  width="600"
+                  height="600"
+                  context="featured"
+                  fetchPriority="high"
                 />
                 
                 {allImages.length > 1 && (

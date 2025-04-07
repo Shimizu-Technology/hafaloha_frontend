@@ -23,6 +23,7 @@ import MerchandiseInventoryModal from './MerchandiseInventoryModal';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { api } from '../../../shared/api/apiClient';
+import OptimizedImage from '../../../shared/components/ui/OptimizedImage';
 
 interface MerchandiseManagerProps {
   restaurantId?: string;
@@ -1043,10 +1044,13 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                     <div className="mt-1 flex items-center">
                       {itemFormData.imageFile ? (
                         <div className="relative w-24 h-24 rounded-md overflow-hidden bg-gray-100 mr-4">
-                          <img
+                          <OptimizedImage
                             src={URL.createObjectURL(itemFormData.imageFile)}
                             alt="Preview"
                             className="w-full h-full object-cover"
+                            width="96"
+                            height="96"
+                            context="menuItem"
                           />
                           <button
                             type="button"
@@ -1060,10 +1064,13 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                         </div>
                       ) : itemFormData.image_url ? (
                         <div className="relative w-24 h-24 rounded-md overflow-hidden bg-gray-100 mr-4">
-                          <img
+                          <OptimizedImage
                             src={itemFormData.image_url}
                             alt="Current"
                             className="w-full h-full object-cover"
+                            width="96"
+                            height="96"
+                            context="menuItem"
                           />
                           <button
                             type="button"
@@ -1119,10 +1126,13 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                     <div className="mt-1 flex items-center">
                       {itemFormData.secondImageFile ? (
                         <div className="relative w-24 h-24 rounded-md overflow-hidden bg-gray-100 mr-4">
-                          <img
+                          <OptimizedImage
                             src={URL.createObjectURL(itemFormData.secondImageFile)}
                             alt="Preview"
                             className="w-full h-full object-cover"
+                            width="96"
+                            height="96"
+                            context="menuItem"
                           />
                           <button
                             type="button"
@@ -1136,10 +1146,13 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                         </div>
                       ) : itemFormData.second_image_url ? (
                         <div className="relative w-24 h-24 rounded-md overflow-hidden bg-gray-100 mr-4">
-                          <img
+                          <OptimizedImage
                             src={itemFormData.second_image_url}
                             alt="Current"
                             className="w-full h-full object-cover"
+                            width="96"
+                            height="96"
+                            context="menuItem"
                           />
                           <button
                             type="button"
@@ -1568,10 +1581,13 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
                     <div className="flex items-center">
                       <div className="h-12 w-12 bg-gray-200 rounded-md overflow-hidden mr-4">
                         {item.image_url ? (
-                          <img
+                          <OptimizedImage
                             src={item.image_url}
                             alt={item.name}
                             className="h-full w-full object-cover"
+                            width="48"
+                            height="48"
+                            context="cart"
                           />
                         ) : (
                           <div className="h-full w-full flex items-center justify-center">
