@@ -139,8 +139,17 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
           colorPrimary: '#c1902f',
         },
       },
-      // Disable save payment method option
+      // Configure payment flow
       paymentMethodCreation: 'manual',
+      paymentMethodConfiguration: {
+        card: {
+          setupFutureUsage: false
+        },
+        wallets: {
+          applePay: 'auto',
+          googlePay: 'auto'
+        }
+      },
       // Minimize billing address collection
       billingAddressCollection: 'never'
     });
@@ -157,8 +166,22 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     // Mark as mounted to prevent creating multiple elements
     paymentElementMounted.current = true;
     
-    // Create and mount the payment element
-    const paymentElement = elements.create('payment');
+    // Create and mount the payment element with payment method configuration
+    const paymentElement = elements.create('payment', {
+      // Configure payment methods
+      paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'cashapp'],
+      defaultValues: {
+        billingDetails: {
+          name: '',
+          email: '',
+          phone: ''
+        }
+      },
+      wallets: {
+        applePay: 'auto',
+        googlePay: 'auto'
+      }
+    });
     
     // Mount the element
     paymentElement.mount(paymentElementRef.current);
