@@ -439,7 +439,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     switch (status) {
       case 'loading':
         return (
-          <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible" style={{ position: 'relative', zIndex: 1 }}>
+          <div className="w-full px-4 py-3 min-h-[200px] flex items-center justify-center overflow-visible">
             <div className="text-gray-600">Loading payment form...</div>
           </div>
         );
@@ -456,11 +456,13 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         
       case 'processing':
         return (
-          <div className="w-full px-4 py-3">
-            <div className="bg-gray-50 border border-gray-200 p-4 rounded-md text-center">
-              <div className="animate-pulse flex flex-col items-center">
-                <div className="rounded-full bg-gray-300 h-10 w-10 mb-2"></div>
-                <p className="text-gray-700">Processing payment...</p>
+          <div className="w-full px-4 py-3 relative">
+            <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white p-4 rounded-lg shadow-lg text-center">
+                <div className="animate-pulse flex flex-col items-center">
+                  <div className="rounded-full bg-gray-300 h-10 w-10 mb-2"></div>
+                  <p className="text-gray-700">Processing payment...</p>
+                </div>
               </div>
             </div>
           </div>
@@ -582,17 +584,19 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   // Always render the payment element container to ensure it's in the DOM
   const PaymentElementContainer = () => (
     <div 
-      className="absolute inset-0 w-full px-4 py-3 overflow-visible" 
+      className="relative w-full px-4 py-3 overflow-visible" 
       style={{ 
-        zIndex: 10,
-        opacity: 1,
-        pointerEvents: 'auto'
+        opacity: status === 'ready' ? 1 : 0,
+        transition: 'opacity 0.2s ease-in-out'
       }}
     >
       <div 
         id="payment-element" 
         ref={paymentElementRef} 
         className="mb-6 min-h-[200px] overflow-visible stripe-element-container"
+        style={{
+          pointerEvents: status === 'ready' ? 'auto' : 'none'
+        }}
       />
     </div>
   );
@@ -601,18 +605,15 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     <div 
       className="stripe-checkout-container w-full mx-auto overflow-visible" 
       style={{ 
-        position: 'relative', 
-        zIndex: 1,
+        position: 'relative',
         minHeight: '300px',
-        marginBottom: '30px', // Extra space at bottom to ensure full visibility
-        pointerEvents: testMode || status === 'error' ? 'none' : 'auto'
+        marginBottom: '30px' // Extra space at bottom to ensure full visibility
       }}
     >
       <div 
-        className="w-full max-w-full overflow-visible relative" 
+        className="w-full max-w-full overflow-visible" 
         style={{ 
-          position: 'relative',
-          zIndex: 1 
+          position: 'relative'
         }}
       >
         {/* Always render the payment element container first */}
