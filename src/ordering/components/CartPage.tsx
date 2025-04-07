@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, Minus, Plus, Settings } from 'lucide-react';
 import { useOrderStore, CartItem } from '../store/orderStore';
-import { CartSkeletonList } from '../../shared/components/ui/SkeletonLoader';
 import { useMenuStore } from '../store/menuStore';
 import { CustomizationModal } from './CustomizationModal';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
@@ -20,8 +19,7 @@ export function CartPage() {
     cartItems,
     setCartQuantity,
     removeFromCart,
-    setCartItemNotes,
-    loading
+    setCartItemNotes
   } = useOrderStore();
   
   // Make sure menu items are loaded (for finding original items with option groups)
@@ -66,11 +64,7 @@ export function CartPage() {
         <div className="lg:grid lg:grid-cols-12 lg:gap-8">
           {/* Cart items list */}
           <div className="lg:col-span-7">
-            {loading ? (
-              <div className="animate-fadeIn transition-opacity duration-300">
-                <CartSkeletonList count={cartItems.length || 3} />
-              </div>
-            ) : (
+            {
               cartItems.map((item: CartItem) => {
                 // Generate a unique key for this item using our composite key function
                 const itemKey = useOrderStore.getState()._getItemKey(item);
@@ -179,7 +173,7 @@ export function CartPage() {
                   </div>
                 );
               })
-            )}
+            }
           </div>
 
           {/* Order summary */}

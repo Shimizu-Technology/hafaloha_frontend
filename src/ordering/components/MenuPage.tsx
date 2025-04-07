@@ -5,16 +5,14 @@ import { MenuItem } from './MenuItem';
 import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
-import { MenuItemSkeletonGrid } from '../../shared/components/ui/SkeletonLoader';
 import { deriveStockStatus, calculateAvailableQuantity } from '../utils/inventoryUtils';
 
 export function MenuPage() {
-  const { menuItems, fetchMenuItems, fetchMenus, loading, error, currentMenuId, websocketConnected: menuWebsocketConnected } = useMenuStore();
+  const { menuItems, fetchMenuItems, fetchMenus, error, currentMenuId, websocketConnected: menuWebsocketConnected } = useMenuStore();
   const { categories, fetchCategoriesForMenu, websocketConnected: categoriesWebsocketConnected } = useCategoryStore();
   const { restaurant } = useRestaurantStore();
   
-  // Track initial loading state to prevent flickering during refreshes
-  const [initialLoading, setInitialLoading] = useState(true);
+  // Reference to track if data has been loaded at least once
   const initialLoadComplete = useRef(false);
 
   // For category filter
@@ -42,9 +40,8 @@ export function MenuPage() {
       // Fetch menu items - the fetchMenuItems function now checks if we already have data and WebSocket is connected
       await fetchMenuItems();
       
-      // If this is the first load, set initialLoading to false
+      // If this is the first load, mark as complete
       if (!initialLoadComplete.current && menuItems.length > 0) {
-        setInitialLoading(false);
         initialLoadComplete.current = true;
       }
       
@@ -208,15 +205,10 @@ export function MenuPage() {
 
       {/* Menu Items Grid with min-height to prevent layout shift */}
       <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
-        {initialLoading ? (
-          <div className="transition-opacity duration-300">
-            <MenuItemSkeletonGrid count={6} />
-          </div>
-        ) : (
-          <div className="animate-fadeIn transition-opacity duration-300">
-            {filteredItems.length > 0 ? (
+        <div className="animate-fadeIn transition-opacity duration-300">
+          {filteredItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-                {filteredItems.map((item, index) => (
+                {filteredItems.map((item) => (
                   <MenuItem key={item.id} item={item} />
                 ))}
               </div>
@@ -241,7 +233,6 @@ export function MenuPage() {
               </div>
             )}
           </div>
-        )}
       </div>
     </div>
   );

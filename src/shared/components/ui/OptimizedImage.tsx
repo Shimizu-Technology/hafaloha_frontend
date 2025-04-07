@@ -66,29 +66,59 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
     sizes = '(max-width: 768px) 90vw, 50vw'; // Fallback default sizes
   }
   
-  // Special case for 'cart' context - still use ResponsiveImage but with optimized settings
+  // Special case for 'cart' context where fixed size might be better than responsive
   if (context === 'cart') {
-    // Use smaller widths and fixed size for cart items
-    const cartImgixOptions: Omit<ImgixImageOptions, 'width' | 'height'> = {
-      auto: 'format,compress',
-      fit: 'crop',
-      quality: 80,
-      // Apply a higher DPR for sharper thumbnails
-      dpr: 2,
-      ...explicitImgixOptions
-    };
+    // Get optimized URL from Imgix if available
+    let optimizedUrl = sourceUrl || fallbackSrc;
+    
+    // Try to apply Imgix transformations directly to the URL if it's a valid URL
+    if (sourceUrl && typeof sourceUrl === 'string') {
+      try {
+        // Get imgix domain from env
+        const imgixDomain = import.meta.env.VITE_IMGIX_DOMAIN;
+        
+        if (imgixDomain) {
+          // Extract the path from the source URL
+          const urlObj = new URL(sourceUrl);
+          const path = urlObj.pathname;
+          
+          // Create Imgix URL with optimizations
+          const imgixOptions = {
+            auto: 'format,compress',
+            fit: 'clip', // Use clip instead of crop to preserve the entire image
+            quality: 85,
+            dpr: 2,
+            ...explicitImgixOptions
+          };
+          
+          // Build query string from options
+          const params = new URLSearchParams();
+          Object.entries(imgixOptions).forEach(([key, value]) => {
+            if (value !== undefined) params.append(key, String(value));
+          });
+          
+          // Set width and height based on the display size (doubled for retina)
+          params.append('w', '200');
+          params.append('h', '200');
+          
+          // Construct the final Imgix URL
+          optimizedUrl = `https://${imgixDomain}${path}?${params.toString()}`;
+        }
+      } catch (e) {
+        // If URL parsing fails, fall back to original URL
+        console.warn('Failed to create Imgix URL:', e);
+      }
+    }
     
     return (
-      <ResponsiveImage
-        src={sourceUrl}
-        widths={[100, 200]} // Small widths for cart thumbnails
-        sizes="100px" // Fixed size
+      <img
+        src={optimizedUrl}
         alt={alt}
-        imgixOptions={cartImgixOptions}
-        fallbackSrc={fallbackSrc}
-        priority={false} // Cart items don't need priority loading
-        fetchPriority={fetchPriority}
-        loading="lazy" // Always lazy load cart items
+        width={imgProps.width || 100} // Use provided width or default
+        height={imgProps.height || 100} // Use provided height or default
+        loading="eager" // Load cart images eagerly since they're important on mobile
+        {...(fetchPriority ? { fetchpriority: fetchPriority } : { fetchpriority: 'high' })} // Prioritize cart images
+        onError={(e) => { if ((e.target as HTMLImageElement).src !== fallbackSrc) { (e.target as HTMLImageElement).src = fallbackSrc; }}}
         {...imgProps}
       />
     );
