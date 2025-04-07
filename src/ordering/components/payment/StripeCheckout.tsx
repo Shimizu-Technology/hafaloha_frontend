@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../../shared/api/apiClient';
 import { loadStripeScript, getStripe } from '../../../shared/utils/PaymentScriptLoader';
 import { StripeFieldsSkeleton } from './StripeFieldsSkeleton';
+import { Stripe, StripeElements } from '@stripe/stripe-js';
 
 interface StripeCheckoutProps {
   amount: string;
@@ -37,8 +38,8 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'processing'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [stripe, setStripe] = useState<any>(null);
-  const [elements, setElements] = useState<any>(null);
+  const [stripe, setStripe] = useState<Stripe | null>(null);
+  const [elements, setElements] = useState<StripeElements | null>(null);
 
   // Single ref for payment element
   const paymentElementRef = useRef<HTMLDivElement>(null);
@@ -189,28 +190,22 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       return;
     }
     
-    // Added a more robust check for the payment element ref
+    // Add a small delay to ensure the DOM has fully rendered
+    // Check for the payment element ref and elements instance
     if (!paymentElementRef.current) {
-      console.log('Payment element ref not available, will retry in 500ms');
-      // Set a timer to retry mounting
-      const retryTimer = setTimeout(() => {
-        console.log('Retrying Elements mount after delay');
-        // Force a re-render by toggling the status
-        if (isMounted.current && status === 'ready') {
-          // Brief loading state to trigger re-render
-          setStatus('loading');
-          setTimeout(() => {
-            if (isMounted.current) {
-              setStatus('ready');
-            }
-          }, 10);
-        }
-      }, 500);
-      
-      return () => clearTimeout(retryTimer);
+      console.log('Payment element ref not available');
+      return;
     }
     
+    if (elements) {
+      console.log('Elements already mounted, skipping');
+      return;
+    }
+    
+    console.log('All conditions met, attempting to mount Stripe Elements');
+    
     console.log('Creating Elements instance...');
+    
     try {
       // First, ensure the payment element ref exists and is in the DOM
       if (!paymentElementRef.current) {
@@ -234,11 +229,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
           variables: {
             colorPrimary: '#c1902f',
           },
-        },
-        // Disable save payment method option
-        paymentMethodCreation: 'manual',
-        // Minimize billing address collection
-        billingAddressCollection: 'never'
+        }
       });
       
       console.log('Elements instance created, mounting payment element...');
@@ -259,7 +250,11 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       setTimeout(() => {
         try {
           // Mount the payment element
-          paymentElement.mount(paymentElementRef.current);
+          if (paymentElementRef.current) {
+            paymentElement.mount(paymentElementRef.current);
+          } else {
+            throw new Error('Payment element container not found during mount');
+          }
           console.log('Payment element mounted successfully');
         } catch (mountError) {
           console.error('Error mounting payment element:', mountError);
@@ -385,7 +380,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       return false;
     } catch (err: any) {
       if (isMounted.current) {
-        setError(err.message || 'Payment failed');
+        setError(err instanceof Error ? err.message : 'Payment failed');
         setStatus('error');
       }
       onPaymentError(err instanceof Error ? err : new Error(err.message || 'Unknown error'));
@@ -398,26 +393,40 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     processPayment
   }), [processPayment]);
 
-  // Ensure payment element is rendered and positioned correctly
+  // Add a robust check to ensure element exists and is mounted
   useEffect(() => {
-    // Create a small delay to ensure DOM is fully rendered before checking ref
-    const checkRefTimeout = setTimeout(() => {
-      if (status === 'ready' && stripe && clientSecret && !elements) {
-        console.log('Payment ref check - status ready but elements not created yet');
-        // Force re-render if elements haven't been created yet
-        if (isMounted.current) {
-          setStatus('loading');
-          setTimeout(() => {
-            if (isMounted.current) {
-              setStatus('ready');
-            }
-          }, 50);
+    if (!testMode && status === 'ready' && stripe && clientSecret && !elements) {
+      console.log('All dependencies ready but elements not mounted yet');
+      
+      // Check DOM at regular intervals to ensure the element is mounted
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      const checkAndRetryMount = () => {
+        if (!isMounted.current) return;
+        attempts++;
+        
+        console.log(`Checking payment element (attempt ${attempts}/${maxAttempts})`);
+        
+        if (paymentElementRef.current && !elements) {
+          console.log('Payment element ref exists but elements not created, forcing re-init');
+          // Force re-initialization by toggling status
+          initializeStripe();
         }
-      }
-    }, 200);
-    
-    return () => clearTimeout(checkRefTimeout);
-  }, [status, stripe, clientSecret, elements]);
+        
+        if (attempts < maxAttempts && isMounted.current && !elements) {
+          setTimeout(checkAndRetryMount, 500);
+        }
+      };
+      
+      // Start checking after a small delay to ensure DOM is ready
+      const initialDelay = setTimeout(checkAndRetryMount, 300);
+      
+      return () => {
+        clearTimeout(initialDelay);
+      };
+    }
+  }, [status, stripe, clientSecret, elements, testMode, initializeStripe]);
 
   // Render based on status
   // Helper function to check if status is processing - fixes TypeScript errors
@@ -562,22 +571,50 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     };
   }, []);
 
+  // Log outside of JSX to avoid TypeScript void errors
+  useEffect(() => {
+    console.log('StripeCheckout rendered, status:', status, 'ref exists:', !!paymentElementRef.current);
+  }, [status]);
+  
+  // Always render the payment element container to ensure it's in the DOM
+  const PaymentElementContainer = () => (
+    <div 
+      className="absolute inset-0 w-full px-4 py-3 overflow-visible" 
+      style={{ 
+        zIndex: (status === 'ready' || status === 'processing') && !testMode ? 10 : -10,
+        opacity: (status === 'ready' || status === 'processing') && !testMode ? 1 : 0,
+        pointerEvents: status === 'ready' && !testMode ? 'auto' : 'none'
+      }}
+    >
+      <div 
+        id="payment-element" 
+        ref={paymentElementRef} 
+        className="mb-6 min-h-[200px] overflow-visible stripe-element-container"
+      />
+    </div>
+  );
+
   return (
     <div 
       className="stripe-checkout-container w-full mx-auto overflow-visible" 
       style={{ 
         position: 'relative', 
         zIndex: 1,
-        minHeight: '300px'
+        minHeight: '300px',
+        marginBottom: '30px' // Extra space at bottom to ensure full visibility
       }}
     >
       <div 
-        className="w-full max-w-full overflow-visible" 
+        className="w-full max-w-full overflow-visible relative" 
         style={{ 
           position: 'relative',
           zIndex: 1 
         }}
       >
+        {/* Always render the payment element container first */}
+        <PaymentElementContainer />
+        
+        {/* Then render the conditional content based on status */}
         {renderContent()}
       </div>
     </div>
