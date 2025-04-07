@@ -66,17 +66,29 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
     sizes = '(max-width: 768px) 90vw, 50vw'; // Fallback default sizes
   }
   
-  // Special case for 'cart' context where fixed size might be better than responsive
+  // Special case for 'cart' context - still use ResponsiveImage but with optimized settings
   if (context === 'cart') {
+    // Use smaller widths and fixed size for cart items
+    const cartImgixOptions: Omit<ImgixImageOptions, 'width' | 'height'> = {
+      auto: 'format,compress',
+      fit: 'crop',
+      quality: 80,
+      // Apply a higher DPR for sharper thumbnails
+      dpr: 2,
+      ...explicitImgixOptions
+    };
+    
     return (
-      <img
-        src={sourceUrl || fallbackSrc}
+      <ResponsiveImage
+        src={sourceUrl}
+        widths={[100, 200]} // Small widths for cart thumbnails
+        sizes="100px" // Fixed size
         alt={alt}
-        width={100} // Set explicit dims
-        height={100}
-        loading="lazy" // Carts usually off-screen initially
-        onError={(e) => { if ((e.target as HTMLImageElement).src !== fallbackSrc) { (e.target as HTMLImageElement).src = fallbackSrc; }}}
-        {...(fetchPriority ? { fetchpriority: fetchPriority } : {})} // Add fetchpriority as a custom attribute
+        imgixOptions={cartImgixOptions}
+        fallbackSrc={fallbackSrc}
+        priority={false} // Cart items don't need priority loading
+        fetchPriority={fetchPriority}
+        loading="lazy" // Always lazy load cart items
         {...imgProps}
       />
     );
