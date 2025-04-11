@@ -1,6 +1,6 @@
 // src/shared/api/apiClient.ts
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { isTokenExpired, getRestaurantId } from '../utils/jwt';
 import { config } from '../config';
 import { useAuthStore } from '../auth/authStore';
@@ -16,7 +16,8 @@ const ORDERING_RESTAURANT_CONTEXT_ENDPOINTS = [
   'menu_items',
   'option_groups',
   'options',
-  'promo_codes'
+  'promo_codes',
+  'orders'
 ];
 
 // Endpoints that require restaurant_id parameter for reservations
@@ -46,6 +47,10 @@ const axiosInstance: AxiosInstance = axios.create({
 
 // Add request interceptor to handle authentication and restaurant context
 axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  // Identify this frontend and send the configured restaurant ID
+  config.headers.set('X-Frontend-ID', 'hafaloha');
+  config.headers.set('X-Frontend-Restaurant-ID', import.meta.env.VITE_RESTAURANT_ID || '1');
+  
   const token = localStorage.getItem('token');
   
   // Check token expiration
@@ -76,18 +81,37 @@ axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers.set('Authorization', `Bearer ${token}`);
   }
   
-  // Add restaurant_id to params for endpoints that need it, regardless of authentication
-  if (config.url && needsRestaurantContext(config.url)) {
-    // Get restaurant ID from token if available, otherwise use default
-    const restaurantId = token ? getRestaurantId(token) : null;
-    const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
-    const finalRestaurantId = restaurantId || defaultId;
+  // Always add restaurant_id to authenticated requests
+  if (token) {
+    // Get restaurant ID from token
+    const restaurantId = getRestaurantId(token);
     
-    if (finalRestaurantId) {
-      config.params = config.params || {};
+    // Add restaurant_id to headers for all authenticated requests
+    if (restaurantId) {
+      config.headers.set('X-Restaurant-ID', restaurantId);
+    }
+    
+    // Also add to params for backward compatibility and specific endpoints
+    config.params = config.params || {};
+    
+    // If endpoint specifically needs restaurant context or it's an authenticated request
+    if (config.url && (needsRestaurantContext(config.url) || token)) {
+      // Use restaurant ID from token, or fall back to environment variable
+      const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
+      const finalRestaurantId = restaurantId || defaultId;
+      
+      // Only set if not already specified in the request
       if (!config.params.restaurant_id) {
         config.params.restaurant_id = finalRestaurantId;
       }
+    }
+  } else if (config.url && needsRestaurantContext(config.url)) {
+    // For unauthenticated requests to endpoints that need restaurant context
+    const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
+    
+    config.params = config.params || {};
+    if (!config.params.restaurant_id) {
+      config.params.restaurant_id = defaultId;
     }
   }
   
@@ -120,6 +144,26 @@ axiosInstance.interceptors.response.use(
       }
     }
     
+    // Handle 403 Forbidden (tenant access denied)
+    if (error.response && error.response.status === 403) {
+      console.error('Tenant access denied:', error.response.data);
+      
+      // Check if this is a tenant access issue
+      if (error.response.data?.errors?.includes('User not authorized for this restaurant')) {
+        const authStore = useAuthStore.getState();
+        authStore.logout();
+        // Could show a more specific error message here
+      }
+    }
+    
+    // Handle 422 Unprocessable Entity (missing restaurant context)
+    if (error.response && error.response.status === 422) {
+      if (error.response.data?.errors?.includes('Restaurant context required')) {
+        console.error('Missing restaurant context:', error.response.data);
+        // Could redirect to a restaurant selection page or show an error
+      }
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -130,6 +174,32 @@ export const apiClient = axiosInstance;
 // Helper function to extract data from response
 export const extractData = <T>(response: AxiosResponse<T>): T => {
   return response.data;
+};
+
+/**
+ * Switch to a different restaurant context
+ * @param restaurantId The restaurant ID to switch to
+ * @returns Promise that resolves to the new JWT token and user object
+ */
+export const switchRestaurantContext = async (restaurantId: string | number): Promise<{ jwt: string; user: any }> => {
+  try {
+    const response = await apiClient.post<{ jwt: string; user: any }>('/switch-tenant', { restaurant_id: restaurantId });
+    
+    // Update the token in localStorage
+    if (response.data.jwt) {
+      localStorage.setItem('token', response.data.jwt);
+      
+      // Update user in localStorage if needed
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Failed to switch restaurant context:', error);
+    throw error;
+  }
 };
 
 // Generic API functions

@@ -7,6 +7,7 @@ import {
   toggleVipMode as apiToggleVipMode,
   setCurrentEvent as apiSetCurrentEvent 
 } from '../api/endpoints/restaurants';
+import { config } from '../config';
 
 export interface Restaurant {
   id: number;
@@ -50,8 +51,9 @@ export const useRestaurantStore = create<RestaurantStore>((set, get) => ({
   fetchRestaurant: async () => {
     set({ loading: true, error: null });
     try {
-      // Assuming the first restaurant (ID 1) is the main restaurant
-      const data = await fetchRestaurant(1);
+      // Use the configured restaurant ID from environment variables
+      const restaurantId = parseInt(config.restaurantId);
+      const data = await fetchRestaurant(restaurantId);
       set({ restaurant: data as Restaurant, loading: false });
     } catch (err: any) {
       console.error('Failed to fetch restaurant:', err);

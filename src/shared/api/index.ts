@@ -1,7 +1,7 @@
 // src/shared/api/index.ts
 
 // Export the API client
-export { api, apiClient, extractData } from './apiClient';
+export { api, apiClient, extractData, switchRestaurantContext } from './apiClient';
 
 // Export utility functions
 export { uploadFile, objectToFormData } from './utils';
