@@ -1,4 +1,5 @@
 // src/ordering/types/order.ts
+import { Location } from '../../shared/types/Location';
 
 export interface OrderItem {
   id: string;
@@ -23,6 +24,7 @@ export interface MerchandiseOrderItem {
 
 export interface Order {
   id: string;
+  order_number?: string; // New restaurant-specific order number
   created_at?: string;
   updated_at?: string;
   createdAt?: string;
@@ -42,12 +44,13 @@ export interface Order {
   payment_method?: string;
   transaction_id?: string;
   restaurant_id?: string;
-  order_number?: string; // Custom restaurant-specific order number
   staff_created?: boolean; // Flag to indicate if order was created by staff
   created_by_staff_id?: number | string | null; // ID of the staff member who created this order
   is_staff_order?: boolean; // Flag to indicate if this is a staff order (vs customer order)
   error?: string; // For error handling in optimistic updates
   global_last_acknowledged_at?: string; // Timestamp when any admin acknowledged the order
+  location?: Location; // Location information for multi-location restaurants
+  location_id?: number; // ID of the location for this order
 }
 
 export interface OrderManagerProps {

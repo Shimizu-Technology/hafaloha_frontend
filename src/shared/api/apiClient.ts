@@ -1,7 +1,7 @@
 // src/shared/api/apiClient.ts
 
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { isTokenExpired, getRestaurantId } from '../utils/jwt';
+import { isTokenExpired } from '../utils/jwt';
 import { config } from '../config';
 import { useAuthStore } from '../auth/authStore';
 
@@ -17,7 +17,8 @@ const ORDERING_RESTAURANT_CONTEXT_ENDPOINTS = [
   'option_groups',
   'options',
   'promo_codes',
-  'orders'
+  'orders',
+  'locations'
 ];
 
 // Endpoints that require restaurant_id parameter for reservations
@@ -80,38 +81,36 @@ axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     // Add token to headers
     config.headers.set('Authorization', `Bearer ${token}`);
   }
-  
-  // Always add restaurant_id to authenticated requests
+    // Always add restaurant_id to authenticated requests
   if (token) {
-    // Get restaurant ID from token
-    const restaurantId = getRestaurantId(token);
+    // For Hafaloha frontend, always use restaurant ID 1
+    // This ensures proper tenant isolation
+    const hafalohaRestaurantId = import.meta.env.VITE_RESTAURANT_ID || '1';
     
     // Add restaurant_id to headers for all authenticated requests
-    if (restaurantId) {
-      config.headers.set('X-Restaurant-ID', restaurantId);
-    }
+    config.headers.set('X-Restaurant-ID', hafalohaRestaurantId);
     
     // Also add to params for backward compatibility and specific endpoints
     config.params = config.params || {};
     
     // If endpoint specifically needs restaurant context or it's an authenticated request
     if (config.url && (needsRestaurantContext(config.url) || token)) {
-      // Use restaurant ID from token, or fall back to environment variable
-      const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
-      const finalRestaurantId = restaurantId || defaultId;
+      // Always use the Hafaloha restaurant ID (1) for this frontend
+      // This prevents data leakage from other restaurants
       
       // Only set if not already specified in the request
       if (!config.params.restaurant_id) {
-        config.params.restaurant_id = finalRestaurantId;
+        config.params.restaurant_id = hafalohaRestaurantId;
       }
     }
   } else if (config.url && needsRestaurantContext(config.url)) {
     // For unauthenticated requests to endpoints that need restaurant context
-    const defaultId = import.meta.env.VITE_RESTAURANT_ID || '1';
+    // Always use Hafaloha ID (1) for this frontend
+    const hafalohaRestaurantId = import.meta.env.VITE_RESTAURANT_ID || '1';
     
     config.params = config.params || {};
     if (!config.params.restaurant_id) {
-      config.params.restaurant_id = defaultId;
+      config.params.restaurant_id = hafalohaRestaurantId;
     }
   }
   
