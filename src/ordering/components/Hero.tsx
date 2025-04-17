@@ -38,37 +38,45 @@ export function Hero() {
       </div>
 
       <div className="relative max-w-7xl mx-auto py-16 sm:py-24 md:py-32 px-4 sm:px-6 lg:px-8">
-        {/* Heading */}
-        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white">
-          Experience the Flavors of Two Islands
-        </h1>
-        <p className="mt-6 text-lg sm:text-xl text-gray-300 max-w-3xl">
-          Where Chamorro and Hawaiian cuisines come together to create 
-          an unforgettable dining experience
-        </p>
+        {/* Content container with subtle animation */}
+        <div className="animate-fadeIn">
+          {/* Heading with text shadow for better readability */}
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white drop-shadow-sm">
+            Experience the Flavors of Two Islands
+          </h1>
+          
+          {/* Subheading with improved contrast */}
+          <p className="mt-6 text-lg sm:text-xl text-white text-opacity-90 max-w-3xl font-light drop-shadow-sm">
+            Where Chamorro and Hawaiian cuisines come together to create 
+            an unforgettable dining experience
+          </p>
 
-        {/* Buttons */}
-        <div className="mt-8 flex flex-col sm:flex-row gap-4">
-          <Link
-            to="/menu"
-            className="inline-flex items-center justify-center px-6 py-3
-                       border border-transparent text-base font-medium rounded-md 
-                       text-gray-900 bg-[#c1902f]
-                       hover:bg-[#d4a43f] transition-colors duration-150"
-          >
-            Order Now
-          </Link>
-          {/* Book Your Table button temporarily hidden
-          <button
-            onClick={() => setShowReservationModal(true)}
-            className="inline-flex items-center justify-center px-6 py-3
-                       border-2 border-[#c1902f]
-                       text-base font-medium rounded-md text-white
-                       hover:bg-[#c1902f] transition-colors duration-150"
-          >
-            Book Your Table
-          </button>
-          */}
+          {/* Buttons with improved styling and hover effects */}
+          <div className="mt-10 flex flex-col sm:flex-row gap-4">
+            <Link
+              to="/menu"
+              className="inline-flex items-center justify-center px-6 py-3.5
+                        border border-transparent text-base font-medium rounded-md 
+                        text-white bg-[#c1902f] shadow-md
+                        hover:bg-[#d4a43f] hover:shadow-lg transform hover:-translate-y-0.5
+                        transition-all duration-200 ease-in-out"
+            >
+              Order Now
+            </Link>
+            {/* Book Your Table button temporarily hidden
+            <button
+              onClick={() => setShowReservationModal(true)}
+              className="inline-flex items-center justify-center px-6 py-3.5
+                        border-2 border-white border-opacity-80 shadow-md
+                        text-base font-medium rounded-md text-white
+                        hover:bg-white hover:bg-opacity-10 hover:border-opacity-100 hover:shadow-lg
+                        transform hover:-translate-y-0.5
+                        transition-all duration-200 ease-in-out"
+            >
+              Book Your Table
+            </button>
+            */}
+          </div>
         </div>
       </div>
 
