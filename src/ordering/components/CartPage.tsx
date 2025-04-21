@@ -77,10 +77,11 @@ export function CartPage() {
                   >
                   {/* Image */}
                   <OptimizedImage
-                    src={(item as any).image || '/placeholder-food.png'}
+                    src={(item as any).image}
                     alt={item.name}
                     className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
                     context="cart"
+                    fallbackSrc="/placeholder-food.png"
                   />
 
                   <div className="flex-1 min-w-0">
