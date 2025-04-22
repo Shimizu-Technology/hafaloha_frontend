@@ -1,7 +1,7 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import { useState, lazy, Suspense, useEffect } from 'react';
-import { Store, Users, CreditCard, Book, Lock, Bell, MapPin } from 'lucide-react';
+import { Store, Users, CreditCard, Book, Lock, Bell, MapPin, Calendar } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
@@ -12,8 +12,9 @@ const NotificationSettings = lazy(() => import('./settings/NotificationSettings'
 const VipModeToggle = lazy(() => import('./settings/VipModeToggle').then(module => ({ default: module.VipModeToggle })));
 const VipCodesManager = lazy(() => import('./settings/VipCodesManager').then(module => ({ default: module.VipCodesManager })));
 const LocationManager = lazy(() => import('./settings/LocationManager').then(module => ({ default: module.LocationManager })));
+const ReservationsSettings = lazy(() => import('./settings/ReservationsSettings').then(module => ({ default: module.ReservationsSettings })));
 
-type SettingsTab = 'restaurant' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access' | 'locations';
+type SettingsTab = 'restaurant' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access' | 'locations' | 'reservations';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -22,7 +23,7 @@ interface SettingsManagerProps {
 export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => {
     const stored = localStorage.getItem('adminSettingsTab');
-    if (stored && ['restaurant', 'menus', 'users', 'payments', 'notifications', 'vip-access'].includes(stored)) {
+    if (stored && ['restaurant', 'menus', 'users', 'payments', 'notifications', 'vip-access', 'locations', 'reservations'].includes(stored)) {
       return stored as SettingsTab;
     }
     return 'restaurant';
@@ -41,6 +42,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'vip-access', label: 'VIP Access', icon: Lock },
     { id: 'locations', label: 'Locations', icon: MapPin },
+    { id: 'reservations', label: 'Reservations', icon: Calendar },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -90,6 +92,12 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         return (
           <div>
             <LocationManager restaurantId={restaurantId} />
+          </div>
+        );
+      case 'reservations':
+        return (
+          <div>
+            <ReservationsSettings restaurantId={restaurantId} />
           </div>
         );
       default:
