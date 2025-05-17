@@ -44,6 +44,10 @@ const needsRestaurantContext = (endpoint: string): boolean => {
 // Create an Axios instance
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  }
 });
 
 // We'll use a simple approach without the loading store

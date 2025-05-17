@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { websocketService } from '../../services/websocketService';
+import { config } from '../../config';
 
 interface RestaurantProviderProps {
   children: React.ReactNode;
@@ -50,6 +51,24 @@ export function RestaurantProvider({ children }: RestaurantProviderProps) {
   
   // Track the restaurant ID to detect real changes
   const previousRestaurantIdRef = useRef<number | null>(null);
+  
+  // Effect to set restaurant ID in localStorage for tenant validation
+  useEffect(() => {
+    if (restaurant?.id) {
+      // Set the restaurant ID in localStorage for tenant validation
+      localStorage.setItem('restaurantId', restaurant.id.toString());
+      console.log('Tenant context initialized with restaurant ID:', restaurant.id);
+    } else {
+      // Fallback to config restaurant ID if available
+      const configRestaurantId = parseInt(config.restaurantId);
+      if (!isNaN(configRestaurantId)) {
+        localStorage.setItem('restaurantId', configRestaurantId.toString());
+        console.log('Tenant context initialized from config with ID:', configRestaurantId);
+      } else {
+        console.warn('No restaurant ID available for tenant context');
+      }
+    }
+  }, [restaurant]);
   
   // WebSocket subscription effect - separate from the polling effect
   useEffect(() => {

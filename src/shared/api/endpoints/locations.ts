@@ -1,7 +1,10 @@
 // src/shared/api/endpoints/locations.ts
 
-import { apiClient } from '../apiClient';
-import { Location, LocationPayload } from '../../types/Location';
+import { apiClient as api } from '../apiClient';
+import { Location as LocationType, LocationPayload } from '../../types/Location';
+
+// Re-export the Location type for easier imports
+export type Location = LocationType;
 
 const BASE_URL = '/locations';
 
@@ -11,9 +14,14 @@ export const locationsApi = {
    * @param params Optional filter parameters
    * @returns Promise with locations array
    */
-  getLocations: async (params?: { active?: boolean }): Promise<Location[]> => {
-    const response = await apiClient.get(BASE_URL, { params });
-    return response.data;
+  getLocations: async (params?: { active?: boolean; restaurant_id?: number; is_active?: boolean }): Promise<Location[]> => {
+    try {
+      const response = await api.get(BASE_URL, { params });
+      return response.data || [];
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      return [];
+    }
   },
 
   /**
@@ -22,7 +30,7 @@ export const locationsApi = {
    * @returns Promise with location object
    */
   getLocation: async (id: number): Promise<Location> => {
-    const response = await apiClient.get(`${BASE_URL}/${id}`);
+    const response = await api.get(`${BASE_URL}/${id}`);
     return response.data;
   },
 
@@ -32,7 +40,7 @@ export const locationsApi = {
    * @returns Promise with created location
    */
   createLocation: async (location: LocationPayload): Promise<Location> => {
-    const response = await apiClient.post(BASE_URL, { location });
+    const response = await api.post(BASE_URL, location);
     return response.data;
   },
 
@@ -42,8 +50,8 @@ export const locationsApi = {
    * @param location Location data
    * @returns Promise with updated location
    */
-  updateLocation: async (id: number, location: LocationPayload): Promise<Location> => {
-    const response = await apiClient.put(`${BASE_URL}/${id}`, { location });
+  updateLocation: async (id: number, location: Partial<LocationPayload>): Promise<Location> => {
+    const response = await api.patch(`${BASE_URL}/${id}`, location);
     return response.data;
   },
 
@@ -53,7 +61,7 @@ export const locationsApi = {
    * @returns Promise with no content
    */
   deleteLocation: async (id: number): Promise<void> => {
-    await apiClient.delete(`${BASE_URL}/${id}`);
+    await api.delete(`${BASE_URL}/${id}`);
   },
 
   /**
@@ -62,7 +70,7 @@ export const locationsApi = {
    * @returns Promise with updated location
    */
   setDefaultLocation: async (id: number): Promise<Location> => {
-    const response = await apiClient.put(`${BASE_URL}/${id}/default`);
+    const response = await api.post(`${BASE_URL}/${id}/set_default`);
     return response.data;
   }
 };

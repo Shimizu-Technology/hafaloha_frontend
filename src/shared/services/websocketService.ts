@@ -229,12 +229,37 @@ class WebSocketService {
     }
     
     if (!token) {
-      this.log('error', 'No auth token available for WebSocket authentication');
-      this.handleError(new Error('No auth token available'));
-      this.isConnecting = false;
-      this.connectionStartTime = null;
-      this.reconnectAttempts = this.maxReconnectAttempts;
-      return;
+      // Enhanced public mode detection - check if we're in a public-facing component 
+      const currentPath = window.location.pathname;
+      
+      // Consider any route a public route if it's not specifically in the admin/dashboard area
+      // This is a more reliable approach for multi-tenant systems
+      const isAdminRoute = (
+        currentPath.includes('/dashboard') || 
+        currentPath.includes('/admin') || 
+        currentPath.includes('/management') ||
+        currentPath.includes('/staff')
+      );
+      
+      const isPublicMode = !isAdminRoute;
+      
+      if (isPublicMode) {
+        // In public mode, we can't connect to WebSocket but don't need to show error
+        this.log('info', `Public mode detected on path ${currentPath} - WebSocket connection not required`);
+        this.isConnecting = false;
+        this.connectionStartTime = null;
+        // Don't try to reconnect in public mode
+        this.reconnectAttempts = this.maxReconnectAttempts;
+        return;
+      } else {
+        // For admin/dashboard components, continue showing the error
+        this.log('error', 'No auth token available for WebSocket authentication');
+        this.handleError(new Error('No auth token available'));
+        this.isConnecting = false;
+        this.connectionStartTime = null;
+        this.reconnectAttempts = this.maxReconnectAttempts;
+        return;
+      }
     }
     
     // Log token info for debugging (safely)

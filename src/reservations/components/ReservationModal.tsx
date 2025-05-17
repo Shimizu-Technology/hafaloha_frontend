@@ -42,6 +42,7 @@ export default function ReservationModal({
   onRefreshData,
 }: Props) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   // Basic fields
   const [guestName, setGuestName] = useState(reservation.contact_name || '');
@@ -166,6 +167,7 @@ export default function ReservationModal({
 
   // ---------- Save changes (Edit mode -> Update) ----------
   async function handleSave() {
+    setIsProcessingAction(true);
     try {
       // Filter out empty seat-preference sets
       const seat_preferences = allSets.filter((arr) => arr.length > 0);
@@ -182,19 +184,70 @@ export default function ReservationModal({
 
       toastUtils.success('Reservation updated!');
       setIsEditing(false);
+      if (onRefreshData) onRefreshData();
       onClose();
     } catch (err) {
       console.error('Failed to update reservation:', err);
       toastUtils.error('Error updating reservation. Please try again.');
+    } finally {
+      setIsProcessingAction(false);
     }
   }
 
   // ---------- If user clicks Delete ----------
   function handleDelete() {
     if (!onDelete) return;
-    // Usually you'd confirm with the user first
-    onDelete(reservation.id);
-    toastUtils.success('Reservation deleted.');
+    // Confirm with the user first
+    if (window.confirm('Are you sure you want to delete this reservation? This action cannot be undone.')) {
+      onDelete(reservation.id);
+      toastUtils.success('Reservation deleted.');
+    }
+  }
+  
+  // ---------- Status Action Handlers ----------
+  async function handleApproveReservation() {
+    setIsProcessingAction(true);
+    try {
+      await updateReservation(reservation.id, { status: 'reserved' });
+      toastUtils.success('Reservation approved!');
+      if (onRefreshData) onRefreshData();
+      onClose();
+    } catch (err) {
+      console.error('Failed to approve reservation:', err);
+      toastUtils.error('Error approving reservation. Please try again.');
+    } finally {
+      setIsProcessingAction(false);
+    }
+  }
+  
+  async function handleRejectReservation() {
+    setIsProcessingAction(true);
+    try {
+      await updateReservation(reservation.id, { status: 'rejected' });
+      toastUtils.success('Reservation rejected.');
+      if (onRefreshData) onRefreshData();
+      onClose();
+    } catch (err) {
+      console.error('Failed to reject reservation:', err);
+      toastUtils.error('Error rejecting reservation. Please try again.');
+    } finally {
+      setIsProcessingAction(false);
+    }
+  }
+  
+  async function handleCancelReservation() {
+    setIsProcessingAction(true);
+    try {
+      await updateReservation(reservation.id, { status: 'canceled' });
+      toastUtils.success('Reservation canceled.');
+      if (onRefreshData) onRefreshData();
+      onClose();
+    } catch (err) {
+      console.error('Failed to cancel reservation:', err);
+      toastUtils.error('Error canceling reservation. Please try again.');
+    } finally {
+      setIsProcessingAction(false);
+    }
   }
 
   // ---------- Seat Map Modal ----------
@@ -301,7 +354,7 @@ export default function ReservationModal({
               {/* Status */}
               <div>
                 <strong>Status:</strong>{' '}
-                <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-hafaloha-gold/10 text-hafaloha-gold">
+                <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-[#0078d4]/10 text-[#0078d4]">
                   {reservation.status || 'N/A'}
                 </span>
               </div>
@@ -335,10 +388,10 @@ export default function ReservationModal({
                             onClick={() => handleAssignSeatsFromOption(idx)}
                             className="
                               ml-2 text-xs px-2 py-1
-                              bg-hafaloha-pink/10
-                              text-hafaloha-pink
+                              bg-[#50a3d9]/10
+                              text-[#50a3d9]
                               rounded
-                              hover:bg-hafaloha-pink/20
+                              hover:bg-[#50a3d9]/20
                             "
                           >
                             Assign
@@ -365,11 +418,44 @@ export default function ReservationModal({
                 </div>
               ) : null}
 
+              {/* Processing indicator */}
+              {isProcessingAction && (
+                <div className="mt-4 flex items-center justify-center py-2 text-[#0078d4]">
+                  <div className="animate-spin h-5 w-5 border-2 border-[#0078d4] border-r-transparent rounded-full mr-2"></div>
+                  <span>Processing...</span>
+                </div>
+              )}
+              
+              {/* Reservation Action Buttons */}
+              {reservation.status === 'booked' && !isProcessingAction && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={handleApproveReservation}
+                    className="px-4 py-2 bg-[#0078d4] text-white rounded hover:bg-[#50a3d9]"
+                  >
+                    Approve Reservation
+                  </button>
+                  <button
+                    onClick={handleRejectReservation}
+                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                  >
+                    Reject Reservation
+                  </button>
+                  <button
+                    onClick={handleCancelReservation}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                  >
+                    Cancel Reservation
+                  </button>
+                </div>
+              )}
+              
               {/* View mode buttons */}
               <div className="mt-6 flex justify-end space-x-2">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 bg-hafaloha-gold text-white rounded hover:bg-hafaloha-coral"
+                  className="px-4 py-2 bg-[#0078d4] text-white rounded hover:bg-[#50a3d9]"
+                  disabled={isProcessingAction}
                 >
                   Edit
                 </button>
@@ -377,6 +463,7 @@ export default function ReservationModal({
                   <button
                     onClick={handleDelete}
                     className="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                    disabled={isProcessingAction}
                   >
                     Delete
                   </button>
@@ -384,6 +471,7 @@ export default function ReservationModal({
                 <button
                   onClick={onClose}
                   className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                  disabled={isProcessingAction}
                 >
                   Close
                 </button>
@@ -404,7 +492,7 @@ export default function ReservationModal({
                   className="
                     w-full p-2 border border-gray-300
                     rounded
-                    focus:ring-2 focus:ring-hafaloha-gold focus:border-hafaloha-gold
+                    focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   "
                 />
               </div>
@@ -422,7 +510,7 @@ export default function ReservationModal({
                   className="
                     w-full p-2 border border-gray-300
                     rounded
-                    focus:ring-2 focus:ring-hafaloha-gold focus:border-hafaloha-gold
+                    focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   "
                 />
               </div>
@@ -440,7 +528,7 @@ export default function ReservationModal({
                   className="
                     w-full p-2 border border-gray-300
                     rounded
-                    focus:ring-2 focus:ring-hafaloha-gold focus:border-hafaloha-gold
+                    focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   "
                 />
               </div>
@@ -456,7 +544,7 @@ export default function ReservationModal({
                   className="
                     w-full p-2 border border-gray-300
                     rounded
-                    focus:ring-2 focus:ring-hafaloha-gold focus:border-hafaloha-gold
+                    focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   "
                 />
               </div>
@@ -472,7 +560,7 @@ export default function ReservationModal({
                   className="
                     w-full p-2 border border-gray-300
                     rounded
-                    focus:ring-2 focus:ring-hafaloha-gold focus:border-hafaloha-gold
+                    focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   "
                 />
               </div>
@@ -487,11 +575,12 @@ export default function ReservationModal({
                   className="
                     w-full p-2 border border-gray-300
                     rounded
-                    focus:ring-2 focus:ring-hafaloha-gold focus:border-hafaloha-gold
+                    focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   "
                 >
                   <option value="booked">booked</option>
                   <option value="reserved">reserved</option>
+                  <option value="rejected">rejected</option>
                   <option value="seated">seated</option>
                   <option value="finished">finished</option>
                   <option value="canceled">canceled</option>
@@ -525,28 +614,25 @@ export default function ReservationModal({
               </div>
 
               {/* Edit mode buttons */}
-              <div className="mt-6 flex justify-end space-x-2">
+              <div className="flex justify-end space-x-2 mt-6">
                 <button
                   onClick={handleSave}
-                  className="
-                    px-4 py-2
-                    bg-hafaloha-gold
-                    text-white
-                    rounded
-                    hover:bg-hafaloha-coral
-                  "
+                  className="px-4 py-2 bg-[#0078d4] text-white rounded hover:bg-[#50a3d9]"
+                  disabled={isProcessingAction}
                 >
                   Save
                 </button>
                 <button
+                  onClick={handleOpenSeatMap}
+                  className="px-4 py-2 bg-[#50a3d9]/20 text-[#50a3d9] rounded hover:bg-[#50a3d9]/30"
+                  disabled={isProcessingAction}
+                >
+                  Seat Map
+                </button>
+                <button
                   onClick={() => setIsEditing(false)}
-                  className="
-                    px-4 py-2
-                    bg-gray-200
-                    text-gray-800
-                    rounded
-                    hover:bg-gray-300
-                  "
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                  disabled={isProcessingAction}
                 >
                   Cancel
                 </button>

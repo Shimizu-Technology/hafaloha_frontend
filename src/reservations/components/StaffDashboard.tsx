@@ -15,7 +15,7 @@ export default function StaffDashboard() {
       <div className="max-w-7xl mx-auto px-4 mt-6">
         <div
           className="
-            bg-hafaloha-gold/5
+            bg-[#0078d4]/5
             rounded-md
             shadow
             p-3
@@ -29,6 +29,8 @@ export default function StaffDashboard() {
           <NavTab to="waitlist"     label="Waitlist"     currentPath={location.pathname} />
           <NavTab to="seating"      label="Seating"      currentPath={location.pathname} />
           <NavTab to="layout"       label="Layout"       currentPath={location.pathname} />
+          <NavTab to="blocked-periods" label="Blocked Periods" currentPath={location.pathname} />
+          <NavTab to="location-capacities" label="Capacities" currentPath={location.pathname} />
           <NavTab to="settings"     label="Settings"     currentPath={location.pathname} />
         </div>
       </div>
@@ -72,8 +74,8 @@ function NavTab({
         transition-colors
         ${
           isActive
-            ? 'bg-hafaloha-gold text-white shadow'
-            : 'bg-hafaloha-gold/10 text-hafaloha-gold hover:bg-hafaloha-gold/20'
+            ? 'bg-[#0078d4] text-white shadow'
+            : 'bg-[#0078d4]/10 text-[#0078d4] hover:bg-[#50a3d9]/20'
         }
       `}
     >

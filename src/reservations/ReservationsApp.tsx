@@ -12,6 +12,8 @@ import WaitlistTab from './components/dashboard/WaitlistTab';
 import SeatingTab from './components/dashboard/SeatingTab';
 import LayoutTab from './components/dashboard/LayoutTab';
 import SettingsTab from './components/dashboard/SettingsTab';
+import BlockedPeriodsTab from './components/dashboard/BlockedPeriodsTab';
+import LocationCapacitiesTab from './components/dashboard/LocationCapacitiesTab';
 
 import { DateFilterProvider } from './context/DateFilterContext';
 
@@ -56,6 +58,8 @@ export default function ReservationsApp() {
         <Route path="seating"      element={<SeatingTab />} />
         <Route path="layout"       element={<LayoutTab />} />
         <Route path="settings"     element={<SettingsTab />} />
+        <Route path="blocked-periods" element={<BlockedPeriodsTab />} />
+        <Route path="location-capacities" element={<LocationCapacitiesTab />} />
 
         {/* default => go to “reservations” tab */}
         <Route index element={<Navigate to="reservations" />} />

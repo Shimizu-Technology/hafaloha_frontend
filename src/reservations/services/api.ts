@@ -7,13 +7,20 @@ import { api as sharedApi } from '../../shared/api';
 export const api = sharedApi;
 
 // For backward compatibility
-export const fetchReservations = async (date?: string) => {
-  const params: any = {};
-  if (date) params.date = date;
+export const fetchReservations = async (params: Record<string, any> = {}) => {
+  // If a string is passed (old usage), convert it to object format
+  if (typeof params === 'string') {
+    params = { date: params };
+  } else if (params.date) {
+    // Ensure date parameter is properly formatted
+    params = { ...params, date: params.date };
+  }
+  
   return sharedApi.get('/reservations', params);
 };
 
 export const createReservation = async (data: any) => {
+  // Ensure location_id is properly passed if present
   return sharedApi.post('/reservations', data);
 };
 
@@ -31,8 +38,10 @@ export const fetchWaitlistEntries = async (date?: string) => {
   return sharedApi.get('/waitlist_entries', params);
 };
 
-export const fetchAvailability = async (date: string, partySize: number) => {
-  return sharedApi.get('/availability', { date, party_size: partySize });
+export const fetchAvailability = async (date: string, partySize: number, locationId?: number) => {
+  const params: any = { date, party_size: partySize };
+  if (locationId) params.location_id = locationId;
+  return sharedApi.get('/availability', params);
 };
 
 export const signupUser = async (userData: any) => {
@@ -53,6 +62,18 @@ export const seatAllocationReserve = async (data: any) => {
 
 export const fetchRestaurant = async (id: number) => {
   return sharedApi.get(`/restaurants/${id}`);
+};
+
+export const fetchRestaurantSettings = async () => {
+  // Get the restaurantId from localStorage or context
+  const restaurantId = localStorage.getItem('restaurantId') || '';
+  
+  // Use the /restaurants/:id endpoint instead of the non-existent /restaurant_settings
+  if (restaurantId) {
+    return sharedApi.get(`/restaurants/${restaurantId}`, { params: { include_settings: true } });
+  }
+  
+  throw new Error('Restaurant ID not available for settings request');
 };
 
 export const updateRestaurant = async (id: number, data: any) => {

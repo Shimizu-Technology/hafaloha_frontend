@@ -10,6 +10,7 @@ import { AnalyticsManager } from './AnalyticsManager';
 import { SettingsManager } from './SettingsManager';
 import MerchandiseManager from './MerchandiseManager';
 import { StaffManagement } from './StaffManagement';
+import { ReservationsManager } from './reservations/ReservationsManager';
 // RestaurantSelector removed - super admins now only see data for the current restaurant
 import NotificationContainer from '../../../shared/components/notifications/NotificationContainer';
 /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -35,7 +36,8 @@ import {
   ShoppingCart,
   // Bell, // Commented out - not currently using stock notifications
   Package,
-  Users
+  Users,
+  Calendar
 } from 'lucide-react';
 import AcknowledgeAllButton from '../../../shared/components/notifications/AcknowledgeAllButton';
 import { api } from '../../lib/api';
@@ -51,7 +53,7 @@ import { useOrderStore } from '../../store/orderStore';
 import { calculateAvailableQuantity } from '../../utils/inventoryUtils';
 import useWebSocket from '../../../shared/hooks/useWebSocket';
 
-type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise' | 'staff';
+type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise' | 'staff' | 'reservations';
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
@@ -85,6 +87,8 @@ export function AdminDashboard() {
     ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'merchandise', label: 'Merchandise', icon: ShoppingCart }] : []),
     // Promos - visible to admin and super_admin only
     ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'promos', label: 'Promos', icon: Tag }] : []),
+    // Reservations - visible to admin and super_admin only
+    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'reservations', label: 'Reservations', icon: Calendar }] : []),
     // Staff - visible to admin and super_admin only
     ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'staff', label: 'Staff', icon: Users }] : []),
     // Settings - visible to admin and super_admin
@@ -99,7 +103,7 @@ export function AdminDashboard() {
     
     // For admin/super_admin, check stored preference
     const stored = localStorage.getItem('adminTab');
-    if (stored && ['analytics','orders','menu','merchandise','promos','staff','settings'].includes(stored)) {
+    if (stored && ['analytics','orders','menu','merchandise','promos','reservations','staff','settings'].includes(stored)) {
       // Check if the user has access to the stored tab
       if (
         (stored === 'analytics' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
@@ -107,6 +111,7 @@ export function AdminDashboard() {
         (stored === 'menu' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'merchandise' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'promos' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'reservations' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'staff' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'settings' && (authStore.isSuperAdmin() || authStore.isAdmin()))
       ) {
@@ -1430,6 +1435,10 @@ useEffect(() => {
                   onInventoryModalClose={() => setOpenInventoryForItem(null)}
                 />
               )}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'reservations' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'reservations' && <ReservationsManager />}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'promos' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>

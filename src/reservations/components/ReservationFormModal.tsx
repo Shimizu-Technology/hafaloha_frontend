@@ -12,6 +12,7 @@ import {
   fetchLayout,
   fetchRestaurant
 } from '../services/api';
+import { locationsApi } from '../../shared/api/endpoints/locations';
 
 import SeatPreferenceMapModal from './SeatPreferenceMapModal';
 import type { SeatSectionData } from './SeatLayoutCanvas';
@@ -83,6 +84,11 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   // Layout
   const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
   const [layoutLoading, setLayoutLoading]   = useState(false);
+  
+  // Locations
+  const [locations, setLocations] = useState<any[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<number | undefined>(undefined);
+  const [hasMultipleLocations, setHasMultipleLocations] = useState(false);
 
   function getPartySize(): number {
     return parseInt(partySizeText, 10) || 1;
@@ -90,22 +96,36 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
 
   // -- Effects --
 
-  // 1) Load default reservation length from the restaurant
+  // 1) Load default reservation length from the restaurant and fetch locations
   useEffect(() => {
-    async function loadRestaurant() {
+    async function loadData() {
       try {
+        // Fetch restaurant config
         const rest = await fetchRestaurant(1);
-        if (rest.default_reservation_length) {
-          setDuration(rest.default_reservation_length);
+        if (rest && typeof rest === 'object' && 'default_reservation_length' in rest) {
+          const durationValue = Number(rest.default_reservation_length);
+          if (!isNaN(durationValue)) {
+            setDuration(durationValue);
+          }
+        }
+        
+        // Fetch locations
+        const locationsList = await locationsApi.getLocations({ active: true });
+        setLocations(locationsList);
+        setHasMultipleLocations(locationsList.length > 1);
+        
+        // If there's only one location, select it automatically
+        if (locationsList.length === 1) {
+          setSelectedLocationId(locationsList[0].id);
         }
       } catch (err) {
-        console.error('Error fetching restaurant:', err);
+        console.error('Error fetching initial data:', err);
       }
     }
-    loadRestaurant();
+    loadData();
   }, []);
 
-  // 2) Load timeslots on date/partySize changes
+  // 2) Load timeslots on date/partySize/location changes
   useEffect(() => {
     const sizeNum = getPartySize();
     if (!date || !sizeNum) {
@@ -114,15 +134,19 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
     }
     async function loadTimes() {
       try {
-        const data = await fetchAvailability(date, sizeNum);
-        setTimeslots(data.slots || []);
+        const data = await fetchAvailability(date, sizeNum, selectedLocationId);
+        if (data && typeof data === 'object' && 'slots' in data && Array.isArray(data.slots)) {
+          setTimeslots(data.slots);
+        } else {
+          setTimeslots([]);
+        }
       } catch (err) {
         console.error('Error fetching availability:', err);
         setTimeslots([]);
       }
     }
     loadTimes();
-  }, [date, partySizeText]);
+  }, [date, partySizeText, selectedLocationId]);
 
   // 3) If only 1 timeslot => forcibly set duration
   useEffect(() => {
@@ -137,7 +161,9 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
       setLayoutLoading(true);
       try {
         const layout = await fetchLayout(1);
-        const sections: SeatSectionData[] = layout.seat_sections.map((sec: any) => ({
+        let sections: SeatSectionData[] = [];
+        if (layout && typeof layout === 'object' && 'seat_sections' in layout && Array.isArray(layout.seat_sections)) {
+          sections = layout.seat_sections.map((sec: any) => ({
           id: sec.id,
           name: sec.name,
           section_type: sec.section_type === 'table' ? 'table' : 'counter',
@@ -151,7 +177,8 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
             position_y: s.position_y,
             capacity: s.capacity ?? 1,
           })),
-        }));
+          }));
+        }
         setLayoutSections(sections);
       } catch (err) {
         console.error('Error fetching layout:', err);
@@ -219,6 +246,7 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
           status: 'booked',
           seat_preferences: seat_prefs_for_db,
           duration_minutes: duration,
+          location_id: selectedLocationId
         },
       });
 
@@ -332,6 +360,27 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
                 />
               </div>
             </div>
+            
+            {/* Location selector - only shown for multiple locations */}
+            {hasMultipleLocations && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location
+                </label>
+                <select
+                  value={selectedLocationId || ''}
+                  onChange={(e) => setSelectedLocationId(Number(e.target.value) || undefined)}
+                  className="w-full p-2 border border-gray-300 rounded text-sm"
+                >
+                  <option value="">Select a location</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Time => React Select */}
             <div className="mt-4">

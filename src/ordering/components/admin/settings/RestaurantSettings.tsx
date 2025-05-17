@@ -1037,67 +1037,6 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
             </div>
           </div>
 
-          {/* Reservation Settings Section */}
-          <div className="bg-white border border-gray-100 rounded-lg shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
-            <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
-              <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#c1902f]" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                </svg>
-                Reservation Settings
-              </h3>
-            </div>
-            
-            <div className="p-5 space-y-4">
-              <div>
-                <div className="flex items-center mb-1">
-                  <label className="text-sm font-medium text-gray-700">Time Zone</label>
-                </div>
-                <MobileSelect
-                  options={timezoneOptions}
-                  value={restaurant.time_zone}
-                  onChange={(value) => setRestaurant({...restaurant, time_zone: value})}
-                  className="mt-1"
-                  placeholder="Select time zone"
-                />
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
-                    Time Slot Interval (minutes)
-                    <span className="ml-1 text-gray-500 text-xs rounded-full bg-gray-100 w-4 h-4 inline-flex items-center justify-center" title="The interval in minutes between available reservation time slots">ⓘ</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="60"
-                    value={restaurant.time_slot_interval.toString()}
-                    onChange={(e) => setRestaurant({...restaurant, time_slot_interval: parseInt(e.target.value) || 30})}
-                    placeholder="30"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
-                    Default Reservation Length (minutes)
-                    <span className="ml-1 text-gray-500 text-xs rounded-full bg-gray-100 w-4 h-4 inline-flex items-center justify-center" title="The default duration for reservations in minutes">ⓘ</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="15"
-                    max="240"
-                    value={restaurant.default_reservation_length.toString()}
-                    onChange={(e) => setRestaurant({...restaurant, default_reservation_length: parseInt(e.target.value) || 60})}
-                    placeholder="60"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Save Button */}
           <div className="flex justify-end pt-4">
             <button

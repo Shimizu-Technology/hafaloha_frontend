@@ -4,8 +4,13 @@ import { api } from '../apiClient';
 
 /**
  * Fetch seat allocations for a specific date and optional time
+ * @param params Object containing date, optional time and optional restaurant_id
  */
-export const fetchSeatAllocations = async (params: { date: string, time?: string }) => {
+export const fetchSeatAllocations = async (params: { 
+  date: string, 
+  time?: string, 
+  restaurant_id?: string 
+}) => {
   return api.get('/seat_allocations', params);
 };
 

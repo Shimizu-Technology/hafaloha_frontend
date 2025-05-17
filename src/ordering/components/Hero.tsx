@@ -63,19 +63,20 @@ export function Hero() {
             >
               Order Now
             </Link>
-            {/* Book Your Table button temporarily hidden
-            <button
-              onClick={() => setShowReservationModal(true)}
-              className="inline-flex items-center justify-center px-6 py-3.5
-                        border-2 border-white border-opacity-80 shadow-md
-                        text-base font-medium rounded-md text-white
-                        hover:bg-white hover:bg-opacity-10 hover:border-opacity-100 hover:shadow-lg
-                        transform hover:-translate-y-0.5
-                        transition-all duration-200 ease-in-out"
-            >
-              Book Your Table
-            </button>
-            */}
+            {/* Only show Book Your Table button if enabled in settings */}
+            {restaurant?.admin_settings?.reservations?.enable_reservations_button !== false && (
+              <button
+                onClick={() => setShowReservationModal(true)}
+                className="inline-flex items-center justify-center px-6 py-3.5
+                          border-2 border-white border-opacity-80 shadow-md
+                          text-base font-medium rounded-md text-white
+                          hover:bg-white hover:bg-opacity-10 hover:border-opacity-100 hover:shadow-lg
+                          transform hover:-translate-y-0.5
+                          transition-all duration-200 ease-in-out"
+              >
+                Book Your Table
+              </button>
+            )}
           </div>
         </div>
       </div>

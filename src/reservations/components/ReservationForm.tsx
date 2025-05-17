@@ -4,15 +4,14 @@ import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import Select, { SingleValue } from 'react-select';
-import {
-  Clock,
-  Users,
-  Phone,
-  Mail,
-  Check,
-  MapPin,
-  CalendarClock,
-  Share2,
+import { 
+  CalendarClock, 
+  Check, 
+  Clock, 
+  Mail, 
+  MapPin, 
+  Phone, 
+  Users
 } from 'lucide-react';
 
 import { useAuth } from '../../shared/auth';
@@ -20,6 +19,9 @@ import toastUtils from '../../shared/utils/toastUtils';
 import { api } from '../../shared/api';
 import { Tooltip } from '../../shared/components/ui';
 import { formatPhoneNumber } from '../../shared/utils/formatters';
+import * as tenantUtils from '../../shared/utils/tenantUtils';
+import { useRestaurantStore } from '../../shared/store/restaurantStore';
+import { config } from '../../shared/config';
 
 // Define API types
 interface AvailabilityResponse {
@@ -29,11 +31,28 @@ interface AvailabilityResponse {
 
 // Define API functions
 const fetchAvailability = async (date: string, partySize: number): Promise<AvailabilityResponse> => {
-  return api.get<AvailabilityResponse>(`/availability?date=${date}&party_size=${partySize}`);
+  // Add restaurant_id to query params for tenant isolation
+  const restaurantId = tenantUtils.getCurrentRestaurantId();
+  const params = tenantUtils.addRestaurantIdToParams({ date, party_size: partySize }, restaurantId);
+  return api.get<AvailabilityResponse>('/availability', params);
 };
 
 const createReservation = async (data: any): Promise<any> => {
   return api.post<any>('/reservations', data);
+};
+
+const fetchRestaurantOperatingHours = async (): Promise<any[]> => {
+  // Add restaurant_id to query params for tenant isolation
+  const restaurantId = tenantUtils.getCurrentRestaurantId();
+  const params = tenantUtils.addRestaurantIdToParams({}, restaurantId);
+  return api.get('/operating_hours', params);
+};
+
+const fetchRestaurantSpecialEvents = async (): Promise<any[]> => {
+  // Add restaurant_id to query params for tenant isolation
+  const restaurantId = tenantUtils.getCurrentRestaurantId();
+  const params = tenantUtils.addRestaurantIdToParams({}, restaurantId);
+  return api.get('/special_events', params);
 };
 
 /** Helpers */
@@ -85,6 +104,7 @@ interface ReservationFormData {
   lastName: string;
   phone: string;
   email: string;
+  specialRequests: string;
 }
 
 /** Data for the confirmation UI */
@@ -97,9 +117,10 @@ interface ConfirmationData {
   lastName?: string;
   phone?: string;
   email?: string;
+  specialRequests?: string;
 }
 
-/** “Reservation Confirmed!” screen */
+/** "Reservation Confirmed!" screen */
 function ReservationConfirmation({
   reservation,
   onClose,
@@ -107,6 +128,9 @@ function ReservationConfirmation({
   reservation: ConfirmationData;
   onClose: () => void;
 }) {
+  // No need to access auth context for this component
+  
+  // Format date for display
   const dateObj = parseYYYYMMDD(reservation.date);
   const dateStr = dateObj
     ? dateObj.toLocaleDateString('en-US', {
@@ -116,24 +140,41 @@ function ReservationConfirmation({
         day: 'numeric',
       })
     : reservation.date;
+  
+  // Create a unique reservation ID
+  const reservationId = `R-${Date.now().toString().slice(-6)}`;
+  
+  // Current date and time for the confirmation timestamp
+  const confirmationTime = new Date().toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true
+  });
 
   return (
     <div className="relative p-6 max-w-md sm:max-w-xl mx-auto bg-white rounded-lg shadow-lg">
-      {/* Pink check bubble */}
+      {/* Success icon with Shimizu blue color */}
       <div className="absolute left-1/2 -top-8 -translate-x-1/2">
-        <div className="bg-hafaloha-pink text-white p-3 rounded-full shadow-lg">
+        <div className="bg-[#0078d4] text-white p-3 rounded-full shadow-lg">
           <Check className="h-7 w-7" />
         </div>
       </div>
 
-      <div className="text-center mt-8 mb-6">
-        <h2 className="text-2xl sm:text-3xl font-bold">Reservation Confirmed!</h2>
+      <div className="text-center mt-8 mb-4">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Reservation Confirmed!</h2>
         <p className="text-gray-600 mt-1">
           {reservation.firstName ? `Thank you, ${reservation.firstName}! ` : 'Thank you! '}
-          We’re excited to serve you at Hafaloha.
+          We're looking forward to your visit.
         </p>
+        <div className="mt-2 bg-[#0078d4]/10 text-[#0078d4] text-sm px-4 py-2 rounded-full inline-block">
+          Confirmation #: <span className="font-medium">{reservationId}</span>
+        </div>
       </div>
 
+      {/* Main reservation details panel */}
       <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-4">
         <h3 className="font-semibold text-base sm:text-lg mb-4 text-gray-900">
           Reservation Details
@@ -141,7 +182,7 @@ function ReservationConfirmation({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Date & Time */}
           <div className="flex items-start space-x-2">
-            <CalendarClock className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+            <CalendarClock className="h-5 w-5 text-[#0078d4] mt-0.5" />
             <div>
               <p className="font-medium text-gray-900">Date &amp; Time</p>
               <p className="text-gray-600">{dateStr}</p>
@@ -151,7 +192,7 @@ function ReservationConfirmation({
 
           {/* Party & Duration */}
           <div className="flex items-start space-x-2">
-            <Users className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+            <Users className="h-5 w-5 text-[#0078d4] mt-0.5" />
             <div>
               <p className="font-medium text-gray-900">Party Size</p>
               <p className="text-gray-600">
@@ -162,12 +203,15 @@ function ReservationConfirmation({
             </div>
           </div>
 
-          {/* Contact */}
+          {/* Contact Info */}
           {(reservation.phone || reservation.email) && (
             <div className="flex items-start space-x-2 md:col-span-2">
-              <Mail className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+              <Mail className="h-5 w-5 text-[#0078d4] mt-0.5" />
               <div>
                 <p className="font-medium text-gray-900">Contact Information</p>
+                <p className="text-gray-600">
+                  {reservation.firstName} {reservation.lastName}
+                </p>
                 {reservation.phone && (
                   <p className="text-gray-600">{formatPhoneNumber(reservation.phone)}</p>
                 )}
@@ -180,30 +224,64 @@ function ReservationConfirmation({
 
           {/* Location */}
           <div className="flex items-start space-x-2">
-            <MapPin className="h-5 w-5 text-hafaloha-pink mt-0.5" />
+            <MapPin className="h-5 w-5 text-[#0078d4] mt-0.5" />
             <div>
               <p className="font-medium text-gray-900">Location</p>
               <p className="text-gray-600">955 Pale San Vitores Rd</p>
               <p className="text-gray-600">Tamuning, Guam 96913</p>
             </div>
           </div>
+          
+          {/* Special Requests - Only show if provided */}
+          {reservation.specialRequests && (
+            <div className="flex items-start space-x-2 md:col-span-2 mt-2">
+              <div className="bg-white border border-gray-200 rounded-lg p-3 w-full">
+                <p className="font-medium text-gray-900 mb-1">Special Requests</p>
+                <p className="text-gray-600 text-sm">{reservation.specialRequests}</p>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Confirmation timestamp */}
+        <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
+          <p>Confirmation sent: {confirmationTime}</p>
         </div>
       </div>
 
-      {/* Done / Share buttons */}
+      {/* Important notice */}
+      <div className="bg-[#0078d4]/5 border border-[#0078d4]/20 rounded-lg p-3 mb-4 text-sm">
+        <p className="font-medium text-gray-800 mb-1">Important Information</p>
+        <ul className="text-gray-600 text-xs list-disc list-inside space-y-1">
+          <li>Please arrive on time for your reservation.</li>
+          <li>Your table may be released after 15 minutes if you're late.</li>
+          <li>To modify or cancel, please call us at least 2 hours in advance.</li>
+        </ul>
+      </div>
+
+      {/* Action buttons */}
       <div className="flex flex-col sm:flex-row gap-3">
         <button
           onClick={onClose}
-          className="w-full sm:w-auto flex-1 bg-hafaloha-coral hover:bg-hafaloha-pink text-white font-medium py-2 sm:py-3 px-4 rounded-lg transition-colors"
+          className="w-full sm:w-auto flex-1 bg-[#0078d4] hover:bg-[#50a3d9] text-white font-medium py-2 sm:py-3 px-4 rounded-lg transition-colors"
         >
           Done
         </button>
         <button
-          onClick={() => alert('Share feature not yet implemented!')}
+          onClick={() => {
+            // Create a calendar event URL
+            const eventTitle = `Reservation for ${reservation.partySize} at Shimizu Restaurant`;
+            const eventDetails = `Reservation details:\nTime: ${reservation.time}\nParty: ${reservation.partySize} people\nDuration: ${reservation.duration}\nConfirmation #: ${reservationId}`;
+            const eventStart = encodeURIComponent(`${reservation.date}T${reservation.time}`);
+            
+            // Create a Google Calendar URL
+            const googleCalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventTitle)}&details=${encodeURIComponent(eventDetails)}&dates=${eventStart}/${eventStart}`;
+            window.open(googleCalUrl, '_blank');
+          }}
           className="w-full sm:w-auto flex-1 bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 sm:py-3 px-4 rounded-lg border border-gray-300 transition-colors inline-flex items-center justify-center"
         >
-          <Share2 className="h-5 w-5 mr-2" />
-          Share Details
+          <CalendarClock className="h-5 w-5 mr-2" />
+          Add to Calendar
         </button>
       </div>
     </div>
@@ -213,12 +291,14 @@ function ReservationConfirmation({
 /** Main ReservationForm */
 export default function ReservationForm({
   onClose,                // Parent can close the modal
-  onToggleConfirmation,   // Tells parent if we’re confirming
+  onToggleConfirmation,   // Tells parent if we're confirming
 }: {
   onClose?: () => void;
   onToggleConfirmation?: (confirming: boolean) => void;
 }) {
   const { user } = useAuth();
+  const [tenantError, setTenantError] = useState<string | null>(null);
+  const { restaurant, fetchRestaurant } = useRestaurantStore();
   // Basic form data
   const [formData, setFormData] = useState<ReservationFormData>({
     date: '',
@@ -227,16 +307,101 @@ export default function ReservationForm({
     lastName: '',
     phone: user?.phone?.trim() || '+1671',
     email: '',
+    specialRequests: '',
   });
+
+  // Form validation state
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof ReservationFormData, string>>>({});
+  const [touched, setTouched] = useState<Partial<Record<keyof ReservationFormData, boolean>>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [partySizeText, setPartySizeText] = useState('1');
   const [duration, setDuration] = useState(60);
   const [timeslots, setTimeslots] = useState<string[]>([]);
+  
+  // Operating hours and special events for closed day handling
+  const [closedDaysOfWeek, setClosedDaysOfWeek] = useState<number[]>([]);
+  const [closedDates, setClosedDates] = useState<Date[]>([]);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
 
   // For confirmation screen
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [reservationDetails, setReservationDetails] = useState<ConfirmationData | null>(null);
+
+  // Initialize restaurant context and set in localStorage for tenant validation
+  useEffect(() => {
+    const setupRestaurantContext = async () => {
+      try {
+        // First try to use the restaurant from the store if already loaded
+        if (restaurant?.id) {
+          // Store in localStorage for tenant validation
+          localStorage.setItem('restaurantId', restaurant.id.toString());
+          setTenantError(null);
+          return;
+        }
+        
+        // If restaurant is not loaded, try to fetch it
+        await fetchRestaurant();
+        
+        // Fallback to config if store fails
+        if (!restaurant?.id) {
+          const configRestaurantId = parseInt(config.restaurantId);
+          if (!isNaN(configRestaurantId)) {
+            localStorage.setItem('restaurantId', configRestaurantId.toString());
+            setTenantError(null);
+            return;
+          }
+        }
+        
+        // If we still don't have a restaurant ID, show error
+        const storedId = localStorage.getItem('restaurantId');
+        if (!storedId) {
+          setTenantError('Unable to access reservation system. Restaurant context is missing.');
+        }
+      } catch (error) {
+        console.error('Error setting up restaurant context:', error);
+        setTenantError('Unable to access reservation system. Restaurant context is missing.');
+      }
+    };
+    
+    setupRestaurantContext();
+  }, [restaurant, fetchRestaurant]);
+  
+  // Fetch operating hours and special events to determine closed days
+  useEffect(() => {
+    const fetchScheduleData = async () => {
+      if (!tenantUtils.getCurrentRestaurantId()) return;
+      
+      setIsLoadingSchedule(true);
+      try {
+        // Fetch operating hours to determine which days of week are closed
+        const hours = await fetchRestaurantOperatingHours();
+        
+        // Extract days of week when restaurant is closed
+        const closedDays = hours
+          .filter((day: any) => day.closed)
+          .map((day: any) => day.day_of_week);
+        setClosedDaysOfWeek(closedDays);
+        
+        // Fetch special events to determine specific dates that are closed
+        const events = await fetchRestaurantSpecialEvents();
+        
+        // Extract dates when restaurant is closed due to special events
+        const closedEventDates = events
+          .filter((event: any) => event.closed)
+          .map((event: any) => new Date(event.event_date));
+        setClosedDates(closedEventDates);
+        
+      } catch (error) {
+        console.error('Error fetching schedule data:', error);
+      } finally {
+        setIsLoadingSchedule(false);
+      }
+    };
+    
+    fetchScheduleData();
+  }, []);
 
   /** Convert typed partySize => number */
   function getPartySize(): number {
@@ -250,9 +415,12 @@ export default function ReservationForm({
         setTimeslots([]);
         return;
       }
+      
       try {
         const data = await fetchAvailability(formData.date, getPartySize());
         setTimeslots(data.slots || []);
+        // Clear any previous tenant error
+        setTenantError(null);
       } catch (err) {
         console.error('Error fetching availability:', err);
         setTimeslots([]);
@@ -278,9 +446,37 @@ export default function ReservationForm({
 
   /** Sync the selectedDate with formData.date */
   function handleDateChange(date: Date | null) {
-    setSelectedDate(date);
-    setFormData({ ...formData, date: date ? formatYYYYMMDD(date) : '' });
+    // Make sure we don't allow selection of closed dates
+    if (date && !isDateClosed(date)) {
+      setSelectedDate(date);
+      setFormData({ ...formData, date: date ? formatYYYYMMDD(date) : '' });
+    }
   }
+  
+  /** Check if a date is closed based on operating hours and special events */
+  function isDateClosed(date: Date): boolean {
+    if (!date) return false;
+    
+    // Check if the day of week is closed (0 = Sunday, 1 = Monday, etc.)
+    const dayOfWeek = date.getDay();
+    if (closedDaysOfWeek.includes(dayOfWeek)) {
+      return true;
+    }
+    
+    // Check if there's a special event that closes the restaurant on this date
+    const dateString = formatYYYYMMDD(date);
+    return closedDates.some(closedDate => {
+      return formatYYYYMMDD(closedDate) === dateString;
+    });
+  }
+  
+  /** Custom date styling for the date picker, to visually indicate closed days */
+  const datePickerDayClassNames = (date: Date): string => {
+    if (isDateClosed(date)) {
+      return 'closed-day';
+    }
+    return '';
+  };
 
   useEffect(() => {
     if (formData.date) {
@@ -290,11 +486,84 @@ export default function ReservationForm({
     }
   }, [formData.date]);
 
+  /** Validate the form and return any errors */
+  function validateForm(): Partial<Record<keyof ReservationFormData, string>> {
+    const errors: Partial<Record<keyof ReservationFormData, string>> = {};
+    
+    // Required fields validation
+    if (!formData.date) {
+      errors.date = 'Please select a date';
+    }
+    
+    if (!formData.time) {
+      errors.time = 'Please select a time';
+    }
+    
+    // At least one contact method is required
+    const hasEmail = !!formData.email.trim() || !!user?.email;
+    const hasPhone = !!formData.phone.trim().replace(/[-()+\s]+/g, '') && formData.phone.trim() !== '+1671';
+    
+    if (!hasEmail && !hasPhone) {
+      errors.email = 'Please provide either an email or phone number';
+      errors.phone = 'Please provide either an email or phone number';
+    }
+    
+    // Name validation
+    if (!formData.firstName.trim() && !user?.name?.split(' ')[0]) {
+      errors.firstName = 'First name is required';
+    }
+    
+    // Email format validation (if provided)
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    // Phone validation (if provided)
+    if (hasPhone && formData.phone.trim().replace(/[-()+\s]+/g, '').length < 7) {
+      errors.phone = 'Please enter a valid phone number';
+    }
+    
+    // Party size validation
+    const partySize = getPartySize();
+    if (partySize < 1) {
+      errors.firstName = 'Party size must be at least 1 person'; // Using firstName as a proxy since we don't have partySize in formData
+    } else if (partySize > 20) { // Assuming 20 is a reasonable upper limit
+      errors.firstName = 'Please call for large party reservations'; // Using firstName as a proxy
+    }
+    
+    return errors;
+  }
+
   /** On form submit => create reservation => show confirmation */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.date || !formData.time) {
-      toastUtils.error('Please pick a date and time.');
+    setIsSubmitting(true);
+    
+    // Validate restaurant context
+    const restaurantId = tenantUtils.getCurrentRestaurantId();
+    if (!restaurantId || !tenantUtils.validateRestaurantContext({ id: restaurantId }, false)) {
+      setTenantError('Unable to access reservation system. Restaurant context is missing.');
+      setIsSubmitting(false);
+      return;
+    }
+    // Clear any previous tenant error
+    setTenantError(null);
+    
+    // Mark all fields as touched
+    const allTouched = Object.keys(formData).reduce(
+      (acc, key) => ({ ...acc, [key]: true }),
+      {}
+    );
+    setTouched(allTouched as Partial<Record<keyof ReservationFormData, boolean>>);
+    
+    // Validate the form
+    const validationErrors = validateForm();
+    setFormErrors(validationErrors);
+    
+    // If there are errors, don't proceed
+    if (Object.keys(validationErrors).length > 0) {
+      setIsSubmitting(false);
+      toastUtils.error('Please fix the errors in the form');
       return;
     }
 
@@ -321,14 +590,19 @@ export default function ReservationForm({
     }
 
     try {
+      // Get restaurant ID from tenant context
+      const restaurantId = tenantUtils.getCurrentRestaurantId();
+      
       await createReservation({
         start_time,
         party_size: finalPartySize,
         contact_name: [contactFirstName, contactLastName].filter(Boolean).join(' '),
         contact_phone: contactPhone,
         contact_email: contactEmail,
-        restaurant_id: 1,
+        restaurant_id: restaurantId,
         duration_minutes: duration,
+        special_requests: formData.specialRequests.trim(),
+        location_id: 1, // Use the default location ID for this restaurant
       });
       toastUtils.success('Reservation created successfully!');
 
@@ -342,6 +616,7 @@ export default function ReservationForm({
         lastName: contactLastName || undefined,
         phone: contactPhone || undefined,
         email: contactEmail || undefined,
+        specialRequests: formData.specialRequests.trim() || undefined,
       };
       setReservationDetails(confirmData);
       setShowConfirmation(true);
@@ -358,23 +633,33 @@ export default function ReservationForm({
     setPartySizeText(digitsOnly);
   }
 
+  /** Mark a field as touched when it's interacted with */
+  const handleBlur = (field: keyof ReservationFormData) => {
+    setTouched({ ...touched, [field]: true });
+  };
+
+  /** Get error message for a field if it has been touched */
+  const getErrorMessage = (field: keyof ReservationFormData): string | undefined => {
+    return touched[field] ? formErrors[field] : undefined;
+  };
+
   /** Custom React-Select styles */
   const reactSelectStyles = {
-    control: (base: any) => ({
+    control: (base: any, state: any) => ({
       ...base,
       minHeight: '2.25rem',
-      borderColor: '#D1D5DB',
+      borderColor: state.isFocused ? '#0078d4' : '#D1D5DB',
       fontSize: '0.875rem',
       boxShadow: 'none',
       paddingLeft: '2rem',
-      '&:hover': { borderColor: '#EB578C' },
+      '&:hover': { borderColor: '#50a3d9' },
     }),
     option: (base: any, state: any) => ({
       ...base,
       fontSize: '0.875rem',
       color: state.isSelected ? 'white' : '#374151',
-      backgroundColor: state.isSelected ? '#EB578C' : 'white',
-      '&:hover': { backgroundColor: '#FF7F6A' },
+      backgroundColor: state.isSelected ? '#0078d4' : 'white',
+      '&:hover': { backgroundColor: '#50a3d9' },
     }),
     menu: (base: any) => ({ ...base, zIndex: 9999 }),
   };
@@ -399,6 +684,31 @@ export default function ReservationForm({
   /** Otherwise, render the narrower form with two columns */
   return (
     <div className="w-full max-w-md mx-auto">
+      {/* Add custom styles for the DatePicker component */}
+      <style>{`
+        .react-datepicker__day.closed-day {
+          background-color: #f3f4f6;
+          color: #9ca3af;
+          text-decoration: line-through;
+          pointer-events: none;
+        }
+        .react-datepicker__day.closed-day:hover {
+          background-color: #f3f4f6 !important;
+          color: #9ca3af !important;
+        }
+      `}</style>
+      {tenantError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+          <div className="flex items-center">
+            <div className="text-red-500 mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p className="text-sm text-red-600">{tenantError}</p>
+          </div>
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           {/* Date */}
@@ -409,6 +719,7 @@ export default function ReservationForm({
             <DatePicker
               selected={selectedDate}
               onChange={handleDateChange}
+              onBlur={() => handleBlur('date')}
               dateFormat="MM/dd/yyyy"
               minDate={new Date()}
               className="
@@ -416,13 +727,46 @@ export default function ReservationForm({
                 px-3 py-2
                 border border-gray-300
                 rounded-md
-                focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                 text-sm sm:text-base
               "
               placeholderText="Select date"
               required
               shouldCloseOnSelect
+              dayClassName={datePickerDayClassNames}
+              filterDate={(date) => !isDateClosed(date)}
+              renderCustomHeader={({ date, decreaseMonth, increaseMonth }) => (
+                <div className="flex justify-between items-center px-3 py-2">
+                  <button
+                    onClick={decreaseMonth}
+                    className="p-1 rounded hover:bg-gray-100"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <div className="text-gray-700 font-medium">
+                    {new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(date)}
+                  </div>
+                  <button
+                    onClick={increaseMonth}
+                    className="p-1 rounded hover:bg-gray-100"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             />
+            {/* Add a small legend to explain closed dates */}
+            <div className="flex items-center text-xs text-gray-500 mt-1">
+              <div className="w-3 h-3 bg-gray-200 rounded-full mr-1"></div>
+              <span>{isLoadingSchedule ? 'Loading schedule...' : 'Closed dates are not selectable'}</span>
+            </div>
+            {getErrorMessage('date') && (
+              <p className="text-red-600 text-xs mt-1">{getErrorMessage('date')}</p>
+            )}
           </div>
 
           {/* Time => React Select */}
@@ -440,12 +784,16 @@ export default function ReservationForm({
                     ? timeOptions.find((opt) => opt.value === formData.time)
                     : null
                 }
-                onChange={(opt: SingleValue<TimeOption>) =>
-                  setFormData({ ...formData, time: opt?.value || '' })
-                }
+                onChange={(opt: SingleValue<TimeOption>) => {
+                  setFormData({ ...formData, time: opt?.value || '' });
+                  handleBlur('time');
+                }}
                 styles={reactSelectStyles}
               />
             </div>
+            {getErrorMessage('time') && (
+              <p className="text-red-600 text-xs mt-1">{getErrorMessage('time')}</p>
+            )}
           </div>
 
           {/* Party Size */}
@@ -473,6 +821,7 @@ export default function ReservationForm({
                 pattern="[0-9]*"
                 value={partySizeText}
                 onChange={handlePartySizeChange}
+                onBlur={() => handleBlur('firstName')}
                 placeholder="1"
                 required
                 className="
@@ -481,11 +830,14 @@ export default function ReservationForm({
                   py-2
                   border border-gray-300
                   rounded-md
-                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   text-sm sm:text-base
                 "
               />
             </div>
+            {getErrorMessage('firstName') && (
+              <p className="text-red-600 text-xs mt-1">{getErrorMessage('firstName')}</p>
+            )}
           </div>
 
           {/* Duration => React Select */}
@@ -506,6 +858,7 @@ export default function ReservationForm({
               placeholder="Select duration"
               value={durationOptions.find((opt) => opt.value === duration) || null}
               onChange={(opt) => setDuration(opt?.value || 60)}
+              onBlur={() => handleBlur('time')}
               styles={reactSelectStyles}
             />
           </div>
@@ -526,15 +879,19 @@ export default function ReservationForm({
               }
               value={formData.firstName}
               onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              onBlur={() => handleBlur('firstName')}
               className="
                 w-full
                 px-3 py-2
                 border border-gray-300
                 rounded-md
-                focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                 text-sm sm:text-base
               "
             />
+            {getErrorMessage('firstName') && (
+              <p className="text-red-600 text-xs mt-1">{getErrorMessage('firstName')}</p>
+            )}
           </div>
 
           {/* Last Name */}
@@ -551,12 +908,13 @@ export default function ReservationForm({
               placeholder={user ? user.name?.split(' ')[1] || '' : 'Last name (optional)'}
               value={formData.lastName}
               onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+              onBlur={() => handleBlur('lastName')}
               className="
                 w-full
                 px-3 py-2
                 border border-gray-300
                 rounded-md
-                focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                 text-sm sm:text-base
               "
             />
@@ -586,17 +944,21 @@ export default function ReservationForm({
                 placeholder={user ? user.phone ?? '' : '+1671'}
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onBlur={() => handleBlur('phone')}
                 className="
                   w-full
                   pl-10 pr-3
                   py-2
                   border border-gray-300
                   rounded-md
-                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   text-sm sm:text-base
                 "
               />
             </div>
+            {getErrorMessage('phone') && (
+              <p className="text-red-600 text-xs mt-1">{getErrorMessage('phone')}</p>
+            )}
           </div>
 
           {/* Email */}
@@ -615,17 +977,50 @@ export default function ReservationForm({
                 placeholder={user ? user.email ?? '' : 'Enter your email'}
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onBlur={() => handleBlur('email')}
                 className="
                   w-full
                   pl-10 pr-3
                   py-2
                   border border-gray-300
                   rounded-md
-                  focus:ring-2 focus:ring-hafaloha-pink focus:border-hafaloha-pink
+                  focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
                   text-sm sm:text-base
                 "
               />
             </div>
+            {getErrorMessage('email') && (
+              <p className="text-red-600 text-xs mt-1">{getErrorMessage('email')}</p>
+            )}
+          </div>
+
+          {/* Special Requests */}
+          <div className="md:col-span-2 space-y-1">
+            <label
+              htmlFor="specialRequests"
+              className="block text-sm sm:text-base font-medium text-gray-700"
+            >
+              Special Requests (Optional)
+            </label>
+            <textarea
+              id="specialRequests"
+              placeholder="Any special requests or preferences?"
+              value={formData.specialRequests}
+              onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
+              onBlur={() => handleBlur('specialRequests')}
+              className="
+                w-full
+                px-3 py-2
+                border border-gray-300
+                rounded-md
+                focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4]
+                text-sm sm:text-base
+                min-h-[80px]
+              "
+            />
+            <p className="text-xs text-gray-500">
+              Let us know if you have any dietary requirements, seating preferences, or special occasions.
+            </p>
           </div>
         </div>
 
@@ -633,10 +1028,11 @@ export default function ReservationForm({
         <div className="mt-4 sm:mt-6">
           <button
             type="submit"
+            disabled={isSubmitting}
             className="
               w-full
-              bg-hafaloha-pink
-              hover:bg-hafaloha-coral
+              bg-[#0078d4]
+              hover:bg-[#50a3d9]
               text-white
               py-2 sm:py-3
               px-4 sm:px-6
@@ -645,6 +1041,8 @@ export default function ReservationForm({
               transition-colors
               duration-200
               text-sm sm:text-base
+              disabled:opacity-50
+              disabled:cursor-not-allowed
             "
           >
             Reserve Now

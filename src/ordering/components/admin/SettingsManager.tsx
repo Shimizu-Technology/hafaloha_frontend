@@ -1,7 +1,8 @@
 // src/ordering/components/admin/SettingsManager.tsx
 
 import { useState, lazy, Suspense, useEffect } from 'react';
-import { Store, Users, CreditCard, Book, Lock, Bell, MapPin } from 'lucide-react';
+import { useRestaurantStore } from '../../../shared/store/restaurantStore';
+import { Store, Users, CreditCard, Book, Lock, Bell, MapPin, CalendarClock } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
@@ -12,8 +13,36 @@ const NotificationSettings = lazy(() => import('./settings/NotificationSettings'
 const VipModeToggle = lazy(() => import('./settings/VipModeToggle').then(module => ({ default: module.VipModeToggle })));
 const VipCodesManager = lazy(() => import('./settings/VipCodesManager').then(module => ({ default: module.VipCodesManager })));
 const LocationManager = lazy(() => import('./settings/LocationManager').then(module => ({ default: module.LocationManager })));
+const ReservationSettings = lazy(() => import('./settings/ReservationSettings').then(module => ({ default: module.ReservationSettings })));
 
-type SettingsTab = 'restaurant' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access' | 'locations';
+// Wrapper component for ReservationSettings that properly handles hooks
+const ReservationSettingsWrapper = () => {
+  const { restaurant, fetchRestaurant, updateRestaurant } = useRestaurantStore();
+  
+  if (!restaurant) {
+    return <div className="p-4 text-gray-500">Loading restaurant data...</div>;
+  }
+  
+  return (
+    <ReservationSettings 
+      restaurant={restaurant} 
+      onUpdate={async (updatedRestaurant) => {
+        try {
+          // Actually save the changes to the server
+          await updateRestaurant(updatedRestaurant);
+          
+          // After successful save, refresh the restaurant data
+          await fetchRestaurant();
+        } catch (error) {
+          console.error('Failed to update restaurant settings:', error);
+          // You might want to show a toast notification here for errors
+        }
+      }}
+    />
+  );
+};
+
+type SettingsTab = 'restaurant' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access' | 'locations' | 'reservations';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -41,6 +70,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'vip-access', label: 'VIP Access', icon: Lock },
     { id: 'locations', label: 'Locations', icon: MapPin },
+    { id: 'reservations', label: 'Reservations', icon: CalendarClock },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -90,6 +120,12 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         return (
           <div>
             <LocationManager restaurantId={restaurantId} />
+          </div>
+        );
+      case 'reservations':
+        return (
+          <div>
+            <ReservationSettingsWrapper />
           </div>
         );
       default:

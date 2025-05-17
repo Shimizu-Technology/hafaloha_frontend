@@ -21,7 +21,7 @@ export default {
         'hafaloha-gold': '#c1902f',
       },
       animation: {
-        'fadeIn': 'fadeIn 0.3s ease-in-out',
+        'fadeIn': 'fadeIn 0.5s ease-in-out',
         'shimmer': 'shimmer 2s infinite linear',
         'slideUp': 'slideUp 0.3s ease-out',
         'slideDown': 'slideDown 0.3s ease-out',
