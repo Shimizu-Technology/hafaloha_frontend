@@ -1,0 +1,1055 @@
+// src/ordering/wholesale/components/WholesaleCheckoutPage.tsx
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate, Link, useParams } from 'react-router-dom';
+import { ArrowLeft, CheckCircle, User, Mail, Phone } from 'lucide-react';
+import toastUtils from '../../../shared/utils/toastUtils';
+import { useWholesaleCartStore } from '../store/wholesaleCartStore';
+import useFundraiserStore from '../store/fundraiserStore';
+import { useAuthStore } from '../../store/authStore';
+import { useRestaurantStore } from '../../../shared/store/restaurantStore';
+import { PayPalCheckout, PayPalCheckoutRef } from '../../components/payment/PayPalCheckout';
+import { StripeCheckout, StripeCheckoutRef } from '../../components/payment/StripeCheckout';
+import { LoadingSpinner } from '../../../shared/components/ui';
+import OptimizedImage from '../../../shared/components/ui/OptimizedImage';
+import ParticipantSelector, { GENERAL_SUPPORT_ID } from './ParticipantSelector';
+import participantService from '../services/participantService';
+import axios from 'axios';
+import { getRequestHeaders, getRequestParams } from '../../../shared/utils/authUtils';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
+interface CheckoutFormData {
+  name: string;
+  email: string;
+  phone: string;
+  // For single participant selection (legacy field)
+  participantId?: number;
+  // Special instructions
+  specialInstructions?: string;
+  // Fulfillment fields
+  fulfillmentMethod: 'pickup'; // Only using pickup method
+  pickupLocationId?: number; // ID of the selected pickup location
+}
+
+interface FormErrors extends Partial<Record<keyof CheckoutFormData, string>> {
+  form?: string;
+}
+
+const WholesaleCheckoutPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { id: fundraiserId } = useParams<{ id: string }>();
+  const { user } = useAuthStore();
+  const restaurant = useRestaurantStore((state) => state.restaurant);
+  
+  // Get fundraiser data
+  const { 
+    currentFundraiser, 
+    fetchFundraiserById 
+  } = useFundraiserStore();
+  
+  // Get cart state and functions from wholesale cart store
+  const { 
+    cartItems: items, 
+    clearCart,
+    setFundraiserParticipant,
+    getUniqueFundraisers,
+    getFundraiserParticipant
+  } = useWholesaleCartStore();
+  
+  // Calculate cart totals
+  const getSubtotal = () => {
+    return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  };
+  
+  // No tax calculation for wholesale orders
+  const getTotal = () => {
+    return getSubtotal();
+  };
+  
+  const getTotalItems = () => {
+    return items.reduce((sum, item) => sum + item.quantity, 0);
+  };
+  
+  // Checkout form state
+  const [formData, setFormData] = useState<CheckoutFormData>({
+    name: user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : '',
+    email: user?.email || '',
+    phone: user?.phone || '+1671',
+    fulfillmentMethod: 'pickup' // Only using pickup method
+  });
+  
+  // Load fundraiser data and participants if needed
+  // Fetch fundraiser details for each fundraiser in cart
+  useEffect(() => {
+    // Handle the primary fundraiser from URL
+    if (fundraiserId && !currentFundraiser) {
+      fetchFundraiserById(parseInt(fundraiserId, 10));
+    }
+    
+    // Prefill user data if available
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        firstName: user.first_name || '',
+        lastName: user.last_name || '',
+        email: user.email || '',
+        phone: user.phone || '+1671'
+      }));
+    }
+  }, [user, fundraiserId, currentFundraiser, fetchFundraiserById]);
+  
+  // Form validation state
+  const [errors, setErrors] = useState<FormErrors>({});
+  
+  // Order processing state
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [paymentProcessed, setPaymentProcessed] = useState(false);
+  const [paymentTransactionId, setPaymentTransactionId] = useState<string>('');
+  
+  // Payment component refs
+  const paypalRef = useRef<PayPalCheckoutRef>(null);
+  const stripeRef = useRef<StripeCheckoutRef>(null);
+  
+  // Per-fundraiser participant loading state
+  const [participantLoadingState, setParticipantLoadingState] = useState<Record<number, boolean>>({});
+  
+  // Get unique fundraisers in the cart
+  const uniqueFundraiserIds = useMemo(() => {
+    return getUniqueFundraisers();
+  }, [items, getUniqueFundraisers]);
+  
+  // State to track which fundraiser ID maps to which fundraiser data
+  const [fundraisersMap, setFundraisersMap] = useState<Record<number, any>>({});
+  
+  // State to store restaurant locations for pickup (simplified since we don't show UI for it)
+  const [locations, setLocations] = useState<any[]>([]);
+
+  // Track loaded fundraisers to prevent duplicate loading
+  const loadedFundraisers = useRef<Record<number, boolean>>({});
+
+  // Load fundraisers for all unique fundraisers in cart
+  useEffect(() => {
+    // Skip if there are no fundraisers in cart
+    if (uniqueFundraiserIds.length === 0) return;
+    
+    const loadAllFundraisers = async () => {
+      const fundraisersData = { ...fundraisersMap };
+      const fundraisersToLoad = uniqueFundraiserIds.filter(id => !loadedFundraisers.current[id]);
+      
+      if (fundraisersToLoad.length === 0) return; // Skip if all fundraisers are already loaded
+      
+      // For each fundraiser in cart that hasn't been loaded yet, fetch its details
+      for (const id of fundraisersToLoad) {
+        try {
+          // Mark as loaded before fetching to prevent duplicate requests
+          loadedFundraisers.current[id] = true;
+          
+          const response = await useFundraiserStore.getState().fetchFundraiserById(id);
+          // Check that response exists and is not null or undefined
+          if (response !== null && response !== undefined) {
+            fundraisersData[id] = response;
+          }
+        } catch (error) {
+          console.error(`Error fetching fundraiser ${id}:`, error);
+        }
+      }
+      
+      setFundraisersMap(fundraisersData);
+    };
+    
+    loadAllFundraisers();
+  // Remove fundraisersMap from dependencies to prevent infinite loop
+  }, [uniqueFundraiserIds]);
+
+  // Function to fetch restaurant locations for pickup
+  const fetchRestaurantLocations = async () => {
+    const authState = useAuthStore.getState();
+    const user = authState.user;
+    const restaurantId = user?.restaurant_id;
+    if (!restaurantId) return;
+    
+    try {
+      const headers = getRequestHeaders();
+      const response = await axios.get(`${API_URL}/locations?active=true`, { 
+        headers,
+        params: getRequestParams({ restaurant_id: restaurantId })
+      });
+      
+      if (response.data && Array.isArray(response.data)) {
+        setLocations(response.data);
+        
+        // Find default location
+        const defaultLoc = response.data.find((loc: any) => loc.is_default) || (response.data.length > 0 ? response.data[0] : null);
+        
+        // If we have a default location, set it in the form data
+        if (defaultLoc) {
+          setFormData(prev => ({
+            ...prev,
+            pickupLocationId: defaultLoc.id
+          }));
+        } else {
+          // No locations found, set a default pickup location ID
+          setFormData(prev => ({
+            ...prev,
+            pickupLocationId: 1
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching restaurant locations:', error);
+      // Set a default pickup location ID even on error
+      setFormData(prev => ({
+        ...prev,
+        pickupLocationId: 1
+      }));
+    }
+  };
+
+  // Fetch restaurant locations when component mounts
+  useEffect(() => {
+    fetchRestaurantLocations();
+  }, []);
+  
+  // Store loaded fundraiser IDs to prevent duplicate loading
+  const loadedFundraiserIds = useRef<Record<number, boolean>>({});
+
+  // Store participant data to look up names
+  const [participantsMap, setParticipantsMap] = useState<Record<number, { id: number; name: string; team?: string }>>({});
+
+  // Function to get participant name by ID
+  const getParticipantName = (participantId: number | undefined) => {
+    if (participantId === undefined) return '';
+    if (participantId === GENERAL_SUPPORT_ID) return 'General Support';
+    return participantsMap[participantId]?.name || `Participant #${participantId}`;
+  };
+  
+  // Function to get participant display name for the order summary
+  const getParticipantDisplayName = (fundraiserId: number) => {
+    const participantId = getFundraiserParticipant(fundraiserId);
+    if (participantId === undefined) return '';
+    return getParticipantName(participantId);
+  };
+
+  // Load participants for each fundraiser in the cart - only once per fundraiser
+  useEffect(() => {
+    // Skip if there are no fundraisers
+    if (uniqueFundraiserIds.length === 0) return;
+    
+    const loadParticipantsForFundraiser = async (fundraiserId: number) => {
+      // Skip if already loading for this fundraiser
+      if (participantLoadingState[fundraiserId]) return;
+      
+      // Skip if we've already loaded for this fundraiser
+      if (loadedFundraiserIds.current[fundraiserId]) return;
+      
+      // Mark this fundraiser as loaded to prevent future loading
+      loadedFundraiserIds.current[fundraiserId] = true;
+      
+      // Set loading state for this fundraiser
+      setParticipantLoadingState(prev => ({ ...prev, [fundraiserId]: true }));
+      
+      try {
+        // Use our participantService to fetch participants
+        const response = await participantService.getParticipants(fundraiserId, { active: true });
+        const fetchedParticipants = response.participants || [];
+        
+        // Add the fundraiser's participants to the global state
+        const formattedParticipants = fetchedParticipants
+          .filter(p => p.id !== undefined)
+          .map(p => ({
+            id: p.id as number,
+            name: p.name || `Participant ${p.id}`,
+            team: p.team
+          }));
+        
+        // Update participants map to easily look up names by ID
+        const newParticipantsMap: Record<number, { id: number; name: string; team?: string }> = {};
+        formattedParticipants.forEach(p => {
+          newParticipantsMap[p.id] = p;
+        });
+        
+        setParticipantsMap(prev => ({
+          ...prev,
+          ...newParticipantsMap
+        }));
+        
+        // If this fundraiser doesn't have a participant selected yet,
+        // and we have participants, automatically select General Support (0)
+        if (formattedParticipants.length > 0 && !getFundraiserParticipant(fundraiserId)) {
+          setFundraiserParticipant(fundraiserId, GENERAL_SUPPORT_ID);
+        }
+        
+        return formattedParticipants;
+      } catch (error) {
+        console.error(`Failed to fetch participants for fundraiser ${fundraiserId}:`, error);
+        return [];
+      } finally {
+        setParticipantLoadingState(prev => ({ ...prev, [fundraiserId]: false }));
+      }
+    };
+    
+    // Load participants for all fundraisers in the cart
+    const loadAllParticipants = async () => {
+      // Loading state is now tracked per fundraiser
+      try {
+        const promises = uniqueFundraiserIds.map(id => loadParticipantsForFundraiser(id));
+        await Promise.all(promises);
+      } catch (error) {
+        console.error('Error loading participants:', error);
+        toastUtils.error('Failed to load some participants');
+      }
+    };
+    
+    loadAllParticipants();
+  // Remove participantLoadingState from dependencies to prevent infinite loop
+  }, [uniqueFundraiserIds, getFundraiserParticipant, setFundraiserParticipant]);
+  
+  
+  // Handle form input changes
+  const handleInputChange = (nameOrEvent: string | React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>, value?: any) => {
+    // Handle both direct calls with (name, value) and event-based calls
+    let fieldName: string;
+    let fieldValue: any;
+    
+    if (typeof nameOrEvent === 'string') {
+      // Direct call: handleInputChange('fieldName', value)
+      fieldName = nameOrEvent;
+      fieldValue = value;
+    } else {
+      // Event-based call: handleInputChange(event)
+      const { name, value } = nameOrEvent.target;
+      fieldName = name;
+      fieldValue = value;
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      [fieldName]: fieldValue
+    }));
+    
+    // Clear error when field is changed
+    if (errors[fieldName as keyof CheckoutFormData]) {
+      setErrors(prev => ({
+        ...prev,
+        [fieldName]: undefined
+      }));
+    }
+  };
+  
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+  
+  // Handler for when payment completes successfully
+  const handlePaymentSuccess = (details: {
+    status: string;
+    transaction_id: string;
+    amount: string;
+    currency?: string;
+    payment_method?: string;
+    payment_intent_id?: string;
+  }) => {
+    setPaymentProcessing(false);
+    setPaymentProcessed(true);
+    setPaymentTransactionId(details.transaction_id);
+    
+    // Get the payment processor from restaurant settings
+    const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
+    
+    // Create payment details object with all relevant information and fundraiser metadata
+    const paymentDetailsObj = {
+      status: details.status,
+      payment_method: details.payment_method || paymentProcessor,
+      transaction_id: details.transaction_id,
+      payment_date: new Date().toISOString().split('T')[0],
+      payment_intent_id: details.payment_intent_id || details.transaction_id,
+      processor: details.payment_method === 'stripe' ? 'stripe' : 'paypal',
+      notes: `Payment processed via ${details.payment_method === 'stripe' ? 'Stripe' : 'PayPal'}`,
+      metadata: {
+        orderType: 'wholesale',
+        fundraiserId: currentFundraiser?.id,
+        participantId: formData.participantId,
+        fulfillmentMethod: formData.fulfillmentMethod,
+        pickupLocationId: formData.pickupLocationId
+      }
+    };
+    
+    // Submit order with payment details
+    submitOrderWithPayment(details.transaction_id, paymentDetailsObj);
+  };
+  
+  // Handler for payment errors
+  const handlePaymentError = (error: any) => {
+    setPaymentProcessing(false);
+    console.error('Payment error:', error);
+    toastUtils.error('Payment failed. Please try again.');
+    setIsProcessing(false);
+  };
+  
+  // Form validation function
+  const validateForm = () => {
+    const newErrors: FormErrors = {};
+    
+    // Validate basic fields
+    if (!formData.name.trim()) newErrors.name = 'Full name is required';
+    if (!formData.email.trim()) newErrors.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Email is invalid';
+    if (!formData.phone.trim()) newErrors.phone = 'Phone is required';
+    
+    // Always set a pickup location - no user input needed since we're only supporting pickup
+    // Ensure pickup location is set by using the first available location or a default
+    if (!formData.pickupLocationId) {
+      const defaultLocationId = locations.length > 0 
+        ? (locations.find((loc: any) => loc.is_default)?.id || locations[0]?.id) 
+        : 1;
+      
+      setFormData(prev => ({
+        ...prev,
+        pickupLocationId: defaultLocationId,
+        fulfillmentMethod: 'pickup'
+      }));
+    }
+    
+    // Participant validation - check if all fundraisers have a participant selected
+    const missingParticipantFundraisers = uniqueFundraiserIds.filter(fundraiserId => {
+      const participantId = getFundraiserParticipant(fundraiserId);
+      return participantId === undefined;
+    });
+    
+    if (missingParticipantFundraisers.length > 0) {
+      if (missingParticipantFundraisers.length === 1) {
+        const fundraiserName = useFundraiserStore.getState().fundraisers
+          .find(f => f.id === missingParticipantFundraisers[0])?.name || `Fundraiser #${missingParticipantFundraisers[0]}`;
+        newErrors.form = `Please select a participant for ${fundraiserName}`;
+      } else {
+        newErrors.form = 'Please select a participant for all fundraisers';
+      }
+    }
+    
+    // No credit card validation needed - using Stripe/PayPal components
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  // Submit order with payment details
+  const submitOrderWithPayment = async (transactionId: string, paymentDetails: any) => {
+    try {
+      // Create customer info object - no address fields needed for pickup only
+      const customerInfo = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone
+      };
+      
+      // Get the payment processor from restaurant settings
+      const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
+      
+      // Create payment info object with fundraiser metadata
+      const paymentInfo = {
+        transactionId,
+        paymentMethod: paymentProcessor === 'stripe' ? 'stripe' : 'paypal',
+        paymentDetails: {
+          ...paymentDetails,
+          metadata: {
+            orderType: 'wholesale',
+            fundraiserId: currentFundraiser?.id,
+            participantId: formData.participantId,
+            fulfillmentMethod: formData.fulfillmentMethod,
+            pickupLocationId: formData.pickupLocationId
+          }
+        }
+      };
+      
+      // For order creation, we'll format the items directly in a structure the API expects
+      // instead of trying to convert between different cart item formats
+      const orderItems = items.map(item => {
+        // Get the participant ID from our fundraiser-participant mapping for this item's fundraiser
+        const selectedParticipantId = getFundraiserParticipant(item.fundraiserId || 0);
+        
+        // Check if this is a general support item
+        // Only consider it general support if it's explicitly the GENERAL_SUPPORT_ID (0) 
+        // or undefined/null
+        const isGeneralSupport = !selectedParticipantId || selectedParticipantId === GENERAL_SUPPORT_ID;
+        
+        console.log(`Item ${item.name} for fundraiser ${item.fundraiserId} has participant: ${selectedParticipantId}, isGeneralSupport: ${isGeneralSupport}`);
+        
+        return {
+          // Use 'id' instead of 'item_id' as expected by the API
+          id: item.id,
+          quantity: item.quantity,
+          price: item.price,
+          name: item.name,
+          // Send null for general support, otherwise send the selected participant ID
+          participant_id: isGeneralSupport ? null : selectedParticipantId
+        };
+      });
+      
+      // Calculate the total order amount
+      const orderTotal = getTotal();
+      
+      // Check if this is a general support order (all items have null participant_id)
+      const isGeneralSupportOrder = orderItems.every(item => item.participant_id === null);
+      
+      // Create clean payload with fundraiser_order wrapper to match regular order flow
+      const cleanPayload = {
+        fundraiser_order: {
+          items: orderItems,
+          total: orderTotal,
+          contact_name: customerInfo.name,
+          contact_email: customerInfo.email,
+          contact_phone: customerInfo.phone,
+          transaction_id: paymentInfo.transactionId,
+          payment_method: paymentInfo.paymentMethod,
+          payment_details: paymentInfo.paymentDetails,
+          fundraiser_id: currentFundraiser!.id,
+          fulfillment_method: formData.fulfillmentMethod,
+          pickup_location_id: formData.pickupLocationId,
+          // Include order_type for the backend to know how to handle this order
+          order_type: isGeneralSupportOrder ? 'general_support' : 'participant_support'
+        }
+      };
+      
+      setIsProcessing(true);
+      
+      try {
+        // Create headers with auth and restaurant context
+        const headers = getRequestHeaders();
+        headers['Content-Type'] = 'application/json';
+        
+        // Make direct API call with fetch to avoid any axios middleware issues
+        const response = await fetch(`${API_URL}/wholesale/fundraiser_orders`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...Object.fromEntries(Object.entries(headers).filter(([_, v]) => v != null))
+          },
+          body: JSON.stringify(cleanPayload)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API error: ${response.status} - ${errorText}`);
+        }
+        
+        const orderResponse = await response.json();
+        
+        // Order successful - no need to set success state as we'll navigate directly
+        
+        // Show success notification
+        toastUtils.success('Order placed successfully!');
+        
+        // Save items before clearing cart to ensure we have them for the confirmation page
+        const itemsForConfirmation = [...items];
+        
+        // Prepare items for confirmation page
+        // Convert WholesaleCartItems to the CartItem structure expected by the confirmation page
+        const sanitizedItems = itemsForConfirmation.map(item => {
+          // Get the participant ID from our fundraiser-participant mapping for this item's fundraiser
+          const selectedParticipantId = getFundraiserParticipant(item.fundraiserId || 0);
+          
+          // Check if this is a general support item
+          const isGeneralSupport = !selectedParticipantId || selectedParticipantId === GENERAL_SUPPORT_ID;
+          
+          // Get the participant name for display
+          const participantName = isGeneralSupport ? 'General Support' : getParticipantName(selectedParticipantId || 0);
+          
+          console.log(`Confirmation page item ${item.name} has participant: ${selectedParticipantId}, name: ${participantName}`);
+          
+          return {
+            // Base properties
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity || 0,
+            // Structure the item property as expected by the confirmation page
+            item: {
+              id: item.id || 0,
+              name: item.name || 'Product',
+              // Need to handle properties that might not exist on WholesaleCartItem
+              description: '',
+              price: item.price || 0,
+              // Use image as image_url since that's what the confirmation page expects
+              image_url: item.image || null,
+              fundraiser_id: item.fundraiserId || currentFundraiser?.id || 0
+            },
+            // Add participant info - handle general support case
+            participantId: isGeneralSupport ? null : selectedParticipantId,
+            participantName: participantName
+          };
+        });
+        
+        // Navigate directly to confirmation page without showing success state
+        navigate('/wholesale/confirmation', { 
+          state: { 
+            orderNumber: orderResponse.order_number || `WF-${orderResponse.id}`,
+            orderTotal: getTotal(),
+            items: sanitizedItems,
+            orderId: orderResponse.id,
+            fundraiserId: currentFundraiser?.id
+          } 
+        });
+        
+        // Clear the cart after navigation to prevent unwanted redirects
+        // We use a small timeout to ensure navigation happens first
+        setTimeout(() => {
+          clearCart();
+        }, 100);
+        
+        return;
+      } catch (error) {
+        console.error('Order creation error:', error);
+        toastUtils.error('Failed to create order. Please try again.');
+        setIsProcessing(false);
+        return;
+      }
+    } catch (error: any) {
+      console.error('Error processing order:', error);
+      setErrors({
+        ...errors,
+        form: error.message || 'There was an error processing your order. Please try again.'
+      });
+      setIsProcessing(false);
+    }
+  };
+  
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (isProcessing) return;
+    
+    if (!validateForm()) {
+      toastUtils.error('Please fix the errors in the form before proceeding');
+      return;
+    }
+    
+    if (!currentFundraiser?.id) {
+      toastUtils.error('Fundraiser information not found');
+      return;
+    }
+    
+    setIsProcessing(true);
+    
+    try {
+      // If payment already processed, just submit the order
+      if (paymentProcessed && paymentTransactionId) {
+        // Get the payment processor from restaurant settings
+        const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
+        
+        // Create basic payment details for already processed payments
+        const paymentDetails = {
+          status: 'succeeded',
+          payment_method: paymentProcessor === 'stripe' ? 'stripe' : 'paypal',
+          transaction_id: paymentTransactionId,
+          payment_date: new Date().toISOString().split('T')[0],
+          processor: paymentProcessor,
+          notes: `Payment processed via ${paymentProcessor === 'stripe' ? 'Stripe' : 'PayPal'}`,
+          metadata: {
+            orderType: 'wholesale',
+            fundraiserId: currentFundraiser.id,
+            participantId: formData.participantId,
+            fulfillmentMethod: formData.fulfillmentMethod,
+            pickupLocationId: formData.pickupLocationId
+          }
+        };
+        
+        await submitOrderWithPayment(paymentTransactionId, paymentDetails);
+        return;
+      }
+      
+      // Process payment based on selected payment method and restaurant settings
+      setPaymentProcessing(true);
+      
+      // Determine which payment processor to use based on restaurant settings
+      const paymentProcessor = restaurant?.admin_settings?.payment_gateway?.payment_processor || 'paypal';
+      const isStripe = paymentProcessor === 'stripe';
+      
+      if (isStripe && stripeRef.current) {
+        // Process with Stripe
+        const success = await stripeRef.current.processPayment();
+        if (!success) {
+          setPaymentProcessing(false);
+          setIsProcessing(false);
+        }
+      } else if (paypalRef.current) {
+        // Process with PayPal
+        const success = await paypalRef.current.processPayment();
+        if (!success) {
+          setPaymentProcessing(false);
+          setIsProcessing(false);
+        }
+      } else if (restaurant?.admin_settings?.payment_gateway?.test_mode) {
+        // For test mode, simulate a successful payment
+        const simTransactionId = `sim_${Date.now()}`;
+        const simPaymentDetails = {
+          status: 'completed',
+          payment_method: paymentProcessor,
+          transaction_id: simTransactionId,
+          payment_date: new Date().toISOString(),
+          processor: paymentProcessor,
+          metadata: {
+            orderType: 'wholesale',
+            fundraiserId: currentFundraiser.id,
+            participantId: formData.participantId,
+            fulfillmentMethod: formData.fulfillmentMethod,
+            pickupLocationId: formData.pickupLocationId
+          }
+        };
+        
+        // Submit the order with simulated payment details
+        await submitOrderWithPayment(simTransactionId, simPaymentDetails);
+      } else {
+        // No payment processor available
+        toastUtils.error('Payment processing is not available');
+        setPaymentProcessing(false);
+        setIsProcessing(false);
+      }
+    } catch (error: any) {
+      console.error('Error during checkout process:', error);
+      toastUtils.error('Failed to process checkout. Please try again.');
+      setPaymentProcessing(false);
+      setIsProcessing(false);
+    }
+  };
+  
+  // Redirect to cart if empty - using useEffect to handle navigation
+  useEffect(() => {
+    if (items.length === 0) {
+      navigate('/wholesale/cart');
+    }
+  }, [items, navigate]);
+  
+  return (
+    <div className="container mx-auto px-4 py-12 relative">
+      {/* Full-screen overlay for payment processing */}
+      {paymentProcessing && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+            <LoadingSpinner text="Processing Payment" className="mb-2" />
+          </div>
+        </div>
+      )}
+      
+      {/* Back button */}
+      <button
+        onClick={() => navigate('/wholesale/cart')}
+        className="flex items-center text-[#c1902f] hover:text-[#d4a43f] font-medium mb-6"
+        disabled={isProcessing}
+      >
+        <ArrowLeft size={18} className="mr-2" />
+        Back to Cart
+      </button>
+      
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Checkout form */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900">Customer Information</h2>
+              </div>
+              
+              <form onSubmit={handleSubmit} className="p-6">
+                {/* Error message */}
+                {errors.form && (
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+                    {errors.form}
+                  </div>
+                )}
+                
+                {/* Participant Selection by Fundraiser - Required at checkout */}
+                <div className="mb-6 bg-[#f9f5e8] p-4 rounded-lg border-2 border-[#c1902f] shadow-md">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center">
+                    <User className="mr-2 text-[#c1902f]" size={20} />
+                    Select Participants to Support <span className="text-red-500 ml-1">*</span>
+                  </h3>
+                  
+                  <p className="text-gray-700 mb-4">
+                    Please select a participant for each fundraiser in your cart. This is required to complete your order.
+                  </p>
+                  
+                  {/* Show fundraiser-specific selections */}
+                  {useWholesaleCartStore.getState().getUniqueFundraisers().map(fundraiserId => {
+                    const fundraiserItems = useWholesaleCartStore.getState().getFundraiserItems(fundraiserId);
+                    const selectedParticipantId = useWholesaleCartStore.getState().getFundraiserParticipant(fundraiserId);
+                    
+                    // Skip if there are no items for this fundraiser
+                    if (!fundraiserItems.length) return null;
+                    
+                    return (
+                      <div key={fundraiserId} className="mb-4 pb-4 border-b border-[#e2d8bc] last:border-0">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900 mb-2">
+                              {useFundraiserStore.getState().fundraisers.find(f => f.id === fundraiserId)?.name || `Fundraiser #${fundraiserId}`}
+                            </h4>
+                            <div className="text-sm text-gray-600">
+                              {fundraiserItems.length} item{fundraiserItems.length !== 1 ? 's' : ''} in cart
+                            </div>
+                          </div>
+                          
+                          <div className="lg:w-1/2">
+                            <ParticipantSelector
+                              fundraiserId={fundraiserId}
+                              selectedParticipantId={selectedParticipantId}
+                              onChange={(participantId) => {
+                                useWholesaleCartStore.getState().setFundraiserParticipant(fundraiserId, participantId);
+                              }}
+                              required={true}
+                              showGeneralSupport={true}
+                              label="Select a participant"
+                              className="bg-white border-2 focus-within:border-[#c1902f]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Error message if any fundraiser is missing a participant */}
+                  {errors.participantId && (
+                    <p className="mt-2 text-sm text-red-600 font-medium">{errors.participantId}</p>
+                  )}
+                </div>
+                
+                {/* Contact Information */}
+                <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                  <h2 className="text-xl font-semibold mb-4">Contact Information</h2>
+                  <div className="space-y-4">
+                    {/* NAME FIELD */}
+                    <div>
+                      <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                        <User className="inline-block w-4 h-4 mr-2" />
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        required
+                        value={formData.name || ''}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-2 border rounded-md focus:ring-[#c1902f] focus:border-[#c1902f] ${
+                          errors.name ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                        placeholder="Enter your full name"
+                      />
+                      {errors.name && (
+                        <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                      )}
+                    </div>
+                  
+                    {/* EMAIL */}
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                        <Mail className="inline-block w-4 h-4 mr-2" />
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        required
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-2 border rounded-md focus:ring-[#c1902f] focus:border-[#c1902f] ${
+                          errors.email ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      />
+                      {errors.email && (
+                        <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                      )}
+                    </div>
+
+                    {/* PHONE */}
+                    <div>
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                        <Phone className="inline-block w-4 h-4 mr-2" />
+                        Phone <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        id="phone"
+                        name="phone"
+                        required
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        placeholder="+1671"
+                        className={`w-full px-4 py-2 border rounded-md focus:ring-[#c1902f] focus:border-[#c1902f] ${
+                          errors.phone ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      />
+                      {errors.phone && (
+                        <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Global Participant Selection has been removed in favor of per-fundraiser selection */}
+                
+                {/* Pickup details section removed from UI - we'll handle pickup location selection automatically */}
+
+                
+                {/* Payment Information */}
+                <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                  <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
+                  
+                  {/* Conditionally render PayPal or Stripe checkout based on payment processor setting */}
+                  {restaurant?.admin_settings?.payment_gateway?.payment_processor === 'stripe' ? (
+                    <StripeCheckout
+                      ref={stripeRef}
+                      amount={getTotal().toFixed(2)}
+                      currency="USD"
+                      publishableKey={(restaurant?.admin_settings?.payment_gateway?.publishable_key as string) || 'pk_test_sample'}
+                      onPaymentSuccess={handlePaymentSuccess}
+                      onPaymentError={handlePaymentError}
+                      testMode={restaurant?.admin_settings?.payment_gateway?.test_mode || true}
+                    />
+                  ) : (
+                    // Default to PayPal if not specified or if set to 'paypal'
+                    <PayPalCheckout
+                      ref={paypalRef}
+                      amount={getTotal().toFixed(2)}
+                      currency="USD"
+                      clientId={(restaurant?.admin_settings?.payment_gateway?.client_id as string) || 'sb'}
+                      onPaymentSuccess={handlePaymentSuccess}
+                      onPaymentError={handlePaymentError}
+                      testMode={restaurant?.admin_settings?.payment_gateway?.test_mode || true}
+                    />
+                  )}
+                </div>
+                
+                <div className="mt-8">
+                  <button
+                    type="submit"
+                    disabled={isProcessing}
+                    className={`w-full py-4 px-6 ${
+                      isProcessing ? 'bg-gray-400' : 'bg-[#c1902f] hover:bg-[#d4a43f]'
+                    } text-white font-semibold rounded-md shadow-sm transition-colors duration-300 flex items-center justify-center`}
+                  >
+                    {isProcessing ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processing Order...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Complete Purchase
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          {/* Order summary */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-md p-6 sticky top-6">
+              <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
+              
+              <div className="space-y-4 mb-6">
+                {/* Cart Items */}
+                {/* First, group items by participant/fundraiser */}
+                {(() => {
+                  // Create a map of fundraiserId to array of items
+                  const itemsByFundraiser: Record<number, typeof items> = {};
+                  items.forEach(item => {
+                    if (!item.fundraiserId) return;
+                    if (!itemsByFundraiser[item.fundraiserId]) {
+                      itemsByFundraiser[item.fundraiserId] = [];
+                    }
+                    itemsByFundraiser[item.fundraiserId].push(item);
+                  });
+
+                  return (
+                    <div className="mb-4 space-y-5">
+                      <h3 className="text-md font-medium">Items ({getTotalItems()})</h3>
+                      <div className="max-h-80 overflow-y-auto pr-2 space-y-6">
+                        {Object.entries(itemsByFundraiser).map(([fundraiserId, fundraiserItems]) => {
+                          const numericFundraiserId = parseInt(fundraiserId);
+                          const participant = getParticipantDisplayName(numericFundraiserId);
+                          const isGeneralSupport = participant === 'General Support';
+                          
+                          return (
+                            <div key={fundraiserId} className="space-y-3">
+                              {/* Participant information */}
+                              <div className="bg-[#f9f5e8] rounded-md p-2 flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <User size={16} className="text-[#c1902f] mr-2" />
+                                  <span className="font-medium text-gray-800">Supporting: </span>
+                                  <span className={`ml-1 ${isGeneralSupport ? 'text-[#c1902f] font-medium' : 'text-gray-700'}`}>
+                                    {participant || 'Select a participant'}
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {/* Items for this participant/fundraiser */}
+                              {fundraiserItems.map((cartItem) => (
+                                <div key={`${cartItem.id}-${cartItem.fundraiserId}`} className="flex items-center space-x-3 pl-2">
+                                  <OptimizedImage
+                                    src={cartItem.image}
+                                    alt={cartItem.name}
+                                    className="w-16 h-16 object-cover rounded-md"
+                                    context="cart"
+                                    fallbackSrc="/placeholder-food.png"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="font-medium">{cartItem.name}</p>
+                                    <p className="text-sm text-gray-500">Qty: {cartItem.quantity}</p>
+                                  </div>
+                                  <span className="font-medium">{formatCurrency(cartItem.price * cartItem.quantity)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                {/* Totals */}
+                <div className="space-y-2 border-t border-gray-100 pt-4">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-medium">{formatCurrency(getSubtotal())}</span>
+                  </div>
+                  {/* Tax line removed as requested */}
+                  <div className="border-t border-gray-200 pt-4 flex justify-between">
+                    <span className="text-lg font-semibold">Total</span>
+                    <span className="text-lg font-bold text-[#c1902f]">{formatCurrency(getTotal())}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-6 text-center">
+                <Link
+                  to="/wholesale/cart"
+                  className="inline-flex items-center text-[#c1902f] hover:text-[#d4a43f] text-sm font-medium transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  Return to Cart
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+    </div>
+  );
+};
+
+export default WholesaleCheckoutPage;

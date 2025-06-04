@@ -45,6 +45,7 @@ export interface OrderQueryParams {
   staff_member_id?: string; // Used to filter by staff member
   user_id?: string; // Used to filter by user
   include_online_orders?: string; // Used to include online orders with user orders
+  // exclude_fundraiser_orders parameter removed - backend now excludes fundraiser orders by default
   _sourceId?: string; // Track the source of the request for debugging
 }
 
@@ -840,6 +841,10 @@ export const useOrderStore = create<OrderStore>()(
               payment_details: paymentDetails,
               // Include location_id if provided
               location_id: locationId,
+              // Set fulfillment method to pickup by default
+              fulfillment_method: 'pickup',
+              // Set pickup location to the selected location
+              pickup_location_id: locationId,
               // Include staff order parameters, especially created_by_staff_id
               ...staffOrderParams
             },

@@ -274,6 +274,13 @@ class WebSocketManager {
                                   (data.metadata && data.metadata.restaurant_id);
       }
       
+      // FILTER FUNDRAISER ORDERS: For order notifications, exclude fundraiser orders from the regular admin dashboard
+      if ((type === NotificationType.NEW_ORDER || type === NotificationType.ORDER_UPDATED) && 
+          data.order_type === 'fundraiser') {
+        console.debug(`[WebSocketManager] Skipping ${type} notification for fundraiser order: ${data.id}`);
+        return;
+      }
+      
       // If the notification has a restaurant_id and it doesn't match our current restaurant,
       // ignore the notification to maintain tenant isolation
       if (notificationRestaurantId && String(notificationRestaurantId) !== String(this.restaurantId)) {

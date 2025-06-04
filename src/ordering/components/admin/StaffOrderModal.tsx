@@ -10,6 +10,7 @@ import { useAuthStore } from '../../store/authStore';
 import { MenuItem } from '../../types/menu';
 import { apiClient } from '../../../shared/api/apiClient';
 // import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
+import { locationsApi, Location } from '../../../shared/api/endpoints/locations';
 
 // Payment components
 import { StripeCheckout, StripeCheckoutRef } from '../../components/payment/StripeCheckout';
@@ -2099,6 +2100,35 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       };
       
       // Use contactPhone directly since we already validated it
+      // Get restaurant from the store and use its ID as the location ID
+      // Default to location ID 1 if none is available
+      const restaurantState = useRestaurantStore.getState();
+      let locationIdToUse: number;
+
+      if (!restaurantState.restaurant) {
+        console.error("StaffOrderModal: Restaurant context not found in store.");
+        alert("Error: Restaurant information is missing. Cannot place order."); // TODO: Replace with a proper UI notification
+        return; 
+      }
+
+      try {
+        // Fetch locations for the current restaurant. The backend API should scope this by tenant.
+        const locations = await locationsApi.getLocations({ restaurant_id: restaurantState.restaurant.id });
+        const defaultLocation = locations.find((loc: Location) => loc.is_default);
+
+        if (defaultLocation) {
+          locationIdToUse = defaultLocation.id;
+        } else {
+          console.error(`StaffOrderModal: No default location found for restaurant ID ${restaurantState.restaurant.id}.`);
+          alert(`Error: No default location is configured for ${restaurantState.restaurant.name}. Please contact an administrator.`); // TODO: Replace with a proper UI notification
+          return; 
+        }
+      } catch (error) {
+        console.error("StaffOrderModal: Failed to fetch locations or find default location:", error);
+        alert("Error: Could not determine the location for this order. Please try again or contact support."); // TODO: Replace with a proper UI notification
+        return; 
+      }
+      
       const newOrder = await addOrder(
         cartItems,
         orderTotal,
@@ -2110,7 +2140,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         paymentMethod || '',
         '', // vipCode parameter
         true, // Add staff_modal parameter to indicate this is a staff-created order
-        enhancedPaymentDetails // Combined payment details and staff order params
+        enhancedPaymentDetails, // Combined payment details and staff order params
+        locationIdToUse // Use the CORRECTED default location ID for pickup
       );
       
       // Create an OrderPayment record for manual payment methods

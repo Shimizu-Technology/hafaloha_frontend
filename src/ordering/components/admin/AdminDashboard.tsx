@@ -11,6 +11,7 @@ import { SettingsManager } from './SettingsManager';
 import MerchandiseManager from './MerchandiseManager';
 import { StaffManagement } from './StaffManagement';
 import { ReservationsManager } from './reservations/ReservationsManager';
+import FundraiserManager from '../../wholesale/components/admin/FundraiserManager';
 // RestaurantSelector removed - super admins now only see data for the current restaurant
 import NotificationContainer from '../../../shared/components/notifications/NotificationContainer';
 /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -37,7 +38,8 @@ import {
   // Bell, // Commented out - not currently using stock notifications
   Package,
   Users,
-  Calendar
+  Calendar,
+  Store
 } from 'lucide-react';
 import AcknowledgeAllButton from '../../../shared/components/notifications/AcknowledgeAllButton';
 import { api } from '../../lib/api';
@@ -53,7 +55,7 @@ import { useOrderStore } from '../../store/orderStore';
 import { calculateAvailableQuantity } from '../../utils/inventoryUtils';
 import useWebSocket from '../../../shared/hooks/useWebSocket';
 
-type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise' | 'staff' | 'reservations';
+type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise' | 'staff' | 'reservations' | 'wholesale';
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
@@ -76,24 +78,62 @@ export function AdminDashboard() {
   }
 
   // List of tabs with role-based access controls
-  const tabs = [
-    // Analytics - visible to admin and super_admin only
-    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'analytics', label: 'Analytics', icon: BarChart2 }] : []),
-    // Orders - visible to all admin roles (including staff)
-    { id: 'orders', label: 'Orders', icon: ShoppingBag },
-    // Menu - visible to admin and super_admin only
-    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'menu', label: 'Menu', icon: LayoutGrid }] : []),
-    // Merchandise - visible to admin and super_admin only
-    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'merchandise', label: 'Merchandise', icon: ShoppingCart }] : []),
-    // Promos - visible to admin and super_admin only
-    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'promos', label: 'Promos', icon: Tag }] : []),
-    // Reservations - visible to admin and super_admin only
-    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'reservations', label: 'Reservations', icon: Calendar }] : []),
-    // Staff - visible to admin and super_admin only
-    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'staff', label: 'Staff', icon: Users }] : []),
-    // Settings - visible to admin and super_admin
-    ...((authStore.isSuperAdmin() || authStore.isAdmin()) ? [{ id: 'settings', label: 'Settings', icon: Sliders }] : []),
-  ] as const;
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; permissions?: string[] }[] = [
+    {
+      id: 'analytics',
+      label: 'Analytics',
+      icon: <BarChart2 size={20} />,
+      permissions: ['view_analytics']
+    },
+    {
+      id: 'orders',
+      label: 'Orders',
+      icon: <ShoppingBag size={20} />,
+      permissions: ['view_orders']
+    },
+    {
+      id: 'menu',
+      label: 'Menu',
+      icon: <LayoutGrid size={20} />,
+      permissions: ['manage_menu']
+    },
+    {
+      id: 'promos',
+      label: 'Promos',
+      icon: <Tag size={20} />,
+      permissions: ['manage_promos']
+    },
+    {
+      id: 'merchandise',
+      label: 'Merchandise',
+      icon: <Package size={20} />,
+      permissions: ['manage_merchandise']
+    },
+    {
+      id: 'staff',
+      label: 'Staff',
+      icon: <Users size={20} />,
+      permissions: ['manage_staff']
+    },
+    {
+      id: 'reservations',
+      label: 'Reservations',
+      icon: <Calendar size={20} />,
+      permissions: ['manage_reservations']
+    },
+    {
+      id: 'wholesale',
+      label: 'Wholesale',
+      icon: <Store size={20} />,
+      permissions: ['manage_fundraisers']
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: <Sliders size={20} />,
+      permissions: ['manage_settings']
+    }
+  ];
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     // For staff users, always default to orders tab
@@ -103,7 +143,7 @@ export function AdminDashboard() {
     
     // For admin/super_admin, check stored preference
     const stored = localStorage.getItem('adminTab');
-    if (stored && ['analytics','orders','menu','merchandise','promos','reservations','staff','settings'].includes(stored)) {
+    if (stored && ['analytics','orders','menu','merchandise','promos','reservations','staff','settings','wholesale'].includes(stored)) {
       // Check if the user has access to the stored tab
       if (
         (stored === 'analytics' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
@@ -113,6 +153,7 @@ export function AdminDashboard() {
         (stored === 'promos' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'reservations' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'staff' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'wholesale' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'settings' && (authStore.isSuperAdmin() || authStore.isAdmin()))
       ) {
         return stored as Tab;
@@ -1132,6 +1173,7 @@ useEffect(() => {
       // AdminDashboard: Checking for unacknowledged orders...
       
       // Get unacknowledged orders from the last 24 hours for the current restaurant only
+      // Fundraiser orders are now excluded by default at the backend
       const url = `/orders/unacknowledged?hours=24${currentRestaurantId ? `&restaurant_id=${currentRestaurantId}` : ''}`;
       const fetchedOrders: Order[] = await api.get(url);
       
@@ -1279,6 +1321,7 @@ useEffect(() => {
       fetchingNotificationsRef.current = true;
       // Polling: Checking for new orders since ID: ${lastOrderId}
       
+      // Fundraiser orders are now excluded by default at the backend
       const url = `/orders/new_since/${lastOrderId}`;
       const newOrders: Order[] = await api.get(url);
       
@@ -1388,7 +1431,7 @@ useEffect(() => {
                 </div>
               ) : (
                 // Regular tab navigation for admin/super_admin users
-                tabs.map(({ id, label, icon: Icon }) => (
+                tabs.map(({ id, label, icon }) => (
                   <button
                     key={id}
                     onClick={() => handleTabClick(id as Tab)}
@@ -1402,7 +1445,7 @@ useEffect(() => {
                       }
                     `}
                   >
-                    <Icon className="h-5 w-5 mx-auto mb-1" />
+                    <div className="h-5 w-5 mx-auto mb-1">{icon}</div>
                     {label}
                   </button>
                 ))
@@ -1455,6 +1498,10 @@ useEffect(() => {
             
             <div className={`transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
               {activeTab === 'settings' && <SettingsManager restaurantId={currentRestaurantId} />}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'wholesale' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'wholesale' && <FundraiserManager restaurantId={currentRestaurantId ? Number(currentRestaurantId) : undefined} />}
             </div>
           </div>
         </div>

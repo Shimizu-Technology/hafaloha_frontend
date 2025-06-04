@@ -351,10 +351,6 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Create a unique source ID for tracking this request
     const sourceId = requestId ? `page-change-${requestId}` : `page-change-${Date.now()}`;
     
-    // Get current store state to log
-    // Store state available for debugging if needed
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const currentStoreState = useOrderStore.getState();
     // Preparing to fetch with current store metadata
     
     // Make the API request with explicit parameters
@@ -372,18 +368,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       searchQuery: searchQuery || null,
       restaurantId: restaurantId || null,
       locationId: locationFilter, // Add location filter parameter
+      // exclude_fundraiser_orders parameter removed - backend now excludes fundraiser orders by default
       _sourceId: sourceId // Add a unique ID to track this request
     };
     
     // Debug log for date range parameters
-    console.log('Date Range Debug:', {
-      dateFilter,
-      customStartDate: customStartDate?.toISOString(),
-      customEndDate: customEndDate?.toISOString(),
-      calculatedStart: start.toISOString(),
-      calculatedEnd: end.toISOString(),
-      currentDateInGuam: new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' })).toISOString()
-    });
+    // Date range debug logs removed
     
     // Handle different user roles
     if (isSuperAdmin() || isAdmin()) {
@@ -456,6 +446,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       searchQuery: searchQuery || null,
       locationId: locationFilter, // Add location filter parameter
       restaurantId: restaurantId || null,
+      // exclude_fundraiser_orders parameter removed - backend now excludes fundraiser orders by default
       _sourceId: sourceId // Add a unique ID to track this request
     };
     
@@ -979,9 +970,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   
   // Add a useEffect to log when orders change and verify page synchronization
   useEffect(() => {
-    console.debug(`[OrderManager:Pagination] Orders updated, count: ${orders.length}, current page: ${currentPage}`);
-    console.debug(`[OrderManager:Pagination] Store metadata: ${JSON.stringify(metadata)}`);
-    console.debug(`[OrderManager:Pagination] Calculated totalPages: ${totalPages}`);
+    // Pagination debug logs removed
+
+
     
     // Verify page synchronization
     if (metadata.page !== currentPage) {
@@ -1000,7 +991,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // When filters change, reset to page 1 and fetch orders
   useEffect(() => {
-    console.debug('[OrderManager] Filters changed, resetting to page 1');
+    // Filter change debug log removed
     
     // Stop any ongoing polling to prevent race conditions
     const { stopOrderPolling } = useOrderStore.getState();
@@ -1026,7 +1017,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Check if WebSocket is connected
     const { websocketConnected } = useOrderStore.getState();
     if (websocketConnected) {
-      console.debug('[OrderManager] Notifying WebSocket about filter change and page reset');
+      // WebSocket notification debug log removed
       // The metadata update above will ensure WebSocket has the correct page number
     }
     
@@ -1034,17 +1025,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const timeoutId = setTimeout(() => {
       // Only fetch if this is still the most recent filter change
       if (lastPageChangeRef.current === filterChangeTimestamp) {
-        console.debug('[OrderManager] Fetching orders after filter change');
+        // Filter change fetch debug log removed
         fetchOrdersWithParams(filterChangeTimestamp);
         
         // Check if we need to restart polling (only if WebSocket is not connected)
         setTimeout(() => {
           const { startOrderPolling, websocketConnected } = useOrderStore.getState();
           if (!websocketConnected) {
-            console.debug('[OrderManager] Restarting polling after filter change (WebSocket not connected)');
+            // Polling restart debug log removed
             startOrderPolling();
           } else {
-            console.debug('[OrderManager] WebSocket is connected, not starting polling after filter change');
+
           }
         }, 500);
       }
@@ -1602,7 +1593,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     const now = Date.now();
                     const timeSinceLastChange = now - lastPageChangeRef.current;
                     if (timeSinceLastChange < 300) {
-                      console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
+                      // Pagination rapid click debug log removed;
                       return;
                     }
                     
@@ -1656,7 +1647,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                         const now = Date.now();
                         const timeSinceLastChange = now - lastPageChangeRef.current;
                         if (timeSinceLastChange < 300) {
-                          console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
+                          // Pagination rapid click debug log removed
                           return;
                         }
                         
@@ -1711,7 +1702,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     const now = Date.now();
                     const timeSinceLastChange = now - lastPageChangeRef.current;
                     if (timeSinceLastChange < 300) {
-                      console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
+                      // Pagination rapid click debug log removed;
                       return;
                     }
                     

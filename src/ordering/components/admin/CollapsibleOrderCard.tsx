@@ -276,8 +276,7 @@ export function CollapsibleOrderCard({
 }: CollapsibleOrderCardProps) {
   
   // Debug location data
-  console.log('Order in CollapsibleOrderCard:', order);
-  console.log('Order location data:', order.location);
+  // Console logs removed
   
   // Mobile optimization enhancements
   const mobileStyles = `
@@ -650,7 +649,7 @@ export function CollapsibleOrderCard({
       id={`order-${order.id}`}
       className={`rounded-lg shadow-sm overflow-hidden ${newOrderClasses} ${highlightClasses} transition-all duration-200 ${
         order.staff_created
-          ? 'bg-blue-50 border-l-4 border-blue-400 border-t border-r border-b border-gray-200 bg-[url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%234b91f1\' fill-opacity=\'0.05\' fill-rule=\'evenodd\'%3E%3Ccircle cx=\'3\' cy=\'3\' r=\'1\'/%3E%3C/g%3E%3C/svg%3E")]'
+          ? 'bg-blue-50 border-l-4 border-blue-400 border-t border-r border-b bg-[url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%234b91f1\' fill-opacity=\'0.05\' fill-rule=\'evenodd\'%3E%3Ccircle cx=\'3\' cy=\'3\' r=\'1\'/%3E%3C/g%3E%3C/svg%3E")]'
           : 'bg-white border border-gray-200'
       }`}
     >

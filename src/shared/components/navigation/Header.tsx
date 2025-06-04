@@ -17,12 +17,18 @@ import toastUtils from '../../utils/toastUtils';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatPhoneNumber } from '../../utils/formatters';
 
-// Create a custom hook to safely use the order store
-function useCartItems() {
+// Create a custom hook to use the appropriate cart based on location
+function useContextAwareCart() {
+  const location = useLocation();
   // Default empty state
-  const [cartItems, setCartItems] = useState<any[]>([]);
+  const [regularCartItems, setRegularCartItems] = useState<any[]>([]);
+  const [wholesaleCartItems, setWholesaleCartItems] = useState<any[]>([]);
   
-  // Effect to load the order store if available
+  // Determine if we're in the wholesale/fundraiser section
+  const isWholesaleSection = location.pathname.startsWith('/wholesale') || 
+                             location.pathname.startsWith('/fundraiser');
+  
+  // Effect to load the regular order store if available
   useEffect(() => {
     let mounted = true;
     let unsubscribe: (() => void) | undefined;
@@ -38,34 +44,79 @@ function useCartItems() {
           // Get initial cart items
           const store = orderingModule.useOrderStore.getState();
           if (store && Array.isArray(store.cartItems)) {
-            setCartItems(store.cartItems);
+            setRegularCartItems(store.cartItems);
           }
           
           // Subscribe to changes
           unsubscribe = orderingModule.useOrderStore.subscribe(
             (state: any) => {
               if (mounted && Array.isArray(state.cartItems)) {
-                setCartItems(state.cartItems);
+                setRegularCartItems(state.cartItems);
               }
             }
           );
         }
-      } catch (e) {
-        console.log('Order store not available, using empty cart');
+      } catch (error) {
+        console.error('Error loading regular order store:', error);
       }
     };
     
-    // Execute the async function
     loadOrderStore();
     
-    // Cleanup function
     return () => {
       mounted = false;
       if (unsubscribe) unsubscribe();
     };
   }, []);
   
-  return cartItems;
+  // Effect to load the wholesale cart store if available
+  useEffect(() => {
+    let mounted = true;
+    let unsubscribe: (() => void) | undefined;
+    
+    const loadWholesaleCartStore = async () => {
+      try {
+        // Dynamic import
+        const wholesaleModule = await import('../../../ordering/wholesale/store/wholesaleCartStore');
+        
+        if (!mounted) return;
+        
+        if (wholesaleModule && wholesaleModule.useWholesaleCartStore) {
+          // Get initial cart items
+          const store = wholesaleModule.useWholesaleCartStore.getState();
+          if (store && Array.isArray(store.cartItems)) {
+            setWholesaleCartItems(store.cartItems);
+          }
+          
+          // Subscribe to changes
+          unsubscribe = wholesaleModule.useWholesaleCartStore.subscribe(
+            (state: any) => {
+              if (mounted && Array.isArray(state.cartItems)) {
+                setWholesaleCartItems(state.cartItems);
+              }
+            }
+          );
+        }
+      } catch (error) {
+        console.error('Error loading wholesale cart store:', error);
+      }
+    };
+    
+    loadWholesaleCartStore();
+    
+    return () => {
+      mounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+  
+  // Return the appropriate cart items and cart link based on location
+  // Based on the route structure in OnlineOrderingApp.tsx, the wholesale cart path is '/wholesale/cart'
+  return {
+    cartItems: isWholesaleSection ? wholesaleCartItems : regularCartItems,
+    cartLink: isWholesaleSection ? '/wholesale/cart' : '/cart',
+    isWholesaleCart: isWholesaleSection
+  };
 }
 
 export function Header() {
@@ -77,8 +128,8 @@ export function Header() {
   const hasAdminAccess = user && (authStore.isSuperAdmin() || authStore.isAdmin() || authStore.isStaff());
   const location = useLocation();
 
-  // Cart items - will only have items in the ordering app context
-  const cartItems = useCartItems();
+  // Get context-aware cart items and link
+  const { cartItems, cartLink, isWholesaleCart } = useContextAwareCart();
   const cartCount = cartItems.reduce((acc: number, item: any) => acc + item.quantity, 0);
 
   // Animate cart icon
@@ -196,6 +247,13 @@ export function Header() {
             >
               Menu
             </Link>
+            <Link
+              to="/wholesale"
+              className={`px-3 py-2 rounded-md text-gray-700 hover:text-[#c1902f] hover:bg-gray-50
+                        transition-colors duration-200 ${isActiveLink('/wholesale')}`}
+            >
+              Fundraising
+            </Link>
             {/* Merchandise link temporarily hidden
             <Link
               to="/merchandise"
@@ -289,6 +347,7 @@ export function Header() {
                             Manage Reservations
                           </Link>
                         )}
+                        */}
                         
                         {/* Admin Dashboard - visible to all admin roles */}
                         <Link
@@ -361,15 +420,20 @@ export function Header() {
 
             {/* Cart icon */}
             <Link
-              to="/cart"
+              to={cartLink}
               className="p-2 relative text-gray-700 hover:text-[#c1902f] hover:bg-gray-50 
                        transition-colors duration-200 rounded-md focus:outline-none 
                        focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50"
-              aria-label={`Shopping cart with ${cartCount} items`}
+              aria-label={`${isWholesaleCart ? 'Wholesale' : 'Shopping'} cart with ${cartCount} items`}
             >
-              <ShoppingCart
-                className={`h-5 w-5 ${cartBounce ? 'animate-bounce' : ''}`}
-              />
+              <div className="relative">
+                <ShoppingCart
+                  className={`h-5 w-5 ${cartBounce ? 'animate-bounce' : ''}`}
+                />
+                {isWholesaleCart && (
+                  <span className="absolute -bottom-1 -left-1 text-[8px] font-bold text-[#c1902f]">F</span>
+                )}
+              </div>
               {cartCount > 0 && (
                 <span
                   className="absolute -top-1 -right-1 
@@ -423,6 +487,15 @@ export function Header() {
             >
               Menu
             </Link>
+            <Link
+              to="/wholesale"
+              className={`block px-3 py-2 rounded-md text-base font-medium text-gray-700
+                         hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150
+                         ${isActiveLink('/wholesale')}`}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Fundraising
+            </Link>
             {/* Merchandise link temporarily hidden
             <Link
               to="/merchandise"
@@ -450,19 +523,19 @@ export function Header() {
           {/* Restaurant Info */}
           <div className="space-y-2 pt-2 border-t border-gray-100">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Restaurant Info</h3>
-            <div className="px-3 py-2 text-base text-gray-700 flex items-center">
+            <div className="px-3 py-2 text-base text-gray-700 inline-flex">
               <Clock className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
               11AM-9PM
             </div>
-            <div className="px-3 py-2 text-base text-gray-700 flex items-center">
+            <div className="px-3 py-2 text-base text-gray-700 inline-flex">
               <MapPin className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
               {restaurant?.address ? restaurant.address.split(',')[0] : 'Tamuning'}
             </div>
             {restaurant?.phone_number ? (
               <a
                 href={`tel:${restaurant.phone_number}`}
-                className="block px-3 py-2 text-base text-gray-700 hover:text-[#c1902f]
-                         hover:bg-gray-50 transition-colors duration-150 flex items-center"
+                className="px-3 py-2 rounded-md text-base font-medium text-gray-700
+                         hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150 flex items-center"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <Phone className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
@@ -471,7 +544,7 @@ export function Header() {
             ) : (
               <a
                 href="tel:+16719893444"
-                className="block px-3 py-2 text-base text-gray-700 hover:text-[#c1902f]
+                className="px-3 py-2 text-base text-gray-700 hover:text-[#c1902f]
                          hover:bg-gray-50 transition-colors duration-150 flex items-center"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -571,14 +644,19 @@ export function Header() {
           {/* Cart Link */}
           <div className="pt-2 border-t border-gray-100">
             <Link
-              to="/cart"
+              to={cartLink}
               className="flex items-center justify-between px-3 py-2 rounded-md text-base font-medium
                        text-gray-700 hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <span>Shopping Cart</span>
+              <span>{isWholesaleCart ? 'Fundraiser Cart' : 'Shopping Cart'}</span>
               <div className="flex items-center">
-                <ShoppingCart className="h-5 w-5 mr-2" />
+                <div className="relative mr-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  {isWholesaleCart && (
+                    <span className="absolute -bottom-1 -left-1 text-[8px] font-bold text-[#c1902f]">F</span>
+                  )}
+                </div>
                 {cartCount > 0 && (
                   <span className="bg-[#c1902f] text-white text-xs font-bold rounded-full h-5 w-5 
                                  flex items-center justify-center">

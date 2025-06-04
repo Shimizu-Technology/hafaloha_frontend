@@ -1,7 +1,7 @@
 // src/ordering/OnlineOrderingApp.tsx
 
 import React, { useEffect, Suspense, useState } from 'react';
-import { Routes, Route, Navigate, Outlet, Link } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, Link, useParams, useNavigate } from 'react-router-dom';
 
 import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
@@ -28,6 +28,19 @@ import { validateRestaurantContext } from '../shared/utils/tenantUtils';
 import type { MenuItem, MenuItemFilterParams } from './types/menu';
 
 import { ProtectedRoute, AnonymousRoute, PhoneVerificationRoute } from '../shared';
+
+// Wholesale components
+import {
+  WholesaleLandingPage,
+  FundraiserDetailPage,
+  FundraiserItemsPage,
+  WholesaleCartPage,
+  WholesaleCheckoutPage,
+  WholesaleConfirmationPage
+} from './wholesale/components';
+
+// Wholesale admin components
+import { FundraiserManager, FundraiserDetailsPage } from './wholesale/components/admin';
 
 function OrderingLayout() {
   const loadingCount = useLoadingStore((state) => state.loadingCount);
@@ -394,6 +407,39 @@ export default function OnlineOrderingApp() {
         
         {/* /merchandise => the MerchandisePage */}
         <Route path="merchandise" element={<MerchandisePage />} />
+        
+        {/* /wholesale => Wholesale Fundraising */}
+        <Route path="wholesale" element={<WholesaleLandingPage />} />
+        
+        {/* New shorter fundraiser URL format */}
+        <Route path="wholesale/:slug" element={<FundraiserDetailPage />} />
+        
+        {/* Support older URL formats for backwards compatibility */}
+        <Route path="wholesale/fundraisers/:slug" element={<RedirectToNewFundraiserUrl />} />
+        <Route path="wholesale/fundraisers/id/:id" element={<FundraiserDetailPage />} />
+        <Route path="wholesale/:slug/items" element={<FundraiserItemsPage />} />
+        <Route path="wholesale/fundraisers/:slug/items" element={<RedirectToItemsPage />} />
+        <Route path="wholesale/cart" element={<WholesaleCartPage />} />
+        <Route path="wholesale/checkout" element={<WholesaleCheckoutPage />} />
+        <Route path="wholesale/confirmation" element={<WholesaleConfirmationPage />} />
+
+        {/* /wholesale/admin => Wholesale Admin */}
+        <Route
+          path="wholesale/admin/fundraisers"
+          element={
+            <ProtectedRoute adminOnly>
+              <FundraiserManager />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="wholesale/admin/fundraisers/:id"
+          element={
+            <ProtectedRoute adminOnly>
+              <FundraiserDetailsPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* /cart => Cart */}
         <Route path="cart" element={<CartPage />} />
@@ -459,3 +505,31 @@ export default function OnlineOrderingApp() {
     </Routes>
   );
 }
+
+// Redirect component to handle moving from old fundraiser URLs to new format
+const RedirectToNewFundraiserUrl = () => {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (slug) {
+      navigate(`/wholesale/${slug}`, { replace: true });
+    }
+  }, [slug, navigate]);
+  
+  return <div>Redirecting...</div>;
+};
+
+// Redirect component for items page URLs
+const RedirectToItemsPage = () => {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (slug) {
+      navigate(`/wholesale/${slug}/items`, { replace: true });
+    }
+  }, [slug, navigate]);
+  
+  return <div>Redirecting...</div>;
+};

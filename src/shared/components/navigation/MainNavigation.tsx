@@ -64,6 +64,18 @@ export function MainNavigation() {
                 Reservations
               </Link>
               
+              {/* Wholesale Fundraising Link */}
+              <Link
+                to="/wholesale"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  location.pathname.startsWith('/wholesale')
+                    ? 'border-[#c1902f] text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Fundraising
+              </Link>
+              
               {/* Admin Dashboard Link - Only visible to admin and super_admin */}
               {user && (isSuperAdmin() || isAdmin()) && (
                 <Link
