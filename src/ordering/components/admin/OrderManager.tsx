@@ -21,6 +21,8 @@ import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
 import { api } from '../../../shared/api';
 import toastUtils from '../../../shared/utils/toastUtils';
+// Import our new custom hook for filter management
+import useOrderFilters from '../../hooks/useOrderFilters';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded';
 
@@ -30,6 +32,22 @@ interface OrderManagerProps {
   restaurantId?: string;
 }
 
+/**
+ * OrderManager Component
+ * 
+ * Main dashboard for managing orders across different statuses.
+ * Handles WebSocket connections for real-time updates and provides
+ * filtering, sorting, and pagination functionality.
+ *
+ * REFACTORING NOTES:
+ * This component is being incrementally refactored to use the useOrderFilters hook.
+ * Currently, both local state and hook state are maintained and kept in sync.
+ * The REST API calls have been updated to use the hook's parameter generation.
+ * Future steps:
+ * 1. Update UI components to use hook state directly rather than local state
+ * 2. Remove synchronization effects after all UI has been updated
+ * 3. Remove local filter state variables after complete transition
+ */
 export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId }: OrderManagerProps) {
   // Get user role from auth store
   const { isSuperAdmin, isAdmin, isStaff, user } = useAuthStore();
@@ -37,7 +55,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const {
     orders,
     fetchOrders,
-    fetchOrdersQuietly,    // For background polling
+    // fetchOrdersQuietly removed to fix lint warning - we're using it from getState() instead
     // updateOrderStatus, // Not used with server-side pagination
     updateOrderStatusQuietly,
     updateOrderData,
@@ -86,6 +104,29 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   
   // new orders highlighting (for newly arrived orders during polling)
   const [newOrders, setNewOrders] = useState<Set<string>>(new Set());
+
+  // Initialize our filter hook without removing existing state - for gradual refactoring
+  // This will run in parallel until we're ready to fully transition
+  const orderFiltersHook = useOrderFilters();
+  
+  // Destructure only what we need for now to avoid naming conflicts
+  // We'll gradually replace local state with the hook's methods
+  const {
+    getApiQueryParams,
+    getDateRange: getFilterDateRange,
+    setStatus: setHookStatus,
+    setDateFilter: setHookDateFilter,
+    setCustomDateRange: setHookCustomDateRange,
+    setSearchQuery: setHookSearchQuery,
+    setLocationFilter: setHookLocationFilter,
+    setStaffFilter: setHookStaffFilter,
+    setOnlineOrdersOnly: setHookOnlineOrdersOnly,
+    setSortNewestFirst: setHookSortNewestFirst,
+    setPage: setHookPage,
+    resetFilters // Add resetFilters for component cleanup
+  } = orderFiltersHook;
+  
+  // We'll add synchronization effects after all state variables are defined
 
   // for the "Set ETA" modal
   const [showEtaModal, setShowEtaModal] = useState(false);
@@ -174,15 +215,25 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const handleToggleOnlineOrders = useCallback(() => {
     setOnlineOrdersOnly(prevState => {
       const newState = !prevState;
+      
+      // Update the hook's state directly instead of relying on the sync effect
+      setHookOnlineOrdersOnly(newState);
+      
       // Only clear staff filter if turning on online orders
       if (newState) {
         setStaffFilter(null);
+        // Also update the hook's staff filter
+        setHookStaffFilter(null);
       }
+      
       // Reset to first page
       setCurrentPage(1);
+      // Also update the hook's page
+      setHookPage(1);
+      
       return newState;
     });
-  }, [setStaffFilter, setCurrentPage]);
+  }, [setStaffFilter, setCurrentPage, setHookOnlineOrdersOnly, setHookStaffFilter, setHookPage]);
   
   // Set current staff member ID for staff users
   const [currentStaffMemberId, setCurrentStaffMemberId] = useState<string | null>(null);
@@ -228,33 +279,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // ----------------------------------
   // Date / Search / Filter
   // ----------------------------------
-  // Helper function to create dates in Guam timezone (UTC+10)
-  const createGuamDate = useCallback((year?: number, month?: number, day?: number, hours: number = 0, minutes: number = 0, seconds: number = 0) => {
-    try {
-      // Create a new date object
-      const date = new Date();
-      
-      // Convert to Guam timezone
-      const guamOffset = 10 * 60; // UTC+10 in minutes
-      const localOffset = date.getTimezoneOffset();
-      const totalOffset = localOffset + guamOffset;
-      
-      // Adjust the date to Guam timezone
-      date.setMinutes(date.getMinutes() + totalOffset);
-      
-      // Set the provided values
-      if (year !== undefined) date.setFullYear(year);
-      if (month !== undefined) date.setMonth(month);
-      if (day !== undefined) date.setDate(day);
-      date.setHours(hours, minutes, seconds, 0);
-      
-      return date;
-    } catch (error) {
-      console.error('Error creating Guam date:', error);
-      // Return current date as fallback
-      return new Date();
-    }
-  }, []);
+  // NOTE: The createGuamDate function was removed as it's not currently used
+  // If timezone functionality is needed in the future, consider adding it back or using a library like date-fns-tz
   
   const getDateRange = useCallback(() => {
     try {
@@ -325,13 +351,64 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }
   }, [dateFilter, customStartDate, customEndDate]);
 
+  // Synchronize local state to the hook's state
+  // This keeps both state management approaches in sync during refactoring
+  
+  // Sync status filter
+  useEffect(() => {
+    setHookStatus(selectedStatus as any);
+  }, [selectedStatus, setHookStatus]);
+  
+  // Sync date filter
+  useEffect(() => {
+    setHookDateFilter(dateFilter as any);
+  }, [dateFilter, setHookDateFilter]);
+  
+  // Sync custom date range
+  useEffect(() => {
+    if (customStartDate && customEndDate) {
+      setHookCustomDateRange(customStartDate, customEndDate);
+    }
+  }, [customStartDate, customEndDate, setHookCustomDateRange]);
+  
+  // Sync search query
+  useEffect(() => {
+    setHookSearchQuery(searchQuery);
+  }, [searchQuery, setHookSearchQuery]);
+  
+  // Sync location filter
+  useEffect(() => {
+    setHookLocationFilter(locationFilter as any);
+  }, [locationFilter, setHookLocationFilter]);
+  
+  // Sync staff filter
+  useEffect(() => {
+    setHookStaffFilter(staffFilter);
+  }, [staffFilter, setHookStaffFilter]);
+  
+  // Sync online orders only filter
+  useEffect(() => {
+    setHookOnlineOrdersOnly(onlineOrdersOnly);
+  }, [onlineOrdersOnly, setHookOnlineOrdersOnly]);
+  
+  // Sync sort direction
+  useEffect(() => {
+    setHookSortNewestFirst(sortNewestFirst);
+  }, [sortNewestFirst, setHookSortNewestFirst]);
+  
+  // Sync pagination
+  useEffect(() => {
+    setHookPage(currentPage);
+  }, [currentPage, setHookPage]);
+  
   // Store a reference to the last page change timestamp to prevent race conditions
   const lastPageChangeRef = useRef<number>(0);
 
   // Define a function to fetch orders with current parameters
   // IMPORTANT: We DO NOT include currentPage in the dependency array to avoid stale closures
   const fetchOrdersWithParams = useCallback((requestId?: number, pageOverride?: number) => {
-    const { start, end } = getDateRange();
+    // Use the hook's getDateRange instead of our local one
+    const { start, end } = getFilterDateRange();
     
     // Use direct API call to ensure we get the right page
     const { fetchOrders } = useOrderStore.getState();
@@ -346,49 +423,51 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       setIsPageChanging(true);
     }
     
-    // Fetching orders with pagination and filters
-    
     // Create a unique source ID for tracking this request
     const sourceId = requestId ? `page-change-${requestId}` : `page-change-${Date.now()}`;
     
-    // Get current store state to log
-    // Store state available for debugging if needed
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const currentStoreState = useOrderStore.getState();
-    // Preparing to fetch with current store metadata
+    // REFACTORING: Using the hook's getApiQueryParams for gradual transition
+    // Phase 2: Start directly using the hook parameters but with our custom adjustments
     
-    // Make the API request with explicit parameters
-    // Add staff filter parameter for admin users
-    const params: any = {
-      page: pageToFetch, // Use the captured page parameter
-      perPage: ordersPerPage,
-      status: selectedStatus !== 'all' ? selectedStatus : null,
-      sortBy: 'created_at',
-      sortDirection: sortNewestFirst ? 'desc' : 'asc',
-      // Send the full ISO string with timezone information
-      // This ensures proper date boundaries are respected
-      dateFrom: start.toISOString(),
-      dateTo: end.toISOString(),
-      searchQuery: searchQuery || null,
-      restaurantId: restaurantId || null,
-      locationId: locationFilter, // Add location filter parameter
-      _sourceId: sourceId // Add a unique ID to track this request
-    };
+    // Get params from the hook
+    const params: any = getApiQueryParams();
     
-    // Debug log for date range parameters
-    console.log('Date Range Debug:', {
-      dateFilter,
-      customStartDate: customStartDate?.toISOString(),
-      customEndDate: customEndDate?.toISOString(),
-      calculatedStart: start.toISOString(),
-      calculatedEnd: end.toISOString(),
+    // Add or override specific parameters needed by this component
+    params.page = pageToFetch; // Use the captured page parameter
+    params.per_page = ordersPerPage;
+    params._sourceId = sourceId; // Add a unique ID to track this request
+    
+    // Restaurant ID might come from props, ensure it's set
+    if (restaurantId) {
+      // Ensure we don't add duplicate restaurant_id
+      params.restaurant_id = restaurantId;
+      // Remove any camelCase version that might exist
+      delete params.restaurantId;
+    }
+    
+    // Debug log for showing the generated parameters from the hook
+    // Since we're now directly using the hook's parameters, we just log the final result
+    console.log('Parameters from useOrderFilters hook:', {
+      params,
+      localStates: {
+        dateFilter,
+        customStartDate: customStartDate?.toISOString(),
+        customEndDate: customEndDate?.toISOString(),
+        calculatedStart: start.toISOString(),
+        calculatedEnd: end.toISOString(),
+        searchQuery,
+        status: selectedStatus,
+        locationFilter,
+        pageToFetch,
+        currentPage
+      },
       currentDateInGuam: new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' })).toISOString()
     });
     
     // Handle different user roles
     if (isSuperAdmin() || isAdmin()) {
-      // Always use the staff orders endpoint for admin users
-      params.endpoint = 'staff';
+      // The staff endpoint is causing 404 errors - comment out until backend route exists
+      // params.endpoint = 'staff';
       
       if (onlineOrdersOnly) {
         // Admin filtering for online orders only (customer orders)
@@ -413,28 +492,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     } else if (isStaff() && currentStaffMemberId) {
       // Staff users - backend policy will filter to show only their created orders and customer orders
       // We don't need to add any specific parameters as the backend policy handles this
-      // Staff user viewing orders - backend policy will filter appropriately
     }
-    
-    // Log the parameters being sent to the API
-
     
     fetchOrders(params);
     
-    // Log the request ID for debugging
-
-    // API request sent for order pagination
-    
     return sourceId; // Return the source ID for potential future reference
   }, [/* deliberately NOT including currentPage to avoid stale closures */
-      ordersPerPage, selectedStatus, sortNewestFirst, getDateRange, searchQuery, locationFilter, restaurantId, staffFilter, onlineOrdersOnly, isSuperAdmin, isAdmin]);
+      ordersPerPage, selectedStatus, sortNewestFirst, getFilterDateRange, searchQuery, locationFilter, restaurantId, staffFilter, onlineOrdersOnly, isSuperAdmin, isAdmin]);
 
   // Fetch orders quietly with current filter parameters (for background updates)
   const fetchOrdersWithParamsQuietly = useCallback(() => {
-    const { start, end } = getDateRange();
-    
-    // Log the current page to help with debugging
-    // Fetching orders quietly with current pagination parameters
+    // No longer need to calculate date range manually as we're using the hook's parameters
     
     // Get the function directly from the store to avoid stale references
     const { fetchOrdersQuietly } = useOrderStore.getState();
@@ -442,27 +510,44 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Create a unique source ID for tracking this request
     const sourceId = `quiet-update-${Date.now()}`;
     
-    // Add staff filter parameter for admin users
-    const params: any = {
-      page: currentPage,
-      perPage: ordersPerPage,
-      status: selectedStatus !== 'all' ? selectedStatus : null,
-      sortBy: 'created_at',
-      sortDirection: sortNewestFirst ? 'desc' : 'asc',
-      // Send the full ISO string with timezone information
-      // This ensures proper date boundaries are respected
-      dateFrom: start.toISOString(),
-      dateTo: end.toISOString(),
-      searchQuery: searchQuery || null,
-      locationId: locationFilter, // Add location filter parameter
-      restaurantId: restaurantId || null,
-      _sourceId: sourceId // Add a unique ID to track this request
-    };
+    // REFACTORING: Using the hook's getApiQueryParams for gradual transition
+    // Phase 2: Start directly using the hook parameters but with our custom adjustments
+    
+    // Get params directly from the hook
+    const params: any = getApiQueryParams();
+    
+    // Add or override specific parameters needed by this component
+    params.page = currentPage;
+    params.per_page = ordersPerPage;
+    params._sourceId = sourceId; // Add a unique ID to track this request
+    
+    // Restaurant ID might come from props, ensure it's set
+    if (restaurantId) {
+      // Use snake_case for consistency with backend parameters
+      params.restaurant_id = restaurantId;
+      // Remove any camelCase version that might exist
+      delete params.restaurantId;
+    }
+    
+    // For debugging - log the parameters
+    console.log('Quiet Update - Using hook params:', {
+      params,
+      localStates: {
+        page: currentPage,
+        status: selectedStatus,
+        dateFilter,
+        searchQuery,
+        locationFilter,
+        staffFilter,
+        onlineOrdersOnly,
+        sortNewestFirst,
+      }
+    });
     
     // Handle different user roles
     if (isSuperAdmin() || isAdmin()) {
-      // Always use the staff orders endpoint for admin users
-      params.endpoint = 'staff';
+      // The staff endpoint is causing 404 errors - comment out until backend route exists
+      // params.endpoint = 'staff';
       
       if (onlineOrdersOnly) {
         // Admin filtering for online orders only (customer orders)
@@ -638,6 +723,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       stopOrderPolling();
       unsubscribeFromStore();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Reset the hook's filter state when component unmounts
+      resetFilters();
     };
   }, []); // Only run on component mount and unmount
   
@@ -720,7 +808,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       // Use the imported websocketService instead of require
       websocketService.updatePaginationParams({
         page: currentPage,
-        perPage: ordersPerPage
+        perPage: ordersPerPage // Use camelCase as expected by websocketService interface
       });
       
       // Force a refresh of the current page to ensure we have correct data and metadata
@@ -983,6 +1071,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     console.debug(`[OrderManager:Pagination] Store metadata: ${JSON.stringify(metadata)}`);
     console.debug(`[OrderManager:Pagination] Calculated totalPages: ${totalPages}`);
     
+    // Add detailed order debugging
+    console.log('Orders received from API:', orders);
+    
     // Verify page synchronization
     if (metadata.page !== currentPage) {
       console.warn(`[OrderManager:Pagination] ⚠️ PAGE MISMATCH: Store metadata page (${metadata.page}) does not match component state (${currentPage})`);
@@ -1090,8 +1181,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         // Reset filters and fetch all orders to find it
         fetchOrders({
           page: 1,
-          perPage: 100, // Fetch more orders to increase chance of finding it
-          searchQuery: String(selectedOrderId)
+          per_page: 100, // Fetch more orders to increase chance of finding it
+          search_query: String(selectedOrderId) // Use snake_case to match OrderQueryParams interface
         });
       }
     }
@@ -1500,7 +1591,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={`skeleton-${i}`}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse animate-fadeIn"
+                className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-pulse"
                 style={{ animationDelay: `${i * 150}ms` }}
               >
                 <div className="flex justify-between items-center p-3 border-b border-gray-100">

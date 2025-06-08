@@ -32,14 +32,14 @@ export interface OrdersMetadata {
 
 export interface OrderQueryParams {
   page?: number;
-  perPage?: number;
+  per_page?: number;
   status?: string | null;
-  sortBy?: string;
-  sortDirection?: 'asc' | 'desc';
-  dateFrom?: string | null;
-  dateTo?: string | null;
-  searchQuery?: string | null;
-  restaurantId?: string | null;
+  sort_by?: string;
+  sort_direction?: 'asc' | 'desc';
+  date_from?: string | null;
+  date_to?: string | null;
+  search_query?: string | null;
+  restaurant_id?: string | null;
   endpoint?: string; // Used to determine which API endpoint to call (e.g., 'staff' for /orders/staff)
   online_orders_only?: string; // Used to filter for online orders only
   staff_member_id?: string; // Used to filter by staff member
@@ -611,39 +611,48 @@ export const useOrderStore = create<OrderStore>()(
         try {
           const {
             page = 1,
-            perPage = 10,
+            per_page = 10,
             status = null,
-            sortBy = 'created_at',
-            sortDirection = 'desc',
-            dateFrom = null,
-            dateTo = null,
-            searchQuery = null,
-            restaurantId = null
+            sort_by = 'created_at',
+            sort_direction = 'desc',
+            date_from = null,
+            date_to = null,
+            search_query = null,
+            restaurant_id = null
           } = params;
           
           // Build query string
           const queryParams = new URLSearchParams();
           queryParams.append('page', page.toString());
-          queryParams.append('per_page', perPage.toString());
+          queryParams.append('per_page', per_page.toString());
           if (status && status !== 'all') queryParams.append('status', status);
-          queryParams.append('sort_by', sortBy);
-          queryParams.append('sort_direction', sortDirection);
-          if (dateFrom) queryParams.append('date_from', dateFrom);
-          if (dateTo) queryParams.append('date_to', dateTo);
-          if (searchQuery) queryParams.append('search', searchQuery);
-          if (restaurantId) queryParams.append('restaurant_id', restaurantId);
+          queryParams.append('sort_by', sort_by);
+          queryParams.append('sort_direction', sort_direction);
+          if (date_from) queryParams.append('date_from', date_from);
+          if (date_to) queryParams.append('date_to', date_to);
+          if (search_query) queryParams.append('search', search_query);
+          if (restaurant_id) queryParams.append('restaurant_id', restaurant_id);
           
           // Include all other parameters from the params object
           // This ensures parameters like online_orders_only, staff_member_id, etc. are included
           Object.entries(params).forEach(([key, value]) => {
             // Skip parameters we've already handled and internal parameters (those starting with _)
-            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+            if (!['page', 'per_page', 'status', 'sort_by', 'sort_direction', 'date_from', 'date_to', 'search_query', 'restaurant_id', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
               queryParams.append(key, String(value));
             }
           });
           
-          // Determine the correct endpoint based on the endpoint parameter
-          const endpoint = params.endpoint === 'staff' ? '/orders/staff' : '/orders';
+          // Always use the standard '/orders' endpoint since '/orders/staff' doesn't exist
+          // The staff parameter will be passed as a query parameter instead
+          const endpoint = '/orders';
+          
+          // If staff endpoint was requested, add a staff=true parameter instead
+          if (params.endpoint === 'staff') {
+            queryParams.append('staff', 'true');
+          }
+          
+          // Remove the endpoint param since it's not a real API parameter
+          delete params.endpoint;
           
           const response = await api.get<{
             orders: Order[];
@@ -689,14 +698,14 @@ export const useOrderStore = create<OrderStore>()(
           
           const {
             page = 1,
-            perPage = 10,
+            per_page = 10,
             status = null,
-            sortBy = 'created_at',
-            sortDirection = 'desc',
-            dateFrom = null,
-            dateTo = null,
-            searchQuery = null,
-            restaurantId = null,
+            sort_by = 'created_at',
+            sort_direction = 'desc',
+            date_from = null,
+            date_to = null,
+            search_query = null,
+            restaurant_id = null,
             _sourceId = null
           } = params;
           
@@ -706,20 +715,20 @@ export const useOrderStore = create<OrderStore>()(
           // Build query string
           const queryParams = new URLSearchParams();
           queryParams.append('page', page.toString());
-          queryParams.append('per_page', perPage.toString());
+          queryParams.append('per_page', per_page.toString());
           if (status && status !== 'all') queryParams.append('status', status);
-          queryParams.append('sort_by', sortBy);
-          queryParams.append('sort_direction', sortDirection);
-          if (dateFrom) queryParams.append('date_from', dateFrom);
-          if (dateTo) queryParams.append('date_to', dateTo);
-          if (searchQuery) queryParams.append('search', searchQuery);
-          if (restaurantId) queryParams.append('restaurant_id', restaurantId);
+          queryParams.append('sort_by', sort_by);
+          queryParams.append('sort_direction', sort_direction);
+          if (date_from) queryParams.append('date_from', date_from);
+          if (date_to) queryParams.append('date_to', date_to);
+          if (search_query) queryParams.append('search', search_query);
+          if (restaurant_id) queryParams.append('restaurant_id', restaurant_id);
           
           // Include all other parameters from the params object
           // This ensures parameters like online_orders_only, staff_member_id, etc. are included
           Object.entries(params).forEach(([key, value]) => {
             // Skip parameters we've already handled and internal parameters (those starting with _)
-            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+            if (!['page', 'per_page', 'status', 'sort_by', 'sort_direction', 'date_from', 'date_to', 'search_query', 'restaurant_id', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
               queryParams.append(key, String(value));
             }
           });
@@ -730,12 +739,21 @@ export const useOrderStore = create<OrderStore>()(
             metadata: {
               ...state.metadata,
               page: page,
-              per_page: perPage
+              per_page: per_page
             }
           }));
           
-          // Determine the correct endpoint based on the endpoint parameter
-          const endpoint = params.endpoint === 'staff' ? '/orders/staff' : '/orders';
+          // Always use the standard '/orders' endpoint since '/orders/staff' doesn't exist
+          // The staff parameter will be passed as a query parameter instead
+          const endpoint = '/orders';
+          
+          // If staff endpoint was requested, add a staff=true parameter instead
+          if (params.endpoint === 'staff') {
+            queryParams.append('staff', 'true');
+          }
+          
+          // Remove the endpoint param since it's not a real API parameter
+          delete params.endpoint;
           
           const response = await api.get<{
             orders: Order[];
@@ -744,6 +762,17 @@ export const useOrderStore = create<OrderStore>()(
             per_page: number;
             total_pages: number;
           }>(`${endpoint}?${queryParams.toString()}`);
+          
+          // Debug API response
+          console.log(`[OrderStore] API response received for ${endpoint}:`, {
+            orderCount: response.orders?.length || 0,
+            metadata: {
+              total_count: response.total_count,
+              page: response.page,
+              per_page: response.per_page,
+              total_pages: response.total_pages
+            }
+          });
           
           // Check if this request is still the most recent one
           // If not, discard the results to prevent race conditions
