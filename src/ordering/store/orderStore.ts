@@ -56,8 +56,9 @@ interface OrderStore {
   websocketConnected: boolean;
   pollingInterval: number | null;
   connectionCheckInterval: NodeJS.Timeout | null;
-  _lastFetchRequestId: number;
-
+  // Replace request ID tracking with AbortController for better race condition handling
+  _currentFetchController: AbortController | null;
+  abortCurrentFetch: () => void;
   // WebSocket methods
   startWebSocketConnection: () => boolean | void;
   stopWebSocketConnection: () => void;
@@ -111,10 +112,44 @@ interface OrderStore {
   setCartItemNotes: (itemId: string, notes: string) => void;
 }
 
+/**
+ * Helper function to calculate pagination metadata with fallbacks
+ * Ensures we always have valid pagination values even when API returns incomplete data
+ */
+const calculatePaginationMetadata = (orders: Order[], metadata: OrdersMetadata): OrdersMetadata => {
+  // If metadata has valid values, use them
+  if (metadata.total_pages > 0 && metadata.total_count > 0) {
+    return metadata;
+  }
+  
+  // Calculate fallbacks when API doesn't provide proper values
+  const per_page = metadata.per_page || 10;
+  
+  // For total_count, use either what API provided or calculate from orders length
+  // If we have orders but total_count is 0, use at least the orders length
+  const total_count = orders.length > 0 ? Math.max(orders.length, metadata.total_count || 0) : metadata.total_count;
+  
+  // Calculate total_pages based on either API value or our calculated count
+  const total_pages = total_count > 0 ? Math.ceil(total_count / per_page) : 0;
+  
+  // Log what we're doing for debugging purposes
+  console.debug(`[OrderStore] Using fallback pagination calculation:`, {
+    originalMetadata: metadata,
+    calculatedMetadata: { ...metadata, total_count, total_pages },
+    ordersLength: orders.length
+  });
+  
+  return {
+    ...metadata,
+    total_count,
+    total_pages
+  };
+};
+
 export const useOrderStore = create<OrderStore>()(
   persist(
     (set, get) => ({
-      _lastFetchRequestId: 0,
+      _currentFetchController: null,
       orders: [],
       metadata: {
         total_count: 0,
@@ -127,6 +162,18 @@ export const useOrderStore = create<OrderStore>()(
       websocketConnected: false,
       pollingInterval: null,
       connectionCheckInterval: null,
+      
+      // ---------------------------------------------------------
+      // Abort any current fetch to prevent race conditions
+      // ---------------------------------------------------------
+      abortCurrentFetch: () => {
+        const controller = get()._currentFetchController;
+        if (controller) {
+          console.debug(`[OrderStore] Aborting current fetch request`);
+          controller.abort();
+          set({ _currentFetchController: null });
+        }
+      },
       
       // ---------------------------------------------------------
       // WebSocket Methods
@@ -595,6 +642,9 @@ export const useOrderStore = create<OrderStore>()(
       // Fetch orders with server-side pagination, filtering, and sorting
       // ---------------------------------------------------------
       fetchOrders: async (params: OrderQueryParams = {}) => {
+        // Create a new AbortController for this request
+        const controller = new AbortController();
+        
         // Check if this is a page change request (starts with 'page-change-')
         const isPaginationRequest = params._sourceId && String(params._sourceId).startsWith('page-change-');
         
@@ -607,6 +657,12 @@ export const useOrderStore = create<OrderStore>()(
           set({ error: null });
           console.debug(`[OrderStore] Handling pagination request: ${params._sourceId}, page: ${params.page}`);
         }
+        
+        // Abort any existing fetch to prevent race conditions
+        get().abortCurrentFetch();
+        
+        // Set this controller as the current fetch controller
+        set({ _currentFetchController: controller });
         
         try {
           const {
@@ -636,8 +692,13 @@ export const useOrderStore = create<OrderStore>()(
           // Include all other parameters from the params object
           // This ensures parameters like online_orders_only, staff_member_id, etc. are included
           Object.entries(params).forEach(([key, value]) => {
-            // Skip parameters we've already handled and internal parameters (those starting with _)
-            if (!['page', 'per_page', 'status', 'sort_by', 'sort_direction', 'date_from', 'date_to', 'search_query', 'restaurant_id', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+            // Skip parameters we've already handled, internal parameters (those starting with _),
+            // signal parameter, and object values to prevent serialization errors
+            if (!['page', 'per_page', 'status', 'sort_by', 'sort_direction', 'date_from', 'date_to', 'search_query', 'restaurant_id', 'endpoint', 'signal'].includes(key) 
+                && !key.startsWith('_') 
+                && value !== null 
+                && value !== undefined 
+                && typeof value !== 'object') {
               queryParams.append(key, String(value));
             }
           });
@@ -654,20 +715,31 @@ export const useOrderStore = create<OrderStore>()(
           // Remove the endpoint param since it's not a real API parameter
           delete params.endpoint;
           
+          // Pass the AbortController signal to the API request for cancellation support
           const response = await api.get<{
             orders: Order[];
             total_count: number;
             page: number;
             per_page: number;
             total_pages: number;
-          }>(`${endpoint}?${queryParams.toString()}`);
+          }>(`${endpoint}?${queryParams.toString()}`, { signal: controller.signal });
           
-          const metadata = {
+          // If the request was aborted while we were waiting, don't update state
+          if (get()._currentFetchController !== controller) {
+            console.debug(`[OrderStore] Request was superseded by a newer request, discarding results`);
+            return;
+          }
+          
+          // Create basic metadata from API response
+          const rawMetadata = {
             total_count: response.total_count || 0,
             page: response.page || 1,
             per_page: response.per_page || 10,
-            total_pages: response.total_pages || Math.ceil((response.total_count || 0) / (response.per_page || 10))
+            total_pages: response.total_pages || 0 // Don't calculate here, let the helper function do it
           };
+          
+          // Use our helper function to ensure consistent metadata calculation with fallbacks
+          const metadata = calculatePaginationMetadata(response.orders || [], rawMetadata);
           
           set({ 
             orders: response.orders || [], 
@@ -675,7 +747,20 @@ export const useOrderStore = create<OrderStore>()(
             loading: false 
           });
         } catch (err: any) {
+          // Don't report errors from aborted requests as they're expected
+          if (err.name === 'AbortError') {
+            console.debug('[OrderStore] Request was aborted');
+            // Still need to set loading to false for aborted requests in fetchOrders
+            set({ loading: false });
+            return;
+          }
+          
           set({ error: err.message, loading: false });
+        } finally {
+          // Clear the fetch controller if it's still the current one
+          if (get()._currentFetchController === controller) {
+            set({ _currentFetchController: null });
+          }
         }
       },
 
@@ -685,6 +770,9 @@ export const useOrderStore = create<OrderStore>()(
       // Track the last fetch request to prevent race conditions
       
       fetchOrdersQuietly: async (params: OrderQueryParams = {}) => {
+        // Create a new AbortController for this request
+        const controller = new AbortController();
+        
         try {
           // If source is polling and WebSocket is connected, skip the request
           if (params._sourceId === 'polling' && get().websocketConnected) {
@@ -692,9 +780,11 @@ export const useOrderStore = create<OrderStore>()(
             return;
           }
           
-          // Generate a unique request ID to track this specific request
-          const requestId = get()._lastFetchRequestId + 1;
-          set({ _lastFetchRequestId: requestId });
+          // Abort any existing fetch to prevent race conditions
+          get().abortCurrentFetch();
+          
+          // Set this controller as the current fetch controller
+          set({ _currentFetchController: controller });
           
           const {
             page = 1,
@@ -709,8 +799,8 @@ export const useOrderStore = create<OrderStore>()(
             _sourceId = null
           } = params;
           
-          // Log the request with its ID and source for debugging
-          console.debug(`[OrderStore] Fetch request #${requestId} from source ${_sourceId || 'unknown'} for page ${page}`);
+          // Log the request source and parameters for debugging
+          console.debug(`[OrderStore] Fetch request from source ${_sourceId || 'unknown'} for page ${page}`);
           
           // Build query string
           const queryParams = new URLSearchParams();
@@ -727,8 +817,13 @@ export const useOrderStore = create<OrderStore>()(
           // Include all other parameters from the params object
           // This ensures parameters like online_orders_only, staff_member_id, etc. are included
           Object.entries(params).forEach(([key, value]) => {
-            // Skip parameters we've already handled and internal parameters (those starting with _)
-            if (!['page', 'per_page', 'status', 'sort_by', 'sort_direction', 'date_from', 'date_to', 'search_query', 'restaurant_id', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+            // Skip parameters we've already handled, internal parameters (those starting with _),
+            // signal parameter, and object values to prevent serialization errors
+            if (!['page', 'per_page', 'status', 'sort_by', 'sort_direction', 'date_from', 'date_to', 'search_query', 'restaurant_id', 'endpoint', 'signal'].includes(key) 
+                && !key.startsWith('_') 
+                && value !== null 
+                && value !== undefined 
+                && typeof value !== 'object') {
               queryParams.append(key, String(value));
             }
           });
@@ -755,13 +850,14 @@ export const useOrderStore = create<OrderStore>()(
           // Remove the endpoint param since it's not a real API parameter
           delete params.endpoint;
           
+          // Pass the AbortController signal to the API request for cancellation support
           const response = await api.get<{
             orders: Order[];
             total_count: number;
             page: number;
             per_page: number;
             total_pages: number;
-          }>(`${endpoint}?${queryParams.toString()}`);
+          }>(`${endpoint}?${queryParams.toString()}`, { signal: controller.signal });
           
           // Debug API response
           console.log(`[OrderStore] API response received for ${endpoint}:`, {
@@ -774,29 +870,50 @@ export const useOrderStore = create<OrderStore>()(
             }
           });
           
-          // Check if this request is still the most recent one
-          // If not, discard the results to prevent race conditions
-          if (requestId !== get()._lastFetchRequestId) {
-            console.debug(`[OrderStore] Discarding stale response for request #${requestId} from ${_sourceId || 'unknown'}, current is #${get()._lastFetchRequestId}`);
+          // If the request was aborted while we were waiting, don't update state
+          if (get()._currentFetchController !== controller) {
+            console.debug(`[OrderStore] Request was superseded by a newer request, discarding results`);
             return;
           }
           
-          const metadata = {
+          // Create basic metadata from API response
+          const rawMetadata = {
             total_count: response.total_count || 0,
             page: response.page || 1,
             per_page: response.per_page || 10,
-            total_pages: response.total_pages || Math.ceil((response.total_count || 0) / (response.per_page || 10))
+            total_pages: response.total_pages || 0 // Don't calculate here, let the helper function do it
           };
           
-          console.debug(`[OrderStore] Updating state with page ${metadata.page} data from request #${requestId} (source: ${_sourceId || 'unknown'})`);
+          // Use our helper function to ensure consistent metadata calculation with fallbacks
+          const metadata = calculatePaginationMetadata(response.orders || [], rawMetadata);
+          console.debug(`[OrderStore] Updating state with page ${metadata.page} data from source: ${_sourceId || 'unknown'}`);
           console.debug(`[OrderStore] Metadata from API: total_count=${metadata.total_count}, total_pages=${metadata.total_pages}`);
           
+          // If we have orders but total_count is 0, use orders length instead
+          const ordersArray = response.orders || [];
+          if (metadata.total_count === 0 && ordersArray.length > 0) {
+            metadata.total_count = ordersArray.length;
+            metadata.total_pages = Math.ceil(ordersArray.length / metadata.per_page);
+            console.debug(`[OrderStore] Corrected metadata from orders array: total_count=${metadata.total_count}, total_pages=${metadata.total_pages}`);
+          }
+          
           // Only update orders, don't change loading state
-          set({ orders: response.orders || [], metadata });
+          set({ orders: ordersArray, metadata });
         } catch (err: any) {
-          // Only update error, don't change loading state
+          // Don't report errors from aborted requests as they're expected
+          if (err.name === 'AbortError') {
+            console.debug('[OrderStore] Request was aborted');
+            return;
+          }
+          
+          // Only update error state for real errors, don't change loading state
           set({ error: err.message });
-          console.error('Error fetching orders:', err.message);
+          console.error('[OrderStore] Error fetching orders:', err.message);
+        } finally {
+          // Clear the fetch controller if it's still the current one
+          if (get()._currentFetchController === controller) {
+            set({ _currentFetchController: null });
+          }
         }
       },
 

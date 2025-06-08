@@ -82,9 +82,6 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [staffFilter, setStaffFilter] = useState<string | null>(null);
   const [staffMembers, setStaffMembers] = useState<Array<{id: string, name: string, type: 'staff' | 'user'}>>([]);
   
-  // user filter for admin users - keeping state but not using in UI
-  const [userFilter] = useState<string | null>(null);
-  
   // location filter for multi-location restaurants
   const [locationFilter, setLocationFilter] = useState<number | null>(null);
   
@@ -102,6 +99,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // selected orders for batch actions
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   
+  // Ref for tracking WebSocket refresh debouncing
+  const wsRefreshTimeoutRef = useRef<number | undefined>(undefined);
+  
   // new orders highlighting (for newly arrived orders during polling)
   const [newOrders, setNewOrders] = useState<Set<string>>(new Set());
 
@@ -109,11 +109,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // This will run in parallel until we're ready to fully transition
   const orderFiltersHook = useOrderFilters();
   
-  // Destructure only what we need for now to avoid naming conflicts
-  // We'll gradually replace local state with the hook's methods
+  // Destructure everything we need from the hook
   const {
     getApiQueryParams,
-    getDateRange: getFilterDateRange,
+    filters: hookFilters,
     setStatus: setHookStatus,
     setDateFilter: setHookDateFilter,
     setCustomDateRange: setHookCustomDateRange,
@@ -213,32 +212,66 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   
   // Handle toggling the online orders filter
   const handleToggleOnlineOrders = useCallback(() => {
-    setOnlineOrdersOnly(prevState => {
-      const newState = !prevState;
-      
-      // Update the hook's state directly instead of relying on the sync effect
-      setHookOnlineOrdersOnly(newState);
-      
-      // Only clear staff filter if turning on online orders
-      if (newState) {
-        setStaffFilter(null);
-        // Also update the hook's staff filter
-        setHookStaffFilter(null);
-      }
-      
-      // Reset to first page
-      setCurrentPage(1);
-      // Also update the hook's page
-      setHookPage(1);
-      
-      return newState;
-    });
-  }, [setStaffFilter, setCurrentPage, setHookOnlineOrdersOnly, setHookStaffFilter, setHookPage]);
+    // REFACTORING: Phase 4: Fully rely on hook state and just keep local state in sync
+    // Get current value from the hook
+    const currentValue = hookFilters.onlineOrdersOnly;
+    const newState = !currentValue;
+    
+    // Update the hook's state directly
+    setHookOnlineOrdersOnly(newState);
+    
+    // Also keep local state in sync during transition
+    setOnlineOrdersOnly(newState);
+    
+    // Only clear staff filter if turning on online orders
+    if (newState) {
+      // Update hook state first
+      setHookStaffFilter(null);
+      // Keep local state in sync
+      setStaffFilter(null);
+    }
+    
+    // Reset to first page
+    setHookPage(1);
+    // Keep local state in sync
+    setCurrentPage(1);
+    
+    // Log for debugging
+    console.debug('[OrderManager:Migration] Online orders filter toggled:', newState);
+  }, [hookFilters.onlineOrdersOnly, setHookOnlineOrdersOnly, setOnlineOrdersOnly, setHookStaffFilter, setStaffFilter, setHookPage, setCurrentPage]);
   
-  // Set current staff member ID for staff users
-  const [currentStaffMemberId, setCurrentStaffMemberId] = useState<string | null>(null);
+  // Hook now handles staff member filters, we keep this transitionally
+  // const [currentStaffMemberId, setCurrentStaffMemberId] = useState<string | null>(null);
   
-  // Get current staff member ID for staff users
+  // Add synchronization effects to keep component state and hook state in sync during transition
+  // This will allow us to gradually replace the local state with hook state
+  
+  // Effect 1: Sync from local state to hook state when local state changes (temporary during migration)
+  useEffect(() => {
+    console.debug('[OrderManager:Migration] Syncing from local state to hook state');
+    setHookStatus(selectedStatus);
+    setHookDateFilter(dateFilter);
+    if (dateFilter === 'custom') {
+      setHookCustomDateRange(customStartDate, customEndDate);
+    }
+    setHookSearchQuery(searchQuery);
+    setHookLocationFilter(locationFilter);
+    setHookStaffFilter(staffFilter);
+    setHookOnlineOrdersOnly(onlineOrdersOnly);
+    setHookSortNewestFirst(sortNewestFirst);
+    setHookPage(currentPage);
+  }, [selectedStatus, dateFilter, customStartDate, customEndDate, searchQuery, 
+      locationFilter, staffFilter, onlineOrdersOnly, sortNewestFirst, currentPage,
+      setHookStatus, setHookDateFilter, setHookCustomDateRange, setHookSearchQuery,
+      setHookLocationFilter, setHookStaffFilter, setHookOnlineOrdersOnly, 
+      setHookSortNewestFirst, setHookPage]);
+
+  // Effect 2: Log changes in hook state (for debugging during migration)
+  useEffect(() => {
+    console.debug('[OrderManager:Migration] Hook filter state changed:', hookFilters);
+  }, [hookFilters]);
+  
+  // Get current staff member ID for staff users and update the hook directly
   useEffect(() => {
     if (isStaff() && user) {
       const fetchCurrentStaffMember = async () => {
@@ -264,8 +297,11 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           }
           
           if (staffMemberData && staffMemberData.id) {
-            // Staff record found for current user
-            setCurrentStaffMemberId(staffMemberData.id.toString());
+            // Staff record found for current user - update both local state and hook state
+            // Setting the hook state directly, as we're migrating away from local state
+            setStaffFilter(staffMemberData.id.toString());
+            setHookStaffFilter(staffMemberData.id.toString());
+            console.debug('[OrderManager:Migration] Setting staff member ID:', staffMemberData.id.toString());
           }
         } catch (error) {
           console.error('Failed to fetch current staff member:', error);
@@ -274,7 +310,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       
       fetchCurrentStaffMember();
     }
-  }, [isStaff, user]);
+  }, [isStaff, user, setStaffFilter, setHookStaffFilter]);
   
   // ----------------------------------
   // Date / Search / Filter
@@ -282,74 +318,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // NOTE: The createGuamDate function was removed as it's not currently used
   // If timezone functionality is needed in the future, consider adding it back or using a library like date-fns-tz
   
-  const getDateRange = useCallback(() => {
-    try {
-      // Get current date in Guam timezone
-      const now = new Date();
-      const guamDate = new Date(now.toLocaleString('en-US', { timeZone: 'Pacific/Guam' }));
-      
-      // Extract date components
-      const year = guamDate.getFullYear();
-      const month = guamDate.getMonth();
-      const date = guamDate.getDate();
-      const dayOfWeek = guamDate.getDay(); // 0 is Sunday, 6 is Saturday
-      
-      // Create today's start and end
-      const today = new Date(year, month, date, 0, 0, 0);
-      const todayEnd = new Date(year, month, date, 23, 59, 59);
-      
-      // Create yesterday's start and end
-      const yesterday = new Date(year, month, date - 1, 0, 0, 0);
-      const yesterdayEnd = new Date(year, month, date - 1, 23, 59, 59);
-      
-      // Calculate this week's start (Sunday)
-      const weekStart = new Date(year, month, date - dayOfWeek, 0, 0, 0);
-      
-      // Calculate last week's start and end
-      // Start: Sunday of previous week
-      const lastWeekStart = new Date(year, month, date - dayOfWeek - 7, 0, 0, 0);
-      // End: Saturday of previous week
-      const lastWeekEnd = new Date(year, month, date - dayOfWeek - 1, 23, 59, 59);
-      
-      // Get first day of month
-      const monthStart = new Date(year, month, 1, 0, 0, 0);
-
-      // Handle different date filter options
-      switch (dateFilter) {
-        case 'today':
-          // For today, use today at 00:00:00 to today at 23:59:59
-          return { start: today, end: todayEnd };
-        case 'yesterday':
-          // For yesterday, use yesterday at 00:00:00 to yesterday at 23:59:59
-          return { start: yesterday, end: yesterdayEnd };
-        case 'thisWeek':
-          // For this week, use week start at 00:00:00 to today at 23:59:59
-          return { start: weekStart, end: todayEnd };
-        case 'lastWeek':
-          // For last week, use last week start at 00:00:00 to last week end at 23:59:59
-          return { start: lastWeekStart, end: lastWeekEnd };
-        case 'thisMonth':
-          // For this month, use month start at 00:00:00 to today at 23:59:59
-          return { start: monthStart, end: todayEnd };
-        case 'custom':
-          // For custom range, use the custom dates with proper time boundaries
-          return { 
-            start: customStartDate || today, 
-            end: customEndDate || todayEnd 
-          };
-        default:
-          // Default to today
-          return { start: today, end: todayEnd };
-      }
-    } catch (error) {
-      console.error('Error calculating date range:', error);
-      // Fallback to a safe default - today
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-      return { start: startOfToday, end: endOfToday };
-    }
-  }, [dateFilter, customStartDate, customEndDate]);
+  // getDateRange function has been removed as part of the migration to useOrderFilters hook
+  // We now use the hook's getDateRange method instead
 
   // Synchronize local state to the hook's state
   // This keeps both state management approaches in sync during refactoring
@@ -396,6 +366,44 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setHookSortNewestFirst(sortNewestFirst);
   }, [sortNewestFirst, setHookSortNewestFirst]);
   
+  // REFACTORING: Phase 4 - Shared pagination handler to handle page changes consistently
+  const handlePageChange = useCallback((newPage: number, source: string) => {
+    // Prevent multiple rapid clicks
+    const now = Date.now();
+    const timeSinceLastChange = now - lastPageChangeRef.current;
+    if (timeSinceLastChange < 300) {
+      console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
+      return;
+    }
+    
+    // Save current orders for smooth transition
+    if (orders.length > 0) {
+      setPreviousOrders(orders);
+      setIsPageChanging(true);
+    }
+    
+    // Generate a unique timestamp for this page change
+    const pageChangeTimestamp = now;
+    lastPageChangeRef.current = pageChangeTimestamp;
+    
+    // Immediately update store metadata to ensure consistency
+    // This helps prevent race conditions with the useEffect
+    useOrderStore.setState(state => ({
+      metadata: {
+        ...state.metadata,
+        page: newPage
+      },
+      _lastFetchRequestId: pageChangeTimestamp
+    }));
+    
+    // Update hook state first
+    setHookPage(newPage);
+    // Keep local state in sync during transition
+    setCurrentPage(newPage);
+    
+    console.debug(`[OrderManager:Migration] Page changed to: ${newPage} (source: ${source})`);
+  }, [orders, setPreviousOrders, setIsPageChanging, setHookPage, setCurrentPage]);
+  
   // Sync pagination
   useEffect(() => {
     setHookPage(currentPage);
@@ -407,193 +415,81 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // Define a function to fetch orders with current parameters
   // IMPORTANT: We DO NOT include currentPage in the dependency array to avoid stale closures
   const fetchOrdersWithParams = useCallback((requestId?: number, pageOverride?: number) => {
-    // Use the hook's getDateRange instead of our local one
-    const { start, end } = getFilterDateRange();
-    
     // Use direct API call to ensure we get the right page
     const { fetchOrders } = useOrderStore.getState();
-    
-    // Use the pageOverride if provided, otherwise use currentPage from state
-    // This prevents stale closures from using outdated page numbers
-    const pageToFetch = pageOverride !== undefined ? pageOverride : currentPage;
     
     // If this is a page change (pageOverride is provided), save current orders for smooth transition
     if (pageOverride !== undefined && orders.length > 0) {
       setPreviousOrders(orders);
       setIsPageChanging(true);
+      
+      // Update the hook's page state first
+      setHookPage(pageOverride);
     }
     
     // Create a unique source ID for tracking this request
     const sourceId = requestId ? `page-change-${requestId}` : `page-change-${Date.now()}`;
     
-    // REFACTORING: Using the hook's getApiQueryParams for gradual transition
-    // Phase 2: Start directly using the hook parameters but with our custom adjustments
-    
-    // Get params from the hook
+    // REFACTORING: Phase 3: Fully rely on the hook for all parameters
+    // Get complete params directly from the hook
     const params: any = getApiQueryParams();
     
-    // Add or override specific parameters needed by this component
-    params.page = pageToFetch; // Use the captured page parameter
-    params.per_page = ordersPerPage;
-    params._sourceId = sourceId; // Add a unique ID to track this request
+    // Only add a source ID for tracking and restaurant ID if needed
+    params._sourceId = sourceId;
     
     // Restaurant ID might come from props, ensure it's set
     if (restaurantId) {
-      // Ensure we don't add duplicate restaurant_id
       params.restaurant_id = restaurantId;
-      // Remove any camelCase version that might exist
-      delete params.restaurantId;
     }
     
     // Debug log for showing the generated parameters from the hook
-    // Since we're now directly using the hook's parameters, we just log the final result
-    console.log('Parameters from useOrderFilters hook:', {
+    console.log('[OrderManager:Migration] Fetching orders with hook parameters:', {
       params,
-      localStates: {
-        dateFilter,
-        customStartDate: customStartDate?.toISOString(),
-        customEndDate: customEndDate?.toISOString(),
-        calculatedStart: start.toISOString(),
-        calculatedEnd: end.toISOString(),
-        searchQuery,
-        status: selectedStatus,
-        locationFilter,
-        pageToFetch,
-        currentPage
-      },
+      hookFilters,
+      pageOverride,
       currentDateInGuam: new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' })).toISOString()
     });
     
-    // Handle different user roles
-    if (isSuperAdmin() || isAdmin()) {
-      // The staff endpoint is causing 404 errors - comment out until backend route exists
-      // params.endpoint = 'staff';
-      
-      if (onlineOrdersOnly) {
-        // Admin filtering for online orders only (customer orders)
-        params.online_orders_only = 'true';
-        // Explicitly clear other filter parameters to avoid conflicts
-        delete params.staff_member_id;
-        delete params.user_id;
-        delete params.include_online_orders;
-      } else if (staffFilter) {
-        // Admin filtering by specific staff member
-        params.staff_member_id = staffFilter;
-        // Ensure online orders filter is off
-        delete params.online_orders_only;
-      } else if (userFilter) {
-        // Admin filtering by specific user
-        params.user_id = userFilter;
-        // Include online orders with user orders if requested
-        params.include_online_orders = 'true';
-        // Ensure online orders filter is off
-        delete params.online_orders_only;
-      }
-    } else if (isStaff() && currentStaffMemberId) {
-      // Staff users - backend policy will filter to show only their created orders and customer orders
-      // We don't need to add any specific parameters as the backend policy handles this
-    }
-    
+    // All filter conditions are now handled by the hook's getApiQueryParams
     fetchOrders(params);
     
-    return sourceId; // Return the source ID for potential future reference
+    return sourceId;
   }, [/* deliberately NOT including currentPage to avoid stale closures */
-      ordersPerPage, selectedStatus, sortNewestFirst, getFilterDateRange, searchQuery, locationFilter, restaurantId, staffFilter, onlineOrdersOnly, isSuperAdmin, isAdmin]);
+      orders, setPreviousOrders, setIsPageChanging, setHookPage, getApiQueryParams, 
+      hookFilters, restaurantId]);
 
   // Fetch orders quietly with current filter parameters (for background updates)
   const fetchOrdersWithParamsQuietly = useCallback(() => {
-    // No longer need to calculate date range manually as we're using the hook's parameters
-    
     // Get the function directly from the store to avoid stale references
     const { fetchOrdersQuietly } = useOrderStore.getState();
     
     // Create a unique source ID for tracking this request
     const sourceId = `quiet-update-${Date.now()}`;
     
-    // REFACTORING: Using the hook's getApiQueryParams for gradual transition
-    // Phase 2: Start directly using the hook parameters but with our custom adjustments
-    
-    // Get params directly from the hook
+    // REFACTORING: Phase 3: Fully rely on the hook for all parameters
+    // Get complete params directly from the hook
     const params: any = getApiQueryParams();
     
-    // Add or override specific parameters needed by this component
-    params.page = currentPage;
-    params.per_page = ordersPerPage;
-    params._sourceId = sourceId; // Add a unique ID to track this request
+    // Only add a source ID for tracking and restaurant ID if needed
+    params._sourceId = sourceId;
     
     // Restaurant ID might come from props, ensure it's set
     if (restaurantId) {
-      // Use snake_case for consistency with backend parameters
       params.restaurant_id = restaurantId;
-      // Remove any camelCase version that might exist
-      delete params.restaurantId;
     }
     
     // For debugging - log the parameters
-    console.log('Quiet Update - Using hook params:', {
+    console.log('[OrderManager:Migration] Quiet fetch with hook parameters:', {
       params,
-      localStates: {
-        page: currentPage,
-        status: selectedStatus,
-        dateFilter,
-        searchQuery,
-        locationFilter,
-        staffFilter,
-        onlineOrdersOnly,
-        sortNewestFirst,
-      }
+      hookFilters,
+      currentDateInGuam: new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Guam' })).toISOString()
     });
     
-    // Handle different user roles
-    if (isSuperAdmin() || isAdmin()) {
-      // The staff endpoint is causing 404 errors - comment out until backend route exists
-      // params.endpoint = 'staff';
-      
-      if (onlineOrdersOnly) {
-        // Admin filtering for online orders only (customer orders)
-        params.online_orders_only = 'true';
-        // Explicitly clear other filter parameters to avoid conflicts
-        delete params.staff_member_id;
-        delete params.user_id;
-        delete params.include_online_orders;
-      } else if (staffFilter) {
-        // Admin filtering by specific staff member
-        params.staff_member_id = staffFilter;
-        // Ensure online orders filter is off
-        delete params.online_orders_only;
-      } else if (userFilter) {
-        // Admin filtering by specific user
-        params.user_id = userFilter;
-        // Include online orders with user orders if requested
-        params.include_online_orders = 'true';
-        // Ensure online orders filter is off
-        delete params.online_orders_only;
-      }
-    } else if (isStaff() && currentStaffMemberId) {
-      // Staff users - backend policy will filter to show only their created orders and customer orders
-      // We don't need to add any specific parameters as the backend policy handles this
-      // Staff user viewing orders - backend policy will filter appropriately
-    }
-    
+    // All filter conditions are now handled by the hook's getApiQueryParams
     fetchOrdersQuietly(params);
     
-    // Log the request ID for debugging
-    // Quiet API request sent
-  }, [
-    currentPage,
-    ordersPerPage,
-    selectedStatus,
-    sortNewestFirst,
-    getDateRange,
-    searchQuery,
-    restaurantId,
-    currentStaffMemberId,
-    staffFilter,
-    userFilter,
-    onlineOrdersOnly,
-    isSuperAdmin,
-    isAdmin
-  ]);
+    return sourceId;
+  }, [getApiQueryParams, hookFilters, restaurantId]);
 
   // ----------------------------------
   // Setup WebSocket connection - only on component mount
@@ -642,6 +538,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       if (state.websocketConnected && state.pollingInterval !== null) {
         // WebSocket connected, stopping polling
         stopOrderPolling();
+        console.log('[OrderManager:WebSocket] WebSocket connected, polling stopped');
+      }
+      
+      // When store metadata updates, just log it without triggering automatic refreshes
+      // This prevents infinite refresh loops
+      if (state.metadata) {
+        console.log('[OrderManager:WebSocket] Received metadata update:', { metadata: state.metadata });
+        
+        // We don't automatically refresh based on metadata updates anymore
+        // This avoids the infinite loop of refreshes we were seeing
       }
       
       const storeOrders = state.orders;
@@ -649,27 +555,58 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         .filter((o) => !currentOrderIds.has(o.id))
         .map((o) => o.id);
 
-      // Check if metadata has changed unexpectedly (possible WebSocket issue)
+      // We previously had a check here for suspicious metadata (total_pages > 100)
+      // but this was causing an infinite refresh loop. Instead of automatically refreshing,
+      // we'll just log any unusual metadata values for monitoring.
       if (state.metadata && state.metadata.total_pages > 100) {
         console.warn(`[OrderManager:Pagination] ⚠️ Detected suspicious metadata update: total_pages=${state.metadata.total_pages}, total_count=${state.metadata.total_count}`);
-        console.warn('[OrderManager:Pagination] This may be caused by a WebSocket update affecting pagination metadata');
-        
-        // Force a refresh of the current page to get correct metadata
-        // Forcing refresh to restore correct pagination metadata
-        fetchOrdersWithParams(Date.now(), currentPage);
-        return;
+        console.warn('[OrderManager:Pagination] This may be caused by a WebSocket update - not automatically refreshing to avoid loops');
+        // No longer forcing a refresh here to avoid infinite loops
       }
 
       if (newOrderIds.length > 0) {
-        // Mark them as new
+        // Log the new orders for debugging
+        console.log(`[OrderManager:WebSocket] Received ${newOrderIds.length} new orders:`, { 
+          newOrderIds
+        });
+        
+        // Mark them as new for UI highlighting
         setNewOrders((prev) => {
           const updated = new Set(prev);
           newOrderIds.forEach((id) => updated.add(id));
           return updated;
         });
 
-        // Update the known IDs
+        // Update the known IDs for tracking
         newOrderIds.forEach((id) => currentOrderIds.add(id));
+        
+        // Instead of auto-refreshing on every WebSocket update, we'll use a more conservative approach
+        // Only refresh orders via WebSocket in specific circumstances to prevent infinite loops
+        
+        // Check if we have active filters that might need a refresh to ensure consistency
+        const hasActiveFilters = 
+            hookFilters.status !== 'all' || 
+            hookFilters.dateFilter !== 'today' || // Using 'today' as comparison since 'all' isn't in DateFilterOption
+            !!hookFilters.searchQuery || 
+            !!hookFilters.staffFilter;
+        
+        // We won't auto-refresh as aggressively as before. Instead, we'll let the user manually refresh
+        // or wait for the regular polling interval to update the orders
+        if (hasActiveFilters && state.websocketConnected && newOrderIds.length >= 5) {
+          // Only trigger a refresh if we get a significant batch of new orders (5 or more)
+          console.log('[OrderManager:WebSocket] Significant batch of new orders with active filters. Will refresh...');
+          
+          // Use setTimeout to avoid too many refreshes in rapid succession
+          if (wsRefreshTimeoutRef.current) {
+            clearTimeout(wsRefreshTimeoutRef.current);
+          }
+          
+          // Longer delay to avoid cascading refreshes
+          wsRefreshTimeoutRef.current = window.setTimeout(() => {
+            console.log('[OrderManager:WebSocket] Performing quiet refresh after significant update');
+            fetchOrdersWithParamsQuietly();
+          }, 5000); // Longer delay to avoid refresh loops
+        }
 
         // Clear highlight after 30s
         setTimeout(() => {
@@ -689,8 +626,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       } else {
         // First stop any polling that might be running
         stopOrderPolling();
+        
+        // Abort any in-progress fetch to ensure our new request is accepted
+        const { abortCurrentFetch } = useOrderStore.getState();
+        abortCurrentFetch();
+        
+        console.log('[OrderManager] Tab became visible - aborting any pending requests and refreshing orders');
+        
         // Refresh once, then start WebSocket again
         fetchOrdersWithParamsQuietly();
+        
         // Short delay to ensure the fetch completes before WebSocket reconnects
         setTimeout(() => {
           initializeWebSocket();
@@ -709,22 +654,23 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }, 30000);
 
     return () => {
+      console.debug('[OrderManager] Component unmounting, cleaning up resources');
+      
       // Clean up all intervals and event listeners
       clearInterval(websocketCheckInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      unsubscribeFromStore();
       
-      // Don't disconnect WebSocket when changing pages - only when component unmounts completely
-      // This prevents the WebSocket connection from being repeatedly closed and reopened
-      if (document.visibilityState !== 'visible') {
-        // Stopping WebSocket connection on component unmount
-        stopWebSocketConnection();
+      // Clear any pending timeouts to avoid memory leaks
+      if (wsRefreshTimeoutRef.current) {
+        clearTimeout(wsRefreshTimeoutRef.current);
+        wsRefreshTimeoutRef.current = undefined;
       }
-      stopOrderPolling();
-      unsubscribeFromStore();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       
-      // Reset the hook's filter state when component unmounts
+      // Clean up WebSocket connection and store subscriptions
+      stopWebSocketConnection();
+      unsubscribeFromStore();
+      
+      // Reset the hook's filter state when component unmounts for clean slate
       resetFilters();
     };
   }, []); // Only run on component mount and unmount
@@ -737,9 +683,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     
     // Record the timestamp of this page change to prevent race conditions
     const changeTimestamp = Date.now();
-    // Previous timestamp for tracking request timing
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const previousTimestamp = lastPageChangeRef.current;
+    // Previous timestamp removed as part of the migration to useOrderFilters
+    // const previousTimestamp = lastPageChangeRef.current;
     lastPageChangeRef.current = changeTimestamp;
     
     // Page change timestamp updated
@@ -751,9 +696,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     
     // Update the store's metadata to ensure WebSocket uses correct page
     // This is critical for ensuring pagination works correctly
-    // Previous metadata for comparison during debugging
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const previousMetadata = { ...useOrderStore.getState().metadata };
+    // Previous metadata removed as part of the migration to useOrderFilters
+    // const previousMetadata = { ...useOrderStore.getState().metadata };
     useOrderStore.setState(state => ({
       metadata: {
         ...state.metadata,
@@ -1063,6 +1007,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // Get metadata from store
   const { metadata } = useOrderStore();
   // const totalOrders = metadata.total_count; // Not directly used in the component
+  
+  // Total pages comes directly from metadata now that store has robust fallback calculation
   const totalPages = metadata.total_pages;
   
   // Add a useEffect to log when orders change and verify page synchronization
@@ -1073,6 +1019,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     
     // Add detailed order debugging
     console.log('Orders received from API:', orders);
+    // Debug the metadata to see why orders aren't displaying
+    console.log('Metadata in OrderManager:', metadata);
     
     // Verify page synchronization
     if (metadata.page !== currentPage) {
@@ -1428,7 +1376,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             <label className="block text-sm font-medium text-gray-700 mb-2">Search Orders</label>
             <SearchInput
               value={searchQuery}
-              onChange={setSearchQuery}
+              onChange={(query) => {
+                // Update hook state first
+                setHookSearchQuery(query);
+                // Keep local state in sync during migration
+                setSearchQuery(query);
+                console.log('[OrderManager:Migration] Search query changed:', { query });
+              }}
               placeholder="Search by order #, name, email, or phone"
               className="w-full h-12 shadow-sm border-gray-300 rounded-md"
             />
@@ -1452,12 +1406,26 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     ]}
                     value={staffFilter || ''}
                     onChange={(value) => {
+                      // Update hook state first
+                      setHookStaffFilter(value === '' ? null : value);
+                      // Keep local state in sync during migration
                       setStaffFilter(value === '' ? null : value);
+                      
                       // Only clear online orders filter if a staff member is selected
                       if (value !== '') {
+                        // Update hook state first
+                        setHookOnlineOrdersOnly(false);
+                        // Keep local state in sync
                         setOnlineOrdersOnly(false);
                       }
-                      setCurrentPage(1); // Reset to first page when changing filter
+                      
+                      // Reset to first page when changing filter
+                      // Update hook page state first
+                      setHookPage(1);
+                      // Keep local page state in sync
+                      setCurrentPage(1);
+                      
+                      console.log('[OrderManager:Migration] Staff filter changed:', { staffFilter: value === '' ? null : value });
                     }}
                     className="w-full h-12 shadow-sm border-gray-300 rounded-md"
                     placeholder="Select staff member"
@@ -1487,12 +1455,22 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
                 <DateFilter
                   selectedOption={dateFilter}
-                  onOptionChange={setDateFilter}
+                  onOptionChange={(option) => {
+                    // Update hook state first
+                    setHookDateFilter(option);
+                    // Keep local state in sync during migration
+                    setDateFilter(option);
+                    console.log('[OrderManager:Migration] Date filter changed:', { option });
+                  }}
                   startDate={customStartDate}
                   endDate={customEndDate}
                   onDateRangeChange={(start, end) => {
+                    // Update hook state first
+                    setHookCustomDateRange(start, end);
+                    // Keep local state in sync during migration
                     setCustomStartDate(start);
                     setCustomEndDate(end);
+                    console.log('[OrderManager:Migration] Custom date range changed:', { start, end });
                   }}
                   className="w-full h-12 shadow-sm border-gray-300 rounded-md"
                 />
@@ -1501,7 +1479,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               {/* Location Filter - Only rendered when there are multiple locations */}
               <LocationFilter
                 selectedLocationId={locationFilter}
-                onLocationChange={setLocationFilter}
+                onLocationChange={(locationId) => {
+                  // Update hook state first
+                  setHookLocationFilter(locationId);
+                  // Keep local state in sync during migration
+                  setLocationFilter(locationId);
+                  console.log('[OrderManager:Migration] Location filter changed:', { locationId });
+                }}
                 className="w-full"
               />
 
@@ -1514,7 +1498,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     { value: 'oldest', label: 'Oldest First' }
                   ]}
                   value={sortNewestFirst ? 'newest' : 'oldest'}
-                  onChange={(value) => setSortNewestFirst(value === 'newest')}
+                  onChange={(value) => {
+                    // Update hook state first
+                    setHookSortNewestFirst(value === 'newest');
+                    // Keep local state in sync during migration
+                    setSortNewestFirst(value === 'newest');
+                    console.log('[OrderManager:Migration] Sort direction changed:', { sortNewestFirst: value === 'newest' });
+                  }}
                   className="w-full h-12 shadow-sm border-gray-300 rounded-md"
                 />
               </div>
@@ -1548,8 +1538,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           <div className="flex flex-nowrap space-x-2 overflow-x-auto py-2 px-1 scrollbar-hide -mx-1 pb-3 -mb-1 snap-x touch-pan-x">
             <button
               onClick={() => {
+                // Update hook state first
+                setHookStatus('all');
+                // Keep local state in sync during transition
                 setSelectedStatus('all');
+                // Clear selected order
                 if (setSelectedOrderId) setSelectedOrderId(null);
+                console.debug('[OrderManager:Migration] Status filter set to: all');
               }}
               className={`
                 whitespace-nowrap px-5 py-3 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start transition-colors duration-200 shadow-sm border
@@ -1565,8 +1560,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               <button
                 key={status}
                 onClick={() => {
+                  // Update hook state first
+                  setHookStatus(status);
+                  // Keep local state in sync during transition
                   setSelectedStatus(status);
+                  // Clear selected order
                   if (setSelectedOrderId) setSelectedOrderId(null);
+                  console.debug('[OrderManager:Migration] Status filter set to:', status);
                 }}
                 className={`
                   whitespace-nowrap px-5 py-3 rounded-md text-sm font-medium min-w-[90px] flex-shrink-0 snap-start transition-colors duration-200 shadow-sm border
@@ -1630,7 +1630,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               </div>
             ))}
           </div>
-        ) : metadata.total_count === 0 ? (
+        ) : orders.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-4 text-center">
             <p className="text-gray-500">No orders found matching your filters</p>
           </div>
@@ -1689,42 +1689,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               <div className="flex justify-center items-center space-x-2 mt-6 pb-4">
                 <button
                   onClick={() => {
-                    // Prevent multiple rapid clicks
-                    const now = Date.now();
-                    const timeSinceLastChange = now - lastPageChangeRef.current;
-                    if (timeSinceLastChange < 300) {
-                      console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
-                      return;
-                    }
-                    
-                    // Save current orders for smooth transition
-                    if (orders.length > 0) {
-                      setPreviousOrders(orders);
-                      setIsPageChanging(true);
-                    }
-                    
                     // Calculate the new page number
                     const newPage = Math.max(currentPage - 1, 1);
-
-
-                    
-                    // Generate a unique timestamp for this page change
-                    const pageChangeTimestamp = now;
-                    lastPageChangeRef.current = pageChangeTimestamp;
-                    
-                    // Immediately update store metadata to ensure consistency
-                    // This helps prevent race conditions with the useEffect
-                    useOrderStore.setState(state => ({
-                      metadata: {
-                        ...state.metadata,
-                        page: newPage
-                      },
-                      _lastFetchRequestId: pageChangeTimestamp
-                    }));
-                    
-                    // Update the page state - the useEffect will handle the API call
-
-                    setCurrentPage(newPage);
+                    // Use the shared pagination handler
+                    handlePageChange(newPage, 'previous-button');
                   }}
                   disabled={currentPage === 1}
                   className={`px-4 py-2 rounded-md text-sm font-medium ${
@@ -1743,40 +1711,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     <button
                       key={page}
                       onClick={() => {
-                        // Prevent multiple rapid clicks
-                        const now = Date.now();
-                        const timeSinceLastChange = now - lastPageChangeRef.current;
-                        if (timeSinceLastChange < 300) {
-                          console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
-                          return;
-                        }
-                        
-                        // Save current orders for smooth transition
-                        if (orders.length > 0) {
-                          setPreviousOrders(orders);
-                          setIsPageChanging(true);
-                        }
-                        
-
-
-                        
-                        // Generate a unique timestamp for this page change
-                        const pageChangeTimestamp = now;
-                        lastPageChangeRef.current = pageChangeTimestamp;
-                        
-                        // Immediately update store metadata to ensure consistency
-                        // This helps prevent race conditions with the useEffect
-                        useOrderStore.setState(state => ({
-                          metadata: {
-                            ...state.metadata,
-                            page: page
-                          },
-                          _lastFetchRequestId: pageChangeTimestamp
-                        }));
-                        
-                        // Update the page state - the useEffect will handle the API call
-
-                        setCurrentPage(page);
+                        // Use the shared pagination handler
+                        handlePageChange(page, 'page-number-button');
                       }}
                       className={`w-10 h-10 flex items-center justify-center rounded-md text-sm font-medium ${
                         currentPage === page
@@ -1798,43 +1734,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
                 <button
                   onClick={() => {
-                    // Prevent multiple rapid clicks
-                    const now = Date.now();
-                    const timeSinceLastChange = now - lastPageChangeRef.current;
-                    if (timeSinceLastChange < 300) {
-                      console.debug(`[OrderManager:Pagination] Ignoring rapid page change click - only ${timeSinceLastChange}ms since last change`);
-                      return;
-                    }
-                    
-                    // Save current orders for smooth transition
-                    if (orders.length > 0) {
-                      setPreviousOrders(orders);
-                      setIsPageChanging(true);
-                    }
-                    
                     // Calculate the new page number
                     const newPage = Math.min(currentPage + 1, totalPages);
-
-
-
-                    
-                    // Generate a unique timestamp for this page change
-                    const pageChangeTimestamp = now;
-                    lastPageChangeRef.current = pageChangeTimestamp;
-                    
-                    // Immediately update store metadata to ensure consistency
-                    // This helps prevent race conditions with the useEffect
-                    useOrderStore.setState(state => ({
-                      metadata: {
-                        ...state.metadata,
-                        page: newPage
-                      },
-                      _lastFetchRequestId: pageChangeTimestamp
-                    }));
-                    
-                    // Update the page state - the useEffect will handle the API call
-
-                    setCurrentPage(newPage);
+                    // Use the shared pagination handler
+                    handlePageChange(newPage, 'next-button');
                   }}
                   disabled={currentPage === totalPages}
                   className={`px-4 py-2 rounded-md text-sm font-medium ${
