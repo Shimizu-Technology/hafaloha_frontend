@@ -275,9 +275,7 @@ export function CollapsibleOrderCard({
   requiresAdvanceNotice
 }: CollapsibleOrderCardProps) {
   
-  // Debug location data
-  console.log('Order in CollapsibleOrderCard:', order);
-  console.log('Order location data:', order.location);
+  // Location data available in order.location
   
   // Mobile optimization enhancements
   const mobileStyles = `

@@ -40,7 +40,7 @@ export interface OrderQueryParams {
   dateTo?: string | null;
   searchQuery?: string | null;
   restaurantId?: string | null;
-  endpoint?: string; // Used to determine which API endpoint to call (e.g., 'staff' for /orders/staff)
+  // endpoint parameter removed - backend handles authorization
   online_orders_only?: string; // Used to filter for online orders only
   staff_member_id?: string; // Used to filter by staff member
   user_id?: string; // Used to filter by user
@@ -56,7 +56,6 @@ interface OrderStore {
   websocketConnected: boolean;
   pollingInterval: number | null;
   connectionCheckInterval: NodeJS.Timeout | null;
-  _lastFetchRequestId: number;
 
   // WebSocket methods
   startWebSocketConnection: () => boolean | void;
@@ -114,7 +113,6 @@ interface OrderStore {
 export const useOrderStore = create<OrderStore>()(
   persist(
     (set, get) => ({
-      _lastFetchRequestId: 0,
       orders: [],
       metadata: {
         total_count: 0,
@@ -259,47 +257,9 @@ export const useOrderStore = create<OrderStore>()(
         if (!order || !order.id) return;
         
         console.debug('[OrderStore] Received new order via WebSocket:', order.id);
-        console.debug('[OrderStore] Order staff info:', {
-          created_by_staff_id: order.created_by_staff_id,
-          is_staff_order: order.is_staff_order,
-          staff_created: order.staff_created
-        });
         
-        // Get current user info from authStore
-        const authState = useAuthStore.getState();
-        const { isStaff, isAdmin, isSuperAdmin, user } = authState;
-        
-        // Skip filtering for admin and super admin users - they see all orders
-        if (isAdmin() || isSuperAdmin()) {
-          console.debug('[OrderStore] Admin user - showing all orders');
-        }
-        // Apply policy filtering for staff users
-        else if (isStaff()) {
-          // Get staff ID from user object (safely with type checking)
-          const staffId = (user as any)?.staff_member?.id;
-          
-          if (staffId) {
-            // Convert both IDs to strings for comparison to avoid type mismatches
-            const orderStaffId = String(order.created_by_staff_id || '');
-            const currentStaffId = String(staffId);
-            
-            // Check if this is a customer order (not staff-created and not a staff order)
-            const isCustomerOrder = order.staff_created === false && order.is_staff_order === false;
-            
-            // Staff can see orders they created OR customer orders
-            if (orderStaffId === currentStaffId) {
-              console.debug(`[OrderStore] Showing order ${order.id} - created by current staff ${currentStaffId}`);
-            } else if (isCustomerOrder) {
-              console.debug(`[OrderStore] Showing order ${order.id} - this is a customer order`);
-            } else {
-              console.debug(`[OrderStore] Filtering out order ${order.id} - not created by current staff and not a customer order`);
-              return; // Skip this order as it wasn't created by this staff member and is not a customer order
-            }
-          } else {
-            console.debug('[OrderStore] Staff user without staff_member ID, unable to filter orders properly');
-            return; // To be safe, don't show the order if we can't determine the staff ID
-          }
-        }
+        // Trust backend to send only authorized orders
+        // No frontend filtering needed
         
         // Check if we already have this order
         const existingOrderIndex = get().orders.findIndex((o: Order) => o.id === order.id);
@@ -350,47 +310,9 @@ export const useOrderStore = create<OrderStore>()(
         if (!order || !order.id) return;
         
         console.debug('[OrderStore] Received order update via WebSocket:', order.id);
-        console.debug('[OrderStore] Order update staff info:', {
-          created_by_staff_id: order.created_by_staff_id,
-          is_staff_order: order.is_staff_order,
-          staff_created: order.staff_created
-        });
         
-        // Get current user info from authStore
-        const authState = useAuthStore.getState();
-        const { isStaff, isAdmin, isSuperAdmin, user } = authState;
-        
-        // Skip filtering for admin and super admin users - they see all orders
-        if (isAdmin() || isSuperAdmin()) {
-          console.debug('[OrderStore] Admin user - showing all order updates');
-        }
-        // Apply policy filtering for staff users
-        else if (isStaff()) {
-          // Get staff ID from user object (safely with type checking)
-          const staffId = (user as any)?.staff_member?.id;
-          
-          if (staffId) {
-            // Convert both IDs to strings for comparison to avoid type mismatches
-            const orderStaffId = String(order.created_by_staff_id || '');
-            const currentStaffId = String(staffId);
-            
-            // Check if this is a customer order (not staff-created and not a staff order)
-            const isCustomerOrder = order.staff_created === false && order.is_staff_order === false;
-            
-            // Staff can see orders they created OR customer orders
-            if (orderStaffId === currentStaffId) {
-              console.debug(`[OrderStore] Showing order update ${order.id} - created by current staff ${currentStaffId}`);
-            } else if (isCustomerOrder) {
-              console.debug(`[OrderStore] Showing order update ${order.id} - this is a customer order`);
-            } else {
-              console.debug(`[OrderStore] Filtering out order update ${order.id} - not created by current staff and not a customer order`);
-              return; // Skip this order update as it wasn't created by this staff member and is not a customer order
-            }
-          } else {
-            console.debug('[OrderStore] Staff user without staff_member ID, unable to filter order updates properly');
-            return; // To be safe, don't show the order update if we can't determine the staff ID
-          }
-        }
+        // Trust backend to send only authorized orders
+        // No frontend filtering needed
         
         // Check if this order is in our current view
         const orderExists = get().orders.some((o: Order) => o.id === order.id);
@@ -595,18 +517,7 @@ export const useOrderStore = create<OrderStore>()(
       // Fetch orders with server-side pagination, filtering, and sorting
       // ---------------------------------------------------------
       fetchOrders: async (params: OrderQueryParams = {}) => {
-        // Check if this is a page change request (starts with 'page-change-')
-        const isPaginationRequest = params._sourceId && String(params._sourceId).startsWith('page-change-');
-        
-        // Only set loading: true if this is not a pagination request
-        // This prevents the UI from flashing during page transitions
-        if (!isPaginationRequest) {
-          set({ loading: true, error: null });
-        } else {
-          // For pagination requests, just clear errors
-          set({ error: null });
-          console.debug(`[OrderStore] Handling pagination request: ${params._sourceId}, page: ${params.page}`);
-        }
+        set({ loading: true, error: null });
         
         try {
           const {
@@ -637,13 +548,19 @@ export const useOrderStore = create<OrderStore>()(
           // This ensures parameters like online_orders_only, staff_member_id, etc. are included
           Object.entries(params).forEach(([key, value]) => {
             // Skip parameters we've already handled and internal parameters (those starting with _)
-            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+            // Also skip restaurant_id to avoid duplicates (we use restaurantId above)
+            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'restaurant_id'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
               queryParams.append(key, String(value));
             }
           });
           
-          // Determine the correct endpoint based on the endpoint parameter
-          const endpoint = params.endpoint === 'staff' ? '/orders/staff' : '/orders';
+          // Always use the main orders endpoint (backend handles authorization)
+          const endpoint = '/orders';
+          
+          // Debug log the full API URL being called - DEBUGGING ORDER ISSUE
+          const fullUrl = `${endpoint}?${queryParams.toString()}`;
+          console.log('🔍 [OrderStore] Fetch API URL:', fullUrl);
+          console.log('🔍 [OrderStore] Fetch Query params object:', Object.fromEntries(queryParams.entries()));
           
           const response = await api.get<{
             orders: Order[];
@@ -651,7 +568,7 @@ export const useOrderStore = create<OrderStore>()(
             page: number;
             per_page: number;
             total_pages: number;
-          }>(`${endpoint}?${queryParams.toString()}`);
+          }>(fullUrl);
           
           const metadata = {
             total_count: response.total_count || 0,
@@ -683,10 +600,6 @@ export const useOrderStore = create<OrderStore>()(
             return;
           }
           
-          // Generate a unique request ID to track this specific request
-          const requestId = get()._lastFetchRequestId + 1;
-          set({ _lastFetchRequestId: requestId });
-          
           const {
             page = 1,
             perPage = 10,
@@ -700,8 +613,8 @@ export const useOrderStore = create<OrderStore>()(
             _sourceId = null
           } = params;
           
-          // Log the request with its ID and source for debugging
-          console.debug(`[OrderStore] Fetch request #${requestId} from source ${_sourceId || 'unknown'} for page ${page}`);
+          // Simple request logging
+          console.debug(`[OrderStore] Fetch request from source ${_sourceId || 'unknown'} for page ${page}`);
           
           // Build query string
           const queryParams = new URLSearchParams();
@@ -719,7 +632,8 @@ export const useOrderStore = create<OrderStore>()(
           // This ensures parameters like online_orders_only, staff_member_id, etc. are included
           Object.entries(params).forEach(([key, value]) => {
             // Skip parameters we've already handled and internal parameters (those starting with _)
-            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'endpoint'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
+            // Also skip restaurant_id to avoid duplicates (we use restaurantId above)
+            if (!['page', 'perPage', 'status', 'sortBy', 'sortDirection', 'dateFrom', 'dateTo', 'searchQuery', 'restaurantId', 'restaurant_id'].includes(key) && !key.startsWith('_') && value !== null && value !== undefined) {
               queryParams.append(key, String(value));
             }
           });
@@ -734,8 +648,13 @@ export const useOrderStore = create<OrderStore>()(
             }
           }));
           
-          // Determine the correct endpoint based on the endpoint parameter
-          const endpoint = params.endpoint === 'staff' ? '/orders/staff' : '/orders';
+          // Always use the main orders endpoint (backend handles authorization)
+          const endpoint = '/orders';
+          
+          // Debug log the full API URL being called - DEBUGGING ORDER ISSUE
+          const fullUrl = `${endpoint}?${queryParams.toString()}`;
+          console.log('🔍 [OrderStore] API URL:', fullUrl);
+          console.log('🔍 [OrderStore] Query params object:', Object.fromEntries(queryParams.entries()));
           
           const response = await api.get<{
             orders: Order[];
@@ -743,14 +662,7 @@ export const useOrderStore = create<OrderStore>()(
             page: number;
             per_page: number;
             total_pages: number;
-          }>(`${endpoint}?${queryParams.toString()}`);
-          
-          // Check if this request is still the most recent one
-          // If not, discard the results to prevent race conditions
-          if (requestId !== get()._lastFetchRequestId) {
-            console.debug(`[OrderStore] Discarding stale response for request #${requestId} from ${_sourceId || 'unknown'}, current is #${get()._lastFetchRequestId}`);
-            return;
-          }
+          }>(fullUrl);
           
           const metadata = {
             total_count: response.total_count || 0,
@@ -759,7 +671,7 @@ export const useOrderStore = create<OrderStore>()(
             total_pages: response.total_pages || Math.ceil((response.total_count || 0) / (response.per_page || 10))
           };
           
-          console.debug(`[OrderStore] Updating state with page ${metadata.page} data from request #${requestId} (source: ${_sourceId || 'unknown'})`);
+          console.debug(`[OrderStore] Updating state with page ${metadata.page} data (source: ${_sourceId || 'unknown'})`);
           console.debug(`[OrderStore] Metadata from API: total_count=${metadata.total_count}, total_pages=${metadata.total_pages}`);
           
           // Only update orders, don't change loading state

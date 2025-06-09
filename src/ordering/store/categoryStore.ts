@@ -1,7 +1,7 @@
 // src/ordering/store/categoryStore.ts
 import { create } from 'zustand';
 import { fetchAllCategories, fetchCategoriesByMenu, Category as ApiCategory } from '../../shared/api/endpoints/categories';
-import { websocketService } from '../../shared/services/websocketService';
+import webSocketManager from '../../shared/services/WebSocketManager';
 
 // Use the ApiCategory interface directly instead of creating a duplicate
 export type Category = ApiCategory;
@@ -112,10 +112,10 @@ export const useCategoryStore = create<CategoryStore>((set, get) => ({
       set({ websocketConnected: true });
       
       // Subscribe to the categories channel
-      websocketService.subscribe({
+      webSocketManager.subscribe({
         channel: 'CategoriesChannel',
         params: { restaurant_id: restaurantId },
-        received: (data) => {
+        received: (data: any) => {
           console.debug('Received category update via WebSocket', data.type);
           // Handle category updates
           if (data.type === 'category_update') {

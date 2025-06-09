@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRestaurantStore } from '../../store/restaurantStore';
-import { websocketService } from '../../services/websocketService';
+import webSocketManager from '../../services/WebSocketManager';
 import { config } from '../../config';
 
 interface RestaurantProviderProps {
@@ -35,7 +35,7 @@ export function RestaurantProvider({ children }: RestaurantProviderProps) {
     fetchRestaurant();
     
     // Only start polling if WebSocket is not connected
-    if (!websocketService.isConnected()) {
+    if (!webSocketManager.isConnected()) {
       console.debug('WebSocket not connected, starting polling as fallback');
       startPollingFallback();
     } else {
@@ -88,7 +88,7 @@ export function RestaurantProvider({ children }: RestaurantProviderProps) {
     previousRestaurantIdRef.current = restaurant.id;
     
     // Check if WebSocket is connected
-    if (!websocketService.isConnected()) {
+    if (!webSocketManager.isConnected()) {
       console.debug('WebSocket not connected, skipping subscription attempt');
       // Ensure polling is active as a fallback
       if (!pollingActive) {
@@ -109,10 +109,10 @@ export function RestaurantProvider({ children }: RestaurantProviderProps) {
     
     try {
       // Subscribe to the restaurant channel
-      websocketService.subscribe({
+      webSocketManager.subscribe({
         channel: 'RestaurantChannel',
         params: { restaurant_id: restaurantId },
-        received: (data) => {
+        received: (data: any) => {
           // Handle restaurant updates
           if (data.type === 'restaurant_update') {
             console.debug('Received restaurant update via WebSocket:', data);
@@ -165,7 +165,7 @@ export function RestaurantProvider({ children }: RestaurantProviderProps) {
       if (hasSubscribedRef.current) {
         try {
           console.debug('Unsubscribing from RestaurantChannel');
-          websocketService.unsubscribe('RestaurantChannel');
+          webSocketManager.unsubscribe('RestaurantChannel');
           hasSubscribedRef.current = false;
         } catch (error) {
           console.error('Error unsubscribing from restaurant channel:', error);
@@ -217,18 +217,19 @@ export function RestaurantProvider({ children }: RestaurantProviderProps) {
     };
     
     // Listen for WebSocket connection changes
-    websocketService.onConnectionChange(handleConnectionChange);
+    // Note: WebSocketManager uses a different interface for connection status
+    // webSocketManager.registerStatusHandler(handleConnectionChange);
     
     return () => {
       // Clean up the listener
-      websocketService.offConnectionChange(handleConnectionChange);
+      // webSocketManager.unregisterStatusHandler(handleConnectionChange);
     };
   }, [restaurant, pollingActive]); // Remove fetchRestaurant from dependencies to prevent unnecessary re-renders
   
   // Fallback polling functions using PollingManager instead of direct intervals
   const startPollingFallback = () => {
     // Don't start polling if it's already active or if WebSocket is connected and subscribed
-    if (pollingActive || (websocketService.isConnected() && hasSubscribedRef.current)) {
+    if (pollingActive || (webSocketManager.isConnected() && hasSubscribedRef.current)) {
       console.debug('Not starting polling: already active or WebSocket is connected and subscribed');
       return;
     }

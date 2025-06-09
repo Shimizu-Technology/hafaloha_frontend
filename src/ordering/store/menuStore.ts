@@ -5,7 +5,7 @@ import { handleApiError } from '../../shared/utils/errorHandler';
 import { MenuItem, Category, MenuItemFilterParams } from '../types/menu';
 import { apiClient } from '../../shared/api/apiClient';
 import { menuItemsApi } from '../../shared/api/endpoints/menuItems';
-import { websocketService } from '../../shared/services/websocketService';
+import webSocketManager from '../../shared/services/WebSocketManager';
 import { getCurrentRestaurantId, addRestaurantIdToParams } from '../../shared/utils/tenantUtils';
 import { pollingManager, PollingResourceType } from '../../shared/services/PollingManager';
 import { useMenuLayoutStore } from './menuLayoutStore';
@@ -537,9 +537,9 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     // Set up WebSocket handlers for inventory updates
     try {
       // Subscribe to the inventory channel
-      websocketService.subscribe({
+      webSocketManager.subscribe({
         channel: 'InventoryChannel',
-        received: (data) => {
+        received: (data: any) => {
           // Handle inventory updates
           if (data.type === 'inventory_update') {
             const updatedItem = data.item;
@@ -621,7 +621,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       }
       
       // Subscribe to the menu items channel
-      websocketService.subscribe({
+      webSocketManager.subscribe({
         channel: 'MenuItemsChannel',
         params: { restaurant_id: restaurantId },
         connected: () => {
@@ -645,7 +645,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
           // Start polling as fallback when WebSocket connection is rejected
           get().startInventoryPollingFallback();
         },
-        received: (data) => {
+        received: (data: any) => {
           console.debug('[MenuStore] Received menu items update via WebSocket', data.type);
           // Handle menu item updates
           if (data.type === 'menu_item_update') {
@@ -928,10 +928,10 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         if (restaurantId) {
           const channelName = `menu_items:${restaurantId}`;
           console.debug(`[MenuStore] Unsubscribing from WebSocket channel: ${channelName}`);
-          websocketService.unsubscribe(channelName);
+          webSocketManager.unsubscribe(channelName);
         } else {
           console.debug('[MenuStore] Unsubscribing from inventory channel');
-          websocketService.unsubscribe('InventoryChannel');
+          webSocketManager.unsubscribe('InventoryChannel');
         }
       } catch (error) {
         console.error('[MenuStore] Error unsubscribing from WebSocket channel:', error);

@@ -1602,7 +1602,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   useVh();
 
   // Data & cart from store
-  const { menuItems, fetchMenuItems, loading: menuLoading, currentMenuId } = useMenuStore();
+  const { menuItems, fetchMenuItems, fetchAllMenuItemsForAdmin, loading: menuLoading, currentMenuId } = useMenuStore();
   const {
     cartItems,
     addToCart,
@@ -1755,9 +1755,10 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       }
       
       try {
-        console.debug('[StaffOrderModal] Loading menu items');
-        // Use optimized backend filtering with list view for better performance
-        await fetchMenuItems();
+        console.debug('[StaffOrderModal] Loading menu items with admin privileges for staff ordering');
+        // Use fetchAllMenuItemsForAdmin to ensure staff can see all menu items for internal orders
+        // This passes admin: true, show_all: true flags to bypass filtering
+        await fetchAllMenuItemsForAdmin();
         dataLoadingState.current.menuItemsLoaded = true;
       } catch (error) {
         console.error('Error fetching menu items:', error);
@@ -1775,7 +1776,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         prefetchedCategories: new Set<number>()
       };
     };
-  }, [fetchMenuItems, clearCart]);
+  }, [fetchAllMenuItemsForAdmin, clearCart]);
 
   // Load all categories once menuItems is present with tenant validation
   useEffect(() => {

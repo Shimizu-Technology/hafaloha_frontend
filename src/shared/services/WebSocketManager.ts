@@ -1,6 +1,5 @@
 // src/shared/services/WebSocketManager.ts
 
-import websocketService, { WebSocketCallbacks, ChannelSubscription } from './websocketService';
 import notificationStorageService from './NotificationStorageService';
 
 /**
@@ -48,8 +47,20 @@ interface NotificationRegistryEntry {
 }
 
 /**
+ * Interface for channel subscription (matching old websocketService interface)
+ */
+export interface ChannelSubscription {
+  channel: string;
+  received?: (data: any) => void;
+  connected?: () => void;
+  disconnected?: () => void;
+  rejected?: (data?: any) => void;
+  params?: Record<string, any>;
+}
+
+/**
  * WebSocketManager - A centralized service for managing WebSocket connections
- * and handling notifications to prevent duplicates.
+ * and handling notifications to prevent duplicates. Now implements direct WebSocket connection.
  */
 class WebSocketManager {
   private static instance: WebSocketManager;
@@ -65,9 +76,16 @@ class WebSocketManager {
   private maxReconnectAttempts: number = 10;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private isAdminContext: boolean = false;
-  // We no longer need these variables since we're using a simpler connection check
-  // private lastHeartbeatResponse: number = 0;
-  // private heartbeatTimeoutMs: number = 30000; // 30 seconds
+  
+  // Direct WebSocket connection properties
+  private socket: WebSocket | null = null;
+  private isConnecting: boolean = false;
+  private connectionStartTime: number | null = null;
+  private lastConnectionAttempt: number | null = null;
+  private minReconnectDelay: number = 1000;
+  private maxReconnectDelay: number = 5000;
+  private paginationParams: { page: number; perPage: number } = { page: 1, perPage: 10 };
+  private subscriptions: Map<string, ChannelSubscription> = new Map();
   
   // Private constructor to enforce singleton pattern
   private constructor() {
@@ -138,53 +156,9 @@ class WebSocketManager {
     // Update connection status to connecting
     this.updateConnectionStatus(ConnectionStatus.CONNECTING);
     
-    // Set up callbacks for the WebSocket service
-    const callbacks: WebSocketCallbacks = {
-      onNewOrder: (order) => this.handleNotification(NotificationType.NEW_ORDER, order),
-      onOrderUpdated: (order) => this.handleNotification(NotificationType.ORDER_UPDATED, order),
-      // Temporarily disabled low stock notifications
-      onLowStock: (item) => {
-        console.debug('[WebSocketManager] Low stock notification received but disabled:', item);
-        // Do not forward low stock notifications to handlers
-        return;
-      },
-      onConnected: () => {
-        console.debug('[WebSocketManager] Connected');
-        this.logConnectionEvent('Connected successfully');
-        this.updateConnectionStatus(ConnectionStatus.CONNECTED);
-        this.reconnectAttempts = 0; // Reset reconnection attempts on successful connection
-        this.startHeartbeat(); // Start heartbeat to detect dead connections
-        
-        // Fetch missed notifications since last connection
-        this.fetchMissedNotifications();
-      },
-      onDisconnected: () => {
-        console.debug('[WebSocketManager] Disconnected');
-        this.logConnectionEvent('Disconnected');
-        this.updateConnectionStatus(ConnectionStatus.DISCONNECTED);
-        this.stopHeartbeat();
-        
-        // Attempt to reconnect with exponential backoff
-        this.scheduleReconnect();
-      },
-      onError: (error) => {
-        console.error('[WebSocketManager] Error:', error);
-        this.logConnectionEvent(`Error: ${error.message || 'Unknown error'}`);
-        this.updateConnectionStatus(ConnectionStatus.ERROR, error);
-        
-        // Attempt to reconnect with exponential backoff
-        this.scheduleReconnect();
-      },
-      onPong: () => {
-        // We no longer need to track heartbeat responses
-        // Just log that we received a pong
-        console.debug('[WebSocketManager] Received pong response');
-      }
-    };
-    
-    // Connect to the WebSocket service
+    // Connect directly to WebSocket
     try {
-      websocketService.connect(restaurantId, callbacks);
+      this.connectWebSocket();
       this.isInitialized = true;
     } catch (error) {
       const typedError = error instanceof Error ? error : new Error(String(error));
@@ -194,7 +168,206 @@ class WebSocketManager {
       this.scheduleReconnect();
     }
   }
-  
+
+  /**
+   * Establish direct WebSocket connection
+   */
+  private connectWebSocket(): void {
+    if (this.isConnecting) {
+      console.debug('[WebSocketManager] Connection already in progress');
+      return;
+    }
+
+    const now = Date.now();
+    if (this.lastConnectionAttempt && (now - this.lastConnectionAttempt) < this.minReconnectDelay) {
+      console.debug('[WebSocketManager] Connection attempt too soon, waiting');
+      return;
+    }
+
+    this.isConnecting = true;
+    this.lastConnectionAttempt = now;
+    this.connectionStartTime = now;
+
+    try {
+      // Determine WebSocket URL
+      const wsUrl = this.getWebSocketUrl();
+      console.debug('[WebSocketManager] Connecting to WebSocket:', wsUrl);
+
+      // Create WebSocket connection
+      this.socket = new WebSocket(wsUrl);
+
+      // Set up event handlers
+      this.socket.onopen = this.handleOpen.bind(this);
+      this.socket.onmessage = this.handleMessage.bind(this);
+      this.socket.onclose = this.handleClose.bind(this);
+      this.socket.onerror = this.handleError.bind(this);
+
+    } catch (error) {
+      this.isConnecting = false;
+      throw error;
+    }
+  }
+
+  /**
+   * Get WebSocket URL from environment or current location
+   */
+  private getWebSocketUrl(): string {
+    // Try to get from environment variables
+    let baseUrl = '';
+    
+    // Use type assertion to access custom ENV property safely
+    if (typeof window !== 'undefined' && (window as any).ENV?.API_URL) {
+      baseUrl = (window as any).ENV.API_URL;
+    } else if (typeof window !== 'undefined') {
+      // Fallback to current location
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      baseUrl = `${protocol}//${host}`;
+    } else {
+      // Default fallback
+      baseUrl = 'ws://localhost:3000';
+    }
+
+    // Convert HTTP(S) to WS(S) if needed
+    baseUrl = baseUrl.replace(/^https?:/, baseUrl.includes('https') ? 'wss:' : 'ws:');
+    
+    // Add cable path
+    return `${baseUrl}/cable`;
+  }
+
+  /**
+   * Handle WebSocket connection open
+   */
+  private handleOpen(): void {
+    console.debug('[WebSocketManager] WebSocket connected');
+    this.isConnecting = false;
+    this.reconnectAttempts = 0;
+    this.logConnectionEvent('Connected successfully');
+    this.updateConnectionStatus(ConnectionStatus.CONNECTED);
+    
+    // Subscribe to order and inventory channels
+    this.subscribeToOrderChannel();
+    this.subscribeToInventoryChannel();
+    
+    // Start heartbeat
+    this.startHeartbeat();
+    
+    // Fetch missed notifications
+    this.fetchMissedNotifications();
+  }
+
+  /**
+   * Handle WebSocket message
+   */
+  private handleMessage(event: MessageEvent): void {
+    try {
+      const data = JSON.parse(event.data);
+      console.debug('[WebSocketManager] Received message:', data);
+
+      // Handle different message types
+      switch (data.type) {
+        case 'ping':
+          // Respond to ping with pong
+          this.sendMessage({ type: 'pong' });
+          break;
+          
+        case 'confirm_subscription':
+          console.debug('[WebSocketManager] Subscription confirmed:', data.identifier);
+          break;
+          
+        case 'new_order':
+          this.handleNotification(NotificationType.NEW_ORDER, data.message);
+          break;
+          
+        case 'order_updated':
+          this.handleNotification(NotificationType.ORDER_UPDATED, data.message);
+          break;
+          
+        case 'low_stock':
+          this.handleNotification(NotificationType.LOW_STOCK, data.message);
+          break;
+          
+        default:
+          console.debug('[WebSocketManager] Unknown message type:', data.type);
+      }
+    } catch (error) {
+      console.error('[WebSocketManager] Error parsing message:', error);
+    }
+  }
+
+  /**
+   * Handle WebSocket connection close
+   */
+  private handleClose(event: CloseEvent): void {
+    console.debug('[WebSocketManager] WebSocket closed:', event.code, event.reason);
+    this.isConnecting = false;
+    this.socket = null;
+    this.logConnectionEvent(`Disconnected: ${event.code} ${event.reason}`);
+    this.updateConnectionStatus(ConnectionStatus.DISCONNECTED);
+    this.stopHeartbeat();
+    
+    // Attempt to reconnect unless it was a clean close
+    if (event.code !== 1000) {
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * Handle WebSocket error
+   */
+  private handleError(error: Event): void {
+    console.error('[WebSocketManager] WebSocket error:', error);
+    this.isConnecting = false;
+    this.logConnectionEvent(`Error: ${error}`);
+    this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('WebSocket error'));
+    this.scheduleReconnect();
+  }
+
+  /**
+   * Send message to WebSocket
+   */
+  private sendMessage(message: any): void {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(message));
+    }
+  }
+
+  /**
+   * Subscribe to order channel
+   */
+  private subscribeToOrderChannel(): void {
+    if (!this.restaurantId) return;
+    
+    const subscription = {
+      command: 'subscribe',
+      identifier: JSON.stringify({
+        channel: 'OrderChannel',
+        restaurant_id: this.restaurantId
+      })
+    };
+    
+    this.sendMessage(subscription);
+    console.debug('[WebSocketManager] Subscribed to OrderChannel');
+  }
+
+  /**
+   * Subscribe to inventory channel
+   */
+  private subscribeToInventoryChannel(): void {
+    if (!this.restaurantId) return;
+    
+    const subscription = {
+      command: 'subscribe',
+      identifier: JSON.stringify({
+        channel: 'InventoryChannel',
+        restaurant_id: this.restaurantId
+      })
+    };
+    
+    this.sendMessage(subscription);
+    console.debug('[WebSocketManager] Subscribed to InventoryChannel');
+  }
+
   /**
    * Register a handler for a specific notification type
    * @param type The notification type to handle
@@ -525,7 +698,7 @@ class WebSocketManager {
   public isConnected(): boolean {
     // Check both our internal status and the actual websocket connection
     const internalStatus = this.connectionStatus === ConnectionStatus.CONNECTED;
-    const websocketStatus = websocketService.isConnected();
+    const websocketStatus = this.socket !== null && this.socket.readyState === WebSocket.OPEN;
     
     // Log any discrepancies for debugging
     if (internalStatus !== websocketStatus) {
@@ -655,20 +828,19 @@ class WebSocketManager {
     // Clear any existing heartbeat interval
     this.stopHeartbeat();
     
-    // Start a new heartbeat interval that only checks connection status
-    // without sending ping commands
+    // Send a ping every 30 seconds to maintain connection
     this.heartbeatInterval = setInterval(() => {
       // Check if the WebSocket is still connected
-      if (!websocketService.isConnected()) {
+      if (!this.isConnected()) {
         console.error('[WebSocketManager] Connection check failed - WebSocket is disconnected');
         this.logConnectionEvent('Connection check failed - WebSocket is disconnected');
-        
-        // Force disconnect and reconnect
-        this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('Connection check failed'));
-        this.disconnect();
+        this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('Heartbeat failed'));
         this.scheduleReconnect();
+      } else {
+        // Send ping to keep connection alive
+        this.sendMessage({ type: 'ping' });
       }
-    }, 15000); // Check connection every 15 seconds
+    }, 30000); // 30 seconds
   }
   
   /**
@@ -682,91 +854,91 @@ class WebSocketManager {
   }
   
   /**
-   * Log a connection event for debugging and monitoring
-   * @param event The event description
+   * Log connection events for debugging
    */
   private logConnectionEvent(event: string): void {
     const timestamp = new Date().toISOString();
-    const logEntry = `${timestamp} - ${event}`;
-    
-    // In a production environment, this could send logs to a monitoring service
-    console.debug(`[WebSocketManager] ${logEntry}`);
+    const duration = this.connectionStartTime 
+      ? `${Math.round((Date.now() - this.connectionStartTime) / 1000)}s`
+      : 'N/A';
+    console.debug(`[WebSocketManager] [${timestamp}] [${duration}] ${event}`);
   }
   
   /**
-   * Disconnect the WebSocket
+   * Disconnect from the WebSocket
    */
   public disconnect(): void {
-    if (this.isInitialized) {
-      console.debug('[WebSocketManager] Disconnecting');
-      this.logConnectionEvent('Disconnecting');
-      
-      // Clear any reconnection timeout
-      if (this.reconnectTimeout) {
-        clearTimeout(this.reconnectTimeout);
-        this.reconnectTimeout = null;
-      }
-      
-      // Stop heartbeat
-      this.stopHeartbeat();
-      
-      // Disconnect from the WebSocket service
-      try {
-        websocketService.disconnect('WebSocketManager');
-      } catch (error) {
-        const typedError = error instanceof Error ? error : new Error(String(error));
-        console.error('[WebSocketManager] Error disconnecting:', typedError);
-      }
-      
-      this.isInitialized = false;
-      this.updateConnectionStatus(ConnectionStatus.DISCONNECTED);
-    }
-  }
-  
-  /**
-   * Update pagination parameters for the WebSocket connection
-   * @param params Object containing page and perPage values
-   */
-  public updatePaginationParams(params: { page: number; perPage: number }): void {
-    websocketService.updatePaginationParams(params);
-  }
-  
-  /**
-   * Subscribe to a specific ActionCable channel
-   * @param subscription The channel subscription details
-   */
-  public subscribe(subscription: ChannelSubscription): void {
-    websocketService.subscribe(subscription);
-  }
-  
-  /**
-   * Unsubscribe from a specific ActionCable channel
-   * @param channelName The name of the channel to unsubscribe from
-   */
-  public unsubscribe(channelName: string): void {
-    websocketService.unsubscribe(channelName);
-  }
-  
-  /**
-   * Clean up resources when the manager is no longer needed
-   */
-  public cleanup(): void {
-    this.disconnect();
+    console.debug('[WebSocketManager] Disconnecting');
+    this.logConnectionEvent('Manual disconnect requested');
     
-    // Clear all intervals and timeouts
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
+    // Clear intervals and timeouts
+    this.stopHeartbeat();
     
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
     
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
+    // Disconnect from the WebSocket
+    try {
+      this.socket?.close();
+    } catch (error) {
+      const typedError = error instanceof Error ? error : new Error(String(error));
+      console.error('[WebSocketManager] Error during disconnect:', typedError);
+    }
+    
+    // Update status
+    this.updateConnectionStatus(ConnectionStatus.DISCONNECTED);
+    
+    // Reset state
+    this.isInitialized = false;
+    this.isConnecting = false;
+    this.socket = null;
+    this.reconnectAttempts = 0;
+  }
+
+  /**
+   * Update pagination parameters (legacy compatibility)
+   */
+  public updatePaginationParams(params: { page: number; perPage: number }): void {
+    this.paginationParams = params;
+  }
+  
+  /**
+   * Subscribe to a channel (legacy compatibility)
+   */
+  public subscribe(subscription: ChannelSubscription): void {
+    this.subscriptions.set(subscription.channel, subscription);
+    console.debug(`[WebSocketManager] Subscribed to channel: ${subscription.channel}`);
+  }
+  
+  /**
+   * Unsubscribe from a channel (legacy compatibility)
+   */
+  public unsubscribe(channelName: string): void {
+    this.subscriptions.delete(channelName);
+    console.debug(`[WebSocketManager] Unsubscribed from channel: ${channelName}`);
+  }
+  
+  /**
+   * Cleanup all resources
+   */
+  public cleanup(): void {
+    console.debug('[WebSocketManager] Cleaning up resources');
+    
+    // Disconnect
+    this.disconnect();
+    
+    // Clear handlers
+    this.handlers.clear();
+    this.statusHandlers.clear();
+    this.displayedNotifications.clear();
+    this.subscriptions.clear();
+    
+    // Clear cleanup interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
     }
     
     // Remove event listeners
@@ -774,14 +946,6 @@ class WebSocketManager {
       window.removeEventListener('online', this.handleNetworkOnline);
       window.removeEventListener('offline', this.handleNetworkOffline);
     }
-    
-    // Clean up notification storage service
-    notificationStorageService.cleanup();
-    
-    // Clear all handlers and notifications
-    this.handlers.forEach(handlerSet => handlerSet.clear());
-    this.statusHandlers.clear();
-    this.displayedNotifications.clear();
   }
 }
 
