@@ -1629,11 +1629,17 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   const [createdByStaffId, setCreatedByStaffId] = useState<number | null>(null);
   const [createdByUserId, setCreatedByUserId] = useState<number | null>(null);
   
-  // Used for price calculations
-  const [preDiscountTotal] = useState(0);
-  
   // Used for payment processing
   const [paymentTransactionId, setPaymentTransactionId] = useState<string>('');
+  
+  // Calculate pre-discount total (original price before any discounts)
+  const preDiscountTotal = useMemo(() => {
+    return cartItems.reduce((total: number, item: any) => {
+      const itemPrice = typeof item.price === 'number' ? item.price : 0;
+      const itemQuantity = typeof item.quantity === 'number' ? item.quantity : 1;
+      return total + (itemPrice * itemQuantity);
+    }, 0);
+  }, [cartItems]);
   
   // Calculate order total based on cart items and applicable discounts
   const orderTotal = useMemo(() => {
