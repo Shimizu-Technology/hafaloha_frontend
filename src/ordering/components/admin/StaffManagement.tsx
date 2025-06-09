@@ -4,6 +4,8 @@ import { apiClient } from '../../../shared/api/apiClient';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { StaffReports } from './StaffReports';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
+import { StaffFilterProvider } from './StaffFilterContext';
+import { StaffFilterBar } from './StaffFilterBar';
 
 interface StaffMember {
   id: number;
@@ -38,7 +40,7 @@ interface Transaction {
   updated_at: string;
 }
 
-export function StaffManagement() {
+function StaffManagementContent() {
   const [activeTab, setActiveTab] = useState<'management' | 'reports'>('management');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -591,7 +593,10 @@ export function StaffManagement() {
           )}
         </div>
       ) : (
-        <StaffReports />
+        <>
+          <StaffFilterBar />
+          <StaffReports />
+        </>
       )}
 
       {/* Transactions Section */}
@@ -795,5 +800,14 @@ export function StaffManagement() {
         </div>
       )}
     </div>
+  );
+}
+
+// Export the wrapped component with filter context
+export function StaffManagement() {
+  return (
+    <StaffFilterProvider>
+      <StaffManagementContent />
+    </StaffFilterProvider>
   );
 }
