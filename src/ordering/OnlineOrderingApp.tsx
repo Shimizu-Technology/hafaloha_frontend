@@ -100,168 +100,93 @@ export default function OnlineOrderingApp() {
     }
   }, [restaurant?.id, initializeLayout]);
 
+  // Simple initialization effect that focuses on getting data loaded reliably
   useEffect(() => {
-    // Initialize WebSocket connection as soon as the app loads
-    // Use silent mode during initial load to reduce console noise
-    const isInitialLoad = !restaurant;
-    if (validateRestaurantContext(restaurant, isInitialLoad)) {
-      console.debug('OnlineOrderingApp: Initializing WebSocket connection for menu items');
-      const { startMenuItemsWebSocket, stopInventoryPolling } = useMenuStore.getState();
-      
-      // Ensure any existing polling is stopped before starting WebSocket
-      stopInventoryPolling();
-      
-      // Only initialize WebSocket if user is authenticated
-      const user = useAuthStore.getState().user;
-      const isAuthenticated = !!user;
-      
-      if (isAuthenticated) {
-        // Initialize WebSocketManager with restaurant ID for proper tenant isolation
-        import('../shared/services/WebSocketManager').then(({ default: webSocketManager }) => {
-          if (restaurant && restaurant.id) {
-            webSocketManager.initialize(restaurant.id.toString());
-            startMenuItemsWebSocket();
-          }
-        });
-      } else {
-        console.debug('OnlineOrderingApp: Skipping WebSocket initialization for unauthenticated user');
-      }
-      
-      // Prefetch all menu items data when the app initializes
-      prefetchMenuData();
-      
-      // Double-check that polling is stopped after WebSocket connection
-      setTimeout(() => {
-        if (useMenuStore.getState().inventoryPollingInterval !== null) {
-          console.debug('OnlineOrderingApp: Stopping lingering inventory polling after WebSocket connection');
-          stopInventoryPolling();
-        }
-      }, 1000);
-      
-      return () => {
-        console.debug('OnlineOrderingApp: Cleaning up WebSocket connection');
-        stopInventoryPolling();
-      };
-    }
-  }, [restaurant]);
-  
-  // Function to prefetch menu data at app initialization
-  const prefetchMenuData = async () => {
-    if (!validateRestaurantContext(restaurant)) {
-      console.warn('OnlineOrderingApp: Restaurant context missing, cannot prefetch menu data');
-      return;
-    }
-    
-    try {
-      console.debug('OnlineOrderingApp: Prefetching menu data at app initialization');
-      
-      // Get menu store methods
-      const { 
-        fetchVisibleMenuItems, 
-        fetchMenus, 
-        fetchMenuItemsForAdmin 
-      } = useMenuStore.getState();
-      const { fetchCategoriesForMenu } = useCategoryStore.getState();
-      const { user } = useAuthStore.getState();
-      
-      // Check if user has admin privileges
-      const isAdmin = user && (user.role === 'admin' || user.role === 'super_admin');
-      
-      // 1. Fetch menus first to get the current menu ID
-      await fetchMenus();
-      
-      // 2. Get the current menu ID after fetching menus
-      const { currentMenuId } = useMenuStore.getState();
-      
-      if (currentMenuId) {
-        // 3. Fetch categories for the current menu
-        await fetchCategoriesForMenu(currentMenuId, restaurant?.id);
-        
-        // 4. Prefetch data for customer-facing menu page
-        console.debug('OnlineOrderingApp: Prefetching customer-facing menu data');
-        
-        // 4a. Prefetch "All Items" view (no category filter)
-        await fetchVisibleMenuItems(undefined, restaurant?.id, false, false);
-        
-        // 4b. Get categories after they've been fetched
-        const { categories } = useCategoryStore.getState();
-        const menuCategories = categories.filter((cat: { menu_id: number; id: number; name: string }) => 
-          cat.menu_id === currentMenuId
-        );
-        
-        // 4c. Prefetch first few categories (limit to 3 to avoid too many requests)
-        const categoriesToPrefetch = menuCategories.slice(0, 3);
-        
-        for (const category of categoriesToPrefetch) {
-          console.debug(`OnlineOrderingApp: Prefetching customer data for category ${category.name}`);
-          await fetchVisibleMenuItems(category.id, restaurant?.id, false, false);
-        }
-        
-        // 5. Only prefetch admin data if the user has admin privileges
-        if (isAdmin) {
-          console.debug('OnlineOrderingApp: Prefetching admin menu data');
-          
-          // 5a. Prefetch admin "All Items" view with stock information
-          const adminFilterParams: MenuItemFilterParams = {
-            view_type: 'admin' as 'admin',
-            include_stock: true,
-            restaurant_id: restaurant?.id,
-            menu_id: currentMenuId
-          };
-          
-          await fetchMenuItemsForAdmin(adminFilterParams);
-          
-          // 5b. Prefetch first category for admin view
-          if (categoriesToPrefetch.length > 0) {
-            const firstCategory = categoriesToPrefetch[0];
-            const adminCategoryParams = {
-              ...adminFilterParams,
-              category_id: firstCategory.id
-            };
-            
-            console.debug(`OnlineOrderingApp: Prefetching admin data for category ${firstCategory.name}`);
-            await fetchMenuItemsForAdmin(adminCategoryParams);
-          }
-        }
-        
-        console.debug('OnlineOrderingApp: Menu data prefetching complete');
-      }
-    } catch (error) {
-      console.error('Error prefetching menu data:', error);
-    }
-  };
-
-  useEffect(() => {
-    // Load featured items with optimized backend filtering
-    const loadFeaturedItems = async () => {
-      // Validate restaurant context for tenant isolation
-      // Use silent mode during initial load to reduce console noise
-      const isInitialLoad = !restaurant;
-      if (!validateRestaurantContext(restaurant, isInitialLoad)) {
-        // Only log warning if not in initial load
-        if (!isInitialLoad) {
-          console.warn('OnlineOrderingApp: Restaurant context missing, cannot fetch featured items');
-        }
+    const initializeApp = async () => {
+      // Only proceed if we have restaurant context
+      if (!validateRestaurantContext(restaurant)) {
         return;
       }
       
-      setFeaturedItemsLoading(true);
+      console.debug('OnlineOrderingApp: Starting app initialization');
+      
       try {
-        // Use optimized backend filtering instead of loading all items
-        // Pass the restaurant ID if available, otherwise the utility will try to get it from localStorage
-        const items = await fetchFeaturedItems(restaurant?.id);
-        setFeaturedItems(items);
+        // 1. Fetch site settings
+        await fetchSiteSettings();
+        
+        // 2. Fetch featured items for home page
+        setFeaturedItemsLoading(true);
+        const featured = await fetchFeaturedItems(restaurant?.id);
+        setFeaturedItems(featured);
+        
+        // 3. Fetch merchandise collections
+        await fetchCollections();
+        
+        // 4. Initialize WebSocket connection for real-time updates (non-blocking)
+        // This runs in the background and doesn't block the UI
+        const user = useAuthStore.getState().user;
+        if (user && restaurant?.id) {
+          console.debug('OnlineOrderingApp: Initializing WebSocket connection');
+          import('../shared/services/WebSocketManager').then(({ default: webSocketManager }) => {
+            webSocketManager.initialize(restaurant.id.toString());
+            // Start menu items WebSocket after a short delay to allow primary loading to complete
+            setTimeout(() => {
+              const { startMenuItemsWebSocket } = useMenuStore.getState();
+              startMenuItemsWebSocket();
+            }, 1000);
+          }).catch(error => {
+            console.warn('OnlineOrderingApp: WebSocket initialization failed, will use API fallback:', error);
+          });
+        }
+        
       } catch (error) {
-        console.error('Error fetching featured items:', error);
+        console.error('OnlineOrderingApp: Error during initialization:', error);
       } finally {
         setFeaturedItemsLoading(false);
       }
     };
     
-    loadFeaturedItems();
-    fetchSiteSettings();     // load hero/spinner image URLs
-    fetchCollections();      // load merchandise collections
-  }, [fetchFeaturedItems, fetchSiteSettings, fetchCollections, restaurant]);
+    initializeApp();
+  }, [restaurant, fetchSiteSettings, fetchFeaturedItems, fetchCollections]);
+
+  // Prefetch menu data for better performance (runs after initial load)
+  useEffect(() => {
+    const prefetchMenuData = async () => {
+      if (!restaurant?.id) return;
+      
+      try {
+        console.debug('OnlineOrderingApp: Prefetching menu data');
+        
+        // Get the current menu
+        const { currentMenuId, fetchMenus } = useMenuStore.getState();
+        const { fetchCategoriesForMenu } = useCategoryStore.getState();
+        const { fetchVisibleMenuItems } = useMenuStore.getState();
+        
+        // Ensure we have menu data
+        if (!currentMenuId) {
+          await fetchMenus();
+        }
+        
+        const finalMenuId = useMenuStore.getState().currentMenuId;
+        
+        if (finalMenuId) {
+          // Fetch categories for the current menu
+          await fetchCategoriesForMenu(finalMenuId, restaurant.id);
+          
+          // Prefetch "All Items" view for faster initial page load
+          await fetchVisibleMenuItems(undefined, restaurant.id, false, false);
+        }
+        
+      } catch (error) {
+        console.error('OnlineOrderingApp: Error prefetching menu data:', error);
+      }
+    };
+    
+    // Run prefetch after a short delay to not interfere with initial loading
+    const prefetchTimer = setTimeout(prefetchMenuData, 2000);
+    
+    return () => clearTimeout(prefetchTimer);
+  }, [restaurant?.id]);
 
   // We no longer need to slice the featured items as we're showing all of them in the grid
 

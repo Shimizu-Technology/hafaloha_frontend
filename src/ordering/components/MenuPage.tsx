@@ -6,10 +6,11 @@ import { useMenuStore } from '../store/menuStore';
 import { useCategoryStore } from '../store/categoryStore';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { useMenuLayoutStore } from '../store/menuLayoutStore';
-import { validateRestaurantContext, logTenantIsolationWarning } from '../../shared/utils/tenantUtils';
+import { validateRestaurantContext } from '../../shared/utils/tenantUtils';
 import { MenuItem } from '../types/menu';
 import LayoutToggle from './layouts/LayoutToggle';
 import ListView from './layouts/ListView';
+import { startTiming, endTiming, printPerformanceSummary } from '../utils/loadingPerformance';
 
 export function MenuPage() {
   const { fetchVisibleMenuItems, fetchMenus, error, currentMenuId } = useMenuStore();
@@ -19,10 +20,11 @@ export function MenuPage() {
   
   // State for menu items and loading state
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading=true to prevent flash of "no items"
   
-  // Reference to track if data has been loaded at least once
+  // Track if initial load is complete to prevent unnecessary re-renders
   const initialLoadComplete = useRef(false);
+  const loadingController = useRef<AbortController | null>(null);
 
   // For category filter
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
@@ -38,6 +40,16 @@ export function MenuPage() {
   
   // Debounce search to avoid excessive API calls
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Performance monitoring
+  useEffect(() => {
+    // Print performance summary when component unmounts (in development)
+    return () => {
+      if (process.env.NODE_ENV === 'development') {
+        printPerformanceSummary();
+      }
+    };
+  }, []);
   
   // Listen for keyboard events to show search when user starts typing
   useEffect(() => {
@@ -81,127 +93,98 @@ export function MenuPage() {
     };
   }, []);
 
-  // First useEffect to fetch menus and set currentMenuId
+  // Initialize menus and layout - runs once on mount
   useEffect(() => {
-    fetchMenus();
-  }, [fetchMenus]);
+    const initializeData = async () => {
+      const operationId = 'menu-page-init';
+      startTiming(operationId, 'MenuPage Initialization');
+      
+      try {
+        // Fetch menus first
+        await fetchMenus();
+        
+        // Initialize layout if restaurant is available
+        if (restaurant?.id) {
+          console.debug('MenuPage: Initializing layout based on restaurant preferences');
+          initializeLayout(restaurant.id);
+        }
+        
+        endTiming(operationId, true);
+      } catch (error) {
+        console.error('Error initializing menu data:', error);
+        endTiming(operationId, false, String(error));
+      }
+    };
+    
+    initializeData();
+  }, [fetchMenus, restaurant?.id, initializeLayout]);
 
-  // Initialize layout based on restaurant preferences
-  useEffect(() => {
-    if (restaurant?.id) {
-      console.debug('MenuPage: Initializing layout based on restaurant preferences');
-      initializeLayout(restaurant.id);
-    }
-  }, [restaurant?.id, initializeLayout]);
-
-  // WebSocket connection is now initialized at the app level in OnlineOrderingApp
-  // This improves performance by ensuring real-time updates are available immediately
-
-  // Separate useEffect to fetch categories when menu changes
+  // Fetch categories when menu changes
   useEffect(() => {
     const loadCategories = async () => {
-      // Validate restaurant context for tenant isolation
-      // Use silent mode during initial load to reduce console noise
-      const isInitialLoad = !restaurant;
-      if (!validateRestaurantContext(restaurant, isInitialLoad) || !currentMenuId) {
+      if (!validateRestaurantContext(restaurant) || !currentMenuId) {
         return;
       }
       
+      const operationId = `categories-${currentMenuId}`;
+      startTiming(operationId, `Load Categories for Menu ${currentMenuId}`);
+      
       try {
-        // Fetch categories for the current menu
         await fetchCategoriesForMenu(currentMenuId, restaurant?.id);
+        endTiming(operationId, true);
       } catch (error) {
         console.error('Error fetching categories:', error);
+        endTiming(operationId, false, String(error));
       }
     };
     
     loadCategories();
   }, [fetchCategoriesForMenu, currentMenuId, restaurant]);
   
-  // Use a ref to track the last data refresh time to prevent too frequent updates
-  const lastRefreshTime = useRef<number>(Date.now());
-  const MIN_REFRESH_INTERVAL = 5000; // 5 seconds minimum between visible refreshes
-  
-  // Reference to track categories that have been prefetched
-  const prefetchedCategories = useRef<Set<number | null>>(new Set([null])); // Start with 'All Items' (null) prefetched
-  
   // Filter categories to only show those for the current menu
   const activeCategories = useMemo(() => {
     return currentMenuId ? categories.filter(cat => cat.menu_id === currentMenuId) : [];
   }, [categories, currentMenuId]);
   
-  // Separate useEffect to fetch menu items with backend filtering
+  // Main effect for loading menu items - simplified approach
   useEffect(() => {
-    // Function to prefetch adjacent categories
-    const prefetchAdjacentCategories = async () => {
-      if (!validateRestaurantContext(restaurant)) return;
-      
-      // Get the current category index
-      const allCategoryIds = [null, ...activeCategories.map(cat => cat.id)];
-      const currentIndex = allCategoryIds.findIndex(id => id === selectedCategoryId);
-      
-      // Determine which adjacent categories to prefetch
-      const categoriesToPrefetch: (number | null)[] = [];
-      
-      // Add the next category if it exists
-      if (currentIndex < allCategoryIds.length - 1) {
-        categoriesToPrefetch.push(allCategoryIds[currentIndex + 1]);
+    const loadMenuItems = async () => {
+      // Abort any ongoing request
+      if (loadingController.current) {
+        loadingController.current.abort();
       }
       
-      // Add the previous category if it exists
-      if (currentIndex > 0) {
-        categoriesToPrefetch.push(allCategoryIds[currentIndex - 1]);
-      }
+      // Create new controller for this request
+      loadingController.current = new AbortController();
       
-      // Prefetch data for adjacent categories in the background
-      for (const categoryId of categoriesToPrefetch) {
-        // Skip if already prefetched
-        if (prefetchedCategories.current.has(categoryId)) continue;
-        
-        console.debug(`MenuPage: Prefetching data for category ${categoryId === null ? 'All Items' : categoryId}`);
-        
-        try {
-          await fetchVisibleMenuItems(
-            categoryId || undefined,
-            restaurant?.id,
-            showFeaturedOnly,
-            showSeasonalOnly,
-            searchQuery || undefined
-          );
-          
-          // Mark as prefetched
-          prefetchedCategories.current.add(categoryId);
-        } catch (error) {
-          console.error(`Error prefetching data for category ${categoryId}:`, error);
-        }
-      }
-    };
-    
-    const loadMenuItems = async (forceShowLoading = false) => {
-      // Validate restaurant context for tenant isolation
-      // Use silent mode during initial load to reduce console noise
-      const isInitialLoad = !restaurant;
-      if (!validateRestaurantContext(restaurant, isInitialLoad)) {
-        // Only log detailed warning if not in initial load
-        if (!isInitialLoad) {
-          logTenantIsolationWarning('MenuPage', 'Restaurant context missing, cannot fetch menu items');
-        }
+      // Validate restaurant context
+      if (!validateRestaurantContext(restaurant)) {
         return;
       }
       
-      // Only show loading indicator if this is a user-initiated refresh or first load
-      const shouldShowLoading = forceShowLoading || !initialLoadComplete.current;
+      // Create unique operation ID for performance tracking
+      const filters = {
+        category: selectedCategoryId,
+        featured: showFeaturedOnly,
+        seasonal: showSeasonalOnly,
+        search: searchQuery
+      };
+      const operationId = `menu-items-${JSON.stringify(filters)}`;
+      startTiming(operationId, `Load Menu Items (${Object.entries(filters).filter(([, v]) => v).map(([k, v]) => `${k}:${v}`).join(', ') || 'all'})`);
       
-      if (shouldShowLoading) {
-        console.debug('MenuPage: Loading menu items with visible indicator');
-        setLoading(true);
-      } else {
-        console.debug('MenuPage: Background refresh of menu items');
-      }
+      // Show loading indicator
+      setLoading(true);
+      setIsSearching(!!searchQuery);
       
       try {
+        console.debug('MenuPage: Loading menu items', {
+          categoryId: selectedCategoryId,
+          featured: showFeaturedOnly,
+          seasonal: showSeasonalOnly,
+          search: searchQuery
+        });
+        
         // Call the enhanced method with all filter parameters
-        // The backend will now handle all filtering including featured and seasonal
         const items = await fetchVisibleMenuItems(
           selectedCategoryId || undefined, 
           restaurant?.id,
@@ -210,80 +193,52 @@ export function MenuPage() {
           searchQuery || undefined
         );
         
-        // Mark this category as prefetched
-        prefetchedCategories.current.add(selectedCategoryId);
-        
-        // Check if data has actually changed before updating state
-        const hasDataChanged = JSON.stringify(items) !== JSON.stringify(menuItems);
-        
-        // Only update the UI if data changed and enough time has passed since last update
-        const now = Date.now();
-        const timeSinceLastRefresh = now - lastRefreshTime.current;
-        
-        if (hasDataChanged && (shouldShowLoading || timeSinceLastRefresh > MIN_REFRESH_INTERVAL)) {
-          console.debug('MenuPage: Data changed, updating UI');
+        // Update state if request wasn't aborted
+        if (!loadingController.current?.signal.aborted) {
           setMenuItems(items);
-          lastRefreshTime.current = now;
-        } else if (hasDataChanged) {
-          console.debug('MenuPage: Data changed but skipping UI update (too soon)');
-        } else {
-          console.debug('MenuPage: No data changes detected');
-        }
-        
-        // If this is the first load, mark as complete
-        if (!initialLoadComplete.current && items.length > 0) {
-          initialLoadComplete.current = true;
           
-          // After initial load, prefetch data for adjacent categories
-          prefetchAdjacentCategories();
+          // Mark initial load as complete
+          if (!initialLoadComplete.current) {
+            initialLoadComplete.current = true;
+          }
+          
+          endTiming(operationId, true);
         }
       } catch (error) {
-        console.error('Error fetching menu items:', error);
+        // Only log error if request wasn't aborted
+        if (!loadingController.current?.signal.aborted) {
+          console.error('Error fetching menu items:', error);
+          endTiming(operationId, false, String(error));
+        }
       } finally {
-        if (shouldShowLoading) {
+        // Clear loading state if request wasn't aborted
+        if (!loadingController.current?.signal.aborted) {
           setLoading(false);
+          setIsSearching(false);
         }
       }
     };
     
-    // Check if WebSocket is connected before loading items
-    const { websocketConnected } = useMenuStore.getState();
-    
-    if (websocketConnected) {
-      console.debug('MenuPage: WebSocket connected, checking if data needs to be loaded');
-      // If this category hasn't been prefetched yet, load it even with WebSocket connected
-      if (!prefetchedCategories.current.has(selectedCategoryId)) {
-        console.debug(`MenuPage: Category ${selectedCategoryId === null ? 'All Items' : selectedCategoryId} not prefetched, loading data`);
-        loadMenuItems(true);
-      } else if (!initialLoadComplete.current) {
-        // Still need to show loading indicator until WebSocket provides data
-        setLoading(true);
-        // Set a timeout to hide loading indicator if WebSocket doesn't deliver data quickly
-        const loadingTimeout = setTimeout(() => {
-          if (loading) {
-            console.debug('MenuPage: WebSocket data taking too long, falling back to API');
-            loadMenuItems(true);
-          }
-        }, 3000); // Wait 3 seconds for WebSocket data before falling back
-        
-        return () => clearTimeout(loadingTimeout);
-      }
-    } else {
-      // WebSocket not connected, fall back to API call
-      console.debug('MenuPage: WebSocket not connected, using API fallback');
-      loadMenuItems(true);
+    // Only load if we have the necessary context
+    if (restaurant && currentMenuId) {
+      loadMenuItems();
     }
     
-    // Create a cleanup function to handle component unmounting
+    // Cleanup function
     return () => {
-      console.debug('MenuPage: Cleaning up menu items effect');
+      if (loadingController.current) {
+        loadingController.current.abort();
+      }
     };
-    
-    // Only trigger refetch when filters or restaurant context changes
-    // The polling will handle regular updates
-  }, [fetchVisibleMenuItems, restaurant, selectedCategoryId, showFeaturedOnly, showSeasonalOnly, searchQuery, activeCategories]);
-
-  // No need for frontend filtering anymore as we're using backend filtering
+  }, [
+    fetchVisibleMenuItems, 
+    restaurant, 
+    currentMenuId,
+    selectedCategoryId, 
+    showFeaturedOnly, 
+    showSeasonalOnly, 
+    searchQuery
+  ]);
 
   // Memoize the selected category description to avoid redundant lookups
   const selectedCategoryDescription = useMemo(() => {
@@ -508,10 +463,10 @@ export function MenuPage() {
         </div>
       )}
       
-      {/* Menu Items Grid with min-height to prevent layout shift */}
+      {/* Menu Items Grid with consistent loading state */}
       <div className="min-h-[300px] transition-opacity duration-300 ease-in-out">
-        {loading || isSearching ? (
-          // Show loading spinner while menu items are loading
+        {loading || isSearching || !initialLoadComplete.current ? (
+          // Show loading spinner while menu items are loading or initial load hasn't completed
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#c1902f]"></div>
           </div>
@@ -520,8 +475,8 @@ export function MenuPage() {
             {menuItems.length > 0 ? (
               layoutType === 'gallery' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-                  {menuItems.map((item) => (
-                    <MenuItemCard key={item.id} item={item} />
+                  {menuItems.map((item, index) => (
+                    <MenuItemCard key={item.id} item={item} index={index} />
                   ))}
                 </div>
               ) : (

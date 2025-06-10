@@ -1016,8 +1016,6 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       // Create filter params for visible menu items
       const params: MenuItemFilterParams = {
         hidden: false, // Only show visible items
-        // Don't use list view optimization to ensure we get all option groups
-        // view_type: 'list', 
         available_on_day: currentDayOfWeek.toString(), // Convert to string for API compatibility
         restaurant_id: restaurantId || getCurrentRestaurantId() || undefined
       };
@@ -1045,7 +1043,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       // Use the base filtering method
       const visibleItems = await get().fetchMenuItemsWithFilters(params);
       
-      // Update the store with the visible items
+      // Always update the store with the visible items for consistency
       set({ menuItems: visibleItems });
       
       return visibleItems;
