@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../../../shared/api/apiClient';
 import toastUtils from '../../../shared/utils/toastUtils';
+import { useStaffFilters } from './StaffFilterContext';
 
 interface StaffMember {
   id: number;
@@ -9,6 +10,16 @@ interface StaffMember {
   position: string;
   house_account_balance: number;
   active: boolean;
+}
+
+interface Transaction {
+  id: number;
+  amount: number;
+  transaction_type: 'order' | 'payment' | 'adjustment' | 'charge';
+  description: string;
+  reference?: string;
+  created_at: string;
+  created_by_name?: string;
 }
 
 interface StaffOrder {
@@ -40,17 +51,54 @@ interface DiscountSummary {
 }
 
 export function StaffReports() {
-  const [activeReport, setActiveReport] = useState<'orders' | 'balances' | 'discounts'>('orders');
-  const [dateRange, setDateRange] = useState<{ from: string; to: string }>({
-    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
-    to: new Date().toISOString().split('T')[0] // today
-  });
+  const { filters } = useStaffFilters();
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [staffOrders, setStaffOrders] = useState<StaffOrder[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [discountSummary, setDiscountSummary] = useState<DiscountSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedStaffId, setSelectedStaffId] = useState<number | 'all'>('all');
+  
+  // Quick Analysis Modal state
+  const [showQuickAnalysisModal, setShowQuickAnalysisModal] = useState(false);
+  const [quickAnalysisData, setQuickAnalysisData] = useState<{
+    totalOrders: number;
+    totalSpending: number;
+    averageOrder: number;
+    onDutyRate: number;
+  } | null>(null);
+  
+
+  
+  // Date formatting helper
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    
+    // Format date with ordinal suffix
+    const getOrdinalSuffix = (day: number) => {
+      if (day > 3 && day < 21) return 'th';
+      switch (day % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+      }
+    };
+    
+    const month = date.toLocaleDateString('en-US', { month: 'long' });
+    const day = date.getDate();
+    const year = date.getFullYear();
+    const time = date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
+    return `${month} ${day}${getOrdinalSuffix(day)}, ${year} at ${time}`;
+  };
+  
+
 
   // Fetch staff members
   useEffect(() => {
@@ -59,12 +107,24 @@ export function StaffReports() {
 
   // Fetch report data when parameters change
   useEffect(() => {
-    if (activeReport === 'orders') {
-      fetchStaffOrders();
-    } else if (activeReport === 'discounts') {
-      fetchDiscountSummary();
-    }
-  }, [activeReport, dateRange, selectedStaffId]);
+    fetchStaffOrders();
+    fetchDiscountSummary();
+  }, [filters.dateRange, filters.staffMemberId]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (isExportMenuOpen && !target.closest('.export-dropdown')) {
+        setIsExportMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExportMenuOpen]);
 
   const fetchStaffMembers = async () => {
     try {
@@ -99,9 +159,9 @@ export function StaffReports() {
     setError(null);
     try {
       const params = new URLSearchParams({
-        date_from: dateRange.from,
-        date_to: dateRange.to,
-        ...(selectedStaffId !== 'all' && { staff_member_id: selectedStaffId.toString() })
+        date_from: filters.dateRange.from,
+        date_to: filters.dateRange.to,
+        ...(filters.staffMemberId !== 'all' && { staff_member_id: filters.staffMemberId.toString() })
       });
       
       const response = await apiClient.get(`/reports/staff_orders?${params.toString()}`);
@@ -135,13 +195,11 @@ export function StaffReports() {
   };
 
   const fetchDiscountSummary = async () => {
-    setLoading(true);
-    setError(null);
     try {
       const params = new URLSearchParams({
-        date_from: dateRange.from,
-        date_to: dateRange.to,
-        ...(selectedStaffId !== 'all' && { staff_member_id: selectedStaffId.toString() })
+        date_from: filters.dateRange.from,
+        date_to: filters.dateRange.to,
+        ...(filters.staffMemberId !== 'all' && { staff_member_id: filters.staffMemberId.toString() })
       });
       
       const response = await apiClient.get(`/reports/discount_summary?${params.toString()}`);
@@ -179,43 +237,42 @@ export function StaffReports() {
       } else {
         console.error('Invalid discount summary response data:', response.data);
         setDiscountSummary(null);
-        setError('Invalid API response');
       }
     } catch (err: any) {
       console.error('Error fetching discount summary:', err);
-      setError(err.message || 'Failed to fetch discount summary');
       toastUtils.error('Failed to fetch discount summary');
       setDiscountSummary(null);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setDateRange(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleExportCSV = async () => {
+  const handleExport = async (format: 'csv' | 'detailed_csv' | 'summary_pdf') => {
     try {
-      let endpoint = '';
-      let filename = '';
+      setIsExportMenuOpen(false);
+      setIsExporting(true);
       
-      if (activeReport === 'orders') {
-        endpoint = '/reports/staff_orders/export';
-        filename = 'staff_orders.csv';
-      } else if (activeReport === 'balances') {
-        endpoint = '/reports/house_account_balances/export';
-        filename = 'house_account_balances.csv';
-      } else if (activeReport === 'discounts') {
-        endpoint = '/reports/discount_summary/export';
-        filename = 'discount_summary.csv';
+      let endpoint = '/reports/staff_orders/export';
+      let filename = 'house_accounts_report.csv';
+      
+      switch (format) {
+        case 'csv':
+          endpoint = '/reports/staff_orders/export';
+          filename = 'house_accounts.csv';
+          break;
+        case 'detailed_csv':
+          endpoint = '/reports/staff_orders/export';
+          filename = 'house_accounts_detailed.csv';
+          break;
+        case 'summary_pdf':
+          endpoint = '/reports/staff_orders/summary';
+          filename = 'house_accounts_summary.pdf';
+          break;
       }
       
       const params = new URLSearchParams({
-        date_from: dateRange.from,
-        date_to: dateRange.to,
-        ...(selectedStaffId !== 'all' && { staff_member_id: selectedStaffId.toString() })
+        date_from: filters.dateRange.from,
+        date_to: filters.dateRange.to,
+        format: format,
+        ...(filters.staffMemberId !== 'all' && { staff_member_id: filters.staffMemberId.toString() })
       });
       
       const response = await apiClient.get(`${endpoint}?${params.toString()}`, {
@@ -234,104 +291,135 @@ export function StaffReports() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
       
-      toastUtils.success('Export successful');
+      toastUtils.success(`${format.toUpperCase()} export successful`);
     } catch (err: any) {
-      console.error('Error exporting CSV:', err);
-      toastUtils.error('Failed to export CSV');
+      console.error('Error exporting:', err);
+      toastUtils.error(`Failed to export ${format.toUpperCase()}`);
+    } finally {
+      setIsExporting(false);
     }
+  };
+
+  const handleQuickAnalysis = () => {
+    const houseAccountOrders = staffOrders.filter(order => order.use_house_account);
+    const insights = {
+      totalOrders: houseAccountOrders.length,
+      totalSpending: houseAccountOrders.reduce((sum, order) => sum + order.total, 0),
+      averageOrder: houseAccountOrders.length > 0 ? houseAccountOrders.reduce((sum, order) => sum + order.total, 0) / houseAccountOrders.length : 0,
+      onDutyRate: houseAccountOrders.length > 0 ? (houseAccountOrders.filter(order => order.staff_on_duty).length / houseAccountOrders.length) * 100 : 0,
+    };
+    
+    setShowQuickAnalysisModal(true);
+    setQuickAnalysisData(insights);
   };
 
   return (
     <div className="p-4 md:p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Staff Reports</h1>
-        <button
-          onClick={handleExportCSV}
-          className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#a67b28] transition-colors"
-        >
-          Export CSV
-        </button>
-      </div>
+        
+        {/* Enhanced Export & Actions Menu */}
+        <div className="flex items-center space-x-3">
+          {/* Quick Analysis Button */}
+          <button
+            onClick={handleQuickAnalysis}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors border border-gray-300 flex items-center space-x-2"
+            title="Get quick insights about current data"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span className="hidden sm:inline">Quick Analysis</span>
+          </button>
 
-      {/* Report Type Selector */}
-      <div className="mb-6">
-        <div className="flex space-x-4 border-b border-gray-200">
-          <button
-            onClick={() => setActiveReport('orders')}
-            className={`py-2 px-4 font-medium ${
-              activeReport === 'orders'
-                ? 'text-[#c1902f] border-b-2 border-[#c1902f]'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Staff Order History
-          </button>
-          <button
-            onClick={() => setActiveReport('balances')}
-            className={`py-2 px-4 font-medium ${
-              activeReport === 'balances'
-                ? 'text-[#c1902f] border-b-2 border-[#c1902f]'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            House Account Balances
-          </button>
-          <button
-            onClick={() => setActiveReport('discounts')}
-            className={`py-2 px-4 font-medium ${
-              activeReport === 'discounts'
-                ? 'text-[#c1902f] border-b-2 border-[#c1902f]'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Discount Summary
-          </button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-md shadow-sm mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              From Date
-            </label>
-            <input
-              type="date"
-              name="from"
-              value={dateRange.from}
-              onChange={handleDateChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              To Date
-            </label>
-            <input
-              type="date"
-              name="to"
-              value={dateRange.to}
-              onChange={handleDateChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Staff Member
-            </label>
-            <select
-              value={selectedStaffId === 'all' ? 'all' : selectedStaffId}
-              onChange={(e) => setSelectedStaffId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
+          {/* Enhanced Export Dropdown */}
+          <div className="relative export-dropdown">
+            <button
+              onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+              disabled={isExporting}
+              className={`px-4 py-2 rounded-md transition-colors flex items-center space-x-2 ${
+                isExporting 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-[#c1902f] hover:bg-[#a67b28]'
+              } text-white`}
+              aria-expanded={isExportMenuOpen}
             >
-              <option value="all">All Staff Members</option>
-              {staffMembers.map((staff) => (
-                <option key={staff.id} value={staff.id}>
-                  {staff.name}
-                </option>
-              ))}
-            </select>
+              {isExporting ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              )}
+              <span>{isExporting ? 'Exporting...' : 'Export'}</span>
+              {!isExporting && (
+                <svg className={`w-4 h-4 transition-transform ${isExportMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              )}
+            </button>
+
+            {/* Export Dropdown Menu */}
+            {isExportMenuOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg border border-gray-200 z-50">
+                <div className="py-1">
+                  <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Export Options
+                  </div>
+                  
+                  {/* CSV Export */}
+                  <button
+                    onClick={() => handleExport('csv')}
+                    className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <svg className="w-4 h-4 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="flex-1 text-left">
+                      <div className="font-medium">Standard CSV</div>
+                      <div className="text-xs text-gray-500">Basic data export for spreadsheets</div>
+                    </div>
+                  </button>
+
+                  {/* Detailed CSV Export */}
+                  <button
+                    onClick={() => handleExport('detailed_csv')}
+                    className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <svg className="w-4 h-4 mr-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="flex-1 text-left">
+                      <div className="font-medium">Detailed CSV</div>
+                      <div className="text-xs text-gray-500">Enhanced data with analytics & performance metrics</div>
+                    </div>
+                  </button>
+
+                  {/* PDF Summary Export */}
+                  <button
+                    onClick={() => handleExport('summary_pdf')}
+                    className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <svg className="w-4 h-4 mr-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <div className="flex-1 text-left">
+                      <div className="font-medium">Summary PDF</div>
+                      <div className="text-xs text-gray-500">Professional report with charts & insights</div>
+                    </div>
+                  </button>
+
+                  <div className="border-t border-gray-100 mt-1 pt-1">
+                    <div className="px-4 py-2 text-xs text-gray-500">
+                      House Accounts & Discounts • {filters.dateRange.from} to {filters.dateRange.to}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -349,304 +437,354 @@ export function StaffReports() {
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#c1902f]"></div>
         </div>
       ) : (
-        <>
-          {/* Staff Order History */}
-          {activeReport === 'orders' && (
-            <div className="bg-white rounded-md shadow-md overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+        <div className="space-y-6">
+          {/* Basic Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {(() => {
+              const houseAccountOrders = staffOrders.filter(order => order.use_house_account);
+              const totalOrders = houseAccountOrders.length;
+              const totalSpending = houseAccountOrders.reduce((sum, order) => sum + order.total, 0);
+              const averageOrderValue = totalOrders > 0 ? totalSpending / totalOrders : 0;
+              const totalSavings = discountSummary?.total_discount_amount || 0;
+              
+              return (
+                <>
+                  {/* Total Orders */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Total Orders</dt>
+                          <dd className="text-2xl font-bold text-gray-900">{totalOrders}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Total Spending */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Total Spending</dt>
+                          <dd className="text-2xl font-bold text-gray-900">${totalSpending.toFixed(2)}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Average Order Value */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-8 w-8 text-[#c1902f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Average Order</dt>
+                          <dd className="text-2xl font-bold text-gray-900">${averageOrderValue.toFixed(2)}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Total Discount Savings */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Total Savings</dt>
+                          <dd className="text-2xl font-bold text-gray-900">${totalSavings.toFixed(2)}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Summary Section */}
+          {discountSummary && (
+            <div className="bg-white rounded-md shadow-md p-4">
+              <h2 className="text-xl font-semibold mb-4">Summary</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <div className="text-sm text-gray-500">Original Price (Before Discount)</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    ${(discountSummary.total_retail_value || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <div className="text-sm text-gray-500">Amount Paid (After Discount)</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    ${(discountSummary.total_discounted_value || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <div className="text-sm text-gray-500">Discount Savings</div>
+                  <div className="text-2xl font-bold text-[#c1902f]">
+                    ${(discountSummary.total_discount_amount || 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-gray-500 italic">
+                <span className="font-medium">Note:</span> Staff discounts are 50% for on-duty staff and 30% for off-duty staff.
+              </div>
+            </div>
+          )}
+
+          {/* Recent Orders Section */}
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="px-4 md:px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800">Recent House Account Orders</h2>
+              <p className="text-sm text-gray-600 mt-1">Orders charged to house accounts in the selected period</p>
+            </div>
+            
+            {/* Mobile-friendly order cards */}
+            <div className="md:hidden">
+              {staffOrders.length === 0 ? (
+                <div className="px-4 py-8 text-center text-gray-500">
+                  No house account orders found for the selected period
+                </div>
+              ) : (
+                staffOrders.filter(order => order.use_house_account).map((order) => (
+                  <div key={order.id} className="border-b border-gray-200 p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{order.staff_member_name}</h3>
+                        <p className="text-sm text-gray-500">{formatDateTime(order.created_at)}</p>
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        order.staff_on_duty ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {order.staff_on_duty ? 'On Duty' : 'Off Duty'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-gray-500">Pre-Discount:</span>
+                        <span className="ml-1 font-medium">${order.pre_discount_total.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Final Total:</span>
+                        <span className="ml-1 font-medium text-[#c1902f]">${order.total.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Discount:</span>
+                        <span className="ml-1 font-medium">${order.discount_amount.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Rate:</span>
+                        <span className="ml-1 font-medium">{order.staff_on_duty ? '50%' : '30%'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date & Time
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Staff Member
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Duty Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Pre-Discount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Discount Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Discount Rate
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Final Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {staffOrders.filter(order => order.use_house_account).length === 0 ? (
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Staff Member
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Duty Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Pre-Discount
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Discount Amount
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Discount Rate
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Final Total
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Payment
-                      </th>
+                      <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                        No house account orders found for the selected period
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {staffOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
-                          No staff orders found for the selected period
+                  ) : (
+                    staffOrders.filter(order => order.use_house_account).map((order) => (
+                      <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {formatDateTime(order.created_at)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {order.staff_member_name}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            order.staff_on_duty ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {order.staff_on_duty ? 'On Duty' : 'Off Duty'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            ${order.pre_discount_total.toFixed(2)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            ${order.discount_amount.toFixed(2)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {order.staff_on_duty ? '50%' : '30%'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-[#c1902f]">
+                            ${order.total.toFixed(2)}
+                          </div>
                         </td>
                       </tr>
-                    ) : (
-                      staffOrders.map((order) => (
-                        <tr key={order.id}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              {new Date(order.created_at).toLocaleDateString()}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">
-                              {order.staff_member_name}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              order.staff_on_duty ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {order.staff_on_duty ? 'On Duty' : 'Off Duty'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              ${order.pre_discount_total.toFixed(2)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              ${order.discount_amount.toFixed(2)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              {order.staff_on_duty ? '50%' : '30%'}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">
-                              ${order.total.toFixed(2)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              {order.use_house_account ? 'House Account' : 'Immediate'}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-
-          {/* House Account Balances */}
-          {activeReport === 'balances' && (
-            <div className="bg-white rounded-md shadow-md overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Staff Member
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Position
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Current Balance
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {staffMembers.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                          No staff members found
-                        </td>
-                      </tr>
-                    ) : (
-                      staffMembers.map((staff) => (
-                        <tr key={staff.id}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{staff.name}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-500">{staff.position}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm font-medium ${
-                              staff.house_account_balance > 0 ? 'text-red-600' : 'text-green-600'
-                            }`}>
-                              ${Math.abs(staff.house_account_balance).toFixed(2)}
-                              {staff.house_account_balance > 0 ? ' (owed)' : staff.house_account_balance < 0 ? ' (credit)' : ''}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              staff.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              {staff.active ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button
-                              onClick={() => window.location.href = `#/admin/staff?id=${staff.id}`}
-                              className="text-indigo-600 hover:text-indigo-900"
-                            >
-                              Manage
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Quick Analysis Modal */}
+      {showQuickAnalysisModal && quickAnalysisData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                <span className="mr-2">📊</span>
+                Quick Analysis
+              </h3>
+              <button
+                onClick={() => setShowQuickAnalysisModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-          )}
-
-          {/* Discount Summary */}
-          {activeReport === 'discounts' && discountSummary && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-md shadow-md p-4">
-                <h2 className="text-xl font-semibold mb-4">Summary</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-md group relative cursor-help">
-                    <div className="flex items-center">
-                      <div className="text-sm text-gray-500">Original Price (Before Discount)</div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">
-                      ${(discountSummary.total_retail_value || 0).toFixed(2)}
-                    </div>
-                    <div className="opacity-0 group-hover:opacity-100 transition duration-300 absolute z-10 bottom-full left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-800 text-white text-xs rounded w-64 mb-2 shadow-lg">
-                      The full price that would have been charged to regular customers (no staff discount).
+            
+            <div className="space-y-4">
+              {/* Total Orders */}
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-blue-600 text-sm">📋</span>
                     </div>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-md group relative cursor-help">
-                    <div className="flex items-center">
-                      <div className="text-sm text-gray-500">Amount Paid (After Discount)</div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">
-                      ${(discountSummary.total_discounted_value || 0).toFixed(2)}
-                    </div>
-                    <div className="opacity-0 group-hover:opacity-100 transition duration-300 absolute z-10 bottom-full left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-800 text-white text-xs rounded w-64 mb-2 shadow-lg">
-                      The actual amount paid by staff members after applying the staff discount (50% for on-duty, 30% for off-duty).
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-md group relative cursor-help">
-                    <div className="flex items-center">
-                      <div className="text-sm text-gray-500">Discount Savings</div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <div className="text-2xl font-bold text-[#c1902f]">
-                      ${(discountSummary.total_discount_amount || 0).toFixed(2)}
-                    </div>
-                    <div className="opacity-0 group-hover:opacity-100 transition duration-300 absolute z-10 bottom-full left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-800 text-white text-xs rounded w-64 mb-2 shadow-lg">
-                      The total amount saved through staff discounts (Original Price - Amount Paid).
-                    </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-blue-800">Total Orders</p>
                   </div>
                 </div>
-                <div className="mt-3 text-xs text-gray-500 italic">
-                  <span className="font-medium">Note:</span> Hover over each card for more details. Staff discounts are 50% for on-duty staff and 30% for off-duty staff.
+                <div className="text-lg font-bold text-blue-600">
+                  {quickAnalysisData.totalOrders}
                 </div>
               </div>
-
-              <div className="bg-white rounded-md shadow-md overflow-hidden">
-                <h2 className="text-xl font-semibold p-4 border-b border-gray-200">
-                  Breakdown by Staff Member
-                </h2>
-                <div className="px-4 py-2 bg-gray-50 text-sm text-gray-600">
-                  This table shows the discount breakdown for each staff member, including the number of orders and discount amounts for both on-duty (50% discount) and off-duty (30% discount) orders.
+              
+              {/* Total Spending */}
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <span className="text-green-600 text-sm">💰</span>
+                    </div>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-green-800">Total Spending</p>
+                  </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Staff Member
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          On Duty Orders
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Off Duty Orders
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          On Duty Savings (50%)
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Off Duty Savings (30%)
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total Savings
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {!discountSummary.by_staff_member || discountSummary.by_staff_member.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                            No discount data found for the selected period
-                          </td>
-                        </tr>
-                      ) : (
-                        discountSummary.by_staff_member.map((staff) => (
-                          <tr key={staff.staff_id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
-                                {staff.staff_name}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">{staff.on_duty_count}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">{staff.off_duty_count}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">
-                                ${(staff.on_duty_discount || 0).toFixed(2)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">
-                                ${(staff.off_duty_discount || 0).toFixed(2)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-[#c1902f]">
-                                ${(staff.total_discount || 0).toFixed(2)}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                <div className="text-lg font-bold text-green-600">
+                  ${quickAnalysisData.totalSpending.toFixed(2)}
+                </div>
+              </div>
+              
+              {/* Average Order */}
+              <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                      <span className="text-yellow-600 text-sm">📈</span>
+                    </div>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-yellow-800">Average Order</p>
+                  </div>
+                </div>
+                <div className="text-lg font-bold text-yellow-600">
+                  ${quickAnalysisData.averageOrder.toFixed(2)}
+                </div>
+              </div>
+              
+              {/* On-Duty Rate */}
+              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <span className="text-purple-600 text-sm">⏰</span>
+                    </div>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-purple-800">On-Duty Orders</p>
+                  </div>
+                </div>
+                <div className="text-lg font-bold text-purple-600">
+                  {quickAnalysisData.onDutyRate.toFixed(1)}%
                 </div>
               </div>
             </div>
-          )}
-        </>
+            
+            {/* Close Button */}
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowQuickAnalysisModal(false)}
+                className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#a67b28] transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
