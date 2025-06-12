@@ -916,11 +916,8 @@ function PaymentPanel({
   onBack,
   isProcessing
 }: PaymentPanelProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other' | 'stripe_reader'>('credit_card');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
-  const [paymentLinkSent, setPaymentLinkSent] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'stripe_reader' | 'cash' | 'credit_card' | 'other'>('stripe_reader');
+
   const [paymentError, setPaymentError] = useState<string | null>(null);
   // For dynamic height adjustment
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
@@ -1016,22 +1013,6 @@ function PaymentPanel({
     }
   };
 
-  const handleSendPaymentLink = async () => {
-    if (!customerEmail && !customerPhone) {
-      setPaymentError('Please provide either an email or phone number to send the payment link.');
-      return;
-    }
-    setPaymentError(null);
-    try {
-      // Simulate payment link creation
-      const mockPaymentLink = `https://payment.example.com/order/${Date.now()}?token=abc123`;
-      setPaymentLinkUrl(mockPaymentLink);
-      setPaymentLinkSent(true);
-    } catch (error) {
-      console.error('Error creating payment link:', error);
-      setPaymentError('Failed to create payment link. Please try again.');
-    }
-  };
 
   const handleProcessPayment = async () => {
     if (paymentState === 'processing') return;
@@ -1040,11 +1021,7 @@ function PaymentPanel({
       handleCashPayment();
       return;
     }
-    if (paymentMethod === 'payment_link') {
-      handleSendPaymentLink();
-      return;
-    }
-    if (['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod)) {
+    if (['stripe_reader', 'other'].includes(paymentMethod)) {
       handleManualPayment();
       return;
     }
@@ -1119,18 +1096,7 @@ function PaymentPanel({
         {/* Payment Method Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-3">Payment Method</label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <button
-              type="button"
-              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                paymentMethod === 'credit_card'
-                  ? 'bg-[#c1902f] text-white border-[#c1902f]'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-              onClick={() => setPaymentMethod('credit_card')}
-            >
-              Credit Card
-            </button>
+          <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
@@ -1140,7 +1106,7 @@ function PaymentPanel({
               }`}
               onClick={() => setPaymentMethod('stripe_reader')}
             >
-              Stripe Reader
+              Card Reader
             </button>
             <button
               type="button"
@@ -1156,35 +1122,13 @@ function PaymentPanel({
             <button
               type="button"
               className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                paymentMethod === 'payment_link'
+                paymentMethod === 'credit_card'
                   ? 'bg-[#c1902f] text-white border-[#c1902f]'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
-              onClick={() => setPaymentMethod('payment_link')}
+              onClick={() => setPaymentMethod('credit_card')}
             >
-              Send Link
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                paymentMethod === 'clover'
-                  ? 'bg-[#c1902f] text-white border-[#c1902f]'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-              onClick={() => setPaymentMethod('clover')}
-            >
-              Clover
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                paymentMethod === 'revel'
-                  ? 'bg-[#c1902f] text-white border-[#c1902f]'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-              onClick={() => setPaymentMethod('revel')}
-            >
-              Revel
+              Stripe
             </button>
             <button
               type="button"
@@ -1201,7 +1145,7 @@ function PaymentPanel({
         </div>
 
         {/* Credit Card Panel - with improved layout */}
-        {paymentMethod === 'credit_card' && !paymentLinkSent && (
+        {paymentMethod === 'credit_card' && (
           <div className="border border-gray-200 rounded-md p-4 mb-6">
             <h4 className="text-sm font-medium text-gray-700 mb-3">Credit Card Payment</h4>
             <div className="sm:flex sm:space-x-4">
@@ -1235,7 +1179,7 @@ function PaymentPanel({
         )}
 
         {/* Cash Payment Panel */}
-        {paymentMethod === 'cash' && !paymentLinkSent && (
+        {paymentMethod === 'cash' && (
           <div className="border border-gray-200 rounded-md p-4 mb-6">
             <h4 className="text-sm font-medium text-gray-700 mb-3">Cash Payment</h4>
             <div className="space-y-4">
@@ -1327,17 +1271,13 @@ function PaymentPanel({
             </div>
           </div>
         )}
-{/* Manual Payment Panel (Stripe Reader, Clover, Revel, Other) */}
-{['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod) && (
+{/* Manual Payment Panel (Stripe Reader, Other) */}
+{['stripe_reader', 'other'].includes(paymentMethod) && (
   <div className="border border-gray-200 rounded-md p-4 mb-6">
     <h4 className="text-sm font-medium text-gray-700 mb-3">
       {paymentMethod === 'stripe_reader'
-        ? 'Stripe Card Reader'
-        : paymentMethod === 'clover'
-          ? 'Clover'
-          : paymentMethod === 'revel'
-            ? 'Revel'
-            : 'Other'} Payment Details
+        ? 'Card Reader'
+        : 'Other'} Payment Details
     </h4>
     <div className="space-y-4">
       <div>
@@ -1379,77 +1319,7 @@ function PaymentPanel({
   </div>
 )}
 
-        {/* Payment Link Panel */}
-        {paymentMethod === 'payment_link' && !paymentLinkSent && (
-          <div className="space-y-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer Email (optional)
-              </label>
-              <input
-                type="email"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
-                value={customerEmail}
-                onChange={e => setCustomerEmail(e.target.value)}
-                placeholder="customer@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer Phone (optional)
-              </label>
-              <input
-                type="tel"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
-                value={customerPhone}
-                onChange={e => setCustomerPhone(e.target.value)}
-                placeholder="+1234567890"
-              />
-            </div>
-            <p className="text-sm text-gray-500">
-              Please provide at least one contact method to send the payment link.
-            </p>
-          </div>
-        )}
 
-        {/* Payment Link Sent */}
-        {paymentLinkSent && (
-          <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293
-                      a1 1 0 00-1.414-1.414L9 10.586 7.707
-                      9.293a1 1 0 00-1.414 1.414l2 2
-                      a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-green-800">Payment Link Sent</h3>
-                <div className="mt-2 text-sm text-green-700">
-                  <p>A payment link has been sent. The customer can complete payment via:</p>
-                  <div className="mt-2 bg-white p-2 rounded border border-gray-200 break-all">
-                    <a
-                      href={paymentLinkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
-                    >
-                      {paymentLinkUrl}
-                    </a>
-                  </div>
-                  <p className="mt-2">
-                    You can mark items as paid once the customer finishes payment.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Payment Error */}
         {paymentError && (
@@ -1495,79 +1365,48 @@ function PaymentPanel({
           >
             Back
           </button>
-          {!paymentLinkSent ? (
-            <button
-              onClick={handleProcessPayment}
-              disabled={
-                paymentState === 'processing' || isProcessing ||
-                (paymentMethod === 'payment_link' && !customerEmail && !customerPhone) ||
-                (paymentMethod === 'cash' && (parseFloat(cashReceived || '0') < orderTotal))
-              }
-              className="py-3 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28]
-                        focus:outline-none focus:ring-2 focus:ring-[#c1902f]
-                        focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed
-                        shadow-sm transition-colors"
-            >
-              {isProcessing ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10"
-                      stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0
-                          0 5.373 0 12h4zm2
-                          5.291A7.962
-                          7.962
-                          0
-                          014
-                          12H0c0
-                          3.042
-                          1.135
-                          5.824
-                          3
-                          7.938l3-2.647z" />
-                  </svg>
-                  Processing...
-                </span>
-              ) : (
-                paymentMethod === 'cash'
-                  ? 'Complete Cash Payment'
-                  : paymentMethod === 'payment_link'
-                    ? 'Send Payment Link'
-                    : ['clover', 'revel', 'other'].includes(paymentMethod)
-                      ? `Complete ${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)} Payment`
-                      : 'Process Payment'
-              )}
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                // Mark as "pending" or "paid" in your real system
-                const mockTransactionId = `link_${Date.now()}`;
-                
-                // Create detailed payment information
-                const paymentDetails = {
-                  payment_method: 'payment_link',
-                  transaction_id: mockTransactionId,
-                  payment_date: today,
-                  status: 'pending',
-                  notes: `Payment link sent to ${customerEmail || customerPhone}`,
-                  processor: 'payment_link'
-                };
-                
-                onPaymentSuccess({
-                  status: 'pending',
-                  transaction_id: mockTransactionId,
-                  amount: orderTotal.toString(),
-                  payment_details: paymentDetails
-                });
-              }}
-              className="py-3 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28]
-                        focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50"
-            >
-              Mark as Paid &amp; Close
-            </button>
-          )}
+          <button
+            onClick={handleProcessPayment}
+            disabled={
+              paymentState === 'processing' || isProcessing ||
+              (paymentMethod === 'cash' && (parseFloat(cashReceived || '0') < orderTotal))
+            }
+            className="py-3 bg-[#c1902f] text-white rounded-md font-medium hover:bg-[#a97c28]
+                      focus:outline-none focus:ring-2 focus:ring-[#c1902f]
+                      focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed
+                      shadow-sm transition-colors"
+          >
+            {isProcessing ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10"
+                    stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0
+                        0 5.373 0 12h4zm2
+                        5.291A7.962
+                        7.962
+                        0
+                        014
+                        12H0c0
+                        3.042
+                        1.135
+                        5.824
+                        3
+                        7.938l3-2.647z" />
+                </svg>
+                Processing...
+              </span>
+            ) : (
+              paymentMethod === 'cash'
+                ? 'Complete Cash Payment'
+                : paymentMethod === 'stripe_reader'
+                  ? 'Complete Card Reader Payment'
+                  : paymentMethod === 'credit_card'
+                    ? 'Process Payment'
+                    : 'Complete Other Payment'
+            )}
+                      </button>
         </div>
       </div>
     </div>

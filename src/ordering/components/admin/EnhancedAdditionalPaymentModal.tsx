@@ -28,7 +28,7 @@ export function EnhancedAdditionalPaymentModal({
   onPaymentCompleted,
 }: EnhancedAdditionalPaymentModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'cash' | 'payment_link' | 'clover' | 'revel' | 'other' | 'stripe_reader' | 'stripe' | 'paypal'>('credit_card');
+  const [paymentMethod, setPaymentMethod] = useState<'stripe_reader' | 'cash' | 'credit_card' | 'other'>('stripe_reader');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentLinkUrl, setPaymentLinkUrl] = useState('');
@@ -450,7 +450,7 @@ export function EnhancedAdditionalPaymentModal({
       let actualPaymentMethod = paymentMethod;
       let processor = undefined;
       
-      // Special handling for credit card payments
+      // Special handling for different payment methods
       if (paymentMethod === 'credit_card') {
         actualPaymentMethod = 'credit_card'; // Always use 'credit_card' for card payments
         processor = paymentProcessor === 'stripe' ? 'stripe' : 'paypal';
@@ -464,9 +464,7 @@ export function EnhancedAdditionalPaymentModal({
         payment_method: actualPaymentMethod, // Use the determined payment method
         transaction_id: transactionId,
         payment_date: today,
-        notes: paymentMethod === 'credit_card'
-          ? `Payment processed via ${processor}`
-          : `Payment processed via ${actualPaymentMethod}`,
+        notes: `Payment processed via ${actualPaymentMethod}`,
         processor: processor,
         status: 'succeeded',
         payment_intent_id: paymentIntentId,
@@ -615,18 +613,7 @@ export function EnhancedAdditionalPaymentModal({
               {!showStripeForm && !paymentLinkSent && (
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                  <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                    <button
-                      type="button"
-                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                        paymentMethod === 'credit_card'
-                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                      onClick={() => setPaymentMethod('credit_card')}
-                    >
-                      Credit Card
-                    </button>
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
@@ -636,7 +623,7 @@ export function EnhancedAdditionalPaymentModal({
                       }`}
                       onClick={() => setPaymentMethod('stripe_reader')}
                     >
-                      Stripe Reader
+                      Card Reader
                     </button>
                     <button
                       type="button"
@@ -652,35 +639,13 @@ export function EnhancedAdditionalPaymentModal({
                     <button
                       type="button"
                       className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                        paymentMethod === 'payment_link'
+                        paymentMethod === 'credit_card'
                           ? 'bg-[#c1902f] text-white border-[#c1902f]'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
-                      onClick={() => setPaymentMethod('payment_link')}
+                      onClick={() => setPaymentMethod('credit_card')}
                     >
-                      Send Link
-                    </button>
-                    <button
-                      type="button"
-                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                        paymentMethod === 'clover'
-                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                      onClick={() => setPaymentMethod('clover')}
-                    >
-                      Clover
-                    </button>
-                    <button
-                      type="button"
-                      className={`px-3 py-2 border rounded-md text-sm font-medium transition-colors ${
-                        paymentMethod === 'revel'
-                          ? 'bg-[#c1902f] text-white border-[#c1902f]'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                      onClick={() => setPaymentMethod('revel')}
-                    >
-                      Revel
+                      Stripe
                     </button>
                     <button
                       type="button"
@@ -697,17 +662,13 @@ export function EnhancedAdditionalPaymentModal({
                 </div>
               )}
 
-              {/* Manual Payment Panel (Stripe Reader, Clover, Revel, Other) */}
-              {['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod) && !paymentLinkSent && (
+              {/* Manual Payment Panel (Stripe Reader, Other) */}
+              {['stripe_reader', 'other'].includes(paymentMethod) && !paymentLinkSent && (
                 <div className="border border-gray-200 rounded-md p-4 mb-6">
                   <h4 className="text-sm font-medium text-gray-700 mb-3">
                     {paymentMethod === 'stripe_reader'
-                      ? 'Stripe Card Reader'
-                      : paymentMethod === 'clover'
-                        ? 'Clover'
-                        : paymentMethod === 'revel'
-                          ? 'Revel'
-                          : 'Other'} Payment Details
+                      ? 'Card Reader'
+                      : 'Other'} Payment Details
                   </h4>
                   <div className="space-y-4">
                     <div>
@@ -749,38 +710,6 @@ export function EnhancedAdditionalPaymentModal({
                 </div>
               )}
 
-              {/* Payment Link Form */}
-              {paymentMethod === 'payment_link' && !paymentLinkSent && (
-                <div className="space-y-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Customer Email (optional)
-                    </label>
-                    <input
-                      type="email"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder="customer@example.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Customer Phone (optional)
-                    </label>
-                    <input
-                      type="tel"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f]"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="+1234567890"
-                    />
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    Please provide at least one contact method to send the payment link.
-                  </p>
-                </div>
-              )}
 
               {/* Payment Link Sent */}
               {paymentLinkSent && (
@@ -1042,24 +971,14 @@ export function EnhancedAdditionalPaymentModal({
                     {isLoading ? 'Processing...' : 'Complete Cash Payment'}
                   </button>
                 )}
-                {['stripe_reader', 'clover', 'revel', 'other'].includes(paymentMethod) && (
+                {['stripe_reader', 'other'].includes(paymentMethod) && (
                   <button
                     type="button"
                     onClick={handleManualPayment}
                     disabled={isLoading || !paymentDate}
                     className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? 'Processing...' : `Complete ${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)} Payment`}
-                  </button>
-                )}
-                {paymentMethod === 'payment_link' && (
-                  <button
-                    type="button"
-                    onClick={handleSendPaymentLink}
-                    disabled={isLoading || (!customerEmail && !customerPhone)}
-                    className="px-4 py-2 bg-[#c1902f] text-white rounded-md text-sm font-medium hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isLoading ? 'Sending...' : 'Send Payment Link'}
+                    {isLoading ? 'Processing...' : `Complete ${paymentMethod === 'stripe_reader' ? 'Card Reader' : 'Other'} Payment`}
                   </button>
                 )}
                 <button
