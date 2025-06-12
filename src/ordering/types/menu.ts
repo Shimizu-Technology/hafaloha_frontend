@@ -35,6 +35,14 @@ export interface MenuOption {
   available: boolean;
   is_preselected?: boolean;
   is_available?: boolean; // Whether this option is currently available for ordering
+  
+  // Option-level inventory fields (from PRD Step 4)
+  stock_quantity?: number;
+  damaged_quantity?: number;
+  available_quantity?: number; // Computed: stock_quantity - damaged_quantity
+  // New fields from backend API response for customer interface
+  low_stock?: boolean; // Whether this option is low on stock
+  out_of_stock?: boolean; // Whether this option is completely out of stock
 }
 
 export interface OptionGroup {
@@ -47,6 +55,14 @@ export interface OptionGroup {
   has_available_options?: boolean;
   required_but_unavailable?: boolean;
   required?: boolean; // Whether this option group is required
+  
+  // Option-level inventory fields (from PRD Step 4)
+  enable_option_inventory?: boolean;
+  low_stock_threshold?: number;
+  tracking_priority?: number;
+  total_available_stock?: number;
+  has_low_stock_options?: boolean;
+  all_options_out_of_stock?: boolean;
 }
 
 /**
@@ -123,6 +139,12 @@ export interface MenuItem {
   damaged_quantity?: number;
   low_stock_threshold?: number;
   available_quantity?: number; // Computed: stock_quantity - damaged_quantity
+  
+  // Option-level inventory tracking (from PRD Step 4)
+  inventory_tracking_type?: 'manual' | 'menu_item_level' | 'option_level';
+  primary_tracked_option_group_id?: number;
+  primary_tracked_option_group_name?: string;
+  total_option_stock?: number;
   
   // Visibility status
   hidden?: boolean;

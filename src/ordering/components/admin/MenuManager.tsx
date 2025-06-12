@@ -17,6 +17,8 @@ import { useRestaurantStore } from '../../../shared/store/restaurantStore';
 
 // Import the Inventory Modal
 import ItemInventoryModal from './ItemInventoryModal';
+// Import option-level inventory modal
+import OptionInventoryModal from './OptionInventoryModal';
 // Import the updated OptionGroupsModal (no "required" field)
 import OptionGroupsModal from './OptionGroupsModal';
 
@@ -86,6 +88,12 @@ interface MenuItemFormData {
   damaged_quantity?: number;
   low_stock_threshold?: number;
   available_quantity?: number; // Computed: stock_quantity - damaged_quantity
+  
+  // Option-level inventory fields (from PRD Step 4)
+  inventory_tracking_type?: 'manual' | 'menu_item_level' | 'option_level';
+  primary_tracked_option_group_id?: number;
+  primary_tracked_option_group_name?: string;
+  total_option_stock?: number;
 }
 
 /**
@@ -201,6 +209,10 @@ export function MenuManager({
   // Inventory modal state
   const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [inventoryModalItem, setInventoryModalItem] = useState<MenuItem | null>(null);
+  
+  // Option inventory modal state
+  const [optionInventoryModalOpen, setOptionInventoryModalOpen] = useState(false);
+  const [optionInventoryModalItem, setOptionInventoryModalItem] = useState<MenuItem | null>(null);
   
   // For item-specific polling when editing
   const [editItemPollingActive, setEditItemPollingActive] = useState(false);
@@ -648,22 +660,28 @@ export function MenuManager({
     }
   }, [menuItems, isEditing, editItemPollingActive, editingItem]);
 
-  /** Manage inventory => show the modal and ensure WebSocket connection. */
+  /** Manage inventory => show the appropriate modal based on tracking type. */
   const handleManageInventory = (item: MenuItem) => {
-    // First ensure any existing polling is stopped
-    stopInventoryPolling();
-    
-    // Make sure WebSocket connection is active
-    const { websocketConnected } = useMenuStore.getState();
-    if (!websocketConnected) {
-      console.debug(`[MenuManager] Starting WebSocket connection for inventory updates`);
-      useMenuStore.getState().startMenuItemsWebSocket();
+    if (item.inventory_tracking_type === 'option_level') {
+      // Open option-level inventory modal
+      setOptionInventoryModalItem(item);
+      setOptionInventoryModalOpen(true);
     } else {
-      console.debug(`[MenuManager] WebSocket already connected for inventory updates`);
+      // First ensure any existing polling is stopped
+      stopInventoryPolling();
+      
+      // Make sure WebSocket connection is active
+      const { websocketConnected } = useMenuStore.getState();
+      if (!websocketConnected) {
+        console.debug(`[MenuManager] Starting WebSocket connection for inventory updates`);
+        useMenuStore.getState().startMenuItemsWebSocket();
+      } else {
+        console.debug(`[MenuManager] WebSocket already connected for inventory updates`);
+      }
+      
+      setInventoryModalItem(item);
+      setInventoryModalOpen(true);
     }
-    
-    setInventoryModalItem(item);
-    setInventoryModalOpen(true);
   };
   const handleCloseInventoryModal = () => {
     setInventoryModalOpen(false);
@@ -690,6 +708,19 @@ export function MenuManager({
       console.debug('[MenuManager] Using API call for inventory refresh');
       refreshAfterInventoryChanges();
     }
+  };
+
+  const handleCloseOptionInventoryModal = () => {
+    setOptionInventoryModalOpen(false);
+    setOptionInventoryModalItem(null);
+    
+    // If the parent component needs to reset e.g. "openInventoryForItem"
+    if (onInventoryModalClose) {
+      onInventoryModalClose();
+    }
+    
+    // Force a refresh to get updated inventory/tracking data
+    refreshAfterInventoryChanges();
   };
 
   // Use our loading overlay hook
@@ -1290,7 +1321,9 @@ export function MenuManager({
                       )}
                       {/* 6) If inventory tracking is enabled */}
                       {item.enable_stock_tracking && (
-                        <Badge bgColor="bg-blue-500">Inventory Tracked</Badge>
+                        <Badge bgColor="bg-blue-500">
+                          {item.inventory_tracking_type === 'option_level' ? 'Option-Level Tracking' : 'Inventory Tracked'}
+                        </Badge>
                       )}
                       {/* 7) If tracking is enabled, show dynamic stock badges */}
                       {item.enable_stock_tracking && deriveStockStatus(item) === 'low_stock' && (
@@ -1848,187 +1881,129 @@ export function MenuManager({
               <div>
                 <div className="flex items-center mb-2 border-b pb-2">
                   <h4 className="text-md font-semibold">
-                    Inventory Status
+                    Inventory Management
                   </h4>
                   <Tooltip
-                    content="Manage the current availability of this item based on your inventory."
+                    content="Choose how to track inventory for this item - manually, at menu item level, or at option level."
                     position="right"
                     icon
                     iconClassName="ml-1 h-4 w-4"
                   />
                 </div>
+                
+                {/* Inventory Management Button */}
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingItem.id) {
+                        handleManageInventory({
+                          ...editingItem,
+                          id: editingItem.id.toString(),
+                        } as unknown as MenuItem);
+                      }
+                    }}
+                    disabled={!editingItem.id}
+                    className="w-full bg-[#c1902f] hover:bg-[#a97c28] disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50 flex items-center justify-center"
+                  >
+                    <Package className="h-4 w-4 mr-2" />
+                    {!editingItem.id ? 'Save Item First to Manage Inventory' : 'Manage Inventory & Settings'}
+                  </button>
+                </div>
+
+                {/* Current Status & Note */}
                 <div className="flex flex-col sm:flex-row gap-4">
-                  {editingItem.enable_stock_tracking ? (
-                    // Inventory tracking is enabled - show auto status
-                    <>
-                      <div className="flex-1">
-                        <div className="flex items-center mb-1">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Inventory-Controlled Status
-                          </label>
-                          <Tooltip
-                            content="This status is automatically determined by available inventory."
-                            position="top"
-                            icon
-                            iconClassName="ml-1 h-4 w-4"
-                          />
-                        </div>
-                        <div className="py-2 px-3 border rounded-md bg-gray-50">
-                          {(() => {
-                            const availableQty = calculateAvailableQuantity(editingItem as any);
-                            const threshold = editingItem.low_stock_threshold || 10;
-                            const status = deriveStockStatus(editingItem as any);
+                  <div className="flex-1">
+                    <div className="flex items-center mb-1">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Current Status
+                      </label>
+                      <Tooltip
+                        content="Click 'Manage Inventory & Settings' above to configure inventory tracking strategy."
+                        position="top"
+                        icon
+                        iconClassName="ml-1 h-4 w-4"
+                      />
+                    </div>
+                    <div className="py-2 px-3 border rounded-md bg-gray-50">
+                      {(() => {
+                        const status = deriveStockStatus(editingItem as any);
+                        const isOptionLevel = editingItem.inventory_tracking_type === 'option_level';
+                        const isMenuItemLevel = editingItem.enable_stock_tracking && editingItem.inventory_tracking_type !== 'option_level';
+                        
+                        let statusLabel = 'In Stock';
+                        let statusColor = 'bg-green-500';
+                        let trackingMode = 'Manual';
 
-                            let statusLabel = 'In Stock';
-                            let statusColor = 'bg-green-500';
-
-                            if (status === 'out_of_stock') {
-                              statusLabel = 'Out of Stock';
-                              statusColor = 'bg-red-500';
-                            } else if (status === 'low_stock') {
-                              statusLabel = 'Low Stock';
-                              statusColor = 'bg-yellow-500';
-                            }
-
-                            return (
-                              <>
-                                <div className="flex items-center">
-                                  <div
-                                    className={`h-3 w-3 rounded-full mr-2 ${statusColor}`}
-                                  />
-                                  <span className="font-medium">{statusLabel}</span>
-                                </div>
-                                <div className="text-sm text-gray-600 mt-2">
-                                  <div>Available: {availableQty} items</div>
-                                  <div>Low Stock Threshold: {threshold} items</div>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Status is determined by inventory levels.
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (editingItem.id) {
-                              handleManageInventory({
-                                ...editingItem,
-                                id: editingItem.id.toString(),
-                              } as unknown as MenuItem);
-                            }
-                          }}
-                          className="mt-2 text-blue-600 hover:text-blue-800 text-sm flex items-center"
-                        >
-                          <Package className="h-4 w-4 mr-1" />
-                          Manage Inventory
-                        </button>
-                      </div>
-                      {/* Status Note */}
-                      <div className="flex-1">
-                        <div className="flex items-center mb-1">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Status Note (Optional)
-                          </label>
-                          <Tooltip
-                            content="Add a note explaining the current status, e.g. supplier delay."
-                            position="top"
-                            icon
-                            iconClassName="ml-1 h-4 w-4"
-                          />
-                        </div>
-                        <textarea
-                          value={editingItem.status_note ?? ''}
-                          onChange={(e) =>
-                            setEditingItem({ ...editingItem, status_note: e.target.value })
+                        if (isOptionLevel) {
+                          trackingMode = 'Option Level';
+                          if (status === 'out_of_stock') {
+                            statusLabel = 'All Options Out of Stock';
+                            statusColor = 'bg-red-500';
+                          } else if (status === 'low_stock') {
+                            statusLabel = 'Some Options Low/Out of Stock';
+                            statusColor = 'bg-yellow-500';
+                          } else {
+                            statusLabel = 'Options Available';
                           }
-                          className="w-full px-4 py-2 border rounded-md"
-                          rows={2}
-                          placeholder="e.g. 'Using a temporary sauce due to delay.'"
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    // Manual status selection
-                    <>
-                      <div className="flex-1">
-                        <div className="flex items-center mb-1">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Inventory Status
-                          </label>
-                          <Tooltip
-                            content="Set the current availability if not tracking inventory."
-                            position="top"
-                            icon
-                            iconClassName="ml-1 h-4 w-4"
-                          />
-                        </div>
-                        <select
-                          value={editingItem.stock_status ?? 'in_stock'}
-                          onChange={(e) =>
-                            setEditingItem({
-                              ...editingItem,
-                              stock_status: e.target.value as
-                                | 'in_stock'
-                                | 'out_of_stock'
-                                | 'low_stock',
-                            })
+                        } else if (isMenuItemLevel) {
+                          trackingMode = 'Menu Item Level';
+                          if (status === 'out_of_stock') {
+                            statusLabel = 'Out of Stock';
+                            statusColor = 'bg-red-500';
+                          } else if (status === 'low_stock') {
+                            statusLabel = 'Low Stock';
+                            statusColor = 'bg-yellow-500';
                           }
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="in_stock">In Stock</option>
-                          <option value="out_of_stock">Out of Stock</option>
-                          <option value="low_stock">Low Stock</option>
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          "Low Stock" shows a warning but still allows ordering.
-                          "Out of Stock" fully disables ordering.
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (editingItem.id) {
-                              handleManageInventory({
-                                ...editingItem,
-                                id: editingItem.id.toString(),
-                              } as unknown as MenuItem);
-                            }
-                          }}
-                          className="mt-2 text-blue-600 hover:text-blue-800 text-sm flex items-center"
-                        >
-                          <Package className="h-4 w-4 mr-1" />
-                          Enable Inventory Tracking
-                        </button>
-                      </div>
-
-                      {/* Status Note */}
-                      <div className="flex-1">
-                        <div className="flex items-center mb-1">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Status Note (Optional)
-                          </label>
-                          <Tooltip
-                            content="Add a note explaining the current status, e.g. supplier delay."
-                            position="top"
-                            icon
-                            iconClassName="ml-1 h-4 w-4"
-                          />
-                        </div>
-                        <textarea
-                          value={editingItem.status_note ?? ''}
-                          onChange={(e) =>
-                            setEditingItem({ ...editingItem, status_note: e.target.value })
+                        } else {
+                          // Manual mode
+                          if (editingItem.stock_status === 'out_of_stock') {
+                            statusLabel = 'Out of Stock';
+                            statusColor = 'bg-red-500';
+                          } else if (editingItem.stock_status === 'low_stock') {
+                            statusLabel = 'Low Stock';
+                            statusColor = 'bg-yellow-500';
                           }
-                          className="w-full px-4 py-2 border rounded-md"
-                          rows={2}
-                          placeholder="e.g. 'Using a temporary sauce due to delay.'"
-                        />
-                      </div>
-                    </>
-                  )}
+                        }
+
+                        return (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                <div className={`h-3 w-3 rounded-full mr-2 ${statusColor}`} />
+                                <span className="font-medium">{statusLabel}</span>
+                              </div>
+                              <span className="text-xs bg-gray-200 px-2 py-1 rounded">{trackingMode}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Status Note */}
+                  <div className="flex-1">
+                    <div className="flex items-center mb-1">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Status Note (Optional)
+                      </label>
+                      <Tooltip
+                        content="Add a note explaining the current status, e.g. supplier delay."
+                        position="top"
+                        icon
+                        iconClassName="ml-1 h-4 w-4"
+                      />
+                    </div>
+                    <textarea
+                      value={editingItem.status_note ?? ''}
+                      onChange={(e) =>
+                        setEditingItem({ ...editingItem, status_note: e.target.value })
+                      }
+                      className="w-full px-4 py-2 border rounded-md"
+                      rows={2}
+                      placeholder="e.g. 'Using a temporary sauce due to delay.'"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2102,10 +2077,21 @@ export function MenuManager({
                         } as unknown as MenuItem);
                       }
                     }}
-                    className="px-4 py-2 border rounded-md hover:bg-gray-50"
+                    className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center"
                   >
+                    <Package className="h-4 w-4 mr-2" />
                     Manage Options
+                    {editingItem.inventory_tracking_type === 'option_level' && (
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                        + Inventory
+                      </span>
+                    )}
                   </button>
+                  {editingItem.inventory_tracking_type === 'option_level' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Configure which option group should track inventory levels.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -2190,6 +2176,40 @@ export function MenuManager({
               });
             }
           }}
+          onTrackingTypeChange={(trackingType) => {
+            // Handle tracking type changes
+            if (trackingType === 'option_level') {
+              // Switch to option-level modal
+              handleCloseInventoryModal();
+              setOptionInventoryModalItem(inventoryModalItem);
+              setOptionInventoryModalOpen(true);
+            }
+            // Update the editingItem if we're editing the same item
+            if (
+              editingItem &&
+              editingItem.id &&
+              inventoryModalItem.id === String(editingItem.id)
+            ) {
+              setEditingItem((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  inventory_tracking_type: trackingType,
+                  enable_stock_tracking: trackingType !== 'manual'
+                };
+              });
+            }
+          }}
+        />
+      )}
+
+      {/* Option Inventory Modal */}
+      {optionInventoryModalOpen && optionInventoryModalItem && (
+        <OptionInventoryModal
+          open={optionInventoryModalOpen}
+          menuItem={optionInventoryModalItem}
+          onClose={handleCloseOptionInventoryModal}
+          onSave={refreshAfterInventoryChanges}
         />
       )}
       

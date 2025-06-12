@@ -35,9 +35,17 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
         return 0;
       })
       .map((group: OptionGroup) => {
-        // Filter out unavailable options and sort by position
+        // Filter out unavailable options (including out-of-stock) and sort by position
         const availableOptions = group.options
-          .filter((option: MenuOption) => option.is_available !== false)
+          .filter((option: MenuOption) => {
+            // Basic availability check
+            if (option.is_available === false) return false;
+            
+            // Stock-based availability check (only if option group has inventory enabled)
+            if (group.enable_option_inventory && option.out_of_stock) return false;
+            
+            return true;
+          })
           .sort((a: MenuOption, b: MenuOption) => {
             if ((a as any).position !== undefined && (b as any).position !== undefined) {
               return (a as any).position - (b as any).position;
@@ -365,12 +373,33 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
       // Get the original array format for compatibility
       const customizationsArray = formatCustomizations();
       
+      // Determine tracked option for inventory if option-level tracking is enabled
+      let trackedOption = null;
+      if (item.inventory_tracking_type === 'option_level' && item.primary_tracked_option_group_id) {
+        const primaryGroup = processedOptionGroups.find(g => g.id === item.primary_tracked_option_group_id);
+        if (primaryGroup) {
+          const selectedOptionsForGroup = selectedOptions[primaryGroup.id.toString()] || [];
+          if (selectedOptionsForGroup.length > 0) {
+            // For required single-select groups (typical for size), use the first (only) selection
+            // For multi-select, we'd need business logic to determine which to track
+            const trackedOptionData = selectedOptionsForGroup[0];
+            trackedOption = {
+              option_id: trackedOptionData.id,
+              option_group_id: primaryGroup.id,
+              quantity: quantity
+            };
+          }
+        }
+      }
+      
       // Create a copy of the item with the updated price and formatted customizations
       const itemWithUpdatedPrice = {
         ...item,
         price: basePrice + additionalPrice,
         // Add a properly formatted customizations object that will display correctly
-        customizations: formatCustomizationsForDisplay()
+        customizations: formatCustomizationsForDisplay(),
+        // Add tracked option data for inventory
+        tracked_option: trackedOption
       };
       
       // Debug log to help troubleshoot price calculations
@@ -380,7 +409,8 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
         additionalPrice: additionalPrice,
         totalItemPrice: totalPrice,
         quantity: quantity,
-        customizations: itemWithUpdatedPrice.customizations
+        customizations: itemWithUpdatedPrice.customizations,
+        trackedOption: trackedOption
       });
       
       // Pass the updated item and the array of customizations
@@ -509,14 +539,16 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                       
                       <div className="space-y-2">
                         {group.options.map((option: MenuOption) => {
-                          // Skip unavailable options
+                          // Skip unavailable options (including out-of-stock)
                           if (option.is_available === false) return null;
+                          if (group.enable_option_inventory && option.out_of_stock) return null;
                           
                           const isSelected = (selectedOptions[groupId.toString()] || [])
                             .some(opt => opt.id === option.id);
                           
                           const extraPrice = getOptionPrice(option);
                           const isFree = isOptionFree(group, option.id);
+                          const isLowStock = group.enable_option_inventory && option.low_stock && !option.out_of_stock;
                           
                           // Determine what price indicator to show
                           let priceIndicator = null;
@@ -543,15 +575,28 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                                   ? 'border-[#c1902f] bg-[#c1902f]/10'
                                   : 'border-gray-200 hover:border-[#c1902f]'
                                 }
+                                ${isLowStock ? 'border-orange-200 bg-orange-50' : ''}
                               `}
                               onClick={() => toggleOption(group, option)}
                             >
                               <div className="flex justify-between items-center w-full">
-                                <div>
-                                  {option.name}{' '}
-                                  {option.is_preselected && !isSelected && (
-                                    <span className="ml-2 text-xs text-blue-500">
-                                      (Recommended)
+                                <div className="flex flex-col">
+                                  <div className="flex items-center">
+                                    {option.name}{' '}
+                                    {option.is_preselected && !isSelected && (
+                                      <span className="ml-2 text-xs text-blue-500">
+                                        (Recommended)
+                                      </span>
+                                    )}
+                                    {isLowStock && (
+                                      <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                                        Low Stock
+                                      </span>
+                                    )}
+                                  </div>
+                                  {group.enable_option_inventory && option.available_quantity !== undefined && (
+                                    <span className="text-xs text-gray-500">
+                                      {option.available_quantity} available
                                     </span>
                                   )}
                                 </div>

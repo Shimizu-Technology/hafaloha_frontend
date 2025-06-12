@@ -21,6 +21,12 @@ export interface CartItem extends Omit<OrderItem, 'id'> {
   variant_id?: number;
   size?: string;
   color?: string;
+  // For option-level inventory tracking
+  tracked_option?: {
+    option_id: number;
+    option_group_id: number;
+    quantity: number;
+  };
 }
 
 export interface OrdersMetadata {
@@ -728,7 +734,9 @@ export const useOrderStore = create<OrderStore>()(
                 quantity: item.quantity,
                 price: item.price,
                 customizations: item.customizations,
-                notes: item.notes
+                notes: item.notes,
+                // Include tracked_option if present for option-level inventory
+                ...(item.tracked_option && { tracked_option: item.tracked_option })
               });
             }
           }
