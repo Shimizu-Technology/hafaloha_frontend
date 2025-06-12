@@ -152,14 +152,15 @@ export function MenuManager({
     deleteMenuItem,
     setActiveMenu,
     startMenuItemsWebSocket,
-    stopInventoryPolling
+    stopInventoryPolling,
+    menuItems: storeMenuItems, // Use store menu items directly
+    websocketConnected        // Track WebSocket status
   } = useMenuStore();
 
   const { categories, fetchCategoriesForMenu } = useCategoryStore();
   const { restaurant } = useRestaurantStore();
   
-  // State for menu items and loading state
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  // Remove local menuItems state - use store directly
   const [loading, setLoading] = useState(false);
 
   // The currently selected menu ID for filtering
@@ -175,16 +176,12 @@ export function MenuManager({
   const [cloneModalOpen, setCloneModalOpen] = useState(false);
   const [itemToClone, setItemToClone] = useState<MenuItem | null>(null);
 
-  // Additional filter checkboxes
+  // Additional filter checkboxes - these will be client-side filters
   const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
   const [showSeasonalOnly, setShowSeasonalOnly] = useState(false);
   
   // For search functionality
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSearching, setIsSearching] = useState(false);
-  
-  // Debounce search to avoid excessive API calls
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Visibility filter - default to showing active (non-hidden) items
   const [visibilityFilter, setVisibilityFilter] = useState<'active' | 'hidden' | 'all'>('active');
@@ -208,8 +205,32 @@ export function MenuManager({
   // Reference to track prefetched categories
   const prefetchedCategories = useRef<Set<number>>(new Set());
   
-  // On mount => fetch items (admin) + categories + menus
-  // WebSocket connection is now initialized at the app level in OnlineOrderingApp
+  // Filter store menu items based on current filter settings
+  const menuItems = useMemo(() => {
+    let filtered = storeMenuItems;
+    
+    // Apply client-side filters only for performance
+    if (showFeaturedOnly) {
+      filtered = filtered.filter(item => item.featured);
+    }
+    
+    if (showSeasonalOnly) {
+      filtered = filtered.filter(item => item.seasonal);
+    }
+    
+    // Apply search filter if query exists
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(item => 
+        item.name.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [storeMenuItems, showFeaturedOnly, showSeasonalOnly, searchQuery]);
+  
+  // Optimized useEffect - only trigger server calls for major filter changes
   useEffect(() => {
     // Fetch all menus for the restaurant (not just active ones)
     fetchAllMenus(restaurant?.id);
@@ -224,10 +245,10 @@ export function MenuManager({
       
       setLoading(true);
       try {
-        // Create filter params for backend filtering
+        // Create filter params for backend filtering - only major filters
         const filterParams: MenuItemFilterParams = {
-          view_type: 'admin', // Always use admin view for this method
-          include_stock: true, // Always include stock information
+          view_type: 'admin',
+          include_stock: true,
           restaurant_id: restaurant?.id
         };
         
@@ -248,23 +269,8 @@ export function MenuManager({
           filterParams.hidden = true;
         }
         
-        // Add featured/seasonal filters if selected
-        if (showFeaturedOnly) {
-          filterParams.featured = true;
-        }
-        if (showSeasonalOnly) {
-          filterParams.seasonal = true;
-        }
-        
-        // Add search query if provided
-        if (searchQuery && searchQuery.trim() !== '') {
-          filterParams.search_query = searchQuery.trim();
-          setIsSearching(true);
-        }
-        
-        // Use optimized backend filtering instead of frontend filtering
-        const items = await fetchMenuItemsForAdmin(filterParams);
-        setMenuItems(items);
+        // Use optimized backend filtering - removed featured/seasonal/search from here
+        await fetchMenuItemsForAdmin(filterParams);
         
         // If we have a category filter, mark it as prefetched
         if (selectedCategory && typeof selectedCategory === 'number') {
@@ -274,7 +280,6 @@ export function MenuManager({
         console.error('Error fetching menu items:', error);
       } finally {
         setLoading(false);
-        setIsSearching(false);
       }
     };
     
@@ -286,22 +291,21 @@ export function MenuManager({
       stopInventoryPolling();
     };
   }, [
+    // Removed excessive dependencies - only trigger on major filter changes
     fetchMenuItemsForAdmin,
     fetchAllMenus,
     stopInventoryPolling,
     restaurant,
     selectedMenuId,
     selectedCategory,
-    visibilityFilter,
-    showFeaturedOnly,
-    showSeasonalOnly,
-    searchQuery
+    visibilityFilter
+    // Removed: showFeaturedOnly, showSeasonalOnly, searchQuery
   ]);
   
   // Handle selectedMenuItemId from props (for opening edit modal from e.g. notifications)
   useEffect(() => {
     if (selectedMenuItemId) {
-      const item = menuItems.find((mi) => mi.id === selectedMenuItemId);
+      const item = storeMenuItems.find((mi) => mi.id === selectedMenuItemId);
       if (item) {
         // Make sure we're using WebSockets and not polling
         if (useMenuStore.getState().inventoryPollingInterval !== null) {
@@ -311,12 +315,12 @@ export function MenuManager({
         handleEdit(item);
       }
     }
-  }, [selectedMenuItemId, menuItems, stopInventoryPolling]);
+  }, [selectedMenuItemId, storeMenuItems, stopInventoryPolling]);
   
   // Handle openInventoryForItem from props (for opening inventory modal from notifications)
   useEffect(() => {
     if (openInventoryForItem) {
-      const item = menuItems.find((mi) => mi.id === openInventoryForItem);
+      const item = storeMenuItems.find((mi) => mi.id === openInventoryForItem);
       if (item) {
         // Make sure we're using WebSockets and not polling
         if (useMenuStore.getState().inventoryPollingInterval !== null) {
@@ -326,7 +330,7 @@ export function MenuManager({
         handleManageInventory(item);
       }
     }
-  }, [openInventoryForItem, menuItems, stopInventoryPolling]);
+  }, [openInventoryForItem, storeMenuItems, stopInventoryPolling]);
 
   // Prefetch adjacent categories when a category is selected
   useEffect(() => {
@@ -431,33 +435,27 @@ export function MenuManager({
         restaurant_id: restaurant?.id
       };
       
-      // Add existing filters
+      // Add existing filters (only major backend filters)
       if (selectedCategory) filterParams.category_id = selectedCategory;
       if (visibilityFilter === 'active') filterParams.hidden = false;
       if (visibilityFilter === 'hidden') filterParams.hidden = true;
-      if (showFeaturedOnly) filterParams.featured = true;
-      if (showSeasonalOnly) filterParams.seasonal = true;
       
       // Fetch with current filters
       setLoading(true);
       fetchMenuItemsForAdmin(filterParams)
-        .then(items => setMenuItems(items))
         .catch(error => console.error('Error fetching menu items for selected menu:', error))
         .finally(() => setLoading(false));
       
       // Fetch categories specific to the selected menu
       fetchCategoriesForMenu(selectedMenuId, restaurantId ? Number(restaurantId) : undefined);
     }
-  }, [selectedMenuId, restaurantId, fetchMenuItemsForAdmin, fetchCategoriesForMenu, restaurant, selectedCategory, visibilityFilter, showFeaturedOnly, showSeasonalOnly]);
+  }, [selectedMenuId, restaurantId, fetchMenuItemsForAdmin, fetchCategoriesForMenu, restaurant, selectedCategory, visibilityFilter]);
 
   // Filter categories by selected menu
   const filteredCategories = useMemo(() => {
     if (!selectedMenuId || !categories?.length) return [];
     return categories.filter(cat => cat.menu_id === selectedMenuId);
   }, [categories, selectedMenuId]);
-
-  // No need for frontend filtering anymore as we're using backend filtering
-  // We'll just use the menuItems state directly
 
   // Default form data for a new item
   const initialFormData: MenuItemFormData = {
@@ -485,8 +483,19 @@ export function MenuManager({
     available_quantity: 0,
   };
 
-  /** Refresh data after inventory changes (e.g. from the Inventory Modal) */
-  const refreshAfterInventoryChanges = () => {
+  /** 
+   * Optimized refresh logic - only refresh when WebSocket is not connected 
+   * or when explicitly needed for major changes
+   */
+  const refreshAfterInventoryChanges = async () => {
+    // If WebSocket is connected, trust it to handle updates
+    if (websocketConnected) {
+      console.debug('[MenuManager] WebSocket connected, skipping manual refresh');
+      return;
+    }
+    
+    console.debug('[MenuManager] WebSocket not connected, refreshing via API');
+    
     // Create filter params for backend filtering
     const filterParams: MenuItemFilterParams = {
       view_type: 'admin',
@@ -494,27 +503,28 @@ export function MenuManager({
       restaurant_id: restaurant?.id
     };
     
-    // Add existing filters
+    // Add existing filters (only major backend filters)
     if (selectedMenuId) filterParams.menu_id = selectedMenuId;
     if (selectedCategory) filterParams.category_id = selectedCategory;
     if (visibilityFilter === 'active') filterParams.hidden = false;
     if (visibilityFilter === 'hidden') filterParams.hidden = true;
-    if (showFeaturedOnly) filterParams.featured = true;
-    if (showSeasonalOnly) filterParams.seasonal = true;
     
     // Fetch with current filters
     setLoading(true);
-    fetchMenuItemsForAdmin(filterParams)
-      .then(items => setMenuItems(items))
-      .catch(error => console.error('Error refreshing menu items:', error))
-      .finally(() => setLoading(false));
+    try {
+      await fetchMenuItemsForAdmin(filterParams);
+    } catch (error) {
+      console.error('Error refreshing menu items:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   /** Utility: enforce max 4 featured items. */
   function canFeatureThisItem(formData: MenuItemFormData): boolean {
     if (!formData.featured) return true;
 
-    const isCurrentlyFeatured = menuItems.find(
+    const isCurrentlyFeatured = storeMenuItems.find(
       (m) => Number(m.id) === formData.id
     )?.featured;
 
@@ -522,7 +532,7 @@ export function MenuManager({
     if (isCurrentlyFeatured) return true;
 
     // Otherwise, count how many are currently featured
-    const currentlyFeaturedCount = menuItems.filter(m => m.featured).length;
+    const currentlyFeaturedCount = storeMenuItems.filter(m => m.featured).length;
     if (currentlyFeaturedCount >= 4) {
       toastUtils.error('You can only have 4 featured items at a time.');
       return false;
@@ -615,7 +625,7 @@ export function MenuManager({
   useEffect(() => {
     if (isEditing && editingItem && editingItem.id && editItemPollingActive) {
       const editingItemId = editingItem.id;
-      const updatedItem = menuItems.find((mi) => Number(mi.id) === editingItemId);
+      const updatedItem = storeMenuItems.find((mi) => Number(mi.id) === editingItemId);
       
       if (updatedItem) {
         const stockQty = updatedItem.stock_quantity || 0;
@@ -646,7 +656,7 @@ export function MenuManager({
         }
       }
     }
-  }, [menuItems, isEditing, editItemPollingActive, editingItem]);
+  }, [storeMenuItems, isEditing, editItemPollingActive, editingItem]);
 
   /** Manage inventory => show the modal and ensure WebSocket connection. */
   const handleManageInventory = (item: MenuItem) => {
@@ -667,7 +677,6 @@ export function MenuManager({
   };
   const handleCloseInventoryModal = () => {
     setInventoryModalOpen(false);
-    // Store reference removed as it was unused
     setInventoryModalItem(null);
 
     // Ensure polling is stopped when modal is closed
@@ -681,15 +690,8 @@ export function MenuManager({
       onInventoryModalClose();
     }
     
-    // Force a refresh to get updated inventory/tracking data using WebSocket if possible
-    if (useMenuStore.getState().websocketConnected) {
-      console.debug('[MenuManager] Using WebSocket for inventory refresh');
-      // The WebSocket will handle updates, but we'll fetch once to ensure we have the latest data
-      refreshAfterInventoryChanges();
-    } else {
-      console.debug('[MenuManager] Using API call for inventory refresh');
-      refreshAfterInventoryChanges();
-    }
+    // Only refresh if WebSocket is not connected
+    refreshAfterInventoryChanges();
   };
 
   // Use our loading overlay hook
@@ -708,6 +710,7 @@ export function MenuManager({
   /** Mark a menu as active. */
   const handleSetActiveMenu = async (id: number) => {
     await setActiveMenu(id);
+    // Only refresh if WebSocket is not connected
     await refreshAfterInventoryChanges();
   };
 
@@ -746,7 +749,7 @@ export function MenuManager({
         
         if (editingItem.id) {
           // Updating existing item
-          const { id, imageFile, available_quantity, ...rest } = editingItem;
+          const { id, available_quantity, image, ...rest } = editingItem;
           
           // Ensure available_days is an array of numbers
           const submittedDays = Array.isArray(editingItem.available_days)
@@ -761,14 +764,9 @@ export function MenuManager({
             stock_status: finalStockStatus,
             available_days: submittedDays
           };
+          
+          // The store's updateMenuItem already handles imageFile properly via FormData
           updatedItem = await updateMenuItem(String(id), payload);
-
-          // If there's a new image file, upload it now
-          if (imageFile instanceof File) {
-            await uploadMenuItemImage(String(id), imageFile);
-            // Fetch new data with updated image
-            updatedItem = await api.get(`/menu_items/${id}`);
-          }
 
           // Process available_days from the API response
           let processedDays: number[] = [];
@@ -793,7 +791,7 @@ export function MenuManager({
               cost_to_make: (updatedItem.cost_to_make ?? 0).toString(),
               category_ids: updatedItem.category_ids || [],
               image: updatedItem.image_url || updatedItem.image || '',
-              imageFile: null,
+              imageFile: null, // Clear the file since it's now uploaded
               menu_id: updatedItem.menu_id || selectedMenuId || 1,
               advance_notice_hours: updatedItem.advance_notice_hours ?? 0,
               seasonal: !!updatedItem.seasonal,
@@ -824,8 +822,8 @@ export function MenuManager({
             setHasUnsavedChanges(false);
           }
         } else {
-          // Creating new
-          const { imageFile, available_quantity, ...rest } = editingItem;
+          // Creating new item
+          const { available_quantity, image, ...rest } = editingItem;
           
           // Ensure available_days is an array of numbers
           const availableDays = Array.isArray(editingItem.available_days)
@@ -840,29 +838,25 @@ export function MenuManager({
             stock_status: finalStockStatus,
             available_days: availableDays
           };
+          
+          // The store's addMenuItem already handles imageFile properly via FormData
           updatedItem = await addMenuItem(payload);
 
-          // If there's a new image file, upload it
-          if (updatedItem && updatedItem.id && imageFile instanceof File) {
-            await uploadMenuItemImage(updatedItem.id, imageFile);
-            updatedItem = await api.get(`/menu_items/${updatedItem.id}`);
+          if (updatedItem) {
+            // Show success toast for new item
+            toastUtils.success('Menu item created successfully!');
+            
+            // Close the form after creating a new item
+            setIsEditing(false);
+            setEditingItem(null);
+            setHasUnsavedChanges(false);
           }
-
-          // Show success toast for new item
-          toastUtils.success('Menu item created successfully!');
-          
-          // Close the form after creating a new item
-          setIsEditing(false);
-          setEditingItem(null);
-          setHasUnsavedChanges(false);
         }
       });
     } catch (err) {
       console.error('Failed to save menu item:', err);
-    } finally {
-      // Refresh items after any change
-      refreshAfterInventoryChanges();
     }
+    // No need for finally refresh - the store's addMenuItem/updateMenuItem already handle UI updates
   };
 
   /** Helper to format available days for display. */
@@ -975,10 +969,10 @@ export function MenuManager({
                   {menus.map((menu) => (
                     <button
                       key={menu.id}
-                      onClick={async () => {
+                      onClick={() => {
                         setSelectedMenuId(menu.id);
                         setMenuSelectorOpen(false);
-                        await refreshAfterInventoryChanges();
+                        // No need to refresh - useEffect will handle this when selectedMenuId changes
                       }}
                       className={`
                         w-full text-left px-3 py-2 text-sm flex items-center justify-between
@@ -1121,17 +1115,7 @@ export function MenuManager({
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              setIsSearching(true);
-              
-              // Clear previous timeout
-              if (searchTimeoutRef.current) {
-                clearTimeout(searchTimeoutRef.current);
-              }
-              
-              // Set new timeout for debounce
-              searchTimeoutRef.current = setTimeout(() => {
-                // The actual search is triggered by the useEffect that depends on searchQuery
-              }, 500);
+              // Search is now handled by the useMemo filter, no need for debouncing or server calls
             }}
           />
           {searchQuery && (
@@ -1223,7 +1207,7 @@ export function MenuManager({
             Please select a menu from the options above to view and manage its items.
           </p>
         </div>
-      ) : loading || isSearching ? (
+      ) : loading ? (
         // Show loading spinner while menu items are loading or searching
         <div className="flex justify-center items-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#c1902f]"></div>
@@ -2158,7 +2142,12 @@ export function MenuManager({
           open={inventoryModalOpen}
           menuItem={inventoryModalItem}
           onClose={handleCloseInventoryModal}
-          onSave={refreshAfterInventoryChanges}
+          onSave={() => {
+            // Only refresh if WebSocket is not connected
+            if (!websocketConnected) {
+              refreshAfterInventoryChanges();
+            }
+          }}
           onEnableTrackingChange={(enabled) => {
             // If we're currently editing the same item in the background, sync
             if (
@@ -2202,8 +2191,10 @@ export function MenuManager({
           onClose={() => {
             setCloneModalOpen(false);
             setItemToClone(null);
-            // Refresh menu items to show the newly cloned/copied item
-            refreshAfterInventoryChanges();
+            // Only refresh if WebSocket is not connected (it should handle new items automatically)
+            if (!websocketConnected) {
+              refreshAfterInventoryChanges();
+            }
           }}
         />
       )}
