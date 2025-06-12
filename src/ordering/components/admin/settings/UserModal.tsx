@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { formatPhoneNumber } from '../../../../shared/utils/formatters';
-import { X, KeyRound, Mail, Trash2 } from 'lucide-react';
+import { X, KeyRound, Mail, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '../../../../shared/auth';
 
 // Same phone check from SignUpForm
@@ -41,6 +41,10 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
   const [loading, setLoading] = useState(false);
   const isSuperAdmin = useAuthStore(state => state.isSuperAdmin());
   
+  // For password setting during creation
+  const [createPassword, setCreatePassword] = useState('');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  
   // If a non-super_admin user tries to edit a super_admin user, prevent it
   useEffect(() => {
     if (user?.role === 'super_admin' && !isSuperAdmin) {
@@ -69,14 +73,26 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
 
       if (isCreateMode) {
         // POST /admin/users
-        await api.post('/admin/users', {
+        const payload: any = {
           email,
           first_name: firstName,
           last_name: lastName,
           phone: finalPhone || undefined, // if blank => undefined
           role,
           restaurant_id: restaurantId
-        });
+        };
+        
+        // Add password if provided
+        if (createPassword.trim()) {
+          if (createPassword.length < 6) {
+            toastUtils.error('Password must be at least 6 characters');
+            setLoading(false);
+            return;
+          }
+          payload.password = createPassword.trim();
+        }
+        
+        await api.post('/admin/users', payload);
         toastUtils.success('User created!');
         onClose(true);
       } else if (user) {
@@ -149,12 +165,14 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
   
   // Open password reset modal
   function openPasswordResetModal() {
     setNewPassword('');
     setPasswordError('');
     setResetSuccess(false);
+    setShowResetPassword(false);
     setShowPasswordResetModal(true);
   }
   
@@ -289,6 +307,40 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
               {isSuperAdmin && <option value="super_admin">Super Admin</option>}
             </select>
           </div>
+
+          {/* Password field for creation mode */}
+          {isCreateMode && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Password (Optional)
+              </label>
+              <div className="relative mt-1">
+                <input
+                  type={showCreatePassword ? "text" : "password"}
+                  value={createPassword}
+                  onChange={(e) => setCreatePassword(e.target.value)}
+                  placeholder="Leave blank to send invite email"
+                  className="w-full border border-gray-300 rounded-md
+                           focus:ring-[#c1902f] focus:border-[#c1902f] p-2 pr-10
+                           transition-colors duration-200"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowCreatePassword(!showCreatePassword)}
+                >
+                  {showCreatePassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  )}
+                </button>
+              </div>
+              <p className="mt-1 text-sm text-gray-500">
+                If no password is set, an invite email will be sent to the user to set their password.
+              </p>
+            </div>
+          )}
         </div>
 
           {/* Delete Confirmation Modal */}
@@ -382,21 +434,34 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
                       <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">
                         New Password
                       </label>
-                      <input
-                        id="new-password"
-                        type="text"
-                        autoComplete="new-password"
-                        value={newPassword}
-                        onChange={(e) => {
-                          setNewPassword(e.target.value);
-                          if (passwordError && e.target.value.length >= 6) {
-                            setPasswordError('');
-                          }
-                        }}
-                        className={`w-full p-2 border ${passwordError ? 'border-red-300' : 'border-gray-300'} 
-                                  rounded-md focus:ring-[#c1902f] focus:border-[#c1902f] transition-colors`}
-                        placeholder="Enter new password"
-                      />
+                      <div className="relative">
+                        <input
+                          id="new-password"
+                          type={showResetPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          value={newPassword}
+                          onChange={(e) => {
+                            setNewPassword(e.target.value);
+                            if (passwordError && e.target.value.length >= 6) {
+                              setPasswordError('');
+                            }
+                          }}
+                          className={`w-full p-2 pr-10 border ${passwordError ? 'border-red-300' : 'border-gray-300'} 
+                                    rounded-md focus:ring-[#c1902f] focus:border-[#c1902f] transition-colors`}
+                          placeholder="Enter new password"
+                        />
+                        <button
+                          type="button"
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                          onClick={() => setShowResetPassword(!showResetPassword)}
+                        >
+                          {showResetPassword ? (
+                            <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                          )}
+                        </button>
+                      </div>
                       {passwordError && (
                         <p className="mt-1 text-sm text-red-600">{passwordError}</p>
                       )}
