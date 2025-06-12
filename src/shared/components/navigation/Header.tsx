@@ -180,7 +180,7 @@ export function Header() {
           {/* Logo => link to "/" */}
           <Link
             to="/"
-            className="flex items-center text-2xl font-bold text-gray-900
+            className="flex items-center text-2xl font-display text-gray-900
                      hover:text-[#c1902f] transition-colors duration-200"
             aria-label="Hafaloha Home"
           >
@@ -395,7 +395,7 @@ export function Header() {
         <div className="p-4 border-b border-gray-100 flex justify-between items-center">
           <Link 
             to="/" 
-            className="text-xl font-bold text-[#c1902f]"
+            className="text-xl font-display text-[#c1902f]"
             onClick={() => setIsMobileMenuOpen(false)}
           >
             håfaloha!
