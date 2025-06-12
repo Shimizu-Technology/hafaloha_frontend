@@ -1974,39 +1974,27 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         enhancedPaymentDetails // Combined payment details and staff order params
       );
       
-      // Create an OrderPayment record for manual payment methods
-      // Note: We exclude stripe_reader since it's already creating OrderPayment records
+      // Create an OrderPayment record for manual payment methods that need it
+      // Note: The backend already creates an initial OrderPayment record during order creation
+      // We only need to create additional records for cash payments which use a different endpoint
       const method = paymentMethod || '';
-      if (['cash', 'other', 'clover', 'revel', 'house_account'].includes(method)) {
+      if (method === 'cash') {
         try {
-          if (method === 'cash') {
-            // Use the cash-specific endpoint for cash payments
-            await apiClient.post(`/orders/${newOrder.id}/payments/cash`, {
-              order_total: orderTotal,
-              cash_received: paymentDetails?.cash_received || orderTotal,
-              payment_method: 'cash',
-              transaction_id: paymentTransactionId || ''
-            });
-          } else if (method === 'house_account') {
-            // For house account payments, no additional API call is needed
-            // The backend already processes the house account payment when creating the order
-            // House account payment processed
-          } else {
-            // For other manual payment methods, use the additional endpoint
-            await apiClient.post(`/orders/${newOrder.id}/payments/additional`, {
-              amount: orderTotal,
-              payment_method: paymentMethod || 'other',
-              payment_details: paymentDetails || {},
-              transaction_id: paymentTransactionId || '',
-              items: [] // No additional items, just creating a payment record
-            });
-          }
-          // Payment record created
+          // Use the cash-specific endpoint for cash payments
+          await apiClient.post(`/orders/${newOrder.id}/payments/cash`, {
+            order_total: orderTotal,
+            cash_received: paymentDetails?.cash_received || orderTotal,
+            payment_method: 'cash',
+            transaction_id: paymentTransactionId || ''
+          });
+          // Cash payment record created
         } catch (paymentErr) {
           // Just log the error but don't fail the order creation
-          console.error('Failed to create payment record:', paymentErr);
+          console.error('Failed to create cash payment record:', paymentErr);
         }
       }
+      // For other payment methods (other, clover, revel, house_account, etc.), 
+      // the backend already creates the OrderPayment record during order creation
       
       toastUtils.success('Order created successfully!');
       onOrderCreated(newOrder.id);
