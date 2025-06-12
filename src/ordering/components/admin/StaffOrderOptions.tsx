@@ -11,13 +11,15 @@ interface StaffMember {
   active: boolean;
 }
 
+type StaffDiscountType = 'on_duty' | 'off_duty' | 'no_discount';
+
 interface StaffOrderOptionsProps {
   isStaffOrder: boolean;
   setIsStaffOrder: (value: boolean) => void;
   staffMemberId: number | null;
   setStaffMemberId: (value: number | null) => void;
-  staffOnDuty: boolean;
-  setStaffOnDuty: (value: boolean) => void;
+  discountType: StaffDiscountType;
+  setDiscountType: (value: StaffDiscountType) => void;
   useHouseAccount: boolean;
   setUseHouseAccount: (value: boolean) => void;
   createdByStaffId: number | null;
@@ -29,8 +31,8 @@ export function StaffOrderOptions({
   // setIsStaffOrder is unused but kept in props for compatibility
   staffMemberId,
   setStaffMemberId,
-  staffOnDuty,
-  setStaffOnDuty,
+  discountType,
+  setDiscountType,
   useHouseAccount,
   setUseHouseAccount,
   // createdByStaffId is unused but kept in props for compatibility
@@ -84,11 +86,11 @@ export function StaffOrderOptions({
   useEffect(() => {
     if (!isStaffOrder) {
       setStaffMemberId(null);
-      setStaffOnDuty(false);
+      setDiscountType('off_duty');
       setUseHouseAccount(false);
       setCreatedByStaffId(null);
     }
-  }, [isStaffOrder, setStaffMemberId, setStaffOnDuty, setUseHouseAccount, setCreatedByStaffId]);
+  }, [isStaffOrder, setStaffMemberId, setDiscountType, setUseHouseAccount, setCreatedByStaffId]);
 
   // Get the selected staff member
   const selectedStaffMember = staffMemberId 
@@ -127,39 +129,40 @@ export function StaffOrderOptions({
             {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
           </div>
 
-          {/* Two-column layout for checkboxes */}
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            {/* Staff On Duty */}
-            <div className="flex items-center">
-              <input
-                id="staff-on-duty"
-                type="checkbox"
-                checked={staffOnDuty}
-                onChange={(e) => setStaffOnDuty(e.target.checked)}
-                className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="staff-on-duty" className="ml-1 text-xs font-medium text-gray-900">
-                On duty (50% off)
-              </label>
-            </div>
+          {/* Discount Type Selection */}
+          <div className="mb-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Discount Type
+            </label>
+            <MobileSelect
+              options={[
+                { value: 'on_duty', label: 'On Duty (50% off)' },
+                { value: 'off_duty', label: 'Off Duty (30% off)' },
+                { value: 'no_discount', label: 'No Discount (Full Price)' }
+              ]}
+              value={discountType}
+              onChange={(value) => setDiscountType(value as StaffDiscountType)}
+              placeholder="Select Discount Type"
+              className="text-xs"
+            />
+          </div>
 
-            {/* Use House Account */}
-            <div className="flex items-center">
-              <input
-                id="use-house-account"
-                type="checkbox"
-                checked={useHouseAccount}
-                onChange={(e) => setUseHouseAccount(e.target.checked)}
-                disabled={!canUseHouseAccount}
-                className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
-              />
-              <label 
-                htmlFor="use-house-account" 
-                className={`ml-1 text-xs font-medium ${canUseHouseAccount ? 'text-gray-900' : 'text-gray-400'}`}
-              >
-                Use House Account
-              </label>
-            </div>
+          {/* Use House Account */}
+          <div className="flex items-center mb-2">
+            <input
+              id="use-house-account"
+              type="checkbox"
+              checked={useHouseAccount}
+              onChange={(e) => setUseHouseAccount(e.target.checked)}
+              disabled={!canUseHouseAccount}
+              className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+            />
+            <label 
+              htmlFor="use-house-account" 
+              className={`ml-1 text-xs font-medium ${canUseHouseAccount ? 'text-gray-900' : 'text-gray-400'}`}
+            >
+              Use House Account
+            </label>
           </div>
 
           {selectedStaffMember && (
@@ -183,7 +186,6 @@ export function StaffOrderOptions({
               <span className="text-xs text-gray-700">
                 {currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Current User'}
               </span>
-              {/* Note: This staff member's ID will be used as createdByStaffId */}
             </div>
           </div>
         </>

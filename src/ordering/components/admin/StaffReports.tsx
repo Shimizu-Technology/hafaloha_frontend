@@ -26,7 +26,9 @@ interface StaffOrder {
   id: number;
   staff_member_id: number;
   staff_member_name: string;
-  staff_on_duty: boolean;
+  staff_on_duty: boolean; // Keep for backward compatibility
+  discount_type?: 'on_duty' | 'off_duty' | 'no_discount';
+  discount_rate?: number;
   pre_discount_total: number;
   total: number;
   discount_amount: number;
@@ -39,13 +41,38 @@ interface DiscountSummary {
   total_retail_value: number;
   total_discounted_value: number;
   total_discount_amount: number;
+  duty_breakdown?: {
+    on_duty: {
+      order_count: number;
+      retail_value: number;
+      discounted_value: number;
+      discount_amount: number;
+      discount_percentage: number;
+    };
+    off_duty: {
+      order_count: number;
+      retail_value: number;
+      discounted_value: number;
+      discount_amount: number;
+      discount_percentage: number;
+    };
+    no_discount: {
+      order_count: number;
+      retail_value: number;
+      discounted_value: number;
+      discount_amount: number;
+      discount_percentage: number;
+    };
+  };
   by_staff_member: {
     staff_id: number;
     staff_name: string;
     on_duty_count: number;
     off_duty_count: number;
+    no_discount_count?: number;
     on_duty_discount: number;
     off_duty_discount: number;
+    no_discount_discount?: number;
     total_discount: number;
   }[];
 }
@@ -68,6 +95,39 @@ export function StaffReports() {
     averageOrder: number;
     onDutyRate: number;
   } | null>(null);
+
+  // Helper function to get discount display information
+  const getDiscountInfo = (order: StaffOrder) => {
+    // Use new discount_type if available, otherwise fall back to staff_on_duty
+    const discountType = order.discount_type || (order.staff_on_duty ? 'on_duty' : 'off_duty');
+    
+    switch (discountType) {
+      case 'on_duty':
+        return {
+          label: 'On Duty',
+          percentage: '50%',
+          badgeClass: 'bg-green-100 text-green-800'
+        };
+      case 'off_duty':
+        return {
+          label: 'Off Duty',
+          percentage: '30%',
+          badgeClass: 'bg-yellow-100 text-yellow-800'
+        };
+      case 'no_discount':
+        return {
+          label: 'No Discount',
+          percentage: '0%',
+          badgeClass: 'bg-gray-100 text-gray-800'
+        };
+      default:
+        return {
+          label: 'Off Duty',
+          percentage: '30%',
+          badgeClass: 'bg-yellow-100 text-yellow-800'
+        };
+    }
+  };
   
 
   
@@ -306,7 +366,10 @@ export function StaffReports() {
       totalOrders: houseAccountOrders.length,
       totalSpending: houseAccountOrders.reduce((sum, order) => sum + order.total, 0),
       averageOrder: houseAccountOrders.length > 0 ? houseAccountOrders.reduce((sum, order) => sum + order.total, 0) / houseAccountOrders.length : 0,
-      onDutyRate: houseAccountOrders.length > 0 ? (houseAccountOrders.filter(order => order.staff_on_duty).length / houseAccountOrders.length) * 100 : 0,
+      onDutyRate: houseAccountOrders.length > 0 ? (houseAccountOrders.filter(order => {
+        const discountType = order.discount_type || (order.staff_on_duty ? 'on_duty' : 'off_duty');
+        return discountType === 'on_duty';
+      }).length / houseAccountOrders.length) * 100 : 0,
     };
     
     setShowQuickAnalysisModal(true);
@@ -546,7 +609,7 @@ export function StaffReports() {
                 </div>
               </div>
               <div className="mt-3 text-xs text-gray-500 italic">
-                <span className="font-medium">Note:</span> Staff discounts are 50% for on-duty staff and 30% for off-duty staff.
+                <span className="font-medium">Note:</span> Staff discounts are 50% for on-duty staff, 30% for off-duty staff, and 0% for no discount orders.
               </div>
             </div>
           )}
@@ -572,28 +635,26 @@ export function StaffReports() {
                         <h3 className="font-medium text-gray-900">{order.staff_member_name}</h3>
                         <p className="text-sm text-gray-500">{formatDateTime(order.created_at)}</p>
                       </div>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        order.staff_on_duty ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {order.staff_on_duty ? 'On Duty' : 'Off Duty'}
+                      <span className={`px-2 py-1 text-xs rounded-full ${getDiscountInfo(order).badgeClass}`}>
+                        {getDiscountInfo(order).label}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="text-gray-500">Pre-Discount:</span>
-                        <span className="ml-1 font-medium">${order.pre_discount_total.toFixed(2)}</span>
+                        <span className="ml-1 font-medium">${(Number(order.pre_discount_total) || 0).toFixed(2)}</span>
                       </div>
                       <div>
                         <span className="text-gray-500">Final Total:</span>
-                        <span className="ml-1 font-medium text-[#c1902f]">${order.total.toFixed(2)}</span>
+                        <span className="ml-1 font-medium text-[#c1902f]">${(Number(order.total) || 0).toFixed(2)}</span>
                       </div>
                       <div>
                         <span className="text-gray-500">Discount:</span>
-                        <span className="ml-1 font-medium">${order.discount_amount.toFixed(2)}</span>
+                        <span className="ml-1 font-medium">${(Number(order.discount_amount) || 0).toFixed(2)}</span>
                       </div>
                       <div>
                         <span className="text-gray-500">Rate:</span>
-                        <span className="ml-1 font-medium">{order.staff_on_duty ? '50%' : '30%'}</span>
+                        <span className="ml-1 font-medium">{getDiscountInfo(order).percentage}</span>
                       </div>
                     </div>
                   </div>
@@ -648,30 +709,28 @@ export function StaffReports() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            order.staff_on_duty ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {order.staff_on_duty ? 'On Duty' : 'Off Duty'}
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getDiscountInfo(order).badgeClass}`}>
+                            {getDiscountInfo(order).label}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            ${order.pre_discount_total.toFixed(2)}
+                            ${(Number(order.pre_discount_total) || 0).toFixed(2)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            ${order.discount_amount.toFixed(2)}
+                            ${(Number(order.discount_amount) || 0).toFixed(2)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {order.staff_on_duty ? '50%' : '30%'}
+                            {getDiscountInfo(order).percentage}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-[#c1902f]">
-                            ${order.total.toFixed(2)}
+                            ${(Number(order.total) || 0).toFixed(2)}
                           </div>
                         </td>
                       </tr>

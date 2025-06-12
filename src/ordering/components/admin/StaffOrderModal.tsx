@@ -443,8 +443,8 @@ interface OrderPanelProps {
   setIsStaffOrder: (value: boolean) => void;
   staffMemberId: number | null;
   setStaffMemberId: (value: number | null) => void;
-  staffOnDuty: boolean;
-  setStaffOnDuty: (value: boolean) => void;
+  discountType: StaffDiscountType;
+  setDiscountType: (value: StaffDiscountType) => void;
   useHouseAccount: boolean;
   setUseHouseAccount: (value: boolean) => void;
   createdByStaffId: number | null;
@@ -468,8 +468,8 @@ function OrderPanel({
   setIsStaffOrder,
   staffMemberId,
   setStaffMemberId,
-  staffOnDuty,
-  setStaffOnDuty,
+  discountType,
+  setDiscountType,
   useHouseAccount,
   setUseHouseAccount,
   createdByStaffId,
@@ -520,8 +520,8 @@ function OrderPanel({
                 setIsStaffOrder={setIsStaffOrder}
                 staffMemberId={staffMemberId}
                 setStaffMemberId={setStaffMemberId}
-                staffOnDuty={staffOnDuty}
-                setStaffOnDuty={setStaffOnDuty}
+                discountType={discountType}
+                setDiscountType={setDiscountType}
                 useHouseAccount={useHouseAccount}
                 setUseHouseAccount={setUseHouseAccount}
                 createdByStaffId={createdByStaffId}
@@ -736,7 +736,7 @@ function OrderPanel({
             </div>
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-700">
-                Discount ({staffOnDuty ? '50%' : '30%'}):
+                Discount ({discountType === 'on_duty' ? '50%' : discountType === 'off_duty' ? '30%' : '0%'}):
               </span>
               <span className="text-green-600">-${(preDiscountTotal - orderTotal).toFixed(2)}</span>
             </div>
@@ -1416,8 +1416,11 @@ function PaymentPanel({
 /** --------------------------------------------------------------------
  * STAFF ORDER MODAL (MAIN)
  * -------------------------------------------------------------------*/
+/** Staff discount types */
+type StaffDiscountType = 'on_duty' | 'off_duty' | 'no_discount';
+
 /** Calculate the order total with any applicable discounts */
-function calculateOrderTotal(items: any[], isStaff: boolean, onDuty: boolean, staffId: number | null): number {
+function calculateOrderTotal(items: any[], isStaff: boolean, discountType: StaffDiscountType, staffId: number | null): number {
   // Calculate raw total from all cart items
   const rawTotal = items.reduce((total: number, item: any) => {
     const itemPrice = typeof item.price === 'number' ? item.price : 0;
@@ -1427,7 +1430,16 @@ function calculateOrderTotal(items: any[], isStaff: boolean, onDuty: boolean, st
   
   // Apply staff discount if applicable
   if (isStaff && staffId) {
-    return onDuty ? rawTotal * 0.5 : rawTotal * 0.7; // 50% for on-duty, 30% for off-duty
+    switch (discountType) {
+      case 'on_duty':
+        return rawTotal * 0.5; // 50% discount
+      case 'off_duty':
+        return rawTotal * 0.7; // 30% discount
+      case 'no_discount':
+        return rawTotal; // No discount (full price)
+      default:
+        return rawTotal;
+    }
   }
   
   // No discount for regular orders
@@ -1461,7 +1473,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   // Staff order info - used in staff order options
   const [isStaffOrder, setIsStaffOrder] = useState(false);
   const [staffMemberId, setStaffMemberId] = useState<number | null>(null);
-  const [staffOnDuty, setStaffOnDuty] = useState(false);
+  const [discountType, setDiscountType] = useState<StaffDiscountType>('off_duty');
   const [useHouseAccount, setUseHouseAccount] = useState(false);
   
   // Used for tracking order creation metadata
@@ -1482,8 +1494,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   
   // Calculate order total based on cart items and applicable discounts
   const orderTotal = useMemo(() => {
-    return calculateOrderTotal(cartItems, isStaffOrder, staffOnDuty, staffMemberId);
-  }, [cartItems, isStaffOrder, staffOnDuty, staffMemberId]);
+    return calculateOrderTotal(cartItems, isStaffOrder, discountType, staffMemberId);
+  }, [cartItems, isStaffOrder, discountType, staffMemberId]);
   
   // Payment processing state
   const [paymentProcessing, setPaymentProcessing] = useState(false);
@@ -1579,7 +1591,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       // The orderTotal is already calculated via useMemo, so this is just a hook for side effects
       // We could update other state here if needed based on cart changes
     }
-  }, [cartItems, isStaffOrder, staffOnDuty, staffMemberId]);
+  }, [cartItems, isStaffOrder, discountType, staffMemberId]);
   
   // On mount, fetch menu items with optimized loading
   useEffect(() => {
@@ -1926,7 +1938,10 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       const staffOrderParams = isStaffOrder ? {
         is_staff_order: true,
         staff_member_id: staffMemberId,
-        staff_on_duty: staffOnDuty,
+        staff_on_duty: discountType === 'on_duty',
+        discount_type: discountType,
+        // Add explicit boolean for no discount to make backend processing clearer
+        no_discount: discountType === 'no_discount',
         use_house_account: useHouseAccount,
         created_by_staff_id: finalCreatedByStaffId,
         created_by_user_id: createdByUserId,
@@ -2114,8 +2129,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
               setIsStaffOrder={setIsStaffOrder}
               staffMemberId={staffMemberId}
               setStaffMemberId={setStaffMemberId}
-              staffOnDuty={staffOnDuty}
-              setStaffOnDuty={setStaffOnDuty}
+              discountType={discountType}
+              setDiscountType={setDiscountType}
               useHouseAccount={useHouseAccount}
               setUseHouseAccount={setUseHouseAccount}
               createdByStaffId={createdByStaffId}
@@ -2327,8 +2342,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
                 setIsStaffOrder={setIsStaffOrder}
                 staffMemberId={staffMemberId}
                 setStaffMemberId={setStaffMemberId}
-                staffOnDuty={staffOnDuty}
-                setStaffOnDuty={setStaffOnDuty}
+                discountType={discountType}
+                setDiscountType={setDiscountType}
                 useHouseAccount={useHouseAccount}
                 setUseHouseAccount={setUseHouseAccount}
                 createdByStaffId={createdByStaffId}
@@ -2405,8 +2420,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
             setIsStaffOrder={setIsStaffOrder}
             staffMemberId={staffMemberId}
             setStaffMemberId={setStaffMemberId}
-            staffOnDuty={staffOnDuty}
-            setStaffOnDuty={setStaffOnDuty}
+            discountType={discountType}
+            setDiscountType={setDiscountType}
             useHouseAccount={useHouseAccount}
             setUseHouseAccount={setUseHouseAccount}
             createdByStaffId={createdByStaffId}
