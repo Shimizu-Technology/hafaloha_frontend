@@ -1184,16 +1184,47 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               )}
 
               {order.status === 'ready' && (
-                <button
-                  className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-medium hover:bg-gray-600 min-w-[120px] flex-grow sm:flex-grow-0"
-                  onClick={() => {
-                    setIsStatusUpdateInProgress(true);
-                    updateOrderStatusQuietly(order.id, 'completed')
-                      .finally(() => setIsStatusUpdateInProgress(false));
-                  }}
-                >
-                  Complete
-                </button>
+                <>
+                  <button
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 min-w-[120px] flex-grow sm:flex-grow-0"
+                    onClick={async () => {
+                      setIsStatusUpdateInProgress(true);
+                      try {
+                        // Call dedicated notification endpoint using the same API client as other order operations
+                        const response = await api.post<{ success: boolean; message: string }>(`/orders/${order.id}/notify`, {
+                          notification_type: 'order_ready'
+                        });
+                        
+                        console.log('Notification sent successfully:', response.message);
+                        
+                        // Optional: Show success toast
+                        toastUtils.success('Customer notification sent successfully!');
+                        
+                      } catch (error: any) {
+                        console.error('Failed to send notification:', error);
+                        
+                        // Show user-friendly error message
+                        const errorMessage = error.response?.data?.message || 'Failed to send notification to customer';
+                        toastUtils.error(errorMessage);
+                      } finally {
+                        setIsStatusUpdateInProgress(false);
+                      }
+                    }}
+                    title="Send another notification to customer that order is ready for pickup"
+                  >
+                    Notify Customer
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-medium hover:bg-gray-600 min-w-[120px] flex-grow sm:flex-grow-0"
+                    onClick={() => {
+                      setIsStatusUpdateInProgress(true);
+                      updateOrderStatusQuietly(order.id, 'completed')
+                        .finally(() => setIsStatusUpdateInProgress(false));
+                    }}
+                  >
+                    Complete
+                  </button>
+                </>
               )}
               
               {/* Refund button removed - users should use the AdminEditOrderModal for refunds */}
