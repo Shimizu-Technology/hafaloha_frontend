@@ -1132,23 +1132,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           {/* Only show workflow buttons if not refunded */}
           {!isRefunded && (
             <>
-              {/* Staff Order Quick Actions - Only show for staff orders */}
-              {isStaffOrder && order.status === 'pending' && (
+              {/* Staff Order Quick Actions - Show for pending and preparing staff orders only */}
+              {isStaffOrder && (order.status === 'pending' || order.status === 'preparing') && (
                 <div className="flex gap-1 bg-blue-50 p-1 rounded-md border border-blue-200">
                   <div className="text-xs text-blue-600 font-medium px-1 py-1 self-center whitespace-nowrap">
                     Quick:
                   </div>
-                  <button
-                    className="px-3 py-1 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600 whitespace-nowrap"
-                    onClick={() => {
-                      setIsStatusUpdateInProgress(true);
-                      updateOrderStatusQuietly(order.id, 'ready')
-                        .finally(() => setIsStatusUpdateInProgress(false));
-                    }}
-                    title="Skip preparation and mark as ready immediately"
-                  >
-                    Ready
-                  </button>
                   <button
                     className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-medium hover:bg-gray-700 whitespace-nowrap"
                     onClick={() => {
@@ -1182,32 +1171,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               )}
 
               {order.status === 'preparing' && (
-                <>
-                  <button
-                    className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium hover:bg-green-600 min-w-[120px] flex-grow sm:flex-grow-0"
-                    onClick={() => {
-                      setIsStatusUpdateInProgress(true);
-                      updateOrderStatusQuietly(order.id, 'ready')
-                        .finally(() => setIsStatusUpdateInProgress(false));
-                    }}
-                  >
-                    Mark as Ready
-                  </button>
-                  {/* Quick complete option for staff orders in preparing status */}
-                  {isStaffOrder && (
-                    <button
-                      className="px-3 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700"
-                      onClick={() => {
-                        setIsStatusUpdateInProgress(true);
-                        updateOrderStatusQuietly(order.id, 'completed')
-                          .finally(() => setIsStatusUpdateInProgress(false));
-                      }}
-                      title="Complete immediately without ready status"
-                    >
-                      Done
-                    </button>
-                  )}
-                </>
+                <button
+                  className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium hover:bg-green-600 min-w-[120px] flex-grow sm:flex-grow-0"
+                  onClick={() => {
+                    setIsStatusUpdateInProgress(true);
+                    updateOrderStatusQuietly(order.id, 'ready')
+                      .finally(() => setIsStatusUpdateInProgress(false));
+                  }}
+                >
+                  Mark as Ready
+                </button>
               )}
 
               {order.status === 'ready' && (
