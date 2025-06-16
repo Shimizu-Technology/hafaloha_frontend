@@ -1527,7 +1527,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             {/* Simplified order list */}
             <div className="space-y-4 mb-6">
               {currentOrders.map((order) => (
-                <div key={`order-${order.id}-${order.updated_at}`} className="mb-4">
+                <div key={order.id} className="mb-4">
                   <CollapsibleOrderCard
                     order={order}
                     isExpanded={expandedOrders.has(order.id)}
