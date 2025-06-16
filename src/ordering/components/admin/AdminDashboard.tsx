@@ -43,7 +43,7 @@ import AcknowledgeAllButton from '../../../shared/components/notifications/Ackno
 import { api } from '../../lib/api';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { useAuthStore } from '../../store/authStore';
-import webSocketManager from '../../../shared/services/WebSocketManager';
+import webSocketManager, { NotificationType } from '../../../shared/services/WebSocketManager';
 import { Navigate } from 'react-router-dom';
 import useNotificationStore from '../../store/notificationStore';
 import { Order } from '../../types/order';
@@ -171,12 +171,10 @@ export function AdminDashboard() {
   useEffect(() => {
     // Set admin context to true when component mounts
     webSocketManager.setAdminContext(true);
-    console.debug('[AdminDashboard] Set WebSocketManager admin context to true');
     
     return () => {
       // Set admin context to false when component unmounts
       webSocketManager.setAdminContext(false);
-      console.debug('[AdminDashboard] Set WebSocketManager admin context to false');
     };
   }, []);
 
@@ -217,7 +215,6 @@ export function AdminDashboard() {
 
   // Function to acknowledge an order via the API
   const acknowledgeOrder = async (orderId: number) => {
-    // Starting acknowledgment process for order
     try {
       // First, dismiss all toast notifications for this order
       dismissAllToastsForOrder(orderId);
@@ -228,33 +225,25 @@ export function AdminDashboard() {
       );
       
       if (notification) {
-        // Found notification ID for order
-        
         // Acknowledge the notification in the store
         try {
           await notificationStore.getState().acknowledgeOne(notification.id);
-          // Successfully acknowledged notification in store
         } catch (notificationError) {
           console.error(`[ORDER_DEBUG] Error acknowledging notification in store:`, notificationError);
         }
-      } else {
-        // No notification found for order in notification store
       }
       
       // Call the API to acknowledge the order
       await api.post(`/orders/${orderId}/acknowledge`);
-      // Order acknowledged via API
       
       // Remove from unacknowledged orders list
       setUnacknowledgedOrders(prev => {
         const newList = prev.filter(order => Number(order.id) !== orderId);
-        // Updated unacknowledged orders list, removed order
         return newList;
       });
       
       // Ensure the WebSocketManager knows this notification has been handled
       webSocketManager.markNotificationAsDisplayed(`order_${orderId}`);
-      // Marked notification as displayed in WebSocketManager
     } catch (err) {
       console.error(`[ORDER_DEBUG] Failed to acknowledge order ${orderId}:`, err);
     }
@@ -262,17 +251,13 @@ export function AdminDashboard() {
   
   // Helper function to dismiss all toast notifications for a specific order
   const dismissAllToastsForOrder = (orderId: number) => {
-    // Dismissing all toasts for order
-    
     // First try to dismiss using the global toast ID map
     if (window.orderToastIds && window.orderToastIds[orderId]) {
       const toastIds = window.orderToastIds[orderId];
-      // Found toast IDs for order
       
       toastIds.forEach(id => {
         try {
           toastUtils.dismiss(id);
-          // Dismissed toast with ID: ${id}
         } catch (error) {
           console.error(`[ORDER_DEBUG] Error dismissing toast with ID ${id}:`, error);
         }
@@ -280,15 +265,11 @@ export function AdminDashboard() {
       
       // Clear the toast IDs for this order
       delete window.orderToastIds[orderId];
-    } else {
-      // No stored toast IDs found for order ${orderId}
     }
     
     // As a fallback, also try to find and remove any toast elements in the DOM with this order ID
     const existingToasts = document.querySelectorAll(`[data-order-id="${orderId}"]`);
     if (existingToasts.length > 0) {
-      // Found ${existingToasts.length} toast elements in DOM for order ${orderId}
-      
       // For each toast element, find its parent toast container and dismiss it
       existingToasts.forEach(toastElement => {
         try {
@@ -298,10 +279,7 @@ export function AdminDashboard() {
             const toastId = container.getAttribute('data-id') || '';
             if (toastId) {
               toastUtils.dismiss(toastId);
-              // Dismissed toast with DOM ID: ${toastId}
             }
-          } else {
-            // Could not find toast container for element
           }
         } catch (error) {
           console.error(`[ORDER_DEBUG] Error dismissing toast from DOM:`, error);
@@ -312,7 +290,6 @@ export function AdminDashboard() {
     // Finally, call dismissAll as a last resort if we still have toasts
     const remainingToasts = document.querySelectorAll(`[data-order-id="${orderId}"]`);
     if (remainingToasts.length > 0) {
-      // Still found ${remainingToasts.length} toasts after targeted dismissal, calling dismissAll
       toastUtils.dismissAll();
     }
   };
@@ -320,8 +297,6 @@ export function AdminDashboard() {
   // Function to dismiss a specific notification and acknowledge the order in the backend
   // This prevents it from reappearing on page refresh by properly acknowledging it
   const dismissNotification = async (orderId: number, toastId: string) => {
-    // Dismissing and acknowledging notification for order ${orderId} with toast ID ${toastId}
-    
     try {
       // First dismiss the specific toast from the UI
       toastUtils.dismiss(toastId);
@@ -335,7 +310,6 @@ export function AdminDashboard() {
       );
       
       if (notification) {
-        // Acknowledging notification ${notification.id} in store
         try {
           await notificationStore.getState().acknowledgeOne(notification.id);
         } catch (err) {
@@ -344,17 +318,14 @@ export function AdminDashboard() {
       }
       
       // IMPORTANT: Call the API to acknowledge the order in the backend
-      // Acknowledging order ${orderId} in backend
       await api.post(`/orders/${orderId}/acknowledge`);
       
       // Remove from unacknowledged orders list
       setUnacknowledgedOrders(prev => {
         const newList = prev.filter(order => Number(order.id) !== orderId);
-        // Updated unacknowledged orders list, removed order
         return newList;
       });
       
-      // Successfully acknowledged order ${orderId} in backend
     } catch (error) {
       console.error(`[ORDER_DEBUG] Error acknowledging order ${orderId}:`, error);
       toastUtils.error(`Failed to acknowledge order ${orderId}`);
@@ -367,7 +338,6 @@ export function AdminDashboard() {
     
     try {
       setIsAcknowledgingAll(true);
-      // Acknowledging all ${unacknowledgedOrders.length} unacknowledged orders
       
       // Create a copy of the current unacknowledged orders and filter by current restaurant
       const ordersToAcknowledge = unacknowledgedOrders.filter(order => {
@@ -386,7 +356,6 @@ export function AdminDashboard() {
       const acknowledgePromises = ordersToAcknowledge.map(order => {
         return api.post(`/orders/${order.id}/acknowledge`)
           .then(() => {
-            // Successfully acknowledged order ${order.id}
             // Mark this notification as displayed in WebSocketManager
             webSocketManager.markNotificationAsDisplayed(`order_${order.id}`);
             return order.id;
@@ -402,7 +371,6 @@ export function AdminDashboard() {
       
       // Filter out any failed acknowledgments
       const successfulAcknowledgments = results.filter(id => id !== null);
-      // Successfully acknowledged ${successfulAcknowledgments.length} out of ${ordersToAcknowledge.length} orders
       
       // Clear the unacknowledged orders list
       setUnacknowledgedOrders([]);
@@ -423,18 +391,14 @@ export function AdminDashboard() {
 
   // Function to display order notification with improved handling and deduplication
   const displayOrderNotification = useCallback((order: Order) => {
-    // Starting displayOrderNotification for order
-    
     // TENANT ISOLATION: Skip notifications for other restaurants
     if (order.restaurant_id && currentRestaurantId && 
         String(order.restaurant_id) !== String(currentRestaurantId)) {
-      console.debug(`[AdminDashboard] Ignoring order notification for different restaurant: ${order.restaurant_id} (current: ${currentRestaurantId})`);
       return;
     }
     
     // Skip displaying notification if the order has already been acknowledged globally
     if (order.global_last_acknowledged_at) {
-      // Skipping already acknowledged order: ${order.id}
       return;
     }
     
@@ -443,7 +407,6 @@ export function AdminDashboard() {
     
     // First check if this order has already been acknowledged in our system
     if (webSocketManager.hasNotificationBeenDisplayed(notificationId)) {
-      // Skipping already displayed notification for order: ${order.id}
       return;
     }
     
@@ -451,13 +414,10 @@ export function AdminDashboard() {
     // This prevents duplicate notifications from appearing even if they come from different sources
     const existingToasts = document.querySelectorAll(`[data-order-id="${order.id}"]`);
     if (existingToasts.length > 0) {
-      // Toast already exists in DOM for order: ${order.id}
       // Register this notification to prevent future duplicates
       webSocketManager.markNotificationAsDisplayed(notificationId);
       return;
     }
-
-    // Displaying notification for order: ${order.id} with status: ${order.status}, items: ${order.items?.length}
     
     // Register this notification with the WebSocketManager to prevent duplicates
     webSocketManager.markNotificationAsDisplayed(notificationId);
@@ -470,11 +430,6 @@ export function AdminDashboard() {
     
     // Handle both snake_case and camelCase date formats
     const createdAtStr = new Date(order.created_at || order.createdAt || Date.now()).toLocaleString();
-    // Using the item count for logging purposes
-    /* eslint-disable @typescript-eslint/no-unused-vars */
-    const itemCount = order.items?.length || 0;
-    /* eslint-enable @typescript-eslint/no-unused-vars */
-    // Order ${order.id} has ${itemCount} items
     const totalPrice = (order.total ?? 0).toFixed(2);
     const contactName = (order as any).contact_name || 'N/A';
 
@@ -493,7 +448,6 @@ export function AdminDashboard() {
     
     // Format item names for display (limit to 2 items with "and X more")
     const formatItemNames = (items: any[]) => {
-      // Formatting item names for order ${order.id}
       if (!items || items.length === 0) return 'No items';
       
       const truncateName = (name: string, maxLength: number = 20) => {
@@ -524,10 +478,7 @@ export function AdminDashboard() {
     }
     window.orderToastIds[order.id].push(toastId);
     
-    // Generated unique toast ID: ${toastId}, stored in global map
-    
     // Create the notification with a guaranteed unique toast ID
-    // About to call toastUtils.custom for order: ${order.id}
     try {
       toastUtils.custom((t) => (
       <div
@@ -538,10 +489,8 @@ export function AdminDashboard() {
         {/* Close button */}
         <button
           onClick={() => {
-            // Dismissing notification with ID: ${toastId}
             try {
               toastUtils.dismiss(toastId);
-              // Successfully dismissed notification: ${toastId}
             } catch (dismissError) {
               console.error(`[ORDER_DEBUG] Error dismissing notification: ${toastId}`, dismissError);
             }
@@ -614,8 +563,6 @@ export function AdminDashboard() {
         <div className="flex space-x-2">
           <button
             onClick={() => {
-              // Viewing order: ${order.id}
-              
               // Dismiss notification and mark it as displayed to prevent it from reappearing
               dismissNotification(Number(order.id), toastId);
               
@@ -623,20 +570,17 @@ export function AdminDashboard() {
               Promise.resolve()
                 .then(() => {
                   if (activeTab !== 'orders') {
-                    // Switching to orders tab from ${activeTab}
                     setActiveTab('orders');
                     // Wait for tab switch
                     return new Promise(resolve => setTimeout(resolve, 100));
                   }
                 })
                 .then(() => {
-                  // Clearing selected order ID before setting new one
                   setSelectedOrderId(null);
                   // Wait for state clear
                   return new Promise(resolve => setTimeout(resolve, 50));
                 })
                 .then(() => {
-                  // Setting selected order ID to ${order.id}
                   setSelectedOrderId(Number(order.id));
                 })
                 .catch(error => {
@@ -649,8 +593,6 @@ export function AdminDashboard() {
           </button>
           <button
             onClick={() => {
-              // Dismissing single notification for order: ${order.id}
-              
               // Dismiss notification and mark it as displayed to prevent it from reappearing
               dismissNotification(Number(order.id), toastId);
             }}
@@ -669,7 +611,6 @@ export function AdminDashboard() {
         marginBottom: '1rem'
       }
     });
-    // Successfully created toast notification with ID: ${toastId}
     } catch (error) {
       console.error(`[ORDER_DEBUG] Error creating toast notification for order ${order.id}:`, error);
     }
@@ -747,46 +688,16 @@ export function AdminDashboard() {
   
   // WebSocket integration for real-time updates with improved handling
   const handleNewOrder = useCallback((order: Order) => {
-    // Processing new order via WebSocket
-    // Order info for debugging purposes
-    /* eslint-disable @typescript-eslint/no-unused-vars */
-    const orderInfo = {
-      isStaffCreated: order.staff_created,
-      isAcknowledged: !!order.global_last_acknowledged_at,
-      currentLastOrderId: lastOrderId
-    };
-    /* eslint-enable @typescript-eslint/no-unused-vars */
-    
     // Skip staff-created orders and already acknowledged orders
     if (order.staff_created || order.global_last_acknowledged_at) {
-      // Skipping notification for staff-created or acknowledged order
       return;
     }
     
-    // Force update the orders in the store to ensure UI updates
+    // Immediately update the orders in the store to ensure UI updates
     useOrderStore.getState().handleNewOrder(order);
-    
-    // Explicitly refresh the order list to ensure immediate UI update
-    // This is critical to make new orders appear in the OrderManager component
-    const orderStore = useOrderStore.getState();
-    const currentMetadata = orderStore.metadata;
-    // Explicitly refreshing order list for new order
-    orderStore.fetchOrdersQuietly({
-      page: currentMetadata.page,
-      perPage: currentMetadata.per_page,
-      _sourceId: 'websocket_new_order_refresh'
-    });
     
     // Update the last order ID if needed
     if (Number(order.id) > lastOrderId) {
-      // Updating lastOrderId
-      // Update info for debugging purposes
-      /* eslint-disable @typescript-eslint/no-unused-vars */
-      const updateInfo = {
-        previous: lastOrderId,
-        new: Number(order.id)
-      };
-      /* eslint-enable @typescript-eslint/no-unused-vars */
       setLastOrderId(Number(order.id));
     }
     
@@ -795,19 +706,13 @@ export function AdminDashboard() {
       // Check if order is already in the list
       const exists = prev.some(o => Number(o.id) === Number(order.id));
       if (exists) {
-        // Order already in unacknowledged list
         return prev;
       }
-      // Adding order to unacknowledged list
       return [...prev, order];
     });
     
-    // Ensure notification is displayed with a slight delay to prevent race conditions
-    // Setting timeout to display notification for order: ${order.id}
-    setTimeout(() => {
-      // Timeout completed, now displaying notification for order: ${order.id}
-      displayOrderNotification(order);
-    }, 100);
+    // Display notification immediately (no delay for instant response)
+    displayOrderNotification(order);
   }, [lastOrderId, displayOrderNotification]);
   
   const handleLowStock = useCallback((item: MenuItem) => {
@@ -831,19 +736,16 @@ export function AdminDashboard() {
     }
   }, [acknowledgedLowStockItems, calculateAvailableQuantity, displayLowStockNotification, user?.restaurant_id]);
   
-  // Initialize WebSocket connection
+  // Note: useWebSocket hook disabled in favor of centralized WebSocketManager
+  // The centralized WebSocketManager now handles all WebSocket connections
+  // Initialize local WebSocket connection (for restaurant channel only, not order notifications)
   const { isConnected, error: wsError, connect: connectWebSocket } = useWebSocket({
-    autoConnect: USE_WEBSOCKETS && !!user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'staff'),
-    onNewOrder: handleNewOrder,
-    onLowStock: handleLowStock,
+    autoConnect: false, // Disabled auto-connect since we use centralized manager
+    onNewOrder: () => {}, // Disabled - handled by centralized manager
+    onLowStock: handleLowStock, // Keep this for now
     onConnected: () => {
-      // WebSocket connected successfully - will handle real-time order notifications
-      // WebSocket connection details: userId: ${user?.id}, restaurantId: ${user?.restaurant_id}
-      // WebSocket: Connected successfully - user: ${user?.id}, restaurant: ${user?.restaurant_id}, role: ${user?.role}
-      
       // Clear any existing polling interval when WebSocket connects
       if (pollingIntervalRef.current) {
-        // WebSocket: Clearing existing polling interval
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
@@ -853,7 +755,6 @@ export function AdminDashboard() {
       
       // Ensure we're subscribed to the order channel
       if (user?.restaurant_id) {
-        // WebSocket: Ensuring order WebSocket connection is active on connect
         // Force restart the order store WebSocket connection
         useOrderStore.getState().stopWebSocketConnection();
         setTimeout(() => {
@@ -862,11 +763,9 @@ export function AdminDashboard() {
       }
     },
     onDisconnected: () => {
-      // WebSocket: Disconnected, may fall back to polling - user: ${user?.id}, restaurant: ${user?.restaurant_id}
-      
       // If WebSockets are still enabled but we got disconnected, attempt to reconnect
       if (USE_WEBSOCKETS && (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'staff')) {
-        // WebSocket: Will attempt to reconnect
+        // Will attempt to reconnect
       }
     },
     onError: (err) => {
@@ -883,7 +782,7 @@ export function AdminDashboard() {
 
   // Log WebSocket status changes
   useEffect(() => {
-    // WebSocket: Connection status changed - connected: ${isConnected}, error: ${wsError?.message}
+    // Connection status tracking for internal use
   }, [isConnected, wsError]);
   
   // Add effect for stock notifications (fallback to polling if WebSockets fail)
@@ -959,37 +858,52 @@ export function AdminDashboard() {
     
     const initializeWebSocket = () => {
       if (USE_WEBSOCKETS && user?.restaurant_id) {
-        // WebSocket: Initializing connection for user: ${user.id}, restaurant: ${user.restaurant_id}, role: ${user.role}
-        
         // First, ensure any polling is stopped
         if (pollingIntervalRef.current) {
-          // WebSocket: Clearing existing polling interval before WebSocket connection
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
         
-        // Check if WebSocket is already connected
-        const { websocketConnected } = useOrderStore.getState();
+        // First clean up any existing AdminDashboard handlers to prevent duplicates
+        webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'AdminDashboard');
         
-        if (websocketConnected) {
-          // WebSocket: Connection already established, skipping initialization
+        // Check if WebSocket is already connected
+        if (webSocketManager.isConnected()) {
+          // Register AdminDashboard notification handlers with centralized manager
+          webSocketManager.registerHandler(NotificationType.NEW_ORDER, handleNewOrder, 'AdminDashboard');
+          
+          // Even if already connected, ensure OrderStore handlers are registered
+          useOrderStore.getState().startWebSocketConnection();
           return;
         }
         
         // Wait for cleanup before establishing new connections
         wsCleanupTimeout = setTimeout(() => {
-          // Establishing new WebSocket connections
-          // First connect to the restaurant channel
-          connectWebSocket();
+          // Initialize the centralized WebSocketManager
+          if (user.restaurant_id) {
+            webSocketManager.initialize(user.restaurant_id);
+          }
           
-          // Then connect to the order channel
-          // The orderStore will check if it's already connected
+          // Set admin context
+          webSocketManager.setAdminContext(true);
+          
+          // Clean up any existing handlers first to prevent duplicates
+          webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'AdminDashboard');
+          
+          // Register AdminDashboard notification handlers with centralized manager
+          webSocketManager.registerHandler(NotificationType.NEW_ORDER, handleNewOrder, 'AdminDashboard');
+          
+          // Connect to the restaurant channel for admin notifications (if needed)
+          if (USE_WEBSOCKETS && user?.role && ['admin', 'super_admin', 'staff'].includes(user.role)) {
+            connectWebSocket();
+          }
+          
+          // Register OrderStore handlers
           useOrderStore.getState().startWebSocketConnection();
           
           // Double-check that polling is stopped after WebSocket connection
           setTimeout(() => {
             if (pollingIntervalRef.current) {
-              // WebSocket: Clearing polling interval after WebSocket connection
               clearInterval(pollingIntervalRef.current);
               pollingIntervalRef.current = null;
             }
@@ -1007,6 +921,7 @@ export function AdminDashboard() {
       // Only check if WebSockets should be enabled
       if (USE_WEBSOCKETS && user?.restaurant_id) {
         const { websocketConnected } = useOrderStore.getState();
+        const centralWebSocketConnected = webSocketManager.isConnected();
         const localWebSocketConnected = isConnected;
         
         // Only log if there's a change in connection status
@@ -1016,16 +931,12 @@ export function AdminDashboard() {
         // Check if status has changed
         if (lastConnectionStatus.local !== currentConnectionStatus.local || 
             lastConnectionStatus.order !== currentConnectionStatus.order) {
-          // WebSocket: Connection status changed - local: ${localWebSocketConnected}, orderStore: ${websocketConnected}
-          
           // Update the connection status ref
           connectionStatusRef.current = currentConnectionStatus;
         }
         
-        // If WebSocket should be connected but isn't, try to reconnect
-        // Only attempt reconnection if both connections are down to prevent race conditions
-        if (!websocketConnected && !localWebSocketConnected && !reconnectingRef.current) {
-          // WebSocket: Both connections lost, attempting to reconnect
+        // If centralized WebSocket should be connected but isn't, try to reconnect
+        if (!centralWebSocketConnected && !reconnectingRef.current) {
           reconnectingRef.current = true;
           
           // Use a timeout to prevent immediate reconnection attempts
@@ -1036,8 +947,7 @@ export function AdminDashboard() {
         }
         
         // If WebSocket is connected but polling is still running, stop polling
-        if ((websocketConnected || localWebSocketConnected) && pollingIntervalRef.current) {
-          // WebSocket: WebSocket connected but polling still active - stopping polling
+        if (centralWebSocketConnected && pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
@@ -1046,24 +956,31 @@ export function AdminDashboard() {
     
     // Cleanup function
     return () => {
-      // Cleaning up WebSocket connections
       if (wsCleanupTimeout) {
         clearTimeout(wsCleanupTimeout);
       }
       if (wsCheckInterval) {
         clearInterval(wsCheckInterval);
       }
-      // Only disconnect if component is unmounting
-      if (document.visibilityState !== 'hidden') {
-        useOrderStore.getState().stopWebSocketConnection();
-      }
+      
+      // Set admin context to false since we're leaving the admin dashboard
+      webSocketManager.setAdminContext(false);
+      
+      // Unregister AdminDashboard notification handlers
+      webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'AdminDashboard');
+      
+      // Only unregister OrderStore handlers, don't disconnect the centralized connection
+      // Other components may still need it
+      useOrderStore.getState().stopWebSocketConnection();
+      
+      // Note: We don't call webSocketManager.disconnect() here because
+      // other components (like OrderManager) may still need the connection
     };
   }, [user, USE_WEBSOCKETS, isConnected]);
   
   // Effect to check for low stock items and display notifications - TEMPORARILY DISABLED
   useEffect(() => {
     // Temporarily disabled low stock notifications
-    console.debug('[AdminDashboard] Low stock notifications are temporarily disabled');
     
     // Clear any existing low stock notifications that might be displayed
     menuItems.forEach(item => {
@@ -1201,16 +1118,12 @@ useEffect(() => {
     order: orderStoreWebSocketConnected
   };
   
-  // Log current WebSocket status for debugging (only on initial setup)
-  // AdminDashboard: WebSocket status check - local: ${isConnected}, orderStore: ${orderStoreWebSocketConnected}
-  
   // Skip if not an admin user or if WebSockets are working
   if (!user ||
       (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'staff') ||
       (USE_WEBSOCKETS && (isConnected || orderStoreWebSocketConnected))) {
     // If WebSockets are connected, clear any existing polling interval
     if (USE_WEBSOCKETS && (isConnected || orderStoreWebSocketConnected) && pollingIntervalRef.current) {
-      // Polling: WebSocket is connected, clearing polling interval
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
@@ -1219,59 +1132,51 @@ useEffect(() => {
   
   // Only set up polling if we don't already have an interval
   if (pollingIntervalRef.current) {
-    // Polling: Polling interval already exists, skipping setup
     return;
   }
-
-  // Polling: Setting up polling fallback - WebSockets: ${USE_WEBSOCKETS}, connected: ${isConnected}
   
-  // Function to check for new orders
-  const checkForNewOrders = async () => {
-    // Prevent duplicate API calls
-    if (fetchingNotificationsRef.current) {
-      // AdminDashboard: Already fetching notifications, skipping duplicate call
-      return;
-    }
-    
-    // Get the latest WebSocket connection status from orderStore
-    const currentOrderStoreWebSocketConnected = useOrderStore.getState().websocketConnected;
-    
-    // Update last check timestamp
-    lastWebSocketCheckRef.current = Date.now();
-    
-    // Double-check WebSocket status before polling
-    if (USE_WEBSOCKETS && (isConnected || currentOrderStoreWebSocketConnected)) {
-      // Polling: WebSocket is connected, skipping polling
-      
-      // If polling interval exists but WebSockets are connected, clear the interval
-      if (pollingIntervalRef.current) {
-        // Polling: WebSocket is connected, clearing polling interval
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
+      // Function to check for new orders
+    const checkForNewOrders = async () => {
+      // Prevent duplicate API calls
+      if (fetchingNotificationsRef.current) {
+        return;
       }
       
-      // If WebSocket is connected but we're still in this function, something might be wrong
-      // Force reconnect the WebSocket to ensure it's working properly, but only if it's been a while
-      if (Date.now() - lastWebSocketCheckRef.current > 120000 && !reconnectingRef.current) { // Only force reconnect if it's been more than 2 minutes
-        // WebSocket: Force reconnecting WebSocket to ensure proper connection
-        reconnectingRef.current = true;
+      // Get the latest WebSocket connection status from orderStore
+      const currentOrderStoreWebSocketConnected = useOrderStore.getState().websocketConnected;
+      
+      // Update last check timestamp
+      lastWebSocketCheckRef.current = Date.now();
+      
+      // Double-check WebSocket status before polling
+      if (USE_WEBSOCKETS && (isConnected || currentOrderStoreWebSocketConnected)) {
+        // If polling interval exists but WebSockets are connected, clear the interval
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
         
-        setTimeout(() => {
-          if (isConnected) {
-            // Reconnect local WebSocket
-            connectWebSocket();
-          }
-          if (currentOrderStoreWebSocketConnected) {
-            // Reconnect order store WebSocket
-            useOrderStore.getState().stopWebSocketConnection();
-            setTimeout(() => useOrderStore.getState().startWebSocketConnection(), 1000);
-          }
-          reconnectingRef.current = false;
-        }, 2000);
+        // If WebSocket is connected but we're still in this function, something might be wrong
+        // Force reconnect the WebSocket to ensure it's working properly, but only if it's been a while
+        if (Date.now() - lastWebSocketCheckRef.current > 120000 && !reconnectingRef.current) { // Only force reconnect if it's been more than 2 minutes
+          reconnectingRef.current = true;
+          
+          setTimeout(() => {
+            if (isConnected && USE_WEBSOCKETS && user?.role && ['admin', 'super_admin', 'staff'].includes(user.role)) {
+              // Reconnect local WebSocket (restaurant channel only)
+              connectWebSocket();
+            }
+            if (currentOrderStoreWebSocketConnected) {
+              // Reconnect order store WebSocket
+              useOrderStore.getState().stopWebSocketConnection();
+              setTimeout(() => useOrderStore.getState().startWebSocketConnection(), 1000);
+            }
+            reconnectingRef.current = false;
+          }, 2000);
+        }
+        
+        return;
       }
-      
-      return;
-    }
     
     if (!mountedRef.current) return;
     

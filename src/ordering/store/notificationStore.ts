@@ -91,7 +91,11 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
     // Initialize the WebSocketManager
     webSocketManager.initialize(user.restaurant_id);
     
-    // Register handlers for notifications
+    // Clean up any existing handlers first to prevent duplicates
+    webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'notificationStore');
+    webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, undefined, 'notificationStore');
+    
+    // Register handlers for notifications with source identifiers
     webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order) => {
       console.log('[ORDER_DEBUG] NotificationStore received new order notification:', order);
       
@@ -119,7 +123,7 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       // Process the notification
       console.log('[ORDER_DEBUG] Calling handleNewNotification for order:', order.id);
       get().handleNewNotification(notification as Notification);
-    });
+    }, 'notificationStore');
     
     webSocketManager.registerHandler(NotificationType.LOW_STOCK, (item) => {
       console.debug('[NotificationStore] Received low stock notification:', item);
@@ -146,7 +150,7 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       
       // Process the notification
       get().handleNewNotification(notification as Notification);
-    });
+    }, 'notificationStore');
     
     // Register status handler
     webSocketManager.registerStatusHandler((status) => {
@@ -188,9 +192,9 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
   stopWebSocketConnection: () => {
     console.debug('[NotificationStore] Stopping WebSocket connection');
     
-    // Unregister handlers from WebSocketManager
-    webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, get().handleNewNotification);
-    webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, get().handleNewNotification);
+    // Unregister handlers from WebSocketManager (use source-based unregistration)
+    webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'notificationStore');
+    webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, undefined, 'notificationStore');
     
     // Update connection status
     set({ websocketConnected: false });

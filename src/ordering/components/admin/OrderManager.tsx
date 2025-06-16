@@ -97,6 +97,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [customStartDate, setCustomStartDate] = useState<Date>(todayInGuam);
   const [customEndDate, setCustomEndDate] = useState<Date>(todayInGuam);
   
+  // Track when tab was hidden for smart reconnection strategy
+  const lastHiddenTimeRef = useRef<number>(0);
+  
   // expanded order cards
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   
@@ -345,10 +348,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       _sourceId: sourceId // Add a unique ID to track this request
     };
     
-    // Simple date range logging - DEBUGGING ORDER ISSUE
-    console.log('🔍 DATE RANGE DEBUG:', { start: start.toISOString(), end: end.toISOString() });
-    console.log('🔍 DATE FILTER:', dateFilter);
-    console.log('🔍 fetchOrdersWithParams called with:', { pageToFetch, dateFilter, sourceId });
+
     
     // Handle different user roles
     if (isSuperAdmin() || isAdmin()) {
@@ -380,8 +380,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       // Staff user viewing orders - backend policy will filter appropriately
     }
     
-    // Log the parameters being sent to the API - DEBUGGING ORDER ISSUE
-    console.log('🔍 API PARAMS BEING SENT:', params);
+
     
     fetchOrders(params);
     
@@ -489,31 +488,21 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     // Explicitly stop any existing polling to ensure WebSockets are prioritized
     stopOrderPolling();
     
-    // Initialize WebSocket connection with current pagination settings
-    const initializeWebSocket = () => {
-      // First, always stop polling to ensure WebSockets are prioritized
+    // Register WebSocket handlers with centralized manager
+    // The AdminDashboard handles actual WebSocket connection initialization
+    const registerWebSocketHandlers = () => {
+      console.debug('[OrderManager] Registering WebSocket handlers with centralized manager');
+      
+      // Stop polling if it's active
       stopOrderPolling();
       
-      // Only start WebSocket connection if not already connected
-      // This prevents conflicts with AdminDashboard which also establishes connections
-      const { websocketConnected } = useOrderStore.getState();
-      if (!websocketConnected) {
-        // Starting WebSocket connection
-        // Start WebSocket connection
-        // The WebSocket service will get pagination parameters from the store's metadata
-        startWebSocketConnection();
-        
-        // Double-check polling is stopped after WebSocket connection attempt
-        setTimeout(() => stopOrderPolling(), 500);
-      } else {
-        // WebSocket already connected
-        // Even if already connected, we can update the pagination state in the orderStore
-        // The orderStore will handle updating the WebSocket service with current pagination
-      }
+      // Register handlers with the centralized WebSocket manager
+      // This is safe to call even if connection isn't established yet
+      startWebSocketConnection();
     };
     
-    // Initialize WebSocket on component mount
-    initializeWebSocket();
+    // Register handlers on component mount
+    registerWebSocketHandlers();
     
     // Handle new orders from WebSocket or polling
     const unsubscribeFromStore = useOrderStore.subscribe((state) => {
@@ -564,19 +553,46 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       }
     });
     
-    // Pause WebSocket if the tab is hidden and switch to polling
+    // Handle visibility changes - smart reconnection with state preservation
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        stopWebSocketConnection();
+        console.debug('[OrderManager] Tab hidden, preserving centralized WebSocket connection and UI state');
+        // Track when tab was hidden for smart reconnection strategy
+        lastHiddenTimeRef.current = Date.now();
+        // Don't disconnect WebSocket - it's managed centrally by AdminDashboard
+        // Just ensure we're not polling
+        stopOrderPolling();
       } else {
+        console.debug('[OrderManager] Tab visible, performing smart reconnection check');
         // First stop any polling that might be running
         stopOrderPolling();
-        // Refresh once, then start WebSocket again
-        fetchOrdersWithParamsQuietly();
-        // Short delay to ensure the fetch completes before WebSocket reconnects
-        setTimeout(() => {
-          initializeWebSocket();
-        }, 300);
+        
+        // Check if WebSocket is still connected
+        const isWebSocketConnected = webSocketManager.isConnected();
+        
+        if (isWebSocketConnected) {
+          // WebSocket is connected, just ensure handlers are registered (idempotent)
+          console.debug('[OrderManager] WebSocket still connected, ensuring handlers are registered');
+          setTimeout(() => {
+            registerWebSocketHandlers();
+          }, 100);
+        } else {
+          // WebSocket disconnected, trigger smart reconnection
+          console.debug('[OrderManager] WebSocket disconnected, triggering smart reconnection');
+          
+          // Re-register handlers first (safe even if connection isn't ready)
+          registerWebSocketHandlers();
+          
+          // Only refresh data if we've been away for more than 30 seconds
+          // This preserves UI state for quick tab switches
+          const timeHidden = Date.now() - lastHiddenTimeRef.current;
+          if (timeHidden > 30000) {
+            console.debug('[OrderManager] Tab was hidden for more than 30 seconds, refreshing data');
+            fetchOrdersWithParamsQuietly();
+          } else {
+            console.debug('[OrderManager] Quick tab switch detected, preserving UI state');
+          }
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -591,20 +607,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }, 30000);
 
     return () => {
+      console.debug('[OrderManager] Cleaning up WebSocket handlers and intervals');
+      
       // Clean up all intervals and event listeners
       clearInterval(websocketCheckInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsubscribeFromStore();
       
-      // Don't disconnect WebSocket when changing pages - only when component unmounts completely
-      // This prevents the WebSocket connection from being repeatedly closed and reopened
-      if (document.visibilityState !== 'visible') {
-        // Stopping WebSocket connection on component unmount
-        stopWebSocketConnection();
-      }
+      // Only unregister our handlers, don't disconnect the centralized WebSocket
+      // AdminDashboard manages the actual connection lifecycle
+      stopWebSocketConnection();
       stopOrderPolling();
-      unsubscribeFromStore();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []); // Only run on component mount and unmount
   

@@ -130,28 +130,18 @@ export const useOrderStore = create<OrderStore>()(
       // WebSocket Methods
       // ---------------------------------------------------------
       startWebSocketConnection: (paginationParams?: { page?: number; perPage?: number }) => {
-        // Check if already connected to avoid duplicate connections
-        if (get().websocketConnected) {
-          console.debug('[OrderStore] WebSocket already connected, skipping connection');
-          // Ensure polling is stopped when WebSocket is connected
-          get().stopOrderPolling();
-          
-          // Even if already connected, update pagination params to ensure WebSocket has current state
-          const currentMetadata = get().metadata;
-          webSocketManager.updatePaginationParams({
-            page: paginationParams?.page || currentMetadata.page,
-            perPage: paginationParams?.perPage || currentMetadata.per_page
-          });
-          
-          return;
-        }
+        console.debug('[OrderStore] Requesting WebSocket connection via centralized manager');
         
         // Stop polling if it's active
         get().stopOrderPolling();
         
+        // First clean up any existing handlers to prevent duplicates
+        webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'orderStore');
+        webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, undefined, 'orderStore');
+        
         const user = useAuthStore.getState().user;
         if (!user?.restaurant_id) {
-          console.error('[OrderStore] Cannot start WebSocket connection: No restaurant ID');
+          console.error('[OrderStore] Cannot request WebSocket connection: No restaurant ID');
           return;
         }
         
@@ -170,23 +160,13 @@ export const useOrderStore = create<OrderStore>()(
         // Get current pagination state to send to WebSocket
         const currentMetadata = get().metadata;
         
-        // Initialize the WebSocketManager with the restaurant ID
-        console.debug('[OrderStore] Initializing WebSocketManager', { 
-          restaurantId: user.restaurant_id,
-          currentPage: get().metadata.page 
-        });
+        // Create stable handler references to avoid duplicate registrations
+        const newOrderHandler = (order: Order) => get().handleNewOrder(order);
+        const orderUpdateHandler = (order: Order) => get().handleOrderUpdate(order);
         
-        // Initialize the WebSocketManager
-        webSocketManager.initialize(user.restaurant_id);
-        
-        // Register handlers for order notifications
-        webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order: Order) => {
-          get().handleNewOrder(order);
-        });
-        
-        webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, (order: Order) => {
-          get().handleOrderUpdate(order);
-        });
+        // Register handlers for order notifications with source identifier
+        webSocketManager.registerHandler(NotificationType.NEW_ORDER, newOrderHandler, 'orderStore');
+        webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, orderUpdateHandler, 'orderStore');
         
         // Update pagination parameters
         webSocketManager.updatePaginationParams({
@@ -194,69 +174,74 @@ export const useOrderStore = create<OrderStore>()(
           perPage: currentMetadata.per_page
         });
         
-        // Set connection status
-        set({ websocketConnected: true });
-        
-        // Stop polling when WebSocket is connected
-        get().stopOrderPolling();
-        
-        // Set up a connection status check interval
-        const connectionCheckInterval = setInterval(() => {
-          const isConnected = webSocketManager.isConnected();
+        // Check if WebSocket is already connected by the centralized manager
+        if (webSocketManager.isConnected()) {
+          console.debug('[OrderStore] WebSocket already connected by centralized manager');
+          set({ websocketConnected: true });
           
-          // If connection status has changed, update our state
-          if (isConnected !== get().websocketConnected) {
-            console.debug(`[OrderStore] WebSocket connection status changed: ${isConnected ? 'connected' : 'disconnected'}`);
-            set({ websocketConnected: isConnected });
+          // Set up a connection status check interval
+          const connectionCheckInterval = setInterval(() => {
+            const isConnected = webSocketManager.isConnected();
             
-            // If disconnected, start polling
-            if (!isConnected && !get().pollingInterval) {
-              console.debug('[OrderStore] WebSocket disconnected, starting polling');
-              get().startOrderPolling();
+            // If connection status has changed, update our state
+            if (isConnected !== get().websocketConnected) {
+              console.debug(`[OrderStore] WebSocket connection status changed: ${isConnected ? 'connected' : 'disconnected'}`);
+              set({ websocketConnected: isConnected });
+              
+              // If disconnected, start polling
+              if (!isConnected && !get().pollingInterval) {
+                console.debug('[OrderStore] WebSocket disconnected, starting polling');
+                get().startOrderPolling();
+              }
+              // If connected, stop polling
+              else if (isConnected && get().pollingInterval) {
+                console.debug('[OrderStore] WebSocket connected, stopping polling');
+                get().stopOrderPolling();
+              }
             }
-            // If connected, stop polling
-            else if (isConnected && get().pollingInterval) {
-              console.debug('[OrderStore] WebSocket connected, stopping polling');
-              get().stopOrderPolling();
-            }
-          }
-        }, 5000); // Check every 5 seconds
+          }, 5000); // Check every 5 seconds
+          
+          // Store the interval ID so we can clear it later
+          set({ connectionCheckInterval });
+          
+          return true;
+        }
         
-        // Store the interval ID so we can clear it later
-        set({ connectionCheckInterval });
+        // If not connected, rely on the centralized initialization
+        // The AdminDashboard or other components should handle the actual connection
+        console.debug('[OrderStore] WebSocket not yet connected, registered handlers for when connection is established');
         
-        console.debug('[OrderStore] WebSocket connection initialized');
+        // Set connection status based on actual WebSocket state
+        set({ websocketConnected: webSocketManager.isConnected() });
         
         // Return the connection status
         return webSocketManager.isConnected();
       },
       
       stopWebSocketConnection: () => {
-        if (get().websocketConnected) {
-          console.debug('[OrderStore] Stopping WebSocket connection');
-          
-          // Unregister handlers
-          webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, get().handleNewOrder);
-          webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, get().handleOrderUpdate);
-          
-          // Clear connection check interval if it exists
-          const { connectionCheckInterval } = get();
-          if (connectionCheckInterval) {
-            clearInterval(connectionCheckInterval);
-          }
-          
-          // Update connection status
-          set({ websocketConnected: false, connectionCheckInterval: null });
-          
-          // Note: We don't actually disconnect the WebSocketManager here
-          // as other components might be using it. We just unregister our handlers.
+        console.debug('[OrderStore] Stopping WebSocket connection and unregistering handlers');
+        
+        // Unregister all handlers from this source (much more reliable than function reference)
+        webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'orderStore');
+        webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, undefined, 'orderStore');
+        
+        // Clear connection check interval if it exists
+        const { connectionCheckInterval } = get();
+        if (connectionCheckInterval) {
+          clearInterval(connectionCheckInterval);
         }
+        
+        // Update connection status
+        set({ websocketConnected: false, connectionCheckInterval: null });
+        
+        // Note: We don't disconnect the centralized WebSocketManager
+        // Other components may still need the connection
       },
       
       handleNewOrder: (order: Order) => {
         if (!order || !order.id) return;
         
-        console.debug('[OrderStore] Received new order via WebSocket:', order.id);
+
         
         // Trust backend to send only authorized orders
         // No frontend filtering needed
@@ -271,7 +256,6 @@ export const useOrderStore = create<OrderStore>()(
           
           // Always add new orders to the list if we're on page 1
           if (currentPage === 1) {
-            console.debug('[OrderStore] Adding new order to page 1');
             
             // Create a shallow copy of the current state
             const currentOrders = [...get().orders];
@@ -290,7 +274,6 @@ export const useOrderStore = create<OrderStore>()(
               }
             });
           } else {
-            console.debug(`[OrderStore] On page ${currentPage}, refreshing orders to include new order`);
             
             // If we're not on page 1, refresh the current page to maintain consistency
             // This ensures the order counts and pagination are updated correctly
@@ -309,7 +292,7 @@ export const useOrderStore = create<OrderStore>()(
       handleOrderUpdate: (order: Order) => {
         if (!order || !order.id) return;
         
-        console.debug('[OrderStore] Received order update via WebSocket:', order.id);
+
         
         // Trust backend to send only authorized orders
         // No frontend filtering needed
@@ -319,7 +302,6 @@ export const useOrderStore = create<OrderStore>()(
         
         if (orderExists) {
           // Only update if the order is in our current page
-          console.debug('[OrderStore] Updating existing order in current page');
           
           // IMPORTANT: Create a shallow copy of the current orders to avoid modifying metadata
           const updatedOrders = get().orders.map((o: Order) => 
@@ -335,7 +317,6 @@ export const useOrderStore = create<OrderStore>()(
         } else {
           // If the order isn't in our current view, don't modify the state
           // This prevents pagination issues when viewing pages other than page 1
-          console.debug('[OrderStore] Order not in current page, skipping update');
         }
       },
       
@@ -368,14 +349,18 @@ export const useOrderStore = create<OrderStore>()(
         // Initialize WebSocketManager
         webSocketManager.initialize(user.restaurant_id);
         
+        // Clean up any existing polling handlers first to prevent duplicates
+        webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'orderStore_polling');
+        webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, undefined, 'orderStore_polling');
+        
         // Register handlers for order notifications
         webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order: Order) => {
           get().handleNewOrder(order);
-        });
+        }, 'orderStore_polling');
         
         webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, (order: Order) => {
           get().handleOrderUpdate(order);
-        });
+        }, 'orderStore_polling');
         
         // Check if connected
         const isConnected = webSocketManager.isConnected();
@@ -480,6 +465,10 @@ export const useOrderStore = create<OrderStore>()(
             
           pollingManager.stopPolling(pollingId);
           set({ pollingInterval: null });
+          
+          // Clean up polling handlers when we stop polling
+          webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'orderStore_polling');
+          webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, undefined, 'orderStore_polling');
         }
         
         // If WebSocket is not connected, try to connect now that polling is stopped
@@ -491,14 +480,18 @@ export const useOrderStore = create<OrderStore>()(
             // Initialize the WebSocketManager
             webSocketManager.initialize(user.restaurant_id);
             
+            // Clean up any existing polling handlers first to prevent duplicates
+            webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'orderStore_polling');
+            webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, undefined, 'orderStore_polling');
+            
             // Register handlers for order notifications
             webSocketManager.registerHandler(NotificationType.NEW_ORDER, (order: Order) => {
               get().handleNewOrder(order);
-            });
+            }, 'orderStore_polling');
             
             webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, (order: Order) => {
               get().handleOrderUpdate(order);
-            });
+            }, 'orderStore_polling');
             
             // Get connection status
             const isConnected = webSocketManager.isConnected();
@@ -557,10 +550,7 @@ export const useOrderStore = create<OrderStore>()(
           // Always use the main orders endpoint (backend handles authorization)
           const endpoint = '/orders';
           
-          // Debug log the full API URL being called - DEBUGGING ORDER ISSUE
           const fullUrl = `${endpoint}?${queryParams.toString()}`;
-          console.log('🔍 [OrderStore] Fetch API URL:', fullUrl);
-          console.log('🔍 [OrderStore] Fetch Query params object:', Object.fromEntries(queryParams.entries()));
           
           const response = await api.get<{
             orders: Order[];
@@ -613,8 +603,7 @@ export const useOrderStore = create<OrderStore>()(
             _sourceId = null
           } = params;
           
-          // Simple request logging
-          console.debug(`[OrderStore] Fetch request from source ${_sourceId || 'unknown'} for page ${page}`);
+
           
           // Build query string
           const queryParams = new URLSearchParams();
@@ -651,10 +640,7 @@ export const useOrderStore = create<OrderStore>()(
           // Always use the main orders endpoint (backend handles authorization)
           const endpoint = '/orders';
           
-          // Debug log the full API URL being called - DEBUGGING ORDER ISSUE
           const fullUrl = `${endpoint}?${queryParams.toString()}`;
-          console.log('🔍 [OrderStore] API URL:', fullUrl);
-          console.log('🔍 [OrderStore] Query params object:', Object.fromEntries(queryParams.entries()));
           
           const response = await api.get<{
             orders: Order[];
@@ -671,8 +657,7 @@ export const useOrderStore = create<OrderStore>()(
             total_pages: response.total_pages || Math.ceil((response.total_count || 0) / (response.per_page || 10))
           };
           
-          console.debug(`[OrderStore] Updating state with page ${metadata.page} data (source: ${_sourceId || 'unknown'})`);
-          console.debug(`[OrderStore] Metadata from API: total_count=${metadata.total_count}, total_pages=${metadata.total_pages}`);
+
           
           // Only update orders, don't change loading state
           set({ orders: response.orders || [], metadata });

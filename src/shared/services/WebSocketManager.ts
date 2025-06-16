@@ -30,6 +30,15 @@ export interface NotificationHandler {
 }
 
 /**
+ * Interface for handler registration with unique ID
+ */
+interface HandlerRegistration {
+  id: string;
+  handler: NotificationHandler;
+  source?: string;
+}
+
+/**
  * Interface for connection status change handlers
  */
 export interface ConnectionStatusHandler {
@@ -67,7 +76,7 @@ class WebSocketManager {
   private isInitialized: boolean = false;
   private restaurantId: string | null = null;
   private connectionStatus: ConnectionStatus = ConnectionStatus.DISCONNECTED;
-  private handlers: Map<NotificationType, Set<NotificationHandler>> = new Map();
+  private handlers: Map<NotificationType, Map<string, HandlerRegistration>> = new Map();
   private statusHandlers: Set<ConnectionStatusHandler> = new Set();
   private displayedNotifications: Map<string, NotificationRegistryEntry> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
@@ -83,16 +92,16 @@ class WebSocketManager {
   private connectionStartTime: number | null = null;
   private lastConnectionAttempt: number | null = null;
   private minReconnectDelay: number = 1000;
-  private maxReconnectDelay: number = 5000;
-  private paginationParams: { page: number; perPage: number } = { page: 1, perPage: 10 };
+  // Used to calculate exponential backoff for reconnection attempts
+  private baseReconnectDelay: number = 1000;
   private subscriptions: Map<string, ChannelSubscription> = new Map();
   
   // Private constructor to enforce singleton pattern
   private constructor() {
-    // Initialize handler sets for each notification type
-    this.handlers.set(NotificationType.NEW_ORDER, new Set());
-    this.handlers.set(NotificationType.ORDER_UPDATED, new Set());
-    this.handlers.set(NotificationType.LOW_STOCK, new Set());
+    // Initialize handler maps for each notification type
+    this.handlers.set(NotificationType.NEW_ORDER, new Map());
+    this.handlers.set(NotificationType.ORDER_UPDATED, new Map());
+    this.handlers.set(NotificationType.LOW_STOCK, new Map());
     
     // Set up notification cleanup interval (every 5 minutes)
     this.cleanupInterval = setInterval(() => this.cleanupOldNotifications(), 5 * 60 * 1000);
@@ -108,9 +117,6 @@ class WebSocketManager {
    * Handle network coming back online
    */
   private handleNetworkOnline = () => {
-    console.debug('[WebSocketManager] Network online, attempting to reconnect');
-    this.logConnectionEvent('Network online');
-    
     // If we were previously initialized, try to reconnect
     if (this.isInitialized && this.restaurantId) {
       this.reconnect();
@@ -121,8 +127,6 @@ class WebSocketManager {
    * Handle network going offline
    */
   private handleNetworkOffline = () => {
-    console.debug('[WebSocketManager] Network offline, connection may be disrupted');
-    this.logConnectionEvent('Network offline');
     this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('Network offline'));
   }
   
@@ -142,12 +146,8 @@ class WebSocketManager {
    */
   public initialize(restaurantId: string): void {
     if (this.isInitialized && this.restaurantId === restaurantId) {
-      console.debug('[WebSocketManager] Already initialized for restaurant:', restaurantId);
       return;
     }
-    
-    console.debug('[WebSocketManager] Initializing for restaurant:', restaurantId);
-    this.logConnectionEvent(`Initializing for restaurant: ${restaurantId}`);
     
     // Reset reconnection attempts when initializing
     this.reconnectAttempts = 0;
@@ -163,7 +163,6 @@ class WebSocketManager {
     } catch (error) {
       const typedError = error instanceof Error ? error : new Error(String(error));
       console.error('[WebSocketManager] Error connecting to WebSocket:', typedError);
-      this.logConnectionEvent(`Connection error: ${typedError.message}`);
       this.updateConnectionStatus(ConnectionStatus.ERROR, typedError);
       this.scheduleReconnect();
     }
@@ -174,13 +173,32 @@ class WebSocketManager {
    */
   private connectWebSocket(): void {
     if (this.isConnecting) {
-      console.debug('[WebSocketManager] Connection already in progress');
       return;
     }
 
     const now = Date.now();
     if (this.lastConnectionAttempt && (now - this.lastConnectionAttempt) < this.minReconnectDelay) {
-      console.debug('[WebSocketManager] Connection attempt too soon, waiting');
+      return;
+    }
+
+    // Pre-connection validation
+    const token = localStorage.getItem('auth_token') || 
+                  localStorage.getItem('token') ||
+                  (window as any).authStore?.getState()?.token || '';
+    
+    const cleanToken = token.replace(/['"]/g, '').trim();
+    
+    if (!cleanToken) {
+      const error = new Error('No authentication token available for WebSocket connection');
+      console.error('[WebSocketManager] Pre-connection validation failed:', error.message);
+      this.updateConnectionStatus(ConnectionStatus.ERROR, error);
+      return;
+    }
+    
+    if (!this.restaurantId) {
+      const error = new Error('No restaurant ID available for WebSocket connection');
+      console.error('[WebSocketManager] Pre-connection validation failed:', error.message);
+      this.updateConnectionStatus(ConnectionStatus.ERROR, error);
       return;
     }
 
@@ -191,7 +209,6 @@ class WebSocketManager {
     try {
       // Determine WebSocket URL
       const wsUrl = this.getWebSocketUrl();
-      console.debug('[WebSocketManager] Connecting to WebSocket:', wsUrl);
 
       // Create WebSocket connection
       this.socket = new WebSocket(wsUrl);
@@ -203,7 +220,9 @@ class WebSocketManager {
       this.socket.onerror = this.handleError.bind(this);
 
     } catch (error) {
+      console.error('[WebSocketManager] WebSocket creation failed:', error);
       this.isConnecting = false;
+      this.updateConnectionStatus(ConnectionStatus.ERROR, error as Error);
       throw error;
     }
   }
@@ -221,8 +240,14 @@ class WebSocketManager {
     } else if (typeof window !== 'undefined') {
       // Fallback to current location
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      baseUrl = `${protocol}//${host}`;
+      // For development setup, hardcode the Rails backend port (typically 3000)
+      // instead of using the frontend dev server port (e.g. 5173)
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        baseUrl = `${protocol}//localhost:3000`;
+      } else {
+        const host = window.location.host;
+        baseUrl = `${protocol}//${host}`;
+      }
     } else {
       // Default fallback
       baseUrl = 'ws://localhost:3000';
@@ -231,18 +256,33 @@ class WebSocketManager {
     // Convert HTTP(S) to WS(S) if needed
     baseUrl = baseUrl.replace(/^https?:/, baseUrl.includes('https') ? 'wss:' : 'ws:');
     
-    // Add cable path
-    return `${baseUrl}/cable`;
+    // Get authentication token from localStorage or global state
+    const token = localStorage.getItem('auth_token') || 
+                  localStorage.getItem('token') ||
+                  (window as any).authStore?.getState()?.token || '';
+
+    // Clean token (remove any quotes or whitespace)
+    const cleanToken = token.replace(/['"]/g, '').trim();
+    
+    if (!cleanToken) {
+      console.error('[WebSocketManager] No authentication token found for WebSocket connection');
+    }
+    
+    // Add cable path and authentication parameters
+    const wsUrl = cleanToken && this.restaurantId 
+      ? `${baseUrl}/cable?token=${encodeURIComponent(cleanToken)}&restaurant_id=${encodeURIComponent(this.restaurantId)}`
+      : `${baseUrl}/cable`;
+      
+    return wsUrl;
   }
 
   /**
    * Handle WebSocket connection open
    */
   private handleOpen(): void {
-    console.debug('[WebSocketManager] WebSocket connected');
+    
     this.isConnecting = false;
     this.reconnectAttempts = 0;
-    this.logConnectionEvent('Connected successfully');
     this.updateConnectionStatus(ConnectionStatus.CONNECTED);
     
     // Subscribe to order and inventory channels
@@ -255,6 +295,37 @@ class WebSocketManager {
     // Fetch missed notifications
     this.fetchMissedNotifications();
   }
+  
+  /**
+   * Subscribe to order channel
+   */
+  private subscribeToOrderChannel(): void {
+    if (!this.restaurantId) {
+      console.error('[WebSocketManager] Cannot subscribe: no restaurant ID');
+      return;
+    }
+    
+    // Subscribe to frontend channel format
+    const subscription = {
+      command: 'subscribe',
+      identifier: JSON.stringify({
+        channel: 'OrderChannel',
+        restaurant_id: this.restaurantId
+      })
+    };
+    
+    this.sendMessage(subscription);
+    
+    // Also subscribe to the backend broadcast format channel name
+    const backendSubscription = {
+      command: 'subscribe',
+      identifier: JSON.stringify({
+        channel: `order_channel_${this.restaurantId}`
+      })
+    };
+    
+    this.sendMessage(backendSubscription);
+  }
 
   /**
    * Handle WebSocket message
@@ -262,33 +333,52 @@ class WebSocketManager {
   private handleMessage(event: MessageEvent): void {
     try {
       const data = JSON.parse(event.data);
-      console.debug('[WebSocketManager] Received message:', data);
 
-      // Handle different message types
-      switch (data.type) {
-        case 'ping':
-          // Respond to ping with pong
-          this.sendMessage({ type: 'pong' });
-          break;
-          
-        case 'confirm_subscription':
-          console.debug('[WebSocketManager] Subscription confirmed:', data.identifier);
-          break;
-          
-        case 'new_order':
-          this.handleNotification(NotificationType.NEW_ORDER, data.message);
-          break;
-          
-        case 'order_updated':
-          this.handleNotification(NotificationType.ORDER_UPDATED, data.message);
-          break;
-          
-        case 'low_stock':
-          this.handleNotification(NotificationType.LOW_STOCK, data.message);
-          break;
-          
-        default:
-          console.debug('[WebSocketManager] Unknown message type:', data.type);
+      // Handle ActionCable message format
+      if (data.identifier && data.message) {
+        // This is an ActionCable message - parse the identifier and message
+        const identifier = JSON.parse(data.identifier);
+        const message = data.message;
+        
+        if (identifier.channel === 'OrderChannel') {
+          switch (message.type) {
+            case 'new_order':
+              this.handleNotification(NotificationType.NEW_ORDER, message.order);
+              break;
+              
+            case 'order_updated':
+              this.handleNotification(NotificationType.ORDER_UPDATED, message.order);
+              break;
+              
+            default:
+              console.debug('[WebSocketManager] Unknown OrderChannel message type:', message.type);
+          }
+        } else if (identifier.channel === 'InventoryChannel') {
+          switch (message.type) {
+            case 'low_stock':
+              this.handleNotification(NotificationType.LOW_STOCK, message.item);
+              break;
+              
+            default:
+              console.debug('[WebSocketManager] Unknown InventoryChannel message type:', message.type);
+          }
+        }
+      } else {
+        // Handle non-ActionCable messages (ping/pong, confirmations, etc.)
+        switch (data.type) {
+          case 'ping':
+            // Respond to ping with pong
+            this.sendMessage({ type: 'pong' });
+            break;
+            
+          case 'confirm_subscription':
+            console.debug('[WebSocketManager] Subscription confirmed:', data.identifier);
+            break;
+            
+          case 'welcome':
+            console.debug('[WebSocketManager] WebSocket welcome message received');
+            break;
+        }
       }
     } catch (error) {
       console.error('[WebSocketManager] Error parsing message:', error);
@@ -299,10 +389,10 @@ class WebSocketManager {
    * Handle WebSocket connection close
    */
   private handleClose(event: CloseEvent): void {
-    console.debug('[WebSocketManager] WebSocket closed:', event.code, event.reason);
+    console.log('[WebSocketManager] WebSocket closed:', event.code, event.reason);
+    
     this.isConnecting = false;
     this.socket = null;
-    this.logConnectionEvent(`Disconnected: ${event.code} ${event.reason}`);
     this.updateConnectionStatus(ConnectionStatus.DISCONNECTED);
     this.stopHeartbeat();
     
@@ -317,8 +407,22 @@ class WebSocketManager {
    */
   private handleError(error: Event): void {
     console.error('[WebSocketManager] WebSocket error:', error);
+    
+    // Additional debugging information for common issues
+    const token = localStorage.getItem('auth_token') || 
+                  localStorage.getItem('token') ||
+                  (window as any).authStore?.getState()?.token || '';
+    const cleanToken = token.replace(/['"]/g, '').trim();
+    
+    if (!cleanToken) {
+      console.error('[WebSocketManager] Missing authentication token');
+    } else if (!this.restaurantId) {
+      console.error('[WebSocketManager] Missing restaurant ID');
+    } else if (!navigator.onLine) {
+      console.error('[WebSocketManager] Network offline');
+    }
+    
     this.isConnecting = false;
-    this.logConnectionEvent(`Error: ${error}`);
     this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('WebSocket error'));
     this.scheduleReconnect();
   }
@@ -329,33 +433,21 @@ class WebSocketManager {
   private sendMessage(message: any): void {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
+    } else {
+      console.warn('[WebSocketManager] Cannot send message - WebSocket not open');
     }
-  }
-
-  /**
-   * Subscribe to order channel
-   */
-  private subscribeToOrderChannel(): void {
-    if (!this.restaurantId) return;
-    
-    const subscription = {
-      command: 'subscribe',
-      identifier: JSON.stringify({
-        channel: 'OrderChannel',
-        restaurant_id: this.restaurantId
-      })
-    };
-    
-    this.sendMessage(subscription);
-    console.debug('[WebSocketManager] Subscribed to OrderChannel');
   }
 
   /**
    * Subscribe to inventory channel
    */
   private subscribeToInventoryChannel(): void {
-    if (!this.restaurantId) return;
+    if (!this.restaurantId) {
+      console.error('[WebSocketManager] Cannot subscribe: no restaurant ID');
+      return;
+    }
     
+    // Subscribe to frontend channel format
     const subscription = {
       command: 'subscribe',
       identifier: JSON.stringify({
@@ -365,32 +457,86 @@ class WebSocketManager {
     };
     
     this.sendMessage(subscription);
-    console.debug('[WebSocketManager] Subscribed to InventoryChannel');
+    
+    // Also subscribe to the backend broadcast format channel name
+    const backendSubscription = {
+      command: 'subscribe',
+      identifier: JSON.stringify({
+        channel: `inventory_channel_${this.restaurantId}`
+      })
+    };
+    
+    this.sendMessage(backendSubscription);
   }
 
   /**
    * Register a handler for a specific notification type
    * @param type The notification type to handle
    * @param handler The handler function
+   * @param source Optional source identifier for debugging
    */
-  public registerHandler(type: NotificationType, handler: NotificationHandler): void {
-    const handlers = this.handlers.get(type);
-    if (handlers) {
-      handlers.add(handler);
-      console.debug(`[WebSocketManager] Registered handler for ${type}, total: ${handlers.size}`);
+  public registerHandler(type: NotificationType, handler: NotificationHandler, source?: string): void {
+    // Generate a unique ID for this handler registration
+    const handlerId = `${source || 'unknown'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    let handlers = this.handlers.get(type);
+    if (!handlers) {
+      handlers = new Map<string, HandlerRegistration>();
+      this.handlers.set(type, handlers);
+    }
+    
+    // Check if we already have too many handlers from the same source
+    const sourceHandlers = Array.from(handlers.values()).filter(reg => reg.source === source);
+    if (sourceHandlers.length >= 3) {
+      console.warn(`[WebSocketManager] Too many handlers from source '${source}' for type ${type}. Removing oldest.`);
+      // Remove the oldest handler from this source
+      const oldestHandler = sourceHandlers[0];
+      const oldestId = Array.from(handlers.entries()).find(([_, reg]) => reg === oldestHandler)?.[0];
+      if (oldestId) {
+        handlers.delete(oldestId);
+      }
+    }
+    
+    handlers.set(handlerId, {
+      id: handlerId,
+      handler,
+      source
+    });
+    
+    // Only warn if genuinely excessive (more than expected components)
+    if (handlers.size > 15) {
+      console.warn('[WebSocketManager] Unusually high handler count for type:', type, 'count:', handlers.size);
     }
   }
   
   /**
    * Unregister a handler for a specific notification type
    * @param type The notification type
-   * @param handler The handler function to remove
+   * @param handler The handler function to remove (or source to remove all handlers from that source)
+   * @param source Optional source identifier to remove all handlers from that source
    */
-  public unregisterHandler(type: NotificationType, handler: NotificationHandler): void {
+  public unregisterHandler(type: NotificationType, handler?: NotificationHandler, source?: string): void {
     const handlers = this.handlers.get(type);
-    if (handlers) {
-      handlers.delete(handler);
-      console.debug(`[WebSocketManager] Unregistered handler for ${type}, remaining: ${handlers.size}`);
+    if (!handlers) return;
+    
+    if (source) {
+      // Remove all handlers from the specified source
+      const toRemove: string[] = [];
+      handlers.forEach((registration, id) => {
+        if (registration.source === source) {
+          toRemove.push(id);
+        }
+      });
+      toRemove.forEach(id => handlers.delete(id));
+    } else if (handler) {
+      // Remove specific handler by finding matching function reference
+      const toRemove: string[] = [];
+      handlers.forEach((registration, id) => {
+        if (registration.handler === handler) {
+          toRemove.push(id);
+        }
+      });
+      toRemove.forEach(id => handlers.delete(id));
     }
   }
   
@@ -405,7 +551,6 @@ class WebSocketManager {
         (type === NotificationType.NEW_ORDER || 
          type === NotificationType.ORDER_UPDATED || 
          type === NotificationType.LOW_STOCK)) {
-      console.debug(`[WebSocketManager] Skipping ${type} notification - not in admin context`);
       return;
     }
     
@@ -414,7 +559,6 @@ class WebSocketManager {
     
     // Check if this notification has already been processed
     if (this.hasBeenDisplayed(notificationId)) {
-      console.debug(`[WebSocketManager] Skipping duplicate notification: ${notificationId}`);
       return;
     }
     
@@ -432,13 +576,10 @@ class WebSocketManager {
         
         // If it's a menu item with ID, check if it belongs to this restaurant
         if (!notificationRestaurantId && data.id) {
-          console.debug(`[WebSocketManager] Low stock item ID: ${data.id}, checking if belongs to restaurant: ${this.restaurantId}`);
-          
           // For direct menu item notifications, the item itself might be the data
           if (typeof data.stock_quantity !== 'undefined' || typeof data.low_stock_threshold !== 'undefined') {
             // This is likely a menu item object, check if it has a restaurant_id
             notificationRestaurantId = data.restaurant_id;
-            console.debug(`[WebSocketManager] Direct menu item notification with restaurant_id: ${notificationRestaurantId}`);
           }
         }
       } else {
@@ -457,9 +598,6 @@ class WebSocketManager {
       // If we couldn't determine the restaurant_id for a low stock notification, log it and be cautious
       if (type === NotificationType.LOW_STOCK && !notificationRestaurantId) {
         console.warn(`[WebSocketManager] Could not determine restaurant_id for low stock notification:`, data);
-        // In production, you might want to skip notifications without a restaurant_id
-        // For safety, we'll assume this notification doesn't belong to the current restaurant
-        console.debug(`[WebSocketManager] Skipping low stock notification without restaurant_id for safety`);
         return;
       }
     }
@@ -491,17 +629,16 @@ class WebSocketManager {
     // Get handlers for this notification type
     const handlers = this.handlers.get(type);
     if (!handlers || handlers.size === 0) {
-      console.debug(`[WebSocketManager] No handlers registered for ${type}`);
+      console.debug('[WebSocketManager] No handlers registered for', type);
       return;
     }
     
     // Call all registered handlers
-    console.debug(`[WebSocketManager] Distributing ${type} notification to ${handlers.size} handlers`);
-    handlers.forEach(handler => {
+    handlers.forEach(registration => {
       try {
-        handler(data);
+        registration.handler(data);
       } catch (error) {
-        console.error(`[WebSocketManager] Error in ${type} handler:`, error);
+        console.error('[WebSocketManager] Error in handler:', error);
       }
     });
   }
@@ -511,7 +648,6 @@ class WebSocketManager {
    * @param isAdmin Whether the current context is admin
    */
   public setAdminContext(isAdmin: boolean): void {
-    console.debug(`[WebSocketManager] Setting admin context to: ${isAdmin}`);
     this.isAdminContext = isAdmin;
   }
 
@@ -527,20 +663,14 @@ class WebSocketManager {
    * Fetch missed notifications since last connection
    */
   private async fetchMissedNotifications(): Promise<void> {
-    console.debug('[WebSocketManager] Fetching missed notifications');
-    this.logConnectionEvent('Fetching missed notifications');
-    
     // Skip fetching missed notifications if not in admin context
     if (!this.isAdminContext) {
-      console.debug('[WebSocketManager] Skipping missed notifications - not in admin context');
       return;
     }
     
     try {
       // Fetch missed notifications from the storage service
       const missedNotifications = await notificationStorageService.fetchMissedNotifications();
-      
-      console.debug(`[WebSocketManager] Found ${missedNotifications.length} missed notifications`);
       
       // Process each missed notification
       missedNotifications.forEach(notification => {
@@ -565,9 +695,6 @@ class WebSocketManager {
           case NotificationType.LOW_STOCK.toString():
             notificationType = NotificationType.LOW_STOCK;
             break;
-          default:
-            console.debug(`[WebSocketManager] Unknown notification type: ${notification.notification_type}`);
-            return;
         }
         
         if (notificationType !== null) {
@@ -576,13 +703,13 @@ class WebSocketManager {
           
           if (handlers && handlers.size > 0) {
             // Call each handler with the notification data
-            handlers.forEach(handler => {
+            handlers.forEach(registration => {
               try {
                 // Convert the notification back to the format expected by the handlers
                 const data = notification.metadata || notification;
-                handler(data);
+                registration.handler(data);
               } catch (error) {
-                console.error(`[WebSocketManager] Error in missed notification handler:`, error);
+                console.error('[WebSocketManager] Error in missed notification handler:', error);
               }
             });
           }
@@ -595,7 +722,6 @@ class WebSocketManager {
     } catch (error) {
       const typedError = error instanceof Error ? error : new Error(String(error));
       console.error('[WebSocketManager] Error fetching missed notifications:', typedError);
-      this.logConnectionEvent(`Error fetching missed notifications: ${typedError.message}`);
     }
   }
   
@@ -667,8 +793,6 @@ class WebSocketManager {
       type,
       data
     });
-    
-    console.debug(`[WebSocketManager] Externally registered notification: ${id}`);
   }
   
   /**
@@ -700,11 +824,6 @@ class WebSocketManager {
     const internalStatus = this.connectionStatus === ConnectionStatus.CONNECTED;
     const websocketStatus = this.socket !== null && this.socket.readyState === WebSocket.OPEN;
     
-    // Log any discrepancies for debugging
-    if (internalStatus !== websocketStatus) {
-      console.debug(`[WebSocketManager] Connection status mismatch: internal=${internalStatus}, websocket=${websocketStatus}`);
-    }
-    
     // Use the most conservative approach - only report connected if both agree
     return internalStatus && websocketStatus;
   }
@@ -715,6 +834,83 @@ class WebSocketManager {
    */
   public getConnectionStatus(): ConnectionStatus {
     return this.connectionStatus;
+  }
+  
+  /**
+   * Get detailed connection information for troubleshooting
+   * @returns Detailed connection information
+   */
+  public getConnectionInfo(): {
+    status: ConnectionStatus;
+    isConnected: boolean;
+    reconnectAttempts: number;
+    maxReconnectAttempts: number;
+    restaurantId: string | null;
+    isAdminContext: boolean;
+    handlerCounts: Record<string, number>;
+    lastError?: string;
+  } {
+    const handlerCounts: Record<string, number> = {};
+    Object.values(NotificationType).forEach(type => {
+      const handlers = this.handlers.get(type);
+      handlerCounts[type] = handlers ? handlers.size : 0;
+    });
+    
+    return {
+      status: this.connectionStatus,
+      isConnected: this.isConnected(),
+      reconnectAttempts: this.reconnectAttempts,
+      maxReconnectAttempts: this.maxReconnectAttempts,
+      restaurantId: this.restaurantId,
+      isAdminContext: this.isAdminContext,
+      handlerCounts,
+      lastError: this.socket?.readyState === WebSocket.CLOSED ? 'WebSocket closed' : undefined
+    };
+  }
+  
+  /**
+   * Force an immediate reconnection attempt (useful for debugging)
+   * @returns Promise that resolves when reconnection attempt is complete
+   */
+  public async forceReconnect(): Promise<boolean> {
+    console.debug('[WebSocketManager] Force reconnection requested');
+    
+    if (!this.restaurantId) {
+      console.error('[WebSocketManager] Cannot force reconnect: No restaurant ID');
+      return false;
+    }
+    
+    // Disconnect current connection if exists
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    
+    // Clear any pending reconnection attempts
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    // Reset reconnection attempts
+    this.reconnectAttempts = 0;
+    
+    // Attempt immediate reconnection
+    this.updateConnectionStatus(ConnectionStatus.CONNECTING);
+    
+    try {
+      this.connectWebSocket();
+      
+      // Wait briefly to see if connection succeeds
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const isConnected = this.isConnected();
+      console.debug(`[WebSocketManager] Force reconnection ${isConnected ? 'successful' : 'failed'}`);
+      return isConnected;
+    } catch (error) {
+      console.error('[WebSocketManager] Force reconnection failed:', error);
+      return false;
+    }
   }
   
   /**
@@ -773,7 +969,6 @@ class WebSocketManager {
     // Check if we've exceeded the maximum number of reconnection attempts
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error(`[WebSocketManager] Maximum reconnection attempts (${this.maxReconnectAttempts}) reached`);
-      this.logConnectionEvent(`Maximum reconnection attempts (${this.maxReconnectAttempts}) reached`);
       this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('Maximum reconnection attempts reached'));
       return;
     }
@@ -795,7 +990,6 @@ class WebSocketManager {
     this.reconnectAttempts++;
     
     console.debug(`[WebSocketManager] Scheduling reconnection attempt ${this.reconnectAttempts} in ${Math.round(backoffWithJitter)}ms`);
-    this.logConnectionEvent(`Scheduling reconnection attempt ${this.reconnectAttempts} in ${Math.round(backoffWithJitter)}ms`);
     
     // Update status to reconnecting
     this.updateConnectionStatus(ConnectionStatus.RECONNECTING);
@@ -810,12 +1004,10 @@ class WebSocketManager {
   private reconnect(): void {
     if (!this.restaurantId) {
       console.error('[WebSocketManager] Cannot reconnect: No restaurant ID');
-      this.logConnectionEvent('Cannot reconnect: No restaurant ID');
       return;
     }
     
     console.debug(`[WebSocketManager] Attempting reconnection (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    this.logConnectionEvent(`Attempting reconnection (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
     
     // Reinitialize the connection
     this.initialize(this.restaurantId);
@@ -833,7 +1025,6 @@ class WebSocketManager {
       // Check if the WebSocket is still connected
       if (!this.isConnected()) {
         console.error('[WebSocketManager] Connection check failed - WebSocket is disconnected');
-        this.logConnectionEvent('Connection check failed - WebSocket is disconnected');
         this.updateConnectionStatus(ConnectionStatus.ERROR, new Error('Heartbeat failed'));
         this.scheduleReconnect();
       } else {
@@ -854,22 +1045,10 @@ class WebSocketManager {
   }
   
   /**
-   * Log connection events for debugging
-   */
-  private logConnectionEvent(event: string): void {
-    const timestamp = new Date().toISOString();
-    const duration = this.connectionStartTime 
-      ? `${Math.round((Date.now() - this.connectionStartTime) / 1000)}s`
-      : 'N/A';
-    console.debug(`[WebSocketManager] [${timestamp}] [${duration}] ${event}`);
-  }
-  
-  /**
    * Disconnect from the WebSocket
    */
   public disconnect(): void {
     console.debug('[WebSocketManager] Disconnecting');
-    this.logConnectionEvent('Manual disconnect requested');
     
     // Clear intervals and timeouts
     this.stopHeartbeat();
@@ -899,9 +1078,14 @@ class WebSocketManager {
 
   /**
    * Update pagination parameters (legacy compatibility)
+   * 
+   * Note: Pagination parameters are now handled through ActionCable subscriptions
+   * directly and don't need to be stored in the WebSocketManager.
    */
   public updatePaginationParams(params: { page: number; perPage: number }): void {
-    this.paginationParams = params;
+    // No-op - pagination parameters are now handled in subscription payloads
+    console.debug('[WebSocketManager] Pagination params received:', params);
+    // Instead of storing, we could update existing subscriptions if needed
   }
   
   /**
@@ -909,7 +1093,6 @@ class WebSocketManager {
    */
   public subscribe(subscription: ChannelSubscription): void {
     this.subscriptions.set(subscription.channel, subscription);
-    console.debug(`[WebSocketManager] Subscribed to channel: ${subscription.channel}`);
   }
   
   /**
@@ -917,15 +1100,12 @@ class WebSocketManager {
    */
   public unsubscribe(channelName: string): void {
     this.subscriptions.delete(channelName);
-    console.debug(`[WebSocketManager] Unsubscribed from channel: ${channelName}`);
   }
   
   /**
    * Cleanup all resources
    */
   public cleanup(): void {
-    console.debug('[WebSocketManager] Cleaning up resources');
-    
     // Disconnect
     this.disconnect();
     

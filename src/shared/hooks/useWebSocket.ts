@@ -12,6 +12,7 @@ interface UseWebSocketOptions {
   onError?: (error: any) => void;
   onConnected?: () => void;
   onDisconnected?: () => void;
+  componentName?: string; // Identifier for the component using this hook to prevent duplicate handlers
 }
 
 interface UseWebSocketResult {
@@ -45,17 +46,25 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRes
     // Initialize the WebSocketManager
     webSocketManager.initialize(user.restaurant_id);
     
-    // Register handlers for notifications
+    // Register handlers for notifications with component name as source identifier
+    // This helps prevent duplicate handler registrations and allows proper cleanup
+    const componentName = options.componentName || 'useWebSocketHook';
+    
+    // Clean up any existing handlers from this component first to prevent duplicates
+    webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, componentName);
+    webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, undefined, componentName);
+    webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, undefined, componentName);
+    
     if (options.onNewOrder) {
-      webSocketManager.registerHandler(NotificationType.NEW_ORDER, options.onNewOrder);
+      webSocketManager.registerHandler(NotificationType.NEW_ORDER, options.onNewOrder, componentName);
     }
     
     if (options.onOrderUpdated) {
-      webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, options.onOrderUpdated);
+      webSocketManager.registerHandler(NotificationType.ORDER_UPDATED, options.onOrderUpdated, componentName);
     }
     
     if (options.onLowStock) {
-      webSocketManager.registerHandler(NotificationType.LOW_STOCK, options.onLowStock);
+      webSocketManager.registerHandler(NotificationType.LOW_STOCK, options.onLowStock, componentName);
     }
     
     // Update connection status
@@ -77,24 +86,19 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRes
     if (isConnected) {
       console.debug('[WebSocket] Disconnecting', { source });
       
-      // Unregister handlers
-      if (options.onNewOrder) {
-        webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, options.onNewOrder);
-      }
+      // Use source-based unregistration instead of handler-based (more reliable)
+      const componentName = options.componentName || 'useWebSocketHook';
       
-      if (options.onOrderUpdated) {
-        webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, options.onOrderUpdated);
-      }
-      
-      if (options.onLowStock) {
-        webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, options.onLowStock);
-      }
+      // Unregister all handlers from this component source
+      webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, componentName);
+      webSocketManager.unregisterHandler(NotificationType.ORDER_UPDATED, undefined, componentName);
+      webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, undefined, componentName);
       
       // We don't actually disconnect the WebSocketManager here, as other components might be using it
       // We just unregister our handlers and update our local state
       setIsConnected(false);
     }
-  }, [isConnected, options.onNewOrder, options.onOrderUpdated, options.onLowStock]);
+  }, [isConnected, options.componentName]);
 
   // Ref to track if we're in cleanup phase
   const isCleaningUp = useRef(false);
