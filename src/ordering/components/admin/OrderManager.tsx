@@ -49,7 +49,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
   // which "tab" we are viewing
-  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('pending');
+  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
 
   // sort direction (true = newest first, false = oldest first)
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
