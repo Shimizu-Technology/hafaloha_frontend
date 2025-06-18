@@ -90,7 +90,7 @@ interface OrderStore {
   updateOrderStatus: (orderId: string, status: string, pickupTime?: string) => Promise<void>;
   
   /** Update status without showing loading state (for smoother UI) */
-  updateOrderStatusQuietly: (orderId: string, status: string, pickupTime?: string) => Promise<void>;
+  updateOrderStatusQuietly: (orderId: string, status: string, pickupTime?: string, currentFilter?: string) => Promise<void>;
 
   /** For admin editing an entire order's data (items, total, instructions, etc.). */
   updateOrderData: (orderId: string, updatedOrder: any) => Promise<void>;
@@ -810,8 +810,9 @@ export const useOrderStore = create<OrderStore>()(
       // ---------------------------------------------------------
       // Update order status quietly (no loading spinner)
       // ---------------------------------------------------------
-      updateOrderStatusQuietly: async (orderId, status, pickupTime) => {
+      updateOrderStatusQuietly: async (orderId, status, pickupTime, currentFilter?: string) => {
         set({ error: null });
+        
         const existingOrder = get().orders.find((o: Order) => o.id === orderId);
         if (existingOrder) {
           const typedStatus = status as Order['status'];
@@ -819,11 +820,38 @@ export const useOrderStore = create<OrderStore>()(
           if (pickupTime) {
             (optimisticOrder as any).estimated_pickup_time = pickupTime;
           }
-          const optimisticOrders = get().orders.map((o: Order) =>
-            o.id === orderId ? optimisticOrder : o
-          );
-          set({ orders: optimisticOrders });
+          
+          // Check if the order should still be visible in the current filtered view
+          let shouldRemoveFromView = false;
+          
+          if (currentFilter && currentFilter !== 'all') {
+            // If we're viewing a specific status filter and the new status doesn't match,
+            // the order should be removed from the current view
+            shouldRemoveFromView = typedStatus !== currentFilter;
+          }
+          
+          if (shouldRemoveFromView) {
+            // Remove the order from the current view since it no longer matches the filter
+            const filteredOrders = get().orders.filter((o: Order) => o.id !== orderId);
+            
+            // Update the metadata to reflect the reduced count
+            const currentMetadata = get().metadata;
+            set({ 
+              orders: filteredOrders,
+              metadata: {
+                ...currentMetadata,
+                total_count: Math.max(0, currentMetadata.total_count - 1)
+              }
+            });
+          } else {
+            // Keep the order but update its status
+            const optimisticOrders = get().orders.map((o: Order) =>
+              o.id === orderId ? optimisticOrder : o
+            );
+            set({ orders: optimisticOrders });
+          }
         }
+        
         try {
           const orderPayload: any = { status };
           if (pickupTime) {
@@ -832,13 +860,25 @@ export const useOrderStore = create<OrderStore>()(
           const updatedOrder = await api.patch<Order>(`/orders/${orderId}`, {
             order: orderPayload,
           });
-          const newOrders = get().orders.map(o =>
-            o.id === updatedOrder.id ? updatedOrder : o
-          );
-          set({ orders: newOrders });
+          
+          // After backend confirmation, update the order if it's still in the view
+          const orderStillInView = get().orders.some(o => o.id === updatedOrder.id);
+          if (orderStillInView) {
+            const newOrders = get().orders.map(o =>
+              o.id === updatedOrder.id ? updatedOrder : o
+            );
+            set({ orders: newOrders });
+          }
+          
         } catch (err: any) {
           set({ error: err.message });
-          // revert or re-fetch if needed
+          // On error, revert the optimistic update by refreshing the current view
+          const currentMetadata = get().metadata;
+          get().fetchOrdersQuietly({
+            page: currentMetadata.page,
+            perPage: currentMetadata.per_page,
+            _sourceId: 'status_update_error_revert'
+          });
         }
       },
 

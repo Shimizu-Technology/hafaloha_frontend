@@ -884,12 +884,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       if (isBatchCancel) {
         // For batch
         for (const ord of batchOrdersToCancel) {
-          await updateOrderStatusQuietly(ord.id, 'cancelled');
+          await updateOrderStatusQuietly(ord.id, 'cancelled', undefined, selectedStatus);
         }
         clearSelections();
       } else if (orderToCancel) {
         // For single
-        await updateOrderStatusQuietly(orderToCancel.id, 'cancelled');
+        await updateOrderStatusQuietly(orderToCancel.id, 'cancelled', undefined, selectedStatus);
       }
 
       // 4) Reset state
@@ -913,25 +913,25 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setIsStatusUpdateInProgress(true);
     try {
       for (const orderId of selectedOrders) {
-        await updateOrderStatusQuietly(orderId, 'ready');
+        await updateOrderStatusQuietly(orderId, 'ready', undefined, selectedStatus);
       }
       clearSelections();
     } finally {
       setIsStatusUpdateInProgress(false);
     }
-  }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
+  }, [selectedOrders, updateOrderStatusQuietly, clearSelections, selectedStatus]);
 
   const handleBatchMarkAsCompleted = useCallback(async () => {
     setIsStatusUpdateInProgress(true);
     try {
       for (const orderId of selectedOrders) {
-        await updateOrderStatusQuietly(orderId, 'completed');
+        await updateOrderStatusQuietly(orderId, 'completed', undefined, selectedStatus);
       }
       clearSelections();
     } finally {
       setIsStatusUpdateInProgress(false);
     }
-  }, [selectedOrders, updateOrderStatusQuietly, clearSelections]);
+  }, [selectedOrders, updateOrderStatusQuietly, clearSelections, selectedStatus]);
 
   // Server-side search is now handled by the API
 
@@ -1057,7 +1057,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     }
 
     setIsStatusUpdateInProgress(true);
-    await updateOrderStatusQuietly(orderToPrep.id, 'preparing', pickupTime);
+    await updateOrderStatusQuietly(orderToPrep.id, 'preparing', pickupTime, selectedStatus);
     setIsStatusUpdateInProgress(false);
 
     setShowEtaModal(false);
@@ -1155,7 +1155,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-medium hover:bg-gray-700 whitespace-nowrap"
                     onClick={() => {
                       setIsStatusUpdateInProgress(true);
-                      updateOrderStatusQuietly(order.id, 'completed')
+                      updateOrderStatusQuietly(order.id, 'completed', undefined, selectedStatus)
                         .finally(() => setIsStatusUpdateInProgress(false));
                     }}
                     title="Complete order immediately (for instant fulfillment)"
@@ -1188,7 +1188,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium hover:bg-green-600 min-w-[120px] flex-grow sm:flex-grow-0"
                   onClick={() => {
                     setIsStatusUpdateInProgress(true);
-                    updateOrderStatusQuietly(order.id, 'ready')
+                    updateOrderStatusQuietly(order.id, 'ready', undefined, selectedStatus)
                       .finally(() => setIsStatusUpdateInProgress(false));
                   }}
                 >
@@ -1231,7 +1231,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-medium hover:bg-gray-600 min-w-[120px] flex-grow sm:flex-grow-0"
                     onClick={() => {
                       setIsStatusUpdateInProgress(true);
-                      updateOrderStatusQuietly(order.id, 'completed')
+                      updateOrderStatusQuietly(order.id, 'completed', undefined, selectedStatus)
                         .finally(() => setIsStatusUpdateInProgress(false));
                     }}
                   >
@@ -1705,7 +1705,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               
               // Update the order status based on refund type
               if (isFullRefund) {
-                await updateOrderStatusQuietly(orderToRefund.id, 'refunded');
+                await updateOrderStatusQuietly(orderToRefund.id, 'refunded', undefined, selectedStatus);
               } else if (total_refunded > 0) {
                 // Keep original status and apply refund without changing status
                 // Only change to refunded if all items were refunded
