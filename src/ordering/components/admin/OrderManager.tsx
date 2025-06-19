@@ -1281,7 +1281,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               d="M12 6v6m0 0v6m0-6h6m-6 0H6"
             />
           </svg>
-          <span>Create Staff Order</span>
+          <span>Create Order</span>
         </button>
       </div>
 
