@@ -149,17 +149,35 @@ function MenuItemsPanel({
   useEffect(() => {
     // Categories processed for menu items panel
   }, [categories]);
-  // Filter items by search term & category
-  const filteredMenuItems = menuItems.filter(item => {
-    const matchesSearch =
-      !searchTerm ||
-      (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCat =
-      selectedCategory === 'all' ||
-      (item.category_ids && item.category_ids.includes(Number(selectedCategory)));
-    return matchesSearch && matchesCat;
-  });
+  // Filter items by search term & category & current menu
+  const filteredMenuItems = useMemo(() => {
+    // Get the current menu ID from context
+    const { currentMenuId: contextMenuId } = useMenuStore.getState();
+    const activeMenuId = contextMenuId;
+    
+    console.debug(`[MenuItemsPanel] Filtering ${menuItems.length} items for menu ID: ${activeMenuId}`);
+    
+    return menuItems.filter(item => {
+      // If we have an active menu ID, only show items from that menu
+      const matchesMenu = !activeMenuId || (item.menu_id && Number(item.menu_id) === Number(activeMenuId));
+      
+      const matchesSearch =
+        !searchTerm ||
+        (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesCat =
+        selectedCategory === 'all' ||
+        (item.category_ids && item.category_ids.includes(Number(selectedCategory)));
+      
+      const passes = matchesMenu && matchesSearch && matchesCat;
+      
+      if (!matchesMenu && activeMenuId) {
+        console.debug(`[MenuItemsPanel] Item ${item.name} filtered out - belongs to menu ${item.menu_id}, need ${activeMenuId}`);
+      }
+      
+      return passes;
+    });
+  }, [menuItems, searchTerm, selectedCategory]);
   
   // Sort menu items by position within their categories
   const sortedMenuItems = useMemo(() => {
@@ -271,6 +289,11 @@ function MenuItemsPanel({
                   const cartItem = findCartItem(item.id);
                   const isInCart = !!cartItem;
                   const hasOptions = item.option_groups && item.option_groups.length > 0;
+                  
+                  // Debug logging for customize button logic
+                  if (item.name.toLowerCase().includes('build') || item.name.toLowerCase().includes('bowl')) {
+                    console.debug(`[StaffOrderModal] Item "${item.name}" - hasOptions: ${hasOptions}, option_groups:`, item.option_groups);
+                  }
 
                   return (
                     <div
@@ -1453,7 +1476,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   useVh();
 
   // Data & cart from store
-  const { menuItems, fetchMenuItems, fetchAllMenuItemsForAdmin, loading: menuLoading, currentMenuId } = useMenuStore();
+  const { menuItems, fetchMenuItems, fetchAllMenuItemsForAdmin, fetchMenuItemsForAdmin, loading: menuLoading, currentMenuId } = useMenuStore();
   const {
     cartItems,
     addToCart,
@@ -1527,10 +1550,29 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     prefetchedCategories: new Set<number>()
   });
 
-  // Debug: Log currentMenuId when it changes
+  // Reload menu items when currentMenuId changes
   useEffect(() => {
-    // Current menu ID updated
-  }, [currentMenuId]);
+    if (currentMenuId && dataLoadingState.current.menuItemsLoaded) {
+      // If menu ID changed and we've already loaded items, reload for the new menu
+      console.debug(`[StaffOrderModal] Current menu ID changed to ${currentMenuId}, reloading menu items`);
+      dataLoadingState.current.menuItemsLoaded = false; // Reset to allow reload
+      
+      const { restaurant } = useRestaurantStore.getState();
+      if (restaurant?.id) {
+        fetchMenuItemsForAdmin({
+          menu_id: currentMenuId,
+          view_type: 'admin',
+          include_stock: true,
+          restaurant_id: restaurant.id
+        }).then(() => {
+          dataLoadingState.current.menuItemsLoaded = true;
+          console.debug(`[StaffOrderModal] Reloaded menu items for menu ID: ${currentMenuId}`);
+        }).catch((error) => {
+          console.error('Error reloading menu items:', error);
+        });
+      }
+    }
+  }, [currentMenuId, fetchMenuItemsForAdmin]);
   
   // Fetch current user's staff member record to auto-set the createdByStaffId and createdByUserId
   useEffect(() => {
@@ -1610,12 +1652,29 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         console.error('[StaffOrderModal] Restaurant context missing, cannot fetch menu items');
         return;
       }
-      
+
       try {
-        console.debug('[StaffOrderModal] Loading menu items with admin privileges for staff ordering');
-        // Use fetchAllMenuItemsForAdmin to ensure staff can see all menu items for internal orders
-        // This passes admin: true, show_all: true flags to bypass filtering
-        await fetchAllMenuItemsForAdmin();
+        console.debug('[StaffOrderModal] Loading menu items for current menu with admin privileges');
+        
+        // Get the current menu ID
+        const menuStore = useMenuStore.getState();
+        const activeMenuId = currentMenuId || menuStore.currentMenuId;
+        
+        if (activeMenuId) {
+          // Load menu items for the specific current menu only
+          await fetchMenuItemsForAdmin({
+            menu_id: activeMenuId,
+            view_type: 'admin',
+            include_stock: true,
+            restaurant_id: restaurant.id
+          });
+          console.debug(`[StaffOrderModal] Loaded menu items for menu ID: ${activeMenuId}`);
+        } else {
+          console.warn('[StaffOrderModal] No current menu ID available, loading all menu items as fallback');
+          // Fallback: if no current menu ID, load all items but this shouldn't normally happen
+          await fetchAllMenuItemsForAdmin();
+        }
+        
         dataLoadingState.current.menuItemsLoaded = true;
       } catch (error) {
         console.error('Error fetching menu items:', error);
@@ -1633,7 +1692,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         prefetchedCategories: new Set<number>()
       };
     };
-  }, [fetchAllMenuItemsForAdmin, clearCart]);
+  }, [fetchAllMenuItemsForAdmin, fetchMenuItemsForAdmin, clearCart, currentMenuId]);
 
   // Load all categories once menuItems is present with tenant validation
   useEffect(() => {
@@ -1654,10 +1713,19 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       
       try {
         console.debug('[StaffOrderModal] Loading categories');
-        // Fetching all categories with proper tenant isolation
-        const res = await apiClient.get('/categories', {
-          params: { restaurant_id: restaurant.id }
-        });
+        
+        // Get the current menu ID to filter categories
+        const menuStore = useMenuStore.getState();
+        const activeMenuId = currentMenuId || menuStore.currentMenuId;
+        
+        // Fetching categories with proper tenant isolation and menu filtering
+        const params: any = { restaurant_id: restaurant.id };
+        if (activeMenuId) {
+          params.menu_id = activeMenuId;
+          console.debug(`[StaffOrderModal] Loading categories for menu ID: ${activeMenuId}`);
+        }
+        
+        const res = await apiClient.get('/categories', { params });
         
         // Store all categories in state
         setAllCategories(res.data);

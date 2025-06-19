@@ -1057,15 +1057,19 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   
   fetchMenuItemsForAdmin: async (filters: MenuItemFilterParams) => {
     try {
-      // Ensure admin view type is set
+      // Ensure admin-specific options but DON'T set view_type to 'admin' 
+      // because that excludes option_groups data which we need for the customize button
       const adminFilters: MenuItemFilterParams = {
         ...filters,
-        view_type: 'admin', // Always use admin view for this method
-        include_stock: true // Always include stock information
+        // Remove view_type: 'admin' to get full data including option_groups
+        include_stock: true, // Always include stock information
+        include_option_groups: true // Explicitly request option groups for customize functionality
       };
       
       // Ensure restaurant_id is included
       const enhancedParams = addRestaurantIdToParams(adminFilters);
+      
+      console.debug('[menuStore] Fetching admin menu items with option groups:', enhancedParams);
       
       // Use the base filtering method
       const adminItems = await get().fetchMenuItemsWithFilters(enhancedParams);
