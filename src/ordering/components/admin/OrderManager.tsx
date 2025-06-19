@@ -918,6 +918,27 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // Get orders directly from store - server handles filtering, sorting, and pagination
   const currentOrders = orders;
   
+  // Helper functions for select all functionality
+  const selectAllCurrentPage = useCallback(() => {
+    const currentPageOrderIds = currentOrders.map(order => order.id);
+    setSelectedOrders(new Set(currentPageOrderIds));
+  }, [currentOrders]);
+  
+  const deselectAllCurrentPage = useCallback(() => {
+    setSelectedOrders(new Set());
+  }, []);
+  
+  // Check if all current page orders are selected
+  const areAllCurrentPageSelected = useCallback(() => {
+    if (currentOrders.length === 0) return false;
+    return currentOrders.every(order => selectedOrders.has(order.id));
+  }, [currentOrders, selectedOrders]);
+  
+  // Get count of current page orders that are selected
+  const selectedCurrentPageCount = useCallback(() => {
+    return currentOrders.filter(order => selectedOrders.has(order.id)).length;
+  }, [currentOrders, selectedOrders]);
+  
   // Get metadata from store
   const { metadata } = useOrderStore();
   // const totalOrders = metadata.total_count; // Not directly used in the component
@@ -1406,6 +1427,48 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           <div className="ml-2 px-2.5 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
             {metadata.total_count}
           </div>
+          
+          {/* Select All Button */}
+          {currentOrders.length > 0 && (
+            <button
+              onClick={() => {
+                if (areAllCurrentPageSelected()) {
+                  deselectAllCurrentPage();
+                } else {
+                  selectAllCurrentPage();
+                }
+              }}
+              className="ml-3 px-3 py-1.5 text-sm font-medium border rounded-md transition-colors duration-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#c1902f] focus:ring-opacity-50 shadow-sm"
+              style={{
+                backgroundColor: areAllCurrentPageSelected() ? '#c1902f' : 'white',
+                color: areAllCurrentPageSelected() ? 'white' : '#374151',
+                borderColor: areAllCurrentPageSelected() ? '#c1902f' : '#d1d5db'
+              }}
+              title={areAllCurrentPageSelected() 
+                ? 'Deselect all orders on this page' 
+                : selectedCurrentPageCount() > 0 
+                  ? `Select remaining ${currentOrders.length - selectedCurrentPageCount()} orders on this page`
+                  : `Select all ${currentOrders.length} orders on this page`}
+            >
+              {areAllCurrentPageSelected() ? (
+                <>
+                  <svg className="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Deselect All
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {selectedCurrentPageCount() > 0 
+                    ? `Select Remaining (${currentOrders.length - selectedCurrentPageCount()})` 
+                    : `Select All (${currentOrders.length})`}
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
       
