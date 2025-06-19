@@ -391,6 +391,11 @@ export function AdminDashboard() {
 
   // Function to display order notification with improved handling and deduplication
   const displayOrderNotification = useCallback((order: Order) => {
+    // ROLE CHECK: Only show notifications to admin and super_admin users, NOT staff
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return;
+    }
+    
     // TENANT ISOLATION: Skip notifications for other restaurants
     if (order.restaurant_id && currentRestaurantId && 
         String(order.restaurant_id) !== String(currentRestaurantId)) {
@@ -614,7 +619,7 @@ export function AdminDashboard() {
     } catch (error) {
       console.error(`[ORDER_DEBUG] Error creating toast notification for order ${order.id}:`, error);
     }
-  }, [activeTab, acknowledgeOrder]);
+  }, [activeTab, acknowledgeOrder, user]);
 
   // Function to acknowledge a low stock item
   const acknowledgeLowStockItem = useCallback((itemId: string, currentQty: number) => {
@@ -688,6 +693,11 @@ export function AdminDashboard() {
   
   // WebSocket integration for real-time updates with improved handling
   const handleNewOrder = useCallback((order: Order) => {
+    // ROLE CHECK: Only process notifications for admin and super_admin users, NOT staff
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return;
+    }
+    
     // Skip staff-created orders and already acknowledged orders
     if (order.staff_created || order.global_last_acknowledged_at) {
       return;
@@ -713,7 +723,7 @@ export function AdminDashboard() {
     
     // Display notification immediately (no delay for instant response)
     displayOrderNotification(order);
-  }, [lastOrderId, displayOrderNotification]);
+  }, [lastOrderId, displayOrderNotification, user]);
   
   const handleLowStock = useCallback((item: MenuItem) => {
     // Received low stock alert
@@ -787,8 +797,8 @@ export function AdminDashboard() {
   
   // Add effect for stock notifications (fallback to polling if WebSockets fail)
   useEffect(() => {
-    // Only run for admin users
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'staff')) {
+    // Only run for admin and super_admin users (NOT staff)
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
       return;
     }
     
@@ -847,9 +857,9 @@ export function AdminDashboard() {
   
   // Single WebSocket connection management with improved connection handling
   useEffect(() => {
-    // Only run for admin users
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'staff')) {
-      // WebSocket: Skipping connection - not an admin user
+    // Only run for admin and super_admin users (NOT staff)
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      // WebSocket: Skipping connection - not an admin or super_admin user
       return;
     }
     
@@ -893,8 +903,8 @@ export function AdminDashboard() {
           // Register AdminDashboard notification handlers with centralized manager
           webSocketManager.registerHandler(NotificationType.NEW_ORDER, handleNewOrder, 'AdminDashboard');
           
-          // Connect to the restaurant channel for admin notifications (if needed)
-          if (USE_WEBSOCKETS && user?.role && ['admin', 'super_admin', 'staff'].includes(user.role)) {
+          // Connect to the restaurant channel for admin notifications (if needed) - only for admin/super_admin
+          if (USE_WEBSOCKETS && user?.role && ['admin', 'super_admin'].includes(user.role)) {
             connectWebSocket();
           }
           
@@ -1008,8 +1018,8 @@ const fetchingNotificationsRef = useRef<boolean>(false);
 
 // This effect runs once on mount to check for unacknowledged orders
 useEffect(() => {
-  // Skip if not an admin or staff user
-  if (!user || (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'staff')) {
+  // Skip if not an admin or super_admin user (NOT staff)
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
     return;
   }
 
@@ -1118,9 +1128,9 @@ useEffect(() => {
     order: orderStoreWebSocketConnected
   };
   
-  // Skip if not an admin user or if WebSockets are working
+  // Skip if not an admin or super_admin user (NOT staff) or if WebSockets are working
   if (!user ||
-      (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'staff') ||
+      (user.role !== 'admin' && user.role !== 'super_admin') ||
       (USE_WEBSOCKETS && (isConnected || orderStoreWebSocketConnected))) {
     // If WebSockets are connected, clear any existing polling interval
     if (USE_WEBSOCKETS && (isConnected || orderStoreWebSocketConnected) && pollingIntervalRef.current) {

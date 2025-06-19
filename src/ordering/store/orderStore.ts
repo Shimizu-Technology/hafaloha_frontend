@@ -241,10 +241,34 @@ export const useOrderStore = create<OrderStore>()(
       handleNewOrder: (order: Order) => {
         if (!order || !order.id) return;
         
-
+        // ROLE CHECK: Filter orders based on user role
+        const user = useAuthStore.getState().user;
         
-        // Trust backend to send only authorized orders
-        // No frontend filtering needed
+        if (!user) {
+          console.debug('[OrderStore] No user found, ignoring order notification');
+          return;
+        }
+        
+        // For staff users: only show orders they created via the staff modal
+        if (user.role === 'staff') {
+          // Staff users can only see orders where:
+          // 1. The order was created by this user (created_by_user_id matches)
+          // 2. The order was created via staff modal (staff_created is true)
+          const isUserCreatedOrder = order.staff_created && 
+            String(order.created_by_user_id) === String(user.id);
+          
+          if (!isUserCreatedOrder) {
+            console.debug('[OrderStore] Staff user - ignoring order not created by them:', {
+              orderId: order.id,
+              orderCreatedByUserId: order.created_by_user_id,
+              currentUserId: user.id,
+              staffCreated: order.staff_created
+            });
+            return;
+          }
+        }
+        
+        // For admin/super_admin: they can see all orders (no additional filtering needed)
         
         // Check if we already have this order
         const existingOrderIndex = get().orders.findIndex((o: Order) => o.id === order.id);

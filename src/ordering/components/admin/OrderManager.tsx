@@ -137,7 +137,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // Are we in the middle of refreshing data (quietly)?
   // const [isRefreshing, setIsRefreshing] = useState(false); // Not needed with server-side pagination
 
-  // If we are updating an order’s status, block certain UI interactions
+  // If we are updating an order's status, block certain UI interactions
   const [isStatusUpdateInProgress, setIsStatusUpdateInProgress] = useState(false);
 
   // For temporarily highlighting a specific order row
@@ -192,6 +192,15 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // State for showing only online orders (customer orders)
   const [onlineOrdersOnly, setOnlineOrdersOnly] = useState<boolean>(false);
   
+  // Ensure staff users never have onlineOrdersOnly enabled
+  useEffect(() => {
+    if (isStaff() && !isAdmin() && !isSuperAdmin()) {
+      // Reset all admin-only filters for staff users
+      setOnlineOrdersOnly(false);
+      setStaffFilter(null);
+    }
+  }, [user?.role]);
+  
   // Handle toggling the online orders filter
   const handleToggleOnlineOrders = useCallback(() => {
     setOnlineOrdersOnly(prevState => {
@@ -206,46 +215,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     });
   }, [setStaffFilter, setCurrentPage]);
   
-  // Set current staff member ID for staff users
-  const [currentStaffMemberId, setCurrentStaffMemberId] = useState<string | null>(null);
-  
-  // Get current staff member ID for staff users
-  useEffect(() => {
-    if (isStaff() && user) {
-      const fetchCurrentStaffMember = async () => {
-        try {
-          // Fetch the staff member record for the current user
-          const response: any = await api.get(`/staff_members`, {
-            params: { user_id: user.id }
-          });
-          
-          let staffMemberData = null;
-          // Handle different response formats
-          if (response) {
-            if (response.data && response.data.staff_members && response.data.staff_members.length > 0) {
-              // New format with pagination
-              staffMemberData = response.data.staff_members[0];
-            } else if (Array.isArray(response) && response.length > 0) {
-              // Old format without pagination
-              staffMemberData = response[0];
-            } else if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-              // Another possible format
-              staffMemberData = response.data[0];
-            }
-          }
-          
-          if (staffMemberData && staffMemberData.id) {
-            // Staff record found for current user
-            setCurrentStaffMemberId(staffMemberData.id.toString());
-          }
-        } catch (error) {
-          console.error('Failed to fetch current staff member:', error);
-        }
-      };
-      
-      fetchCurrentStaffMember();
-    }
-  }, [isStaff, user]);
+  // Note: Staff users no longer need to fetch their staff member ID
+  // The backend policy handles filtering by user ID automatically
   
   // ----------------------------------
   // Date / Search / Filter
@@ -374,10 +345,14 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         // Ensure online orders filter is off
         delete params.online_orders_only;
       }
-    } else if (isStaff() && currentStaffMemberId) {
-      // Staff users - backend policy will filter to show only their created orders and customer orders
-      // We don't need to add any specific parameters as the backend policy handles this
-      // Staff user viewing orders - backend policy will filter appropriately
+    } else if (isStaff()) {
+      // Staff users - backend policy already handles filtering to only show orders they created
+      // Do NOT pass staff_member_id parameter as it may conflict with the policy
+      // The policy filters by created_by_user_id = user.id AND staff_created = true
+      delete params.online_orders_only;
+      delete params.user_id;
+      delete params.include_online_orders;
+      delete params.staff_member_id;
     }
     
 
@@ -446,10 +421,14 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         // Ensure online orders filter is off
         delete params.online_orders_only;
       }
-    } else if (isStaff() && currentStaffMemberId) {
-      // Staff users - backend policy will filter to show only their created orders and customer orders
-      // We don't need to add any specific parameters as the backend policy handles this
-      // Staff user viewing orders - backend policy will filter appropriately
+    } else if (isStaff()) {
+      // Staff users - backend policy already handles filtering to only show orders they created
+      // Do NOT pass staff_member_id parameter as it may conflict with the policy
+      // The policy filters by created_by_user_id = user.id AND staff_created = true
+      delete params.online_orders_only;
+      delete params.user_id;
+      delete params.include_online_orders;
+      delete params.staff_member_id;
     }
     
     fetchOrdersQuietly(params);
@@ -466,7 +445,6 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     customEndDate,
     searchQuery,
     restaurantId,
-    currentStaffMemberId,
     staffFilter,
     userFilter,
     onlineOrdersOnly,
@@ -1656,8 +1634,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           onClose={() => setShowStaffOrderModal(false)}
           onOrderCreated={(orderId) => {
             setShowStaffOrderModal(false);
-            // Refresh orders
-            fetchOrders();
+            // Refresh orders with current filters maintained
+            fetchOrdersWithParams();
             if (setSelectedOrderId) {
               setSelectedOrderId(Number(orderId));
             }
