@@ -16,6 +16,18 @@ interface StaffMember {
   active: boolean;
   created_at: string;
   updated_at: string;
+  user_name?: string;
+  user_email?: string;
+  user_role?: string;
+  user_full_info?: {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+    full_name: string;
+    role: string;
+  } | null;
+  has_user_link: boolean;
 }
 
 interface User {
@@ -49,6 +61,9 @@ function StaffManagementContent() {
   // House account quick filter
   const [houseAccountFilter, setHouseAccountFilter] = useState<'all' | 'outstanding' | 'credit'>('all');
   
+  // Search functionality
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  
   // Advanced filters
   const [advancedFilters, setAdvancedFilters] = useState({
     sortBy: 'name' as 'name' | 'balance' | 'recent_activity',
@@ -80,6 +95,52 @@ function StaffManagementContent() {
     creditBalances: [] as StaffMember[]
   });
   
+  // User linking state
+  const [showUserLinkModal, setShowUserLinkModal] = useState(false);
+  const [userLinkingStaff, setUserLinkingStaff] = useState<StaffMember | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+  const [loadingAvailableUsers, setLoadingAvailableUsers] = useState(false);
+  const [processingUserLink, setProcessingUserLink] = useState(false);
+  
+  // Transaction filtering state
+  const [transactionFilters, setTransactionFilters] = useState<Record<number, {
+    dateRange: 'today' | 'yesterday' | 'last_7_days' | 'week' | 'month' | 'last_30_days' | 'custom';
+    startDate: string;
+    endDate: string;
+    transactionType: 'all' | 'order' | 'payment' | 'charge';
+    page: number;
+    perPage: number;
+  }>>({});
+  
+  const [transactionStats, setTransactionStats] = useState<Record<number, {
+    totalCount: number;
+    filteredCount: number;
+    totalAmount: number;
+    paymentAmount: number;
+    orderAmount: number;
+  }>>({});
+  
+  // Enhanced export functions
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    exportType: 'staff_only' as 'staff_only' | 'staff_with_transactions' | 'transactions_only',
+    includeUserAssociations: true,
+    includeInactiveStaff: false,
+    transactionDateRange: 'last_30_days',
+    customStartDate: '',
+    customEndDate: '',
+    transactionType: 'all' as 'all' | 'order' | 'payment' | 'charge',
+    selectedStaffOnly: false
+  });
+  const [processingExport, setProcessingExport] = useState(false);
+
+  const updateExportOptions = (field: string, value: any) => {
+    setExportOptions(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
   // Fetch staff members and users
   useEffect(() => {
     fetchStaffMembers();
@@ -195,6 +256,34 @@ function StaffManagementContent() {
     
     let filtered = [...staffMembers];
     
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(staff => {
+        // Search in staff name
+        if (staff.name.toLowerCase().includes(query)) return true;
+        
+        // Search in position
+        if (staff.position.toLowerCase().includes(query)) return true;
+        
+        // Search in linked user information
+        if (staff.user_name && staff.user_name.toLowerCase().includes(query)) return true;
+        if (staff.user_email && staff.user_email.toLowerCase().includes(query)) return true;
+        if (staff.user_role && staff.user_role.toLowerCase().includes(query)) return true;
+        
+        // Search in user full info if available
+        if (staff.user_full_info) {
+          const userInfo = staff.user_full_info;
+          if (userInfo.first_name && userInfo.first_name.toLowerCase().includes(query)) return true;
+          if (userInfo.last_name && userInfo.last_name.toLowerCase().includes(query)) return true;
+          if (userInfo.full_name && userInfo.full_name.toLowerCase().includes(query)) return true;
+          if (userInfo.email && userInfo.email.toLowerCase().includes(query)) return true;
+        }
+        
+        return false;
+      });
+    }
+    
     // Apply house account balance filter
     switch (houseAccountFilter) {
       case 'outstanding':
@@ -298,6 +387,7 @@ function StaffManagementContent() {
   
   const clearAllFilters = () => {
     setHouseAccountFilter('all');
+    setSearchQuery('');
     setAdvancedFilters({
       sortBy: 'name',
       sortOrder: 'asc',
@@ -308,27 +398,328 @@ function StaffManagementContent() {
   
   // Export functions
   const exportStaffData = () => {
-    const filteredStaff = getFilteredStaffMembers();
+    setShowExportModal(true);
+  };
+
+  const processExport = async () => {
+    setProcessingExport(true);
+    
+    try {
+      // Get filtered staff based on current filters and export options
+      let staffToExport = getFilteredStaffMembers();
+      
+      if (exportOptions.selectedStaffOnly && selectedStaffIds.size > 0) {
+        staffToExport = staffToExport.filter(staff => selectedStaffIds.has(staff.id));
+      }
+      
+      if (!exportOptions.includeInactiveStaff) {
+        staffToExport = staffToExport.filter(staff => staff.active);
+      }
+
+      const currentFilters = {
+        search: searchQuery,
+        balanceFilter: houseAccountFilter,
+        sortBy: advancedFilters.sortBy,
+        sortOrder: advancedFilters.sortOrder,
+        activityFilter: advancedFilters.activityFilter,
+        balanceRange: advancedFilters.balanceRange
+      };
+
+      if (exportOptions.exportType === 'staff_only') {
+        await exportStaffOnly(staffToExport, currentFilters);
+      } else if (exportOptions.exportType === 'staff_with_transactions') {
+        await exportStaffWithTransactions(staffToExport, currentFilters);
+      } else {
+        await exportTransactionsOnly(staffToExport, currentFilters);
+      }
+      
+      toastUtils.success('Export completed successfully');
+      setShowExportModal(false);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      toastUtils.error('Export failed. Please try again.');
+    } finally {
+      setProcessingExport(false);
+    }
+  };
+
+  const exportStaffOnly = async (staffToExport: StaffMember[], currentFilters: any) => {
     const csvData = [
-      ['Name', 'Position', 'House Account Balance', 'Status'],
-      ...filteredStaff.map(staff => [
+      // Header row
+      [
+        'Name',
+        'Position', 
+        'House Account Balance',
+        'Balance Status',
+        'Status',
+        ...(exportOptions.includeUserAssociations ? [
+          'User Linked',
+          'User Name', 
+          'User Email',
+          'User Role'
+        ] : []),
+        'Created Date',
+        'Last Updated'
+      ],
+      // Data rows
+      ...staffToExport.map(staff => [
         staff.name,
         staff.position,
         staff.house_account_balance.toFixed(2),
-        staff.active ? 'Active' : 'Inactive'
+        staff.house_account_balance > 0 ? 'Owed' :
+        staff.house_account_balance < 0 ? 'Credit' : 'Balanced',
+        staff.active ? 'Active' : 'Inactive',
+        ...(exportOptions.includeUserAssociations ? [
+          staff.has_user_link ? 'Yes' : 'No',
+          staff.user_name || '',
+          staff.user_email || '',
+          staff.user_role || ''
+        ] : []),
+        new Date(staff.created_at).toLocaleDateString(),
+        new Date(staff.updated_at).toLocaleDateString()
       ])
     ];
+
+    // Add filter context at the top
+    const filterInfo = [
+      ['Staff Management Export - Generated on', new Date().toLocaleString()],
+      [''],
+      ['Applied Filters:'],
+      ['Search Query', currentFilters.search || 'None'],
+      ['Balance Filter', currentFilters.balanceFilter === 'all' ? 'All Staff' : 
+       currentFilters.balanceFilter === 'outstanding' ? 'Outstanding Balances Only' : 'Credit Balances Only'],
+      ['Activity Filter', currentFilters.activityFilter === 'all' ? 'All Staff' :
+       currentFilters.activityFilter === 'active' ? 'Active Staff Only' : 'Inactive Staff Only'],
+      ['Sort By', `${currentFilters.sortBy} (${currentFilters.sortOrder})`],
+      ['Total Staff Exported', staffToExport.length.toString()],
+      [''],
+      ['Data Fields:']
+    ];
+
+    const finalCsvData = [...filterInfo, ...csvData];
+    downloadCsv(finalCsvData, `staff-export-${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const exportStaffWithTransactions = async (staffToExport: StaffMember[], currentFilters: any) => {
+    const dateRange = exportOptions.transactionDateRange === 'custom' ? {
+      startDate: exportOptions.customStartDate,
+      endDate: exportOptions.customEndDate
+    } : getDateRangeForFilter(exportOptions.transactionDateRange);
+
+         // Get transactions for all staff
+     const allTransactionData: any[][] = [];
     
-    const csvContent = csvData.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    for (const staff of staffToExport) {
+      try {
+        // Build query parameters for transactions
+        const params = new URLSearchParams({
+          start_date: dateRange.startDate,
+          end_date: dateRange.endDate,
+          per_page: '1000' // Get all transactions for export
+        });
+        
+        if (exportOptions.transactionType !== 'all') {
+          params.append('transaction_type', exportOptions.transactionType);
+        }
+        
+        const response = await apiClient.get(`/staff_members/${staff.id}/transactions?${params.toString()}`);
+        
+        let transactions = [];
+        if (response.data && response.data.transactions) {
+          transactions = response.data.transactions;
+        } else if (Array.isArray(response.data)) {
+          transactions = response.data;
+        }
+
+        // Add staff info to each transaction
+        transactions.forEach((txn: any) => {
+          allTransactionData.push([
+            staff.name,
+            staff.position,
+            staff.house_account_balance.toFixed(2),
+            staff.active ? 'Active' : 'Inactive',
+            ...(exportOptions.includeUserAssociations ? [
+              staff.user_name || '',
+              staff.user_email || ''
+            ] : []),
+            new Date(txn.created_at).toLocaleDateString(),
+            new Date(txn.created_at).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            }),
+            txn.transaction_type,
+            txn.amount > 0 ? Math.abs(txn.amount).toFixed(2) : '', // Charge amount
+            txn.amount < 0 ? Math.abs(txn.amount).toFixed(2) : '', // Payment amount
+            Math.abs(txn.amount).toFixed(2), // Total amount
+            txn.description || '',
+            txn.reference || '',
+            txn.created_by_name || 'System'
+          ]);
+        });
+      } catch (error) {
+        console.error(`Error fetching transactions for ${staff.name}:`, error);
+      }
+    }
+
+    const csvData = [
+      // Header row
+      [
+        'Staff Name',
+        'Position',
+        'Current Balance',
+        'Staff Status',
+        ...(exportOptions.includeUserAssociations ? [
+          'Linked User Name',
+          'Linked User Email'
+        ] : []),
+        'Transaction Date',
+        'Transaction Time',
+        'Transaction Type',
+        'Charge Amount',
+        'Payment Amount', 
+        'Total Amount',
+        'Description',
+        'Reference',
+        'Created By'
+      ],
+      ...allTransactionData
+    ];
+
+    // Add context information
+    const contextInfo = [
+      ['Staff & Transactions Export - Generated on', new Date().toLocaleString()],
+      [''],
+      ['Date Range:', `${dateRange.startDate} to ${dateRange.endDate}`],
+      ['Transaction Type Filter:', exportOptions.transactionType === 'all' ? 'All Types' : exportOptions.transactionType],
+      ['Staff Filters Applied:'],
+      ['  Search Query', currentFilters.search || 'None'],
+      ['  Balance Filter', currentFilters.balanceFilter],
+      ['  Activity Filter', currentFilters.activityFilter],
+      ['Total Staff:', staffToExport.length.toString()],
+      ['Total Transactions:', allTransactionData.length.toString()],
+      [''],
+      ['Transaction Data:']
+    ];
+
+    const finalCsvData = [...contextInfo, ...csvData];
+    downloadCsv(finalCsvData, `staff-transactions-export-${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const exportTransactionsOnly = async (staffToExport: StaffMember[], currentFilters: any) => {
+    const dateRange = exportOptions.transactionDateRange === 'custom' ? {
+      startDate: exportOptions.customStartDate,
+      endDate: exportOptions.customEndDate
+    } : getDateRangeForFilter(exportOptions.transactionDateRange);
+
+         const allTransactionData: any[][] = [];
+     let totalCharges = 0;
+     let totalPayments = 0;
+    
+    for (const staff of staffToExport) {
+      try {
+        const params = new URLSearchParams({
+          start_date: dateRange.startDate,
+          end_date: dateRange.endDate,
+          per_page: '1000'
+        });
+        
+        if (exportOptions.transactionType !== 'all') {
+          params.append('transaction_type', exportOptions.transactionType);
+        }
+        
+        const response = await apiClient.get(`/staff_members/${staff.id}/transactions?${params.toString()}`);
+        
+        let transactions = [];
+        if (response.data && response.data.transactions) {
+          transactions = response.data.transactions;
+        } else if (Array.isArray(response.data)) {
+          transactions = response.data;
+        }
+
+        transactions.forEach((txn: any) => {
+          if (txn.amount > 0) totalCharges += txn.amount;
+          if (txn.amount < 0) totalPayments += Math.abs(txn.amount);
+          
+          allTransactionData.push([
+            new Date(txn.created_at).toLocaleDateString(),
+            new Date(txn.created_at).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            }),
+            staff.name,
+            staff.position,
+            txn.transaction_type,
+            txn.amount > 0 ? 'Charge' : 'Payment',
+            Math.abs(txn.amount).toFixed(2),
+            txn.description || '',
+            txn.reference || '',
+            txn.created_by_name || 'System'
+          ]);
+        });
+      } catch (error) {
+        console.error(`Error fetching transactions for ${staff.name}:`, error);
+      }
+    }
+
+    // Sort by date and time
+    allTransactionData.sort((a, b) => {
+      const dateA = new Date(`${a[0]} ${a[1]}`);
+      const dateB = new Date(`${b[0]} ${b[1]}`);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    const csvData = [
+      // Summary information
+      ['Transaction History Export - Generated on', new Date().toLocaleString()],
+      [''],
+      ['Period:', `${dateRange.startDate} to ${dateRange.endDate}`],
+      ['Transaction Type Filter:', exportOptions.transactionType === 'all' ? 'All Types' : exportOptions.transactionType],
+      ['Staff Count:', staffToExport.length.toString()],
+      ['Total Transactions:', allTransactionData.length.toString()],
+      ['Total Charges:', `$${totalCharges.toFixed(2)}`],
+      ['Total Payments:', `$${totalPayments.toFixed(2)}`],
+      ['Net Amount:', `$${(totalCharges - totalPayments).toFixed(2)}`],
+      [''],
+      ['Transaction Details:'],
+      [''],
+      // Header row
+      [
+        'Date',
+        'Time',
+        'Staff Name',
+        'Position',
+        'Transaction Type',
+        'Charge/Payment',
+        'Amount',
+        'Description',
+        'Reference',
+        'Created By'
+      ],
+      ...allTransactionData
+    ];
+
+    downloadCsv(csvData, `transactions-only-export-${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const downloadCsv = (csvData: any[][], filename: string) => {
+    const csvContent = csvData.map(row => 
+      row.map(cell => {
+        // Handle cells that contain commas by wrapping in quotes
+        const cellStr = String(cell || '');
+        return cellStr.includes(',') ? `"${cellStr}"` : cellStr;
+      }).join(',')
+    ).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `staff-balances-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = filename;
     link.click();
     window.URL.revokeObjectURL(url);
-    
-    toastUtils.success('Staff data exported successfully');
   };
   
   // Date formatting helper
@@ -479,6 +870,218 @@ function StaffManagementContent() {
       toastUtils.error('Some payroll deductions failed to process.');
     } finally {
       setProcessingBulkPayment(false);
+    }
+  };
+  
+  // User linking functions
+  const openUserLinkModal = async (staffMember: StaffMember) => {
+    setUserLinkingStaff(staffMember);
+    setShowUserLinkModal(true);
+    await fetchAvailableUsers(staffMember.user_id);
+  };
+  
+  // Transaction filtering utility functions
+  const getDateRangeForFilter = (dateRange: string) => {
+    // Get current time in Guam (UTC+10)
+    const now = new Date();
+    const guamTime = new Date(now.getTime() + (10 * 60 * 60 * 1000)); // Add 10 hours for Guam timezone
+    
+    // Helper function to create a date in Guam timezone
+    const createGuamDate = (year: number, month: number, day: number, hour = 0, minute = 0, second = 0) => {
+      const date = new Date(year, month, day, hour, minute, second);
+      // Convert to Guam time
+      return new Date(date.getTime() + (10 * 60 * 60 * 1000));
+    };
+    
+    // Helper function to format date for API (YYYY-MM-DD)
+    const formatDateForAPI = (date: Date) => {
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    const currentYear = guamTime.getUTCFullYear();
+    const currentMonth = guamTime.getUTCMonth();
+    const currentDay = guamTime.getUTCDate();
+    
+    switch (dateRange) {
+      case 'today':
+        // Today from 12:00 AM to 11:59 PM Guam time
+        const startOfToday = createGuamDate(currentYear, currentMonth, currentDay, 0, 0, 0);
+        const endOfToday = createGuamDate(currentYear, currentMonth, currentDay, 23, 59, 59);
+        return {
+          startDate: formatDateForAPI(startOfToday),
+          endDate: formatDateForAPI(endOfToday)
+        };
+        
+      case 'yesterday':
+        // Yesterday from 12:00 AM to 11:59 PM Guam time
+        const startOfYesterday = createGuamDate(currentYear, currentMonth, currentDay - 1, 0, 0, 0);
+        const endOfYesterday = createGuamDate(currentYear, currentMonth, currentDay - 1, 23, 59, 59);
+        return {
+          startDate: formatDateForAPI(startOfYesterday),
+          endDate: formatDateForAPI(endOfYesterday)
+        };
+        
+      case 'last_7_days':
+        // Last 7 days ending today
+        const start7Days = createGuamDate(currentYear, currentMonth, currentDay - 6, 0, 0, 0);
+        const end7Days = createGuamDate(currentYear, currentMonth, currentDay, 23, 59, 59);
+        return {
+          startDate: formatDateForAPI(start7Days),
+          endDate: formatDateForAPI(end7Days)
+        };
+        
+      case 'week':
+        // This week (Sunday to today)
+        const dayOfWeek = guamTime.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+        const startOfWeek = createGuamDate(currentYear, currentMonth, currentDay - dayOfWeek, 0, 0, 0);
+        const endOfWeek = createGuamDate(currentYear, currentMonth, currentDay, 23, 59, 59);
+        return {
+          startDate: formatDateForAPI(startOfWeek),
+          endDate: formatDateForAPI(endOfWeek)
+        };
+        
+      case 'month':
+        // This month (1st to today)
+        const startOfMonth = createGuamDate(currentYear, currentMonth, 1, 0, 0, 0);
+        const endOfMonth = createGuamDate(currentYear, currentMonth, currentDay, 23, 59, 59);
+        return {
+          startDate: formatDateForAPI(startOfMonth),
+          endDate: formatDateForAPI(endOfMonth)
+        };
+        
+      case 'last_30_days':
+      default:
+        // Last 30 days ending today
+        const start30Days = createGuamDate(currentYear, currentMonth, currentDay - 29, 0, 0, 0);
+        const end30Days = createGuamDate(currentYear, currentMonth, currentDay, 23, 59, 59);
+        return {
+          startDate: formatDateForAPI(start30Days),
+          endDate: formatDateForAPI(end30Days)
+        };
+    }
+  };
+  
+  const initializeTransactionFilter = (staffId: number) => {
+    if (!transactionFilters[staffId]) {
+      const defaultRange = getDateRangeForFilter('last_30_days');
+      setTransactionFilters(prev => ({
+        ...prev,
+        [staffId]: {
+          dateRange: 'last_30_days',
+          startDate: defaultRange.startDate,
+          endDate: defaultRange.endDate,
+          transactionType: 'all' as const,
+          page: 1,
+          perPage: 20
+        }
+      }));
+    }
+  };
+  
+  const updateTransactionFilter = (staffId: number, updates: Partial<typeof transactionFilters[number]>) => {
+    setTransactionFilters(prev => ({
+      ...prev,
+      [staffId]: {
+        ...prev[staffId],
+        ...updates,
+        // Reset to page 1 when changing filters
+        ...(updates.dateRange || updates.transactionType ? { page: 1 } : {})
+      }
+    }));
+  };
+  
+  const setTransactionDateRange = (staffId: number, dateRange: string) => {
+    const dateRangeData = getDateRangeForFilter(dateRange);
+    const newFilter = {
+      dateRange: dateRange as any,
+      startDate: dateRangeData.startDate,
+      endDate: dateRangeData.endDate,
+      page: 1 // Reset to page 1 when changing date range
+    };
+    
+    updateTransactionFilter(staffId, newFilter);
+    
+    // Load transactions immediately with the new filter values
+    loadStaffTransactions(staffId, newFilter);
+  };
+  
+  const closeUserLinkModal = () => {
+    setShowUserLinkModal(false);
+    setUserLinkingStaff(null);
+    setAvailableUsers([]);
+  };
+  
+  const fetchAvailableUsers = async (currentUserId?: number | null) => {
+    setLoadingAvailableUsers(true);
+    try {
+      const params = new URLSearchParams({
+        available_for_staff: 'true',
+        exclude_role: 'customer'
+      });
+      
+      if (currentUserId) {
+        params.append('include_user_id', currentUserId.toString());
+      }
+      
+      const response = await apiClient.get(`/users?${params.toString()}`);
+      
+      if (Array.isArray(response.data)) {
+        setAvailableUsers(response.data);
+      } else if (response.data && Array.isArray(response.data.users)) {
+        setAvailableUsers(response.data.users);
+      } else {
+        setAvailableUsers([]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching available users:', error);
+      toastUtils.error('Failed to fetch available users');
+      setAvailableUsers([]);
+    } finally {
+      setLoadingAvailableUsers(false);
+    }
+  };
+  
+  const linkUserToStaff = async (userId: number) => {
+    if (!userLinkingStaff) return;
+    
+    setProcessingUserLink(true);
+    try {
+      await apiClient.patch(`/staff_members/${userLinkingStaff.id}/link_user`, {
+        user_id: userId
+      });
+      
+      const user = availableUsers.find(u => u.id === userId);
+      toastUtils.success(`Successfully linked ${user?.first_name} ${user?.last_name} to ${userLinkingStaff.name}`);
+      
+      await fetchStaffMembers();
+      closeUserLinkModal();
+    } catch (error: any) {
+      console.error('Error linking user:', error);
+      toastUtils.error(error.response?.data?.errors?.[0] || 'Failed to link user');
+    } finally {
+      setProcessingUserLink(false);
+    }
+  };
+  
+  const unlinkUserFromStaff = async (staffMember: StaffMember) => {
+    if (!staffMember.user_id) return;
+    
+    const confirmUnlink = window.confirm(
+      `Are you sure you want to unlink ${staffMember.user_name} from ${staffMember.name}?`
+    );
+    
+    if (!confirmUnlink) return;
+    
+    try {
+      await apiClient.patch(`/staff_members/${staffMember.id}/unlink_user`);
+      toastUtils.success(`Successfully unlinked ${staffMember.user_name} from ${staffMember.name}`);
+      await fetchStaffMembers();
+    } catch (error: any) {
+      console.error('Error unlinking user:', error);
+      toastUtils.error(error.response?.data?.errors?.[0] || 'Failed to unlink user');
     }
   };
   
@@ -691,16 +1294,99 @@ function StaffManagementContent() {
     setExpandedRows(newExpanded);
   };
 
-  const loadStaffTransactions = async (staffId: number) => {
+  const loadStaffTransactions = async (staffId: number, filterOverrides?: Partial<{
+    dateRange: string;
+    startDate: string;
+    endDate: string;
+    transactionType: string;
+    page: number;
+    perPage: number;
+  }>) => {
+    // Initialize filter if not exists
+    initializeTransactionFilter(staffId);
+    
+    // Use provided overrides or fallback to state/defaults
+    const currentFilter = transactionFilters[staffId] || {
+      dateRange: 'last_30_days' as const,
+      startDate: getDateRangeForFilter('last_30_days').startDate,
+      endDate: getDateRangeForFilter('last_30_days').endDate,
+      transactionType: 'all' as const,
+      page: 1,
+      perPage: 20
+    };
+    
+    const filter = {
+      ...currentFilter,
+      ...filterOverrides
+    };
+    
     setLoadingTransactions(prev => new Set([...prev, staffId]));
+    
     try {
-      const response = await apiClient.get(`/staff_members/${staffId}/transactions`);
-      const transactions = Array.isArray(response.data) ? response.data : 
-                          response.data?.transactions || [];
+      // Build query parameters
+      const params = new URLSearchParams({
+        start_date: filter.startDate,
+        end_date: filter.endDate,
+        page: filter.page.toString(),
+        per_page: filter.perPage.toString()
+      });
+      
+      if (filter.transactionType !== 'all') {
+        params.append('transaction_type', filter.transactionType);
+      }
+      
+      const response = await apiClient.get(`/staff_members/${staffId}/transactions?${params.toString()}`);
+      
+      // Handle both paginated and simple array responses
+      let transactions = [];
+      let stats = {
+        totalCount: 0,
+        filteredCount: 0,
+        totalAmount: 0,
+        paymentAmount: 0,
+        orderAmount: 0
+      };
+      
+      if (response.data && response.data.transactions) {
+        // Paginated response
+        transactions = response.data.transactions;
+        stats = {
+          totalCount: response.data.total_count || transactions.length,
+          filteredCount: response.data.filtered_count || transactions.length,
+          totalAmount: response.data.period_total || 0,
+          paymentAmount: response.data.payment_total || 0,
+          orderAmount: response.data.order_total || 0
+        };
+      } else if (Array.isArray(response.data)) {
+        // Simple array response - calculate stats locally
+        transactions = response.data;
+        stats = {
+          totalCount: transactions.length,
+          filteredCount: transactions.length,
+          totalAmount: transactions.reduce((sum: number, txn: any) => sum + Math.abs(txn.amount), 0),
+          paymentAmount: transactions.filter((txn: any) => txn.transaction_type === 'payment').reduce((sum: number, txn: any) => sum + Math.abs(txn.amount), 0),
+          orderAmount: transactions.filter((txn: any) => txn.transaction_type === 'order').reduce((sum: number, txn: any) => sum + Math.abs(txn.amount), 0)
+        };
+      }
+      
       setStaffTransactions(prev => ({ ...prev, [staffId]: transactions }));
+      setTransactionStats(prev => ({ ...prev, [staffId]: stats }));
+      
     } catch (err: any) {
       console.error('Error loading transactions:', err);
       toastUtils.error('Failed to load transaction history');
+      // Set empty state on error
+      setStaffTransactions(prev => ({ ...prev, [staffId]: [] }));
+      setTransactionStats(prev => ({ 
+        ...prev, 
+        [staffId]: {
+          totalCount: 0,
+          filteredCount: 0,
+          totalAmount: 0,
+          paymentAmount: 0,
+          orderAmount: 0
+        }
+      }));
     } finally {
       setLoadingTransactions(prev => {
         const newSet = new Set(prev);
@@ -905,7 +1591,7 @@ function StaffManagementContent() {
           {/* Enhanced Summary Cards */}
           <div className="bg-white rounded-md shadow-md p-4 sm:p-6">
             <h2 className="text-lg sm:text-xl font-semibold mb-4">Staff Management Overview</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
               <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
                 <div className="flex items-center">
                   <div className="p-2 bg-blue-100 rounded-lg">
@@ -961,6 +1647,21 @@ function StaffManagementContent() {
                   </div>
                 </div>
               </div>
+              
+              <div className="bg-indigo-50 p-3 sm:p-4 rounded-lg">
+                <div className="flex items-center">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <span className="text-lg sm:text-xl">🔗</span>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-xs sm:text-sm font-medium text-indigo-800">User Links</h3>
+                    <p className="text-xl sm:text-2xl font-bold text-indigo-600">
+                      {staffMembers.filter(s => s.has_user_link).length} / {staffMembers.length}
+                    </p>
+                    <p className="text-xs text-indigo-600">linked</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -980,7 +1681,8 @@ function StaffManagementContent() {
               
               {loadingActivities ? (
                 <div className="flex justify-center items-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#c1902f]"></div>
+                  <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#c1902f] mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">Loading activities...</p>
                 </div>
               ) : recentActivities.length === 0 ? (
                 <div className="text-center py-6 sm:py-8">
@@ -1079,7 +1781,7 @@ function StaffManagementContent() {
           {/* Quick Actions */}
           <div className="bg-white rounded-md shadow-md p-4 sm:p-6">
             <h3 className="text-base sm:text-lg font-medium mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <button
                 onClick={() => {
                   setActiveTab('house-accounts');
@@ -1091,6 +1793,19 @@ function StaffManagementContent() {
                   <span className="text-xl sm:text-2xl group-hover:scale-110 transition-transform inline-block">👤</span>
                   <p className="mt-2 font-medium text-gray-900 text-sm sm:text-base">Add New Staff</p>
                   <p className="text-xs sm:text-sm text-gray-500">Create a new staff member</p>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setActiveTab('house-accounts')}
+                className="p-3 sm:p-4 border border-dashed border-gray-300 rounded-lg hover:border-[#c1902f] hover:bg-[#c1902f]/5 transition-colors group"
+              >
+                <div className="text-center">
+                  <span className="text-xl sm:text-2xl group-hover:scale-110 transition-transform inline-block">🔗</span>
+                  <p className="mt-2 font-medium text-gray-900 text-sm sm:text-base">Manage User Links</p>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {staffMembers.filter(s => !s.has_user_link).length} staff unlinked
+                  </p>
                 </div>
               </button>
               
@@ -1242,6 +1957,32 @@ function StaffManagementContent() {
               {/* Quick Filter Controls */}
               <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="space-y-4">
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm"
+                      placeholder="Search staff by name, position, or linked user..."
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      >
+                        <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  
                   {/* Primary Filter Row */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
@@ -1261,12 +2002,12 @@ function StaffManagementContent() {
                     
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={exportStaffData}
+                        onClick={() => setShowExportModal(true)}
                         className="px-3 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 transition-colors"
                       >
                         Export CSV
                       </button>
-                      {(houseAccountFilter !== 'all' || advancedFilters.activityFilter !== 'all' || advancedFilters.balanceRange !== 'all' || advancedFilters.sortBy !== 'name') && (
+                      {(searchQuery.trim() || houseAccountFilter !== 'all' || advancedFilters.activityFilter !== 'all' || advancedFilters.balanceRange !== 'all' || advancedFilters.sortBy !== 'name') && (
                         <button
                           onClick={clearAllFilters}
                           className="text-sm text-[#c1902f] hover:text-[#a67b28] transition-colors underline"
@@ -1339,6 +2080,11 @@ function StaffManagementContent() {
                   {/* Results Summary */}
                   <div className="text-sm text-gray-600">
                     Showing {getFilteredStaffMembers().length} of {staffMembers.length} staff members
+                    {searchQuery.trim() && (
+                      <span className="ml-2 text-[#c1902f] font-medium">
+                        • Search: "{searchQuery}"
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1404,12 +2150,15 @@ function StaffManagementContent() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        User Association
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {getFilteredStaffMembers().length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                           {houseAccountFilter === 'all' ? 'No staff members found' : 
                            houseAccountFilter === 'outstanding' ? 'No staff with outstanding balances' :
                            'No staff with credit balances'}
@@ -1480,12 +2229,49 @@ function StaffManagementContent() {
                                   {staffMember.active ? 'Deactivate' : 'Activate'}
                                 </button>
                               </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {staffMember.has_user_link ? (
+                                  <div className="flex items-center space-x-2">
+                                    <div className="flex items-center">
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <span className="w-2 h-2 bg-green-400 rounded-full mr-1.5"></span>
+                                        Linked
+                                      </span>
+                                    </div>
+                                    <div className="text-sm">
+                                      <div className="font-medium text-gray-900">{staffMember.user_name}</div>
+                                      <div className="text-gray-500 text-xs">{staffMember.user_email}</div>
+                                      <div className="text-xs text-gray-400 capitalize">{staffMember.user_role}</div>
+                                    </div>
+                                    <button
+                                      onClick={() => unlinkUserFromStaff(staffMember)}
+                                      className="ml-2 text-red-600 hover:text-red-900 text-sm"
+                                      title="Unlink user"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center space-x-2">
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                      <span className="w-2 h-2 bg-gray-400 rounded-full mr-1.5"></span>
+                                      Not Linked
+                                    </span>
+                                    <button
+                                      onClick={() => openUserLinkModal(staffMember)}
+                                      className="text-[#c1902f] hover:text-[#a67b28] text-sm font-medium"
+                                    >
+                                      Link User
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
                             </tr>
 
                             {/* Expanded row for payment interface and transactions */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={6} className="px-6 py-4 bg-gray-50 border-t">
+                                <td colSpan={7} className="px-6 py-4 bg-gray-50 border-t">
                                   <div className="space-y-4">
                                     {/* Payment Interface */}
                                     <div className="bg-white p-4 rounded-lg shadow-sm border">
@@ -1594,59 +2380,265 @@ function StaffManagementContent() {
 
                                     {/* Transaction History */}
                                     <div className="bg-white p-4 rounded-lg shadow-sm border">
-                                      <h4 className="text-lg font-medium mb-3">Transaction History</h4>
+                                      <div className="flex justify-between items-center mb-4">
+                                        <h4 className="text-lg font-medium">Transaction History</h4>
+                                        <button
+                                          onClick={() => {
+                                            initializeTransactionFilter(staffMember.id);
+                                            loadStaffTransactions(staffMember.id);
+                                          }}
+                                          className="text-sm text-[#c1902f] hover:text-[#a67b28] font-medium"
+                                        >
+                                          Refresh
+                                        </button>
+                                      </div>
+                                      
+                                      {/* Transaction Filters */}
+                                      <div className="mb-4 space-y-3">
+                                        {/* Quick Date Range Filters */}
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">Time Period:</label>
+                                          <div className="flex flex-wrap gap-2">
+                                            {[
+                                              { key: 'today', label: 'Today' },
+                                              { key: 'yesterday', label: 'Yesterday' },
+                                              { key: 'last_7_days', label: 'Last 7 Days' },
+                                              { key: 'week', label: 'This Week' },
+                                              { key: 'month', label: 'This Month' },
+                                              { key: 'last_30_days', label: 'Last 30 Days' }
+                                            ].map(option => (
+                                              <button
+                                                key={option.key}
+                                                onClick={() => {
+                                                  setTransactionDateRange(staffMember.id, option.key);
+                                                }}
+                                                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                                  (transactionFilters[staffMember.id]?.dateRange || 'last_30_days') === option.key
+                                                    ? 'bg-[#c1902f] text-white'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                }`}
+                                              >
+                                                {option.label}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Custom Date Range and Transaction Type Filter */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                          <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">From Date:</label>
+                                            <input
+                                              type="date"
+                                              value={transactionFilters[staffMember.id]?.startDate || ''}
+                                              onChange={(e) => {
+                                                const newFilter = { 
+                                                  dateRange: 'custom' as const,
+                                                  startDate: e.target.value 
+                                                };
+                                                updateTransactionFilter(staffMember.id, newFilter);
+                                                loadStaffTransactions(staffMember.id, newFilter);
+                                              }}
+                                              className="w-full px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">To Date:</label>
+                                            <input
+                                              type="date"
+                                              value={transactionFilters[staffMember.id]?.endDate || ''}
+                                              onChange={(e) => {
+                                                const newFilter = { 
+                                                  dateRange: 'custom' as const,
+                                                  endDate: e.target.value 
+                                                };
+                                                updateTransactionFilter(staffMember.id, newFilter);
+                                                loadStaffTransactions(staffMember.id, newFilter);
+                                              }}
+                                              className="w-full px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type:</label>
+                                            <select
+                                              value={transactionFilters[staffMember.id]?.transactionType || 'all'}
+                                              onChange={(e) => {
+                                                const newFilter = { 
+                                                  transactionType: e.target.value as 'all' | 'order' | 'payment' | 'charge'
+                                                };
+                                                updateTransactionFilter(staffMember.id, newFilter);
+                                                loadStaffTransactions(staffMember.id, newFilter);
+                                              }}
+                                              className="w-full px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f]"
+                                            >
+                                              <option value="all">All Types</option>
+                                              <option value="order">Orders Only</option>
+                                              <option value="payment">Payments Only</option>
+                                              <option value="charge">Charges Only</option>
+                                            </select>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Transaction Summary Stats */}
+                                      {transactionStats[staffMember.id] && (
+                                        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                                          <h5 className="text-sm font-medium text-gray-700 mb-2">Period Summary:</h5>
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                            <div className="text-center">
+                                              <div className="font-semibold text-gray-900">
+                                                {transactionStats[staffMember.id].filteredCount}
+                                              </div>
+                                              <div className="text-gray-500">Transactions</div>
+                                            </div>
+                                            <div className="text-center">
+                                              <div className="font-semibold text-red-600">
+                                                ${transactionStats[staffMember.id].orderAmount.toFixed(2)}
+                                              </div>
+                                              <div className="text-gray-500">Orders/Charges</div>
+                                            </div>
+                                            <div className="text-center">
+                                              <div className="font-semibold text-green-600">
+                                                ${transactionStats[staffMember.id].paymentAmount.toFixed(2)}
+                                              </div>
+                                              <div className="text-gray-500">Payments</div>
+                                            </div>
+                                            <div className="text-center">
+                                              <div className="font-semibold text-blue-600">
+                                                ${Math.abs(transactionStats[staffMember.id].orderAmount - transactionStats[staffMember.id].paymentAmount).toFixed(2)}
+                                              </div>
+                                              <div className="text-gray-500">Net Change</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Transaction Table */}
                                       {isLoadingTxns ? (
-                                        <div className="text-center py-4">
+                                        <div className="text-center py-8">
                                           <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#c1902f] mx-auto"></div>
+                                          <p className="mt-2 text-sm text-gray-500">Loading transactions...</p>
                                         </div>
                                       ) : transactions.length === 0 ? (
-                                        <p className="text-gray-500 text-center py-4">No transactions found</p>
-                                      ) : (
-                                        <div className="max-h-60 overflow-y-auto">
-                                          <table className="min-w-full text-sm">
-                                            <thead className="bg-gray-50">
-                                              <tr>
-                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date & Time</th>
-                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
-                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-200">
-                                              {transactions.map((txn, idx) => (
-                                                <tr key={txn.id || idx} className="hover:bg-gray-50">
-                                                  <td className="px-3 py-2 text-gray-900 text-sm">
-                                                    {formatDateTime(txn.created_at)}
-                                                  </td>
-                                                  <td className="px-3 py-2 whitespace-nowrap">
-                                                    <span className={`px-2 py-1 text-xs rounded-full ${
-                                                      txn.transaction_type === 'order' ? 'bg-blue-100 text-blue-800' :
-                                                      txn.transaction_type === 'payment' ? 'bg-green-100 text-green-800' :
-                                                      'bg-gray-100 text-gray-800'
-                                                    }`}>
-                                                      {txn.transaction_type}
-                                                    </span>
-                                                  </td>
-                                                  <td className="px-3 py-2 whitespace-nowrap">
-                                                    <span className={`font-medium ${
-                                                      txn.amount > 0 ? 'text-red-600' : 'text-green-600'
-                                                    }`}>
-                                                      ${Math.abs(txn.amount).toFixed(2)}
-                                                      {txn.amount > 0 ? ' (charge)' : ' (payment)'}
-                                                    </span>
-                                                  </td>
-                                                  <td className="px-3 py-2 text-gray-900">{txn.description}</td>
-                                                  <td className="px-3 py-2 text-gray-500">{txn.reference}</td>
-                                                  <td className="px-3 py-2 text-gray-500">
-                                                    {txn.created_by_name || 'System'}
-                                                  </td>
-                                                </tr>
-                                              ))}
-                                            </tbody>
-                                          </table>
+                                        <div className="text-center py-8">
+                                          <span className="text-4xl">📋</span>
+                                          <p className="text-gray-500 mt-2">No transactions found</p>
+                                          <p className="text-sm text-gray-400 mt-1">
+                                            {transactionFilters[staffMember.id]?.dateRange === 'today' ? 'No transactions today' :
+                                             transactionFilters[staffMember.id]?.dateRange === 'week' ? 'No transactions this week' :
+                                             transactionFilters[staffMember.id]?.dateRange === 'month' ? 'No transactions this month' :
+                                             'Try selecting a different time period or transaction type'}
+                                          </p>
                                         </div>
+                                      ) : (
+                                        <>
+                                          <div className="max-h-80 overflow-y-auto border rounded-lg">
+                                            <table className="min-w-full text-sm">
+                                              <thead className="bg-gray-50 sticky top-0">
+                                                <tr>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="bg-white divide-y divide-gray-200">
+                                                {transactions.map((txn, idx) => (
+                                                  <tr key={txn.id || idx} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-3 py-3 text-gray-900 text-sm">
+                                                      <div className="font-medium">
+                                                        {new Date(txn.created_at).toLocaleDateString()}
+                                                      </div>
+                                                      <div className="text-xs text-gray-500">
+                                                        {new Date(txn.created_at).toLocaleTimeString('en-US', { 
+                                                          hour: 'numeric', 
+                                                          minute: '2-digit',
+                                                          hour12: true 
+                                                        })}
+                                                      </div>
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap">
+                                                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                        txn.transaction_type === 'order' ? 'bg-blue-100 text-blue-800' :
+                                                        txn.transaction_type === 'payment' ? 'bg-green-100 text-green-800' :
+                                                        txn.transaction_type === 'charge' ? 'bg-orange-100 text-orange-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                      }`}>
+                                                        {txn.transaction_type}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap">
+                                                      <div className={`font-bold ${
+                                                        txn.amount > 0 ? 'text-red-600' : 'text-green-600'
+                                                      }`}>
+                                                        ${Math.abs(txn.amount).toFixed(2)}
+                                                      </div>
+                                                      <div className="text-xs text-gray-500">
+                                                        {txn.amount > 0 ? 'charge' : 'payment'}
+                                                      </div>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-gray-900">
+                                                      <div className="max-w-xs truncate" title={txn.description}>
+                                                        {txn.description || 'No description'}
+                                                      </div>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-gray-500">
+                                                      <div className="max-w-xs truncate" title={txn.reference}>
+                                                        {txn.reference || '-'}
+                                                      </div>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-gray-500 text-sm">
+                                                      {txn.created_by_name || 'System'}
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                          
+                                          {/* Pagination Controls */}
+                                          {transactionStats[staffMember.id] && transactionStats[staffMember.id].filteredCount > (transactionFilters[staffMember.id]?.perPage || 20) && (
+                                            <div className="mt-3 flex items-center justify-between text-sm">
+                                              <div className="text-gray-500">
+                                                Showing {Math.min((transactionFilters[staffMember.id]?.page || 1) * (transactionFilters[staffMember.id]?.perPage || 20), transactionStats[staffMember.id].filteredCount)} 
+                                                {' '}of {transactionStats[staffMember.id].filteredCount} transactions
+                                              </div>
+                                              <div className="flex space-x-2">
+                                                <button
+                                                  onClick={() => {
+                                                    const newFilter = { 
+                                                      page: Math.max(1, (transactionFilters[staffMember.id]?.page || 1) - 1)
+                                                    };
+                                                    updateTransactionFilter(staffMember.id, newFilter);
+                                                    loadStaffTransactions(staffMember.id, newFilter);
+                                                  }}
+                                                  disabled={(transactionFilters[staffMember.id]?.page || 1) <= 1}
+                                                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                  Previous
+                                                </button>
+                                                <span className="px-3 py-1 bg-[#c1902f] text-white rounded text-sm">
+                                                  Page {transactionFilters[staffMember.id]?.page || 1}
+                                                </span>
+                                                <button
+                                                  onClick={() => {
+                                                    const newFilter = { 
+                                                      page: (transactionFilters[staffMember.id]?.page || 1) + 1
+                                                    };
+                                                    updateTransactionFilter(staffMember.id, newFilter);
+                                                    loadStaffTransactions(staffMember.id, newFilter);
+                                                  }}
+                                                  disabled={((transactionFilters[staffMember.id]?.page || 1) * (transactionFilters[staffMember.id]?.perPage || 20)) >= transactionStats[staffMember.id].filteredCount}
+                                                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                  Next
+                                                </button>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
                                       )}
                                     </div>
                                   </div>
@@ -1793,6 +2785,347 @@ function StaffManagementContent() {
                   className="px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#a67b28] disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
                   {processingBulkPayment ? 'Processing...' : `Record ${bulkPaymentForm.type === 'payment' ? 'Payment' : 'Charge'}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* User Link Modal */}
+      {showUserLinkModal && userLinkingStaff && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Link User to {userLinkingStaff.name}
+              </h3>
+              <button
+                onClick={closeUserLinkModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Current Status */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Current Status:</h4>
+                {userLinkingStaff.has_user_link ? (
+                  <div className="flex items-center space-x-3">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <span className="w-2 h-2 bg-green-400 rounded-full mr-1.5"></span>
+                      Currently Linked
+                    </span>
+                    <div className="text-sm">
+                      <div className="font-medium text-gray-900">{userLinkingStaff.user_name}</div>
+                      <div className="text-gray-500">{userLinkingStaff.user_email}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full mr-1.5"></span>
+                    Not Currently Linked
+                  </span>
+                )}
+              </div>
+              
+              {/* Available Users */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">
+                  {userLinkingStaff.has_user_link ? 'Change Link to:' : 'Select User to Link:'}
+                </h4>
+                {loadingAvailableUsers ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#c1902f]"></div>
+                  </div>
+                ) : availableUsers.length === 0 ? (
+                  <div className="text-center py-6">
+                    <span className="text-gray-500">No available users to link</span>
+                  </div>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {availableUsers.map((user) => (
+                      <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{user.first_name} {user.last_name}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                          <div className="text-xs text-gray-400 capitalize">{user.role}</div>
+                        </div>
+                        <button
+                          onClick={() => linkUserToStaff(user.id)}
+                          disabled={processingUserLink}
+                          className="px-3 py-1 bg-[#c1902f] text-white rounded-md text-sm hover:bg-[#a67b28] disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        >
+                          {processingUserLink ? 'Linking...' : 'Link'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  onClick={closeUserLinkModal}
+                  disabled={processingUserLink}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                {userLinkingStaff.has_user_link && (
+                  <button
+                    onClick={() => {
+                      unlinkUserFromStaff(userLinkingStaff);
+                      closeUserLinkModal();
+                    }}
+                    disabled={processingUserLink}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Unlink Current User
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Enhanced Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl mx-4 max-h-screen overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-medium text-gray-900">
+                Export Staff Data & Transactions
+              </h3>
+              <button
+                onClick={() => setShowExportModal(false)}
+                disabled={processingExport}
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Export Type Selection */}
+              <div>
+                <h4 className="text-lg font-medium text-gray-900 mb-3">What would you like to export?</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <label className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors ${
+                    exportOptions.exportType === 'staff_only' ? 'border-[#c1902f] bg-[#c1902f]/5' : 'border-gray-300 hover:bg-gray-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="exportType"
+                      value="staff_only"
+                      checked={exportOptions.exportType === 'staff_only'}
+                      onChange={(e) => updateExportOptions('exportType', e.target.value)}
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 mt-1"
+                    />
+                    <div className="ml-3">
+                      <div className="font-medium text-gray-900">Staff Information Only</div>
+                      <div className="text-sm text-gray-500">Names, positions, balances, user associations</div>
+                    </div>
+                  </label>
+                  
+                  <label className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors ${
+                    exportOptions.exportType === 'staff_with_transactions' ? 'border-[#c1902f] bg-[#c1902f]/5' : 'border-gray-300 hover:bg-gray-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="exportType"
+                      value="staff_with_transactions"
+                      checked={exportOptions.exportType === 'staff_with_transactions'}
+                      onChange={(e) => updateExportOptions('exportType', e.target.value)}
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 mt-1"
+                    />
+                    <div className="ml-3">
+                      <div className="font-medium text-gray-900">Staff + Transaction History</div>
+                      <div className="text-sm text-gray-500">Complete data with detailed transaction records</div>
+                    </div>
+                  </label>
+                  
+                  <label className={`relative flex cursor-pointer rounded-lg border p-4 transition-colors ${
+                    exportOptions.exportType === 'transactions_only' ? 'border-[#c1902f] bg-[#c1902f]/5' : 'border-gray-300 hover:bg-gray-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="exportType"
+                      value="transactions_only"
+                      checked={exportOptions.exportType === 'transactions_only'}
+                      onChange={(e) => updateExportOptions('exportType', e.target.value)}
+                      className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 mt-1"
+                    />
+                    <div className="ml-3">
+                      <div className="font-medium text-gray-900">Transactions Only</div>
+                      <div className="text-sm text-gray-500">Transaction history with summary statistics</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              
+              {/* Staff Options */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-3">Staff Options</h4>
+                  <div className="space-y-3">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={exportOptions.includeUserAssociations}
+                        onChange={(e) => updateExportOptions('includeUserAssociations', e.target.checked)}
+                        className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Include user associations (linked accounts)</span>
+                    </label>
+                    
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={exportOptions.includeInactiveStaff}
+                        onChange={(e) => updateExportOptions('includeInactiveStaff', e.target.checked)}
+                        className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Include inactive staff members</span>
+                    </label>
+                    
+                    {selectedStaffIds.size > 0 && (
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={exportOptions.selectedStaffOnly}
+                          onChange={(e) => updateExportOptions('selectedStaffOnly', e.target.checked)}
+                          className="h-4 w-4 text-[#c1902f] focus:ring-[#c1902f] border-gray-300 rounded"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">
+                          Export only selected staff ({selectedStaffIds.size} selected)
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Transaction Options (only show for transaction exports) */}
+                {(exportOptions.exportType === 'staff_with_transactions' || exportOptions.exportType === 'transactions_only') && (
+                  <div>
+                    <h4 className="text-lg font-medium text-gray-900 mb-3">Transaction Options</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                        <select
+                          value={exportOptions.transactionDateRange}
+                          onChange={(e) => updateExportOptions('transactionDateRange', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm"
+                        >
+                          <option value="today">Today</option>
+                          <option value="yesterday">Yesterday</option>
+                          <option value="last_7_days">Last 7 Days</option>
+                          <option value="week">This Week</option>
+                          <option value="month">This Month</option>
+                          <option value="last_30_days">Last 30 Days</option>
+                          <option value="custom">Custom Date Range</option>
+                        </select>
+                      </div>
+                      
+                      {exportOptions.transactionDateRange === 'custom' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                            <input
+                              type="date"
+                              value={exportOptions.customStartDate}
+                              onChange={(e) => updateExportOptions('customStartDate', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                            <input
+                              type="date"
+                              value={exportOptions.customEndDate}
+                              onChange={(e) => updateExportOptions('customEndDate', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+                        <select
+                          value={exportOptions.transactionType}
+                          onChange={(e) => updateExportOptions('transactionType', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#c1902f] focus:border-[#c1902f] text-sm"
+                        >
+                          <option value="all">All Transaction Types</option>
+                          <option value="order">Orders Only</option>
+                          <option value="payment">Payments Only</option>
+                          <option value="charge">Charges Only</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Current Filters Summary */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Current Active Filters (will be applied to export):</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
+                  <div>Search: {searchQuery || 'None'}</div>
+                  <div>Balance Filter: {houseAccountFilter === 'all' ? 'All Staff' : 
+                    houseAccountFilter === 'outstanding' ? 'Outstanding Balances' : 'Credit Balances'}</div>
+                  <div>Activity: {advancedFilters.activityFilter === 'all' ? 'All Staff' : 
+                    advancedFilters.activityFilter === 'active' ? 'Active Only' : 'Inactive Only'}</div>
+                  <div>Sort: {advancedFilters.sortBy} ({advancedFilters.sortOrder})</div>
+                </div>
+                {selectedStaffIds.size > 0 && !exportOptions.selectedStaffOnly && (
+                  <div className="mt-2 text-sm text-blue-600">
+                    Note: You have {selectedStaffIds.size} staff selected. Enable "Export only selected staff" above to export just these.
+                  </div>
+                )}
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  disabled={processingExport}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={processExport}
+                  disabled={processingExport || (exportOptions.transactionDateRange === 'custom' && (!exportOptions.customStartDate || !exportOptions.customEndDate))}
+                  className="px-6 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#a67b28] disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {processingExport ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>Export CSV</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
