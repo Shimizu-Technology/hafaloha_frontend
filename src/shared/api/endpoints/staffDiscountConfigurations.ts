@@ -30,6 +30,17 @@ export const staffDiscountConfigurationsApi = {
     }
   },
 
+  // Get all discount configurations (active and inactive) for admin management
+  getAllConfigurations: async (): Promise<StaffDiscountConfiguration[]> => {
+    try {
+      const response = await apiClient.get<StaffDiscountConfigurationsResponse>('/staff_discount_configurations/admin');
+      return response.data.staff_discount_configurations;
+    } catch (error) {
+      console.error('Error fetching all staff discount configurations:', error);
+      throw error;
+    }
+  },
+
   // Admin endpoints for managing configurations
   getConfiguration: async (id: number): Promise<StaffDiscountConfiguration> => {
     const response = await apiClient.get<{ staff_discount_configuration: StaffDiscountConfiguration }>(`/staff_discount_configurations/${id}`);

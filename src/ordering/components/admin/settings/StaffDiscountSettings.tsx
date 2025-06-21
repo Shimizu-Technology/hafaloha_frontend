@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { staffDiscountConfigurationsApi } from '../../../../shared/api/endpoints/staffDiscountConfigurations';
-import { Plus, Trash2, Save, Percent, GripVertical, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Save, Percent, GripVertical, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -73,7 +73,7 @@ function SortableDiscountCard({
       }}
       className={`bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200 ${
         isDragging ? 'shadow-lg ring-2 ring-hafaloha-gold ring-opacity-50 z-50' : ''
-      }`}
+      } ${!discount.is_active ? 'opacity-60 bg-gray-50' : ''}`}
     >
       <div className="flex items-center space-x-3">
         {/* Drag Handle */}
@@ -91,7 +91,7 @@ function SortableDiscountCard({
           {/* Name Field */}
           <div className="md:col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1">
-              Display Name
+              Display Name {!discount.is_active && <span className="text-red-500">(Inactive)</span>}
             </label>
             <input
               type="text"
@@ -187,6 +187,7 @@ function StaffDiscountSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   const [draftDiscounts, setDraftDiscounts] = useState<StaffDiscountConfiguration[]>([]);
   const [originalDiscounts, setOriginalDiscounts] = useState<StaffDiscountConfiguration[]>([]);
 
@@ -211,10 +212,23 @@ function StaffDiscountSettings() {
     setHasUnsavedChanges(hasChanges);
   }, [draftDiscounts, originalDiscounts]);
 
+  // Filter discounts based on show inactive toggle
+  const visibleDiscounts = useMemo(() => {
+    if (showInactive) {
+      return draftDiscounts;
+    }
+    return draftDiscounts.filter(discount => discount.is_active);
+  }, [draftDiscounts, showInactive]);
+
+  // Count inactive discounts for the toggle label
+  const inactiveCount = useMemo(() => {
+    return draftDiscounts.filter(discount => !discount.is_active).length;
+  }, [draftDiscounts]);
+
   async function loadDiscountConfigurations() {
     setLoading(true);
     try {
-      const discounts = await staffDiscountConfigurationsApi.getActiveConfigurations();
+      const discounts = await staffDiscountConfigurationsApi.getAllConfigurations();
       const mappedDiscounts = discounts.map((item: any) => ({
         id: item.id,
         name: item.name,
@@ -354,14 +368,48 @@ function StaffDiscountSettings() {
       }
 
       for (const dc of discountsToDelete) {
-        await staffDiscountConfigurationsApi.deleteConfiguration(dc.id);
+        try {
+          await staffDiscountConfigurationsApi.deleteConfiguration(dc.id);
+        } catch (deleteError: any) {
+          // Check if it's a foreign key constraint error
+          if (deleteError.response?.data?.suggestion === 'deactivate') {
+            // Instead of deleting, deactivate the configuration
+            console.warn(`Cannot delete discount ${dc.name}, deactivating instead:`, deleteError.response.data.errors);
+            await staffDiscountConfigurationsApi.updateConfiguration(dc.id, {
+              name: dc.name,
+              code: dc.code,
+              discount_percentage: dc.discount_percentage,
+              discount_type: dc.discount_type as 'percentage' | 'fixed_amount',
+              is_active: false, // Deactivate instead of delete
+              is_default: dc.is_default,
+              display_order: dc.display_order,
+              description: dc.description || undefined,
+              ui_color: dc.ui_color || undefined,
+            });
+            
+            // Show a specific message about deactivation
+            toastUtils.success(`"${dc.name}" has been deactivated (cannot be deleted as it's used by existing orders)`);
+          } else {
+            // Re-throw other errors
+            throw deleteError;
+          }
+        }
       }
 
       toastUtils.success('Staff discount settings saved successfully!');
       loadDiscountConfigurations();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving discount configurations:', err);
-      toastUtils.error('Failed to save discount configurations. See console for details.');
+      
+      // Extract specific error messages from the API response
+      let errorMessage = 'Failed to save discount configurations.';
+      if (err.response?.data?.errors) {
+        errorMessage = `Save failed: ${err.response.data.errors.join(', ')}`;
+      } else if (err.message) {
+        errorMessage = `Save failed: ${err.message}`;
+      }
+      
+      toastUtils.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -379,6 +427,7 @@ function StaffDiscountSettings() {
   }
 
   const activeDiscounts = draftDiscounts.filter(d => !d._deleted).sort((a, b) => a.display_order - b.display_order);
+  const sortedVisibleDiscounts = visibleDiscounts.filter(d => !d._deleted).sort((a, b) => a.display_order - b.display_order);
 
   return (
     <div className="bg-white shadow-sm rounded-lg border border-gray-200">
@@ -404,13 +453,41 @@ function StaffDiscountSettings() {
       </div>
 
       <div className="p-6 space-y-6">
-        {/* Add New Discount Button */}
+        {/* Header with Toggle and Add Button */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Discount Configurations</h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {activeDiscounts.length} configuration{activeDiscounts.length !== 1 ? 's' : ''} defined • Drag to reorder
-            </p>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Discount Configurations</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {visibleDiscounts.length} configuration{visibleDiscounts.length !== 1 ? 's' : ''} shown • Drag to reorder
+                </p>
+              </div>
+              
+              {/* Show Inactive Toggle */}
+              {inactiveCount > 0 && (
+                <div className="flex items-center space-x-3">
+                  <label className="flex items-center space-x-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={showInactive}
+                      onChange={(e) => setShowInactive(e.target.checked)}
+                      className="rounded border-gray-300 text-hafaloha-gold focus:ring-hafaloha-gold w-4 h-4"
+                    />
+                    <div className="flex items-center space-x-1">
+                      {showInactive ? (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <EyeOff className="h-4 w-4 text-gray-400" />
+                      )}
+                      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                        Show inactive ({inactiveCount})
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
           <button
             onClick={handleAddDiscount}
@@ -424,18 +501,28 @@ function StaffDiscountSettings() {
 
         {/* Discount Cards with Drag and Drop */}
         <div className="space-y-4">
-          {activeDiscounts.length === 0 ? (
+          {sortedVisibleDiscounts.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
               <Percent className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No discount configurations</h3>
-              <p className="text-gray-500 mb-4">Get started by creating your first discount option.</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {!showInactive && inactiveCount > 0 
+                  ? 'No active discount configurations' 
+                  : 'No discount configurations'
+                }
+              </h3>
+              <p className="text-gray-500 mb-4">
+                {!showInactive && inactiveCount > 0 
+                  ? `You have ${inactiveCount} inactive discount${inactiveCount !== 1 ? 's' : ''}. Check "Show inactive" above to view them, or create a new one.`
+                  : 'Get started by creating your first discount option.'
+                }
+              </p>
               <button
                 onClick={handleAddDiscount}
                 type="button"
                 className="inline-flex items-center px-4 py-2 bg-hafaloha-gold text-white text-sm font-medium rounded-lg hover:bg-hafaloha-gold/90 focus:outline-none focus:ring-2 focus:ring-hafaloha-gold focus:ring-offset-2 transition-colors duration-200"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Your First Discount
+                {!showInactive && inactiveCount > 0 ? 'Add New Discount' : 'Add Your First Discount'}
               </button>
             </div>
           ) : (
@@ -444,9 +531,9 @@ function StaffDiscountSettings() {
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
             >
-                             <SortableContext items={activeDiscounts} strategy={verticalListSortingStrategy}>
-                 <div className="space-y-2">
-                  {activeDiscounts.map((discount) => {
+              <SortableContext items={sortedVisibleDiscounts} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {sortedVisibleDiscounts.map((discount) => {
                     const isNew = discount.id > 1000000000;
                     return (
                       <SortableDiscountCard
