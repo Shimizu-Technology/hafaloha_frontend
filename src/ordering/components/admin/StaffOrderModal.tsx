@@ -1664,13 +1664,81 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   useEffect(() => {
     if (isStaffOrder) {
       fetchDiscountConfigurations();
+    } else {
+      // Reset when staff order is disabled
+      setDiscountConfigurationId(null);
+      setDiscountType('off_duty'); // Keep for legacy compatibility
     }
   }, [isStaffOrder]);
+
+  // Initialize default discount when component mounts and staff order is enabled
+  useEffect(() => {
+    if (isStaffOrder && discountConfigurations.length > 0 && !discountConfigurationId) {
+      const defaultConfig = discountConfigurations.find(config => config.is_default);
+      if (defaultConfig) {
+        setDiscountConfigurationId(defaultConfig.id);
+        // Map to the legacy discount type for backward compatibility
+        if (defaultConfig.code === 'on_duty') {
+          setDiscountType('on_duty');
+        } else if (defaultConfig.code === 'off_duty') {
+          setDiscountType('off_duty');
+        } else if (defaultConfig.code === 'no_discount') {
+          setDiscountType('no_discount');
+        } else {
+          // For custom configurations, we'll use 'off_duty' as fallback for legacy compatibility
+          setDiscountType('off_duty');
+        }
+      } else {
+        // If no default is set, use the first configuration
+        const firstConfig = discountConfigurations[0];
+        setDiscountConfigurationId(firstConfig.id);
+        if (firstConfig.code === 'on_duty') {
+          setDiscountType('on_duty');
+        } else if (firstConfig.code === 'off_duty') {
+          setDiscountType('off_duty');
+        } else if (firstConfig.code === 'no_discount') {
+          setDiscountType('no_discount');
+        } else {
+          setDiscountType('off_duty');
+        }
+      }
+    }
+  }, [isStaffOrder, discountConfigurations, discountConfigurationId]);
 
   const fetchDiscountConfigurations = async () => {
     try {
       const configs = await staffDiscountConfigurationsApi.getActiveConfigurations();
       setDiscountConfigurations(configs);
+      
+      // Set the default discount configuration if available
+      const defaultConfig = configs.find(config => config.is_default);
+      if (defaultConfig) {
+        setDiscountConfigurationId(defaultConfig.id);
+        // Map to the legacy discount type for backward compatibility
+        if (defaultConfig.code === 'on_duty') {
+          setDiscountType('on_duty');
+        } else if (defaultConfig.code === 'off_duty') {
+          setDiscountType('off_duty');
+        } else if (defaultConfig.code === 'no_discount') {
+          setDiscountType('no_discount');
+        } else {
+          // For custom configurations, we'll use 'off_duty' as fallback for legacy compatibility
+          setDiscountType('off_duty');
+        }
+      } else if (configs.length > 0) {
+        // If no default is set, use the first configuration
+        const firstConfig = configs[0];
+        setDiscountConfigurationId(firstConfig.id);
+        if (firstConfig.code === 'on_duty') {
+          setDiscountType('on_duty');
+        } else if (firstConfig.code === 'off_duty') {
+          setDiscountType('off_duty');
+        } else if (firstConfig.code === 'no_discount') {
+          setDiscountType('no_discount');
+        } else {
+          setDiscountType('off_duty');
+        }
+      }
     } catch (error) {
       console.error('Error fetching discount configurations:', error);
       // Set empty array to trigger fallback to hardcoded values

@@ -190,6 +190,7 @@ function StaffDiscountSettings() {
   const [showInactive, setShowInactive] = useState(false);
   const [draftDiscounts, setDraftDiscounts] = useState<StaffDiscountConfiguration[]>([]);
   const [originalDiscounts, setOriginalDiscounts] = useState<StaffDiscountConfiguration[]>([]);
+  const [newDefaultDiscount, setNewDefaultDiscount] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -224,6 +225,14 @@ function StaffDiscountSettings() {
   const inactiveCount = useMemo(() => {
     return draftDiscounts.filter(discount => !discount.is_active).length;
   }, [draftDiscounts]);
+
+  // Show toast when default discount changes
+  useEffect(() => {
+    if (newDefaultDiscount) {
+      toastUtils.success(`"${newDefaultDiscount}" is now the default discount. Other defaults have been unselected.`);
+      setNewDefaultDiscount(null);
+    }
+  }, [newDefaultDiscount]);
 
   async function loadDiscountConfigurations() {
     setLoading(true);
@@ -269,10 +278,10 @@ function StaffDiscountSettings() {
           is_default: discount.id === discountId ? true : false
         }));
         
-        // Show toast to inform user about the change
+        // Set the new default name to trigger toast in useEffect
         const changedDiscount = updatedDiscounts.find(d => d.id === discountId);
         if (changedDiscount) {
-          toastUtils.success(`"${changedDiscount.name}" is now the default discount. Other defaults have been unselected.`);
+          setNewDefaultDiscount(changedDiscount.name);
         }
       }
 

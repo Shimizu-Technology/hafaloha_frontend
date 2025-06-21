@@ -115,11 +115,16 @@ export function StaffOrderOptions({
   useEffect(() => {
     if (!isStaffOrder) {
       setStaffMemberId(null);
-      setDiscountType('off_duty');
       setUseHouseAccount(false);
       setCreatedByStaffId(null);
+      // Reset discount configuration ID
+      if (setDiscountConfigurationId) {
+        setDiscountConfigurationId(null);
+      }
+      // Keep legacy fallback
+      setDiscountType('off_duty');
     }
-  }, [isStaffOrder, setStaffMemberId, setDiscountType, setUseHouseAccount, setCreatedByStaffId]);
+  }, [isStaffOrder, setStaffMemberId, setDiscountType, setUseHouseAccount, setCreatedByStaffId, setDiscountConfigurationId]);
 
   // Get the selected staff member
   const selectedStaffMember = staffMemberId 
@@ -166,8 +171,8 @@ export function StaffOrderOptions({
             <MobileSelect
               options={discountConfigurations.length > 0 
                 ? discountConfigurations.map(config => ({
-                    value: config.code,
-                    label: config.display_label,
+                    value: config.id.toString(),
+                    label: `${config.name} (${config.discount_percentage}% off)`,
                     style: config.ui_color ? { color: config.ui_color } : undefined
                   }))
                 : [
@@ -176,13 +181,32 @@ export function StaffOrderOptions({
                     { value: 'no_discount', label: 'No Discount (Full Price)' }
                   ]
               }
-              value={discountType}
+              value={discountConfigurations.length > 0 && discountConfigurationId ? discountConfigurationId.toString() : discountType}
               onChange={(value) => {
-                setDiscountType(value as StaffDiscountType);
-                // Also set the configuration ID if the setter is provided
-                if (setDiscountConfigurationId) {
-                  const config = discountConfigurations.find(c => c.code === value);
-                  setDiscountConfigurationId(config ? config.id : null);
+                if (discountConfigurations.length > 0) {
+                  // Using dynamic configurations
+                  const configId = parseInt(value);
+                  const config = discountConfigurations.find(c => c.id === configId);
+                  if (config && setDiscountConfigurationId) {
+                    setDiscountConfigurationId(configId);
+                    // Update legacy discount type for backward compatibility
+                    if (config.code === 'on_duty') {
+                      setDiscountType('on_duty');
+                    } else if (config.code === 'off_duty') {
+                      setDiscountType('off_duty');
+                    } else if (config.code === 'no_discount') {
+                      setDiscountType('no_discount');
+                    } else {
+                      // For custom configurations, use a fallback
+                      setDiscountType('off_duty');
+                    }
+                  }
+                } else {
+                  // Fallback to legacy system
+                  setDiscountType(value as StaffDiscountType);
+                  if (setDiscountConfigurationId) {
+                    setDiscountConfigurationId(null);
+                  }
                 }
               }}
               placeholder="Select Discount Type"
