@@ -16,6 +16,8 @@ import {
   updateOperatingHour,
 } from '../services/api';
 
+import { staffDiscountConfigurationsApi } from '../../shared/api/endpoints/staffDiscountConfigurations';
+
 /** Basic Restaurant shape (including current_seat_count for the UI) */
 interface Restaurant {
   id: number;
@@ -44,6 +46,21 @@ interface SpecialEvent {
   exclusive_booking: boolean;
   max_capacity: number;
   description: string | null;
+  _deleted?: boolean;
+}
+
+/** StaffDiscountConfiguration shape */
+interface StaffDiscountConfiguration {
+  id: number;
+  name: string;
+  code: string;
+  discount_percentage: number;
+  discount_type: string;
+  is_active: boolean;
+  is_default: boolean;
+  display_order: number;
+  description: string | null;
+  ui_color: string | null;
   _deleted?: boolean;
 }
 
@@ -109,6 +126,9 @@ export default function AdminSettings() {
   // Special Events
   const [draftEvents, setDraftEvents] = useState<SpecialEvent[]>([]);
 
+  // Staff Discount Configurations
+  const [draftDiscounts, setDraftDiscounts] = useState<StaffDiscountConfiguration[]>([]);
+
   // Toggle for advanced event options
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -151,6 +171,24 @@ export default function AdminSettings() {
       })) as SpecialEvent[];
       setDraftEvents(mapped);
 
+      // Load staff discount configurations - using active endpoint for now
+      // TODO: Add admin endpoint to get all configurations (including inactive)
+      const discounts = await staffDiscountConfigurationsApi.getActiveConfigurations();
+      const mappedDiscounts = discounts.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        code: item.code,
+        discount_percentage: item.discount_percentage,
+        discount_type: item.discount_type,
+        is_active: item.is_active,
+        is_default: item.is_default,
+        display_order: item.display_order,
+        description: item.description,
+        ui_color: item.ui_color,
+        _deleted: false,
+      })) as StaffDiscountConfiguration[];
+      setDraftDiscounts(mappedDiscounts);
+
     } catch (err) {
       console.error('Error loading settings:', err);
       toastUtils.error('Failed to load settings.');
@@ -189,6 +227,36 @@ export default function AdminSettings() {
       description: '',
     };
     setDraftEvents((prev) => [...prev, newEvent]);
+  }
+
+  // Staff Discount Configuration changes
+  function handleDiscountChange(discountId: number, field: keyof StaffDiscountConfiguration, value: any) {
+    setDraftDiscounts((prev) =>
+      prev.map((discount) => (discount.id === discountId ? { ...discount, [field]: value } : discount))
+    );
+  }
+
+  function handleDeleteDiscount(discountId: number) {
+    setDraftDiscounts((prev) =>
+      prev.map((discount) => (discount.id === discountId ? { ...discount, _deleted: true } : discount))
+    );
+  }
+
+  function handleAddDiscount() {
+    const maxOrder = Math.max(...draftDiscounts.map(d => d.display_order), 0);
+    const newDiscount: StaffDiscountConfiguration = {
+      id: 0,
+      name: '',
+      code: '',
+      discount_percentage: 0,
+      discount_type: 'percentage',
+      is_active: true,
+      is_default: false,
+      display_order: maxOrder + 1,
+      description: '',
+      ui_color: null,
+    };
+    setDraftDiscounts((prev) => [...prev, newDiscount]);
   }
 
   // Save all
@@ -257,6 +325,46 @@ export default function AdminSettings() {
       // 3.3) Delete
       for (const ev of toDelete) {
         await deleteSpecialEvent(ev.id);
+      }
+
+      // 4) Staff discount configurations
+      const discountsToCreate = draftDiscounts.filter(dc => dc.id === 0 && !dc._deleted);
+      const discountsToUpdate = draftDiscounts.filter(dc => dc.id !== 0 && !dc._deleted);
+      const discountsToDelete = draftDiscounts.filter(dc => dc.id !== 0 && dc._deleted);
+
+      // 4.1) Create new discount configurations
+      for (const dc of discountsToCreate) {
+        await staffDiscountConfigurationsApi.createConfiguration({
+          name: dc.name,
+          code: dc.code,
+          discount_percentage: dc.discount_percentage,
+          discount_type: dc.discount_type as 'percentage' | 'fixed_amount',
+          is_active: dc.is_active,
+          is_default: dc.is_default,
+          display_order: dc.display_order,
+          description: dc.description || undefined,
+          ui_color: dc.ui_color || undefined,
+        });
+      }
+
+      // 4.2) Update existing discount configurations
+      for (const dc of discountsToUpdate) {
+        await staffDiscountConfigurationsApi.updateConfiguration(dc.id, {
+          name: dc.name,
+          code: dc.code,
+          discount_percentage: dc.discount_percentage,
+          discount_type: dc.discount_type as 'percentage' | 'fixed_amount',
+          is_active: dc.is_active,
+          is_default: dc.is_default,
+          display_order: dc.display_order,
+          description: dc.description || undefined,
+          ui_color: dc.ui_color || undefined,
+        });
+      }
+
+      // 4.3) Delete discount configurations
+      for (const dc of discountsToDelete) {
+        await staffDiscountConfigurationsApi.deleteConfiguration(dc.id);
       }
 
       toastUtils.success('All settings saved successfully!');
@@ -522,7 +630,173 @@ export default function AdminSettings() {
             </div>
           </section>
 
-          {/* 3) General Settings */}
+          {/* 3) Staff Discount Configurations */}
+          <section className="bg-white p-4 rounded shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Staff Discount Options</h2>
+              <button
+                onClick={handleAddDiscount}
+                type="button"
+                className="px-3 py-1 bg-hafaloha-gold text-white text-sm rounded hover:bg-hafaloha-coral"
+              >
+                + Add Discount
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Configure discount options available for staff orders. These will appear in the staff order interface.
+            </p>
+
+            <div className="overflow-x-auto">
+              {draftDiscounts.length === 0 ? (
+                <p className="text-sm text-gray-600">No discount configurations found.</p>
+              ) : (
+                <table className="min-w-full table-auto border border-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2 py-2 text-left text-sm">Name</th>
+                      <th className="px-2 py-2 text-left text-sm">Code</th>
+                      <th className="px-2 py-2 text-left text-sm">Discount %</th>
+                      <th className="px-2 py-2 text-left text-sm">Active</th>
+                      <th className="px-2 py-2 text-left text-sm">Default</th>
+                      <th className="px-2 py-2 text-left text-sm">Order</th>
+                      <th className="px-2 py-2 text-left text-sm">Description</th>
+                      <th className="px-2 py-2 text-left text-sm">Color</th>
+                      <th className="px-2 py-2 text-sm" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draftDiscounts.map((discount, idx) => {
+                      if (discount._deleted) return null;
+                      const rowKey = discount.id !== 0 ? `discount-${discount.id}` : `new-${idx}`;
+                      return (
+                        <tr key={rowKey} className="border-b last:border-b-0">
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={discount.name}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'name', e.target.value)
+                              }
+                              placeholder="e.g. On Duty Staff"
+                              className="border border-gray-300 rounded p-1 w-32 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={discount.code}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'code', e.target.value)
+                              }
+                              placeholder="e.g. on_duty"
+                              className="border border-gray-300 rounded p-1 w-24 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={discount.discount_percentage}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'discount_percentage', +e.target.value)
+                              }
+                              className="border border-gray-300 rounded p-1 w-16 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={discount.is_active}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'is_active', e.target.checked)
+                              }
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={discount.is_default}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'is_default', e.target.checked)
+                              }
+                              title="Default selection when staff order is enabled"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number"
+                              min={0}
+                              value={discount.display_order}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'display_order', +e.target.value)
+                              }
+                              className="border border-gray-300 rounded p-1 w-16 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={discount.description || ''}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'description', e.target.value)
+                              }
+                              placeholder="Optional description"
+                              className="border border-gray-300 rounded p-1 w-32 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={discount.ui_color || ''}
+                              onChange={(e) =>
+                                handleDiscountChange(discount.id, 'ui_color', e.target.value)
+                              }
+                              placeholder="#hex or name"
+                              className="border border-gray-300 rounded p-1 w-24 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            {discount.id !== 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDiscount(discount.id)}
+                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                              >
+                                Delete
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDraftDiscounts((prev) => prev.filter((x) => x !== discount))
+                                }
+                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="mt-4 text-sm text-gray-600">
+              <p><strong>Tips:</strong></p>
+              <ul className="list-disc ml-4 space-y-1">
+                <li><strong>Code:</strong> Unique identifier used by the system (e.g., "on_duty", "off_duty")</li>
+                <li><strong>Active:</strong> Only active discounts appear in the staff order interface</li>
+                <li><strong>Default:</strong> Pre-selected when staff order is enabled (only one should be default)</li>
+                <li><strong>Order:</strong> Controls the display order in the interface (lower numbers first)</li>
+                <li><strong>Color:</strong> Optional UI color (e.g., "#green", "#3B82F6", "red")</li>
+              </ul>
+            </div>
+          </section>
+
+          {/* 4) General Settings */}
           <section className="bg-white p-4 rounded shadow">
             <h2 className="text-xl font-bold mb-4">General Settings</h2>
             <div className="space-y-4 max-w-lg">
@@ -556,7 +830,7 @@ export default function AdminSettings() {
             </div>
           </section>
 
-          {/* 4) Save Button */}
+          {/* 5) Save Button */}
           <div>
             <button
               type="button"

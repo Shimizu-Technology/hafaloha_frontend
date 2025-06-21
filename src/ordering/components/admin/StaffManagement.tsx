@@ -48,6 +48,31 @@ interface Activity {
   color: 'green' | 'blue' | 'yellow';
 }
 
+interface Transaction {
+  id: number;
+  amount: number;
+  transaction_type: 'order' | 'payment' | 'adjustment' | 'charge';
+  description: string;
+  reference?: string;
+  created_at: string;
+  created_by_name?: string;
+  order_details?: {
+    order_id: number;
+    order_number: string;
+    is_staff_order: boolean;
+    staff_on_duty: boolean;
+    total: number;
+    discount_info?: {
+      discount_name: string;
+      discount_type: string;
+      discount_percentage: number;
+      discount_code: string;
+      discount_amount: number;
+      pre_discount_total: number;
+    };
+  };
+}
+
 function StaffManagementContent() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'house-accounts' | 'reports'>('house-accounts');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -85,6 +110,10 @@ function StaffManagementContent() {
     useFullBalance: false
   });
   const [processingBulkPayment, setProcessingBulkPayment] = useState(false);
+  
+  // Discount configurations state for dynamic color assignment
+  const [discountConfigurations, setDiscountConfigurations] = useState<any[]>([]);
+  const [discountColorMap, setDiscountColorMap] = useState<Map<string, string>>(new Map());
   
   // Dashboard state
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
@@ -134,6 +163,111 @@ function StaffManagementContent() {
   });
   const [processingExport, setProcessingExport] = useState(false);
 
+  // Helper function to get discount badge class - truly dynamic based on fetched configurations
+  const getBadgeClassForDiscount = (discountCode: string, percentage: number): string => {
+    // Check if we have a dynamically assigned color for this discount code
+    if (discountColorMap.has(discountCode)) {
+      return discountColorMap.get(discountCode)!;
+    }
+    
+    // Fallback for legacy/standard discounts that might not be in configurations
+    switch (discountCode) {
+      case 'on_duty':
+        return 'bg-green-100 text-green-800';
+      case 'off_duty':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'no_discount':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        // If not found in dynamic map and not a standard discount, use a default
+        return 'bg-slate-100 text-slate-800';
+    }
+  };
+
+  // Helper function to get discount display information from transaction
+  const getTransactionDiscountInfo = (transaction: Transaction) => {
+    if (transaction.transaction_type !== 'order' || !transaction.order_details?.discount_info) {
+      return null;
+    }
+
+    const discountInfo = transaction.order_details.discount_info;
+    
+    // Ensure numeric values are properly converted from strings if needed
+    const discountAmount = typeof discountInfo.discount_amount === 'string' 
+      ? parseFloat(discountInfo.discount_amount) 
+      : discountInfo.discount_amount || 0;
+    
+    const preDiscountTotal = typeof discountInfo.pre_discount_total === 'string' 
+      ? parseFloat(discountInfo.pre_discount_total) 
+      : discountInfo.pre_discount_total || 0;
+    
+    const finalTotal = typeof transaction.order_details.total === 'string' 
+      ? parseFloat(transaction.order_details.total) 
+      : transaction.order_details.total || 0;
+
+    return {
+      label: discountInfo.discount_name,
+      percentage: `${discountInfo.discount_percentage}%`,
+      badgeClass: getBadgeClassForDiscount(discountInfo.discount_code, discountInfo.discount_percentage),
+      discountAmount: discountAmount,
+      preDiscountTotal: preDiscountTotal,
+      finalTotal: finalTotal
+    };
+  };
+
+  // Function to fetch discount configurations and assign dynamic colors
+  const loadDiscountConfigurations = async () => {
+    try {
+      const response = await apiClient.get('/staff_discount_configurations');
+      
+      if (response.data) {
+        // Handle both array response and object with configurations inside
+        const configurations = Array.isArray(response.data) 
+          ? response.data 
+          : response.data.configurations || response.data;
+          
+        setDiscountConfigurations(configurations);
+        
+        // Create dynamic color map
+        const colorOptions = [
+          'bg-blue-100 text-blue-800',      // Blue
+          'bg-purple-100 text-purple-800',  // Purple
+          'bg-indigo-100 text-indigo-800',  // Indigo
+          'bg-pink-100 text-pink-800',      // Pink
+          'bg-rose-100 text-rose-800',      // Rose
+          'bg-orange-100 text-orange-800',  // Orange
+          'bg-amber-100 text-amber-800',    // Amber
+          'bg-lime-100 text-lime-800',      // Lime
+          'bg-emerald-100 text-emerald-800',// Emerald
+          'bg-teal-100 text-teal-800',      // Teal
+          'bg-cyan-100 text-cyan-800',      // Cyan
+          'bg-sky-100 text-sky-800',        // Sky
+        ];
+        
+        const newColorMap = new Map<string, string>();
+        
+        // Assign colors to standard discounts first
+        newColorMap.set('on_duty', 'bg-green-100 text-green-800');
+        newColorMap.set('off_duty', 'bg-yellow-100 text-yellow-800');
+        newColorMap.set('no_discount', 'bg-gray-100 text-gray-800');
+        
+        // Assign colors to custom configurations dynamically
+        if (Array.isArray(configurations)) {
+          configurations.forEach((config: any, index: number) => {
+            if (config.code && !newColorMap.has(config.code)) {
+              const colorIndex = index % colorOptions.length;
+              newColorMap.set(config.code, colorOptions[colorIndex]);
+            }
+          });
+        }
+        
+        setDiscountColorMap(newColorMap);
+      }
+    } catch (error) {
+      console.error('Error loading discount configurations:', error);
+    }
+  };
+
   const updateExportOptions = (field: string, value: any) => {
     setExportOptions(prev => ({
       ...prev,
@@ -141,10 +275,11 @@ function StaffManagementContent() {
     }));
   };
 
-  // Fetch staff members and users
+  // Fetch staff members, users, and discount configurations
   useEffect(() => {
     fetchStaffMembers();
     fetchUsers();
+    loadDiscountConfigurations();
   }, []);
 
   // Fetch dashboard data when dashboard tab is active
@@ -1102,7 +1237,7 @@ function StaffManagementContent() {
     reference: string;
   }>>({});
   const [processingPayments, setProcessingPayments] = useState<Set<number>>(new Set());
-  const [staffTransactions, setStaffTransactions] = useState<Record<number, any[]>>({});
+  const [staffTransactions, setStaffTransactions] = useState<Record<number, Transaction[]>>({});
   const [loadingTransactions, setLoadingTransactions] = useState<Set<number>>(new Set());
 
   const fetchStaffMembers = async () => {
@@ -2539,7 +2674,7 @@ function StaffManagementContent() {
                                                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
                                                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                                                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
                                                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
                                                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
                                                 </tr>
@@ -2580,8 +2715,33 @@ function StaffManagementContent() {
                                                       </div>
                                                     </td>
                                                     <td className="px-3 py-3 text-gray-900">
-                                                      <div className="max-w-xs truncate" title={txn.description}>
-                                                        {txn.description || 'No description'}
+                                                      <div className="space-y-1">
+                                                        <div className="max-w-xs truncate" title={txn.description}>
+                                                          {txn.description || 'No description'}
+                                                        </div>
+                                                        {/* Show discount information for order transactions */}
+                                                        {(() => {
+                                                          const discountInfo = getTransactionDiscountInfo(txn);
+                                                          if (!discountInfo) return null;
+                                                          
+                                                          return (
+                                                            <div className="flex flex-col space-y-1">
+                                                              <div className="flex items-center space-x-2">
+                                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${discountInfo.badgeClass}`}>
+                                                                  {discountInfo.label}
+                                                                </span>
+                                                                <span className="text-xs text-gray-600">
+                                                                  {discountInfo.percentage} discount
+                                                                </span>
+                                                              </div>
+                                                              <div className="text-xs text-gray-500 space-y-0.5">
+                                                                <div>Pre-discount: ${discountInfo.preDiscountTotal.toFixed(2)}</div>
+                                                                <div>Discount: -${discountInfo.discountAmount.toFixed(2)}</div>
+                                                                <div className="font-medium">Final: ${discountInfo.finalTotal.toFixed(2)}</div>
+                                                              </div>
+                                                            </div>
+                                                          );
+                                                        })()}
                                                       </div>
                                                     </td>
                                                     <td className="px-3 py-3 text-gray-500">

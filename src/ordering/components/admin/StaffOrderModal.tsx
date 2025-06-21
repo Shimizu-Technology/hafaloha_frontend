@@ -20,6 +20,7 @@ import { PayPalCheckout, PayPalCheckoutRef } from '../../components/payment/PayP
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ItemCustomizationModal } from './ItemCustomizationModal';
 import { StaffOrderOptions } from './StaffOrderOptions';
+import { StaffDiscountConfiguration, staffDiscountConfigurationsApi } from '../../../shared/api/endpoints/staffDiscountConfigurations';
 
 
 interface StaffOrderModalProps {
@@ -473,6 +474,10 @@ interface OrderPanelProps {
   createdByStaffId: number | null;
   setCreatedByStaffId: (value: number | null) => void;
   preDiscountTotal: number;
+  // New props for configurable discounts
+  discountConfigurationId?: number | null;
+  setDiscountConfigurationId?: (value: number | null) => void;
+  discountConfigurations?: StaffDiscountConfiguration[];
 }
 
 function OrderPanel({
@@ -498,11 +503,56 @@ function OrderPanel({
   createdByStaffId,
   setCreatedByStaffId,
   preDiscountTotal,
+  // New props for configurable discounts
+  discountConfigurationId,
+  setDiscountConfigurationId,
+  discountConfigurations = [],
 }: OrderPanelProps) {
   const getItemKey = useOrderStore(state => state._getItemKey);
   const [staffOptionsExpanded, setStaffOptionsExpanded] = useState(true);
   // Use isMobile to conditionally render content
   const isMobile = useIsMobile();
+
+  // Helper function to get discount label
+  const getDiscountLabel = (): string => {
+    if (!isStaffOrder) return '0%';
+    
+    // First, try to get from configuration ID
+    if (discountConfigurationId && discountConfigurations.length > 0) {
+      const config = discountConfigurations.find(c => c.id === discountConfigurationId);
+      if (config) {
+        if (config.discount_type === 'percentage') {
+          return `${config.discount_percentage}%`;
+        } else if (config.discount_type === 'fixed_amount') {
+          return `$${config.discount_percentage}`;
+        }
+      }
+    }
+    
+    // Fallback to configuration by code
+    if (discountConfigurations.length > 0) {
+      const config = discountConfigurations.find(c => c.code === discountType);
+      if (config) {
+        if (config.discount_type === 'percentage') {
+          return `${config.discount_percentage}%`;
+        } else if (config.discount_type === 'fixed_amount') {
+          return `$${config.discount_percentage}`;
+        }
+      }
+    }
+    
+    // Final fallback to hardcoded values
+    switch (discountType) {
+      case 'on_duty':
+        return '50%';
+      case 'off_duty':
+        return '30%';
+      case 'no_discount':
+        return '0%';
+      default:
+        return '0%';
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -549,6 +599,8 @@ function OrderPanel({
                 setUseHouseAccount={setUseHouseAccount}
                 createdByStaffId={createdByStaffId}
                 setCreatedByStaffId={setCreatedByStaffId}
+                discountConfigurationId={discountConfigurationId}
+                setDiscountConfigurationId={setDiscountConfigurationId}
               />
             </div>
           )}
@@ -759,7 +811,7 @@ function OrderPanel({
             </div>
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-700">
-                Discount ({discountType === 'on_duty' ? '50%' : discountType === 'off_duty' ? '30%' : '0%'}):
+                Discount ({getDiscountLabel()}):
               </span>
               <span className="text-green-600">-${(preDiscountTotal - orderTotal).toFixed(2)}</span>
             </div>
@@ -1443,7 +1495,14 @@ function PaymentPanel({
 type StaffDiscountType = 'on_duty' | 'off_duty' | 'no_discount';
 
 /** Calculate the order total with any applicable discounts */
-function calculateOrderTotal(items: any[], isStaff: boolean, discountType: StaffDiscountType, staffId: number | null): number {
+function calculateOrderTotal(
+  items: any[], 
+  isStaff: boolean, 
+  discountType: StaffDiscountType, 
+  staffId: number | null,
+  discountConfigurations: StaffDiscountConfiguration[] = [],
+  discountConfigurationId?: number | null
+): number {
   // Calculate raw total from all cart items
   const rawTotal = items.reduce((total: number, item: any) => {
     const itemPrice = typeof item.price === 'number' ? item.price : 0;
@@ -1453,6 +1512,31 @@ function calculateOrderTotal(items: any[], isStaff: boolean, discountType: Staff
   
   // Apply staff discount if applicable
   if (isStaff && staffId) {
+    // First, try to use the discount configuration ID
+    if (discountConfigurationId && discountConfigurations.length > 0) {
+      const config = discountConfigurations.find(c => c.id === discountConfigurationId);
+      if (config) {
+        if (config.discount_type === 'percentage') {
+          return rawTotal * (1 - config.discount_percentage / 100);
+        } else if (config.discount_type === 'fixed_amount') {
+          return Math.max(0, rawTotal - config.discount_percentage);
+        }
+      }
+    }
+    
+    // Fallback to configured discount by code
+    if (discountConfigurations.length > 0) {
+      const config = discountConfigurations.find(c => c.code === discountType);
+      if (config) {
+        if (config.discount_type === 'percentage') {
+          return rawTotal * (1 - config.discount_percentage / 100);
+        } else if (config.discount_type === 'fixed_amount') {
+          return Math.max(0, rawTotal - config.discount_percentage);
+        }
+      }
+    }
+    
+    // Final fallback to hardcoded values for backward compatibility
     switch (discountType) {
       case 'on_duty':
         return rawTotal * 0.5; // 50% discount
@@ -1497,7 +1581,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   const [isStaffOrder, setIsStaffOrder] = useState(false);
   const [staffMemberId, setStaffMemberId] = useState<number | null>(null);
   const [discountType, setDiscountType] = useState<StaffDiscountType>('off_duty');
+  const [discountConfigurationId, setDiscountConfigurationId] = useState<number | null>(null);
   const [useHouseAccount, setUseHouseAccount] = useState(false);
+  const [discountConfigurations, setDiscountConfigurations] = useState<StaffDiscountConfiguration[]>([]);
   
   // Used for tracking order creation metadata
   const [createdByStaffId, setCreatedByStaffId] = useState<number | null>(null);
@@ -1517,8 +1603,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
   
   // Calculate order total based on cart items and applicable discounts
   const orderTotal = useMemo(() => {
-    return calculateOrderTotal(cartItems, isStaffOrder, discountType, staffMemberId);
-  }, [cartItems, isStaffOrder, discountType, staffMemberId]);
+    return calculateOrderTotal(cartItems, isStaffOrder, discountType, staffMemberId, discountConfigurations, discountConfigurationId);
+  }, [cartItems, isStaffOrder, discountType, staffMemberId, discountConfigurations, discountConfigurationId]);
   
   // Payment processing state
   const [paymentProcessing, setPaymentProcessing] = useState(false);
@@ -1574,6 +1660,24 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
     }
   }, [currentMenuId, fetchMenuItemsForAdmin]);
   
+  // Fetch discount configurations when staff order is enabled
+  useEffect(() => {
+    if (isStaffOrder) {
+      fetchDiscountConfigurations();
+    }
+  }, [isStaffOrder]);
+
+  const fetchDiscountConfigurations = async () => {
+    try {
+      const configs = await staffDiscountConfigurationsApi.getActiveConfigurations();
+      setDiscountConfigurations(configs);
+    } catch (error) {
+      console.error('Error fetching discount configurations:', error);
+      // Set empty array to trigger fallback to hardcoded values
+      setDiscountConfigurations([]);
+    }
+  };
+
   // Fetch current user's staff member record to auto-set the createdByStaffId and createdByUserId
   useEffect(() => {
     const { user } = useAuthStore.getState();
@@ -2013,7 +2117,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         use_house_account: useHouseAccount,
         created_by_staff_id: finalCreatedByStaffId,
         created_by_user_id: createdByUserId,
-        pre_discount_total: preDiscountTotal
+        pre_discount_total: preDiscountTotal,
+        staff_discount_configuration_id: discountConfigurationId
       } : {
         created_by_staff_id: finalCreatedByStaffId, // Track creator even for customer orders
         created_by_user_id: createdByUserId // Always track the user who created the order
@@ -2192,6 +2297,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
               createdByStaffId={createdByStaffId}
               setCreatedByStaffId={setCreatedByStaffId}
               preDiscountTotal={preDiscountTotal}
+              discountConfigurationId={discountConfigurationId}
+              setDiscountConfigurationId={setDiscountConfigurationId}
+              discountConfigurations={discountConfigurations}
             />
           )}
           
@@ -2405,6 +2513,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
                 createdByStaffId={createdByStaffId}
                 setCreatedByStaffId={setCreatedByStaffId}
                 preDiscountTotal={preDiscountTotal}
+                discountConfigurationId={discountConfigurationId}
+                setDiscountConfigurationId={setDiscountConfigurationId}
+                discountConfigurations={discountConfigurations}
               />
               <div className={`absolute ${isStaffOrder ? 'bottom-[190px]' : 'bottom-[150px]'} left-0 right-0 px-4`}>
                 {!showCustomerInfoDesktop ? (
@@ -2483,6 +2594,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
             createdByStaffId={createdByStaffId}
             setCreatedByStaffId={setCreatedByStaffId}
             preDiscountTotal={preDiscountTotal}
+            discountConfigurationId={discountConfigurationId}
+            setDiscountConfigurationId={setDiscountConfigurationId}
+            discountConfigurations={discountConfigurations}
           />
           {/* Fixed position Add Customer Info button or Customer Info panel - only shown for non-staff orders */}
           {!isStaffOrder && (

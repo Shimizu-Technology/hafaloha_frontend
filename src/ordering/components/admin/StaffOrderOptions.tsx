@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiClient } from '../../../shared/api/apiClient';
 import { MobileSelect } from '../../../shared/components/ui/MobileSelect';
 import { useAuthStore } from '../../../shared/auth';
+import { StaffDiscountConfiguration, staffDiscountConfigurationsApi } from '../../../shared/api/endpoints/staffDiscountConfigurations';
 
 interface StaffMember {
   id: number;
@@ -11,6 +12,7 @@ interface StaffMember {
   active: boolean;
 }
 
+// Keep the old type for backward compatibility
 type StaffDiscountType = 'on_duty' | 'off_duty' | 'no_discount';
 
 interface StaffOrderOptionsProps {
@@ -24,6 +26,9 @@ interface StaffOrderOptionsProps {
   setUseHouseAccount: (value: boolean) => void;
   createdByStaffId: number | null;
   setCreatedByStaffId: (value: number | null) => void;
+  // New props for configurable discounts
+  discountConfigurationId?: number | null;
+  setDiscountConfigurationId?: (value: number | null) => void;
 }
 
 export function StaffOrderOptions({
@@ -36,17 +41,23 @@ export function StaffOrderOptions({
   useHouseAccount,
   setUseHouseAccount,
   // createdByStaffId is unused but kept in props for compatibility
-  setCreatedByStaffId
+  setCreatedByStaffId,
+  // New props for configurable discounts
+  discountConfigurationId,
+  setDiscountConfigurationId
 }: StaffOrderOptionsProps) {
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [discountConfigurations, setDiscountConfigurations] = useState<StaffDiscountConfiguration[]>([]);
   const [loading, setLoading] = useState(false);
+  const [discountConfigsLoading, setDiscountConfigsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const currentUser = useAuthStore(state => state.user);
 
-  // Fetch staff members when component mounts
+  // Fetch staff members and discount configurations when component mounts
   useEffect(() => {
     if (isStaffOrder) {
       fetchStaffMembers();
+      fetchDiscountConfigurations();
     }
   }, [isStaffOrder]);
 
@@ -79,6 +90,24 @@ export function StaffOrderOptions({
       setStaffMembers([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDiscountConfigurations = async () => {
+    setDiscountConfigsLoading(true);
+    try {
+      const configs = await staffDiscountConfigurationsApi.getActiveConfigurations();
+      setDiscountConfigurations(configs);
+    } catch (err: any) {
+      console.error('Error fetching discount configurations:', err);
+      // Fallback to default configurations if API fails
+      setDiscountConfigurations([
+        { id: 1, code: 'on_duty', name: 'On Duty', discount_percentage: 50, discount_type: 'percentage', is_active: true, is_default: true, display_order: 1, display_label: 'On Duty (50% off)' },
+        { id: 2, code: 'off_duty', name: 'Off Duty', discount_percentage: 30, discount_type: 'percentage', is_active: true, is_default: false, display_order: 2, display_label: 'Off Duty (30% off)' },
+        { id: 3, code: 'no_discount', name: 'No Discount', discount_percentage: 0, discount_type: 'percentage', is_active: true, is_default: false, display_order: 3, display_label: 'No Discount (Full Price)' }
+      ]);
+    } finally {
+      setDiscountConfigsLoading(false);
     }
   };
 
@@ -135,16 +164,31 @@ export function StaffOrderOptions({
               Discount Type
             </label>
             <MobileSelect
-              options={[
-                { value: 'on_duty', label: 'On Duty (50% off)' },
-                { value: 'off_duty', label: 'Off Duty (30% off)' },
-                { value: 'no_discount', label: 'No Discount (Full Price)' }
-              ]}
+              options={discountConfigurations.length > 0 
+                ? discountConfigurations.map(config => ({
+                    value: config.code,
+                    label: config.display_label,
+                    style: config.ui_color ? { color: config.ui_color } : undefined
+                  }))
+                : [
+                    { value: 'on_duty', label: 'On Duty (50% off)' },
+                    { value: 'off_duty', label: 'Off Duty (30% off)' },
+                    { value: 'no_discount', label: 'No Discount (Full Price)' }
+                  ]
+              }
               value={discountType}
-              onChange={(value) => setDiscountType(value as StaffDiscountType)}
+              onChange={(value) => {
+                setDiscountType(value as StaffDiscountType);
+                // Also set the configuration ID if the setter is provided
+                if (setDiscountConfigurationId) {
+                  const config = discountConfigurations.find(c => c.code === value);
+                  setDiscountConfigurationId(config ? config.id : null);
+                }
+              }}
               placeholder="Select Discount Type"
               className="text-xs"
             />
+            {discountConfigsLoading && <p className="text-xs text-gray-500 mt-1">Loading discount options...</p>}
           </div>
 
           {/* Use House Account */}

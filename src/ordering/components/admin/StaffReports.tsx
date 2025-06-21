@@ -35,6 +35,12 @@ interface StaffOrder {
   discount_percentage: number;
   use_house_account: boolean;
   created_at: string;
+  staff_discount_configuration?: {
+    name: string;
+    discount_type: string;
+    discount_percentage: number;
+    code: string;
+  };
 }
 
 interface DiscountSummary {
@@ -98,7 +104,21 @@ export function StaffReports() {
 
   // Helper function to get discount display information
   const getDiscountInfo = (order: StaffOrder) => {
-    // Use new discount_type if available, otherwise fall back to staff_on_duty
+    // Check if order has staff discount configuration information
+    if (order.staff_discount_configuration) {
+      const config = order.staff_discount_configuration;
+      return {
+        label: config.name,
+        percentage: config.discount_type === 'percentage' 
+          ? `${config.discount_percentage}%` 
+          : `$${config.discount_percentage}`,
+        badgeClass: getBadgeClassForDiscount(config.code, config.discount_percentage),
+        configurationName: config.name,
+        configurationType: config.discount_type
+      };
+    }
+    
+    // Fallback: Use new discount_type if available, otherwise fall back to staff_on_duty
     const discountType = order.discount_type || (order.staff_on_duty ? 'on_duty' : 'off_duty');
     
     switch (discountType) {
@@ -106,26 +126,58 @@ export function StaffReports() {
         return {
           label: 'On Duty',
           percentage: '50%',
-          badgeClass: 'bg-green-100 text-green-800'
+          badgeClass: 'bg-green-100 text-green-800',
+          configurationName: 'On Duty',
+          configurationType: 'percentage'
         };
       case 'off_duty':
         return {
           label: 'Off Duty',
           percentage: '30%',
-          badgeClass: 'bg-yellow-100 text-yellow-800'
+          badgeClass: 'bg-yellow-100 text-yellow-800',
+          configurationName: 'Off Duty',
+          configurationType: 'percentage'
         };
       case 'no_discount':
         return {
           label: 'No Discount',
           percentage: '0%',
-          badgeClass: 'bg-gray-100 text-gray-800'
+          badgeClass: 'bg-gray-100 text-gray-800',
+          configurationName: 'No Discount',
+          configurationType: 'percentage'
         };
       default:
         return {
           label: 'Off Duty',
           percentage: '30%',
-          badgeClass: 'bg-yellow-100 text-yellow-800'
+          badgeClass: 'bg-yellow-100 text-yellow-800',
+          configurationName: 'Off Duty',
+          configurationType: 'percentage'
         };
+    }
+  };
+
+  // Helper function to get badge class based on discount code and percentage
+  const getBadgeClassForDiscount = (code: string, percentage: number) => {
+    // Use specific colors for known discount codes
+    switch (code) {
+      case 'on_duty':
+        return 'bg-green-100 text-green-800';
+      case 'off_duty':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'no_discount':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        // For custom discounts, use color based on percentage
+        if (percentage >= 50) {
+          return 'bg-green-100 text-green-800'; // High discount
+        } else if (percentage >= 25) {
+          return 'bg-yellow-100 text-yellow-800'; // Medium discount
+        } else if (percentage > 0) {
+          return 'bg-blue-100 text-blue-800'; // Low discount
+        } else {
+          return 'bg-gray-100 text-gray-800'; // No discount
+        }
     }
   };
   
@@ -362,14 +414,22 @@ export function StaffReports() {
 
   const handleQuickAnalysis = () => {
     const houseAccountOrders = staffOrders.filter(order => order.use_house_account);
+    
+    // Calculate on-duty rate considering configurable discounts
+    const onDutyCount = houseAccountOrders.filter(order => {
+      if (order.staff_discount_configuration) {
+        return order.staff_discount_configuration.code === 'on_duty';
+      } else {
+        const discountType = order.discount_type || (order.staff_on_duty ? 'on_duty' : 'off_duty');
+        return discountType === 'on_duty';
+      }
+    }).length;
+    
     const insights = {
       totalOrders: houseAccountOrders.length,
       totalSpending: houseAccountOrders.reduce((sum, order) => sum + order.total, 0),
       averageOrder: houseAccountOrders.length > 0 ? houseAccountOrders.reduce((sum, order) => sum + order.total, 0) / houseAccountOrders.length : 0,
-      onDutyRate: houseAccountOrders.length > 0 ? (houseAccountOrders.filter(order => {
-        const discountType = order.discount_type || (order.staff_on_duty ? 'on_duty' : 'off_duty');
-        return discountType === 'on_duty';
-      }).length / houseAccountOrders.length) * 100 : 0,
+      onDutyRate: houseAccountOrders.length > 0 ? (onDutyCount / houseAccountOrders.length) * 100 : 0,
     };
     
     setShowQuickAnalysisModal(true);
@@ -609,7 +669,7 @@ export function StaffReports() {
                 </div>
               </div>
               <div className="mt-3 text-xs text-gray-500 italic">
-                <span className="font-medium">Note:</span> Staff discounts are 50% for on-duty staff, 30% for off-duty staff, and 0% for no discount orders.
+                <span className="font-medium">Note:</span> Staff discounts are based on configurable discount settings. Default rates are 50% for on-duty staff, 30% for off-duty staff, and 0% for no discount orders.
               </div>
             </div>
           )}
@@ -635,9 +695,14 @@ export function StaffReports() {
                         <h3 className="font-medium text-gray-900">{order.staff_member_name}</h3>
                         <p className="text-sm text-gray-500">{formatDateTime(order.created_at)}</p>
                       </div>
-                      <span className={`px-2 py-1 text-xs rounded-full ${getDiscountInfo(order).badgeClass}`}>
-                        {getDiscountInfo(order).label}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className={`px-2 py-1 text-xs rounded-full ${getDiscountInfo(order).badgeClass} mb-1`}>
+                          {getDiscountInfo(order).label}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {getDiscountInfo(order).percentage}
+                        </span>
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
@@ -674,7 +739,7 @@ export function StaffReports() {
                       Staff Member
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Duty Status
+                      Discount Applied
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Pre-Discount
@@ -709,9 +774,14 @@ export function StaffReports() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getDiscountInfo(order).badgeClass}`}>
-                            {getDiscountInfo(order).label}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getDiscountInfo(order).badgeClass} mb-1`}>
+                              {getDiscountInfo(order).label}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {getDiscountInfo(order).percentage} discount
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">

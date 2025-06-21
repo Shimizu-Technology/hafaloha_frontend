@@ -2,7 +2,7 @@
 
 import { useState, lazy, Suspense, useEffect } from 'react';
 import { useRestaurantStore } from '../../../shared/store/restaurantStore';
-import { Store, Users, CreditCard, Book, Lock, Bell, MapPin, CalendarClock } from 'lucide-react';
+import { Store, Users, CreditCard, Book, Lock, Bell, MapPin, CalendarClock, Percent } from 'lucide-react';
 
 // Lazy load the settings components to improve performance
 const RestaurantSettings = lazy(() => import('./settings/RestaurantSettings').then(module => ({ default: module.RestaurantSettings })));
@@ -14,6 +14,7 @@ const VipModeToggle = lazy(() => import('./settings/VipModeToggle').then(module 
 const VipCodesManager = lazy(() => import('./settings/VipCodesManager').then(module => ({ default: module.VipCodesManager })));
 const LocationManager = lazy(() => import('./settings/LocationManager').then(module => ({ default: module.LocationManager })));
 const ReservationSettings = lazy(() => import('./settings/ReservationSettings').then(module => ({ default: module.ReservationSettings })));
+const StaffDiscountSettings = lazy(() => import('./settings/StaffDiscountSettings'));
 
 // Wrapper component for ReservationSettings that properly handles hooks
 const ReservationSettingsWrapper = () => {
@@ -42,7 +43,7 @@ const ReservationSettingsWrapper = () => {
   );
 };
 
-type SettingsTab = 'restaurant' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access' | 'locations' | 'reservations';
+type SettingsTab = 'restaurant' | 'menus' | 'users' | 'payments' | 'notifications' | 'vip-access' | 'locations' | 'reservations' | 'staff-discounts';
 
 interface SettingsManagerProps {
   restaurantId?: string;
@@ -51,7 +52,7 @@ interface SettingsManagerProps {
 export function SettingsManager({ restaurantId }: SettingsManagerProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => {
     const stored = localStorage.getItem('adminSettingsTab');
-    if (stored && ['restaurant', 'menus', 'users', 'payments', 'notifications', 'vip-access'].includes(stored)) {
+    if (stored && ['restaurant', 'menus', 'users', 'payments', 'notifications', 'vip-access', 'locations', 'reservations', 'staff-discounts'].includes(stored)) {
       return stored as SettingsTab;
     }
     return 'restaurant';
@@ -71,6 +72,7 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
     { id: 'vip-access', label: 'VIP Access', icon: Lock },
     { id: 'locations', label: 'Locations', icon: MapPin },
     { id: 'reservations', label: 'Reservations', icon: CalendarClock },
+    { id: 'staff-discounts', label: 'Staff Discounts', icon: Percent },
   ];
 
   // Render a placeholder while the tab content is loading
@@ -126,6 +128,12 @@ export function SettingsManager({ restaurantId }: SettingsManagerProps) {
         return (
           <div>
             <ReservationSettingsWrapper />
+          </div>
+        );
+      case 'staff-discounts':
+        return (
+          <div>
+            <StaffDiscountSettings />
           </div>
         );
       default:
