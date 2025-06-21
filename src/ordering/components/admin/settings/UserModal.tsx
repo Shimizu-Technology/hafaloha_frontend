@@ -93,7 +93,11 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
         }
         
         await api.post('/admin/users', payload);
-        toastUtils.success('User created!');
+        if (createPassword.trim()) {
+          toastUtils.success(`User created! They can log in immediately with the password you set.`);
+        } else {
+          toastUtils.success(`User created! An invite email has been sent to ${email} to set their password.`);
+        }
         onClose(true);
       } else if (user) {
         // PATCH /admin/users/:id
@@ -336,9 +340,17 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
                   )}
                 </button>
               </div>
-              <p className="mt-1 text-sm text-gray-500">
-                If no password is set, an invite email will be sent to the user to set their password.
-              </p>
+              <div className="mt-1 text-sm text-gray-600">
+                {createPassword.trim() ? (
+                  <span className="text-green-600">
+                    ✓ User will be able to log in immediately with this password
+                  </span>
+                ) : (
+                  <span className="text-amber-600">
+                    ⚠ User will receive an invite email to set their own password
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
