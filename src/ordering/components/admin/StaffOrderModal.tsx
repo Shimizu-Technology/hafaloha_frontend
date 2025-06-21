@@ -1677,30 +1677,28 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       const defaultConfig = discountConfigurations.find(config => config.is_default);
       if (defaultConfig) {
         setDiscountConfigurationId(defaultConfig.id);
-        // Map to the legacy discount type for backward compatibility
+        // Only map to legacy discount type if the config has a matching legacy code
         if (defaultConfig.code === 'on_duty') {
           setDiscountType('on_duty');
         } else if (defaultConfig.code === 'off_duty') {
           setDiscountType('off_duty');
         } else if (defaultConfig.code === 'no_discount') {
           setDiscountType('no_discount');
-        } else {
-          // For custom configurations, we'll use 'off_duty' as fallback for legacy compatibility
-          setDiscountType('off_duty');
         }
+        // For custom configurations, don't set a legacy discountType
       } else {
         // If no default is set, use the first configuration
         const firstConfig = discountConfigurations[0];
         setDiscountConfigurationId(firstConfig.id);
+        // Only map to legacy discount type if the config has a matching legacy code
         if (firstConfig.code === 'on_duty') {
           setDiscountType('on_duty');
         } else if (firstConfig.code === 'off_duty') {
           setDiscountType('off_duty');
         } else if (firstConfig.code === 'no_discount') {
           setDiscountType('no_discount');
-        } else {
-          setDiscountType('off_duty');
         }
+        // For custom configurations, don't set a legacy discountType
       }
     }
   }, [isStaffOrder, discountConfigurations, discountConfigurationId]);
@@ -1721,10 +1719,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           setDiscountType('off_duty');
         } else if (defaultConfig.code === 'no_discount') {
           setDiscountType('no_discount');
-        } else {
-          // For custom configurations, we'll use 'off_duty' as fallback for legacy compatibility
-          setDiscountType('off_duty');
         }
+        // For custom configurations, don't set a legacy discountType
       } else if (configs.length > 0) {
         // If no default is set, use the first configuration
         const firstConfig = configs[0];
@@ -1735,9 +1731,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           setDiscountType('off_duty');
         } else if (firstConfig.code === 'no_discount') {
           setDiscountType('no_discount');
-        } else {
-          setDiscountType('off_duty');
         }
+        // For custom configurations, don't set a legacy discountType
       }
     } catch (error) {
       console.error('Error fetching discount configurations:', error);
@@ -2178,15 +2173,19 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       const staffOrderParams = isStaffOrder ? {
         is_staff_order: true,
         staff_member_id: staffMemberId,
-        staff_on_duty: discountType === 'on_duty',
-        discount_type: discountType,
-        // Add explicit boolean for no discount to make backend processing clearer
-        no_discount: discountType === 'no_discount',
         use_house_account: useHouseAccount,
         created_by_staff_id: finalCreatedByStaffId,
         created_by_user_id: createdByUserId,
         pre_discount_total: preDiscountTotal,
+        // If we have a custom discount configuration, use that and omit legacy fields
+        ...(discountConfigurationId ? {
         staff_discount_configuration_id: discountConfigurationId
+        } : {
+          // Only use legacy fields when no custom configuration is selected
+          staff_on_duty: discountType === 'on_duty',
+          discount_type: discountType,
+          no_discount: discountType === 'no_discount'
+        })
       } : {
         created_by_staff_id: finalCreatedByStaffId, // Track creator even for customer orders
         created_by_user_id: createdByUserId // Always track the user who created the order

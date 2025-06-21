@@ -4,6 +4,7 @@ import Select, { StylesConfig, components } from 'react-select';
 interface Option {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 interface MobileSelectProps {
@@ -27,7 +28,7 @@ export function MobileSelect({
   const selectedOption = options.find(option => option.value === value);
   
   // Custom styles for react-select
-  const customStyles: StylesConfig = {
+  const customStyles: StylesConfig<Option, false> = {
     control: (provided, state) => ({
       ...provided,
       borderColor: state.isFocused ? '#c1902f' : '#e5e7eb',
@@ -40,7 +41,14 @@ export function MobileSelect({
       fontSize: '16px', // Prevent iOS zoom
       minHeight: '44px', // Better touch target for mobile
       '@media (min-width: 768px)': {
-        minHeight: '48px', // Slightly larger touch target for iPad
+        minHeight: '52px', // Larger touch target for iPad
+        padding: '6px 12px',
+        fontSize: '17px',
+      },
+      '@media (min-width: 1024px)': {
+        minHeight: '48px', // Standard size for desktop
+        padding: '4px 8px',
+        fontSize: '16px',
       },
       borderRadius: '6px',
       transition: 'all 0.2s ease',
@@ -67,22 +75,24 @@ export function MobileSelect({
     option: (provided, state) => ({
       ...provided,
       backgroundColor: state.isSelected ? '#c1902f' : state.isFocused ? 'rgba(193, 144, 47, 0.1)' : 'white',
-      color: state.isSelected ? 'white' : '#111827',
+      color: state.isSelected ? 'white' : state.isDisabled ? '#9ca3af' : '#111827',
       padding: '12px 16px',
-      cursor: 'pointer',
+      cursor: state.isDisabled ? 'not-allowed' : 'pointer',
       fontSize: '16px',
       fontWeight: state.isSelected ? '500' : '400',
       transition: 'background-color 0.15s ease',
       '&:active': {
-        backgroundColor: state.isSelected ? '#c1902f' : 'rgba(193, 144, 47, 0.2)',
+        backgroundColor: state.isDisabled ? 'white' : state.isSelected ? '#c1902f' : 'rgba(193, 144, 47, 0.2)',
       },
       borderBottom: '1px solid #f3f4f6',
       '&:last-child': {
         borderBottom: 'none',
       },
       '@media (min-width: 768px)': {
-        padding: '14px 16px', // Slightly larger padding for iPad
+        padding: '16px 20px', // Larger padding for iPad
+        fontSize: '17px', // Slightly larger text for iPad
       },
+      opacity: state.isDisabled ? 0.6 : 1,
     }),
     singleValue: (provided) => ({
       ...provided,
@@ -177,6 +187,7 @@ export function MobileSelect({
         menuPlacement="auto"
         classNamePrefix="mobile-select"
         closeMenuOnScroll={false}
+        isOptionDisabled={(option: Option) => option.disabled || false}
       />
     </div>
   );

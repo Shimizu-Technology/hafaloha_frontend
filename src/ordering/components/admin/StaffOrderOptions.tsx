@@ -147,20 +147,48 @@ export function StaffOrderOptions({
               Staff Member
             </label>
             <MobileSelect
-              options={Array.isArray(staffMembers) && staffMembers.length > 0 
-                ? staffMembers.map(staff => ({
+              options={(() => {
+                // If we're loading, show a loading option that's disabled
+                if (loading) {
+                  return [{ value: '', label: 'Loading staff members...', disabled: true }];
+                }
+                
+                // If there's an error, show the error
+                if (error) {
+                  return [{ value: '', label: `Error: ${error}`, disabled: true }];
+                }
+                
+                // If we have staff members, create the proper options with a "select" option
+                if (Array.isArray(staffMembers) && staffMembers.length > 0) {
+                  return [
+                    { value: '', label: 'Select Staff Member' },
+                    ...staffMembers.map(staff => ({
                     value: staff.id.toString(),
                     label: `${staff.name} - ${staff.position}`
                   }))
-                : [{ value: '', label: 'No staff members available' }]
+                  ];
               }
+                
+                // Only show "No staff members available" when we've finished loading and truly have none
+                return [{ value: '', label: 'No staff members available', disabled: true }];
+              })()}
               value={staffMemberId ? staffMemberId.toString() : ''}
-              onChange={(value) => setStaffMemberId(value ? parseInt(value) : null)}
+              onChange={(value) => {
+                // Don't allow selection of empty/disabled options
+                if (value && value !== '') {
+                  setStaffMemberId(parseInt(value));
+                } else {
+                  setStaffMemberId(null);
+                }
+              }}
               placeholder="Select Staff Member"
               className="text-xs"
             />
-            {loading && <p className="text-xs text-gray-500 mt-1">Loading...</p>}
+            {loading && <p className="text-xs text-gray-500 mt-1">Loading staff members...</p>}
             {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+            {!loading && !error && Array.isArray(staffMembers) && staffMembers.length === 0 && (
+              <p className="text-xs text-gray-500 mt-1">No active staff members found.</p>
+            )}
           </div>
 
           {/* Discount Type Selection */}
@@ -189,17 +217,17 @@ export function StaffOrderOptions({
                   const config = discountConfigurations.find(c => c.id === configId);
                   if (config && setDiscountConfigurationId) {
                     setDiscountConfigurationId(configId);
-                    // Update legacy discount type for backward compatibility
+                    // Only update legacy discount type if the config has a matching legacy code
+                    // This prevents custom configurations from being mapped to incorrect legacy types
                     if (config.code === 'on_duty') {
                       setDiscountType('on_duty');
                     } else if (config.code === 'off_duty') {
                       setDiscountType('off_duty');
                     } else if (config.code === 'no_discount') {
                       setDiscountType('no_discount');
-                    } else {
-                      // For custom configurations, use a fallback
-                      setDiscountType('off_duty');
                     }
+                    // For custom configurations (testing, etc.), don't set a legacy discountType
+                    // The backend will use the staff_discount_configuration_id instead
                   }
                 } else {
                   // Fallback to legacy system
@@ -215,32 +243,106 @@ export function StaffOrderOptions({
             {discountConfigsLoading && <p className="text-xs text-gray-500 mt-1">Loading discount options...</p>}
           </div>
 
-          {/* Use House Account */}
-          <div className="flex items-center mb-2">
-            <input
-              id="use-house-account"
-              type="checkbox"
-              checked={useHouseAccount}
-              onChange={(e) => setUseHouseAccount(e.target.checked)}
-              disabled={!canUseHouseAccount}
-              className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
-            />
-            <label 
-              htmlFor="use-house-account" 
-              className={`ml-1 text-xs font-medium ${canUseHouseAccount ? 'text-gray-900' : 'text-gray-400'}`}
-            >
-              Use House Account
+          {/* Use House Account - Clean and Cohesive Design */}
+          <div className="mb-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Payment Method
             </label>
-          </div>
-
-          {selectedStaffMember && (
-            <div className="text-xs text-gray-600 mb-2">
-              Balance: ${selectedStaffMember.house_account_balance.toFixed(2)}
-              {selectedStaffMember.house_account_balance > 0 && (
-                <span className="text-yellow-600"> (deducted on payday)</span>
-              )}
+            <div className={`
+              relative border rounded-md p-3 transition-all duration-200 cursor-pointer
+              ${useHouseAccount 
+                ? 'border-[#c1902f] bg-[#c1902f]/5' 
+                : canUseHouseAccount 
+                  ? 'border-gray-200 bg-white hover:border-gray-300' 
+                  : 'border-gray-200 bg-gray-50 cursor-not-allowed'
+              }
+            `}>
+              <div 
+                className="flex items-center"
+                onClick={() => {
+                  if (canUseHouseAccount) {
+                    setUseHouseAccount(!useHouseAccount);
+                  }
+                }}
+              >
+                {/* Custom styled checkbox matching other form elements */}
+                <div className={`
+                  relative w-4 h-4 rounded border flex items-center justify-center transition-all duration-200
+                  ${useHouseAccount 
+                    ? 'bg-[#c1902f] border-[#c1902f]' 
+                    : canUseHouseAccount 
+                      ? 'bg-white border-gray-300 hover:border-gray-400' 
+                      : 'bg-gray-100 border-gray-200'
+                  }
+                `}>
+                  {useHouseAccount && (
+                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                
+                <div className="ml-2 flex-1">
+                  <div className={`
+                    text-xs font-medium transition-colors duration-200
+                    ${canUseHouseAccount ? 'text-gray-900' : 'text-gray-400'}
+                  `}>
+                    Use House Account
+                  </div>
+                  <div className={`
+                    text-xs mt-0.5 transition-colors duration-200
+                    ${canUseHouseAccount ? 'text-gray-600' : 'text-gray-400'}
+                  `}>
+                    {canUseHouseAccount 
+                      ? 'Charge to employee account'
+                      : 'Select a staff member to enable'
+                    }
+                  </div>
+                </div>
+                
+                {/* Subtle house account icon */}
+                {canUseHouseAccount && (
+                  <div className={`
+                    ml-2 transition-all duration-200
+                    ${useHouseAccount ? 'text-[#c1902f]' : 'text-gray-400'}
+                  `}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              
+              {/* Hidden native checkbox for form submission */}
+              <input
+                id="use-house-account"
+                type="checkbox"
+                checked={useHouseAccount}
+                onChange={(e) => setUseHouseAccount(e.target.checked)}
+                disabled={!canUseHouseAccount}
+                className="sr-only"
+              />
             </div>
-          )}
+            
+            {/* Subtle balance info - only when house account is selected */}
+            {selectedStaffMember && useHouseAccount && (
+              <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded px-2 py-1">
+                <span className="font-medium">{selectedStaffMember.name}</span> balance: 
+                <span className={`ml-1 font-medium ${
+                  selectedStaffMember.house_account_balance > 0 
+                    ? 'text-amber-600' 
+                    : selectedStaffMember.house_account_balance < 0 
+                      ? 'text-green-600' 
+                      : 'text-gray-600'
+                }`}>
+                  ${Math.abs(selectedStaffMember.house_account_balance).toFixed(2)}
+                </span>
+                {selectedStaffMember.house_account_balance > 0 && (
+                  <span className="text-gray-500"> (deducted on payday)</span>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Created By Staff */}
           <div className="mb-1">
