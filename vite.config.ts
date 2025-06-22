@@ -48,15 +48,8 @@ export default defineConfig(({ mode }) => {
               './src/ordering/components/admin/SettingsManager.tsx'
             ],
             
-            // Shared chunks
-            'shared-auth': [
-              './src/shared/auth',
-              './src/shared/components/auth'
-            ],
-            'shared-api': [
-              './src/shared/api',
-              './src/ordering/lib/api.ts'
-            ]
+            // Keep shared chunks minimal to avoid circular dependencies
+            // Removed shared-api and shared-auth chunks to fix circular dependency issues
           }
         }
       },
