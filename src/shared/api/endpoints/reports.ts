@@ -10,6 +10,7 @@ export interface MenuItemReport {
   quantity_sold: number;
   revenue: number;
   average_price: number;
+  customizations?: Record<string, any>;
 }
 
 export interface CategoryReport {

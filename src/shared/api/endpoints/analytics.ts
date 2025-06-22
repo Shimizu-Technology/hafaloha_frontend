@@ -6,6 +6,7 @@ import { api } from '../apiClient';
 export interface CustomerOrderItem {
   name: string;
   quantity: number;
+  customizations?: Record<string, any>; // More flexible to handle different data structures
 }
 
 export interface CustomerOrderReport {
@@ -14,10 +15,25 @@ export interface CustomerOrderReport {
   total_spent: number;
   order_count: number;
   items: CustomerOrderItem[];
+  order_type?: 'customer' | 'guest' | 'staff';
+  created_by_user_id?: number | null;
+  staff_order_details?: {
+    total_orders_for_staff: number;
+    average_order_value: number;
+    employee_name?: string;
+    employee_email?: string;
+  };
 }
 
 export interface CustomerOrdersResponse {
   results: CustomerOrderReport[];
+  customer_orders: CustomerOrderReport[];
+  guest_orders: CustomerOrderReport[];
+  staff_orders: CustomerOrderReport[];
+  start_date: string;
+  end_date: string;
+  restaurant_id: number;
+  restaurant_name: string;
 }
 
 export interface RevenueTrendItem {
@@ -71,8 +87,19 @@ export interface UserActivityHeatmapResponse {
 /**
  * Get customer orders report
  */
-export const getCustomerOrdersReport = async (startDate: string, endDate: string): Promise<CustomerOrdersResponse> => {
-  return api.get<CustomerOrdersResponse>('/admin/analytics/customer_orders', { start: startDate, end: endDate });
+export const getCustomerOrdersReport = async (
+  startDate: string, 
+  endDate: string,
+  staffMemberId?: string | null
+): Promise<CustomerOrdersResponse> => {
+  const params: Record<string, string> = { start: startDate, end: endDate };
+  
+  // Add staff member filter if provided
+  if (staffMemberId && staffMemberId !== 'all') {
+    params.staff_member_id = staffMemberId;
+  }
+  
+  return api.get<CustomerOrdersResponse>('/admin/analytics/customer_orders', params);
 };
 
 /**
@@ -108,4 +135,11 @@ export const getUserSignups = async (startDate: string, endDate: string): Promis
  */
 export const getUserActivityHeatmap = async (startDate: string, endDate: string): Promise<UserActivityHeatmapResponse> => {
   return api.get<UserActivityHeatmapResponse>('/admin/analytics/user_activity_heatmap', { start: startDate, end: endDate });
+};
+
+/**
+ * Get staff users for filtering (users who have created staff orders)
+ */
+export const getStaffUsers = async (): Promise<{ staff_users: Array<{ id: number; name: string; email: string; role: string; }> }> => {
+  return api.get('/admin/analytics/staff_users');
 };
