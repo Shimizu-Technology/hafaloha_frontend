@@ -1,13 +1,15 @@
 // Service Worker for Hafaloha Web App
 // Handles push notifications and offline functionality
 
-const CACHE_NAME = 'hafaloha-cache-v1';
+const CACHE_NAME = 'hafaloha-cache-v2';
+const ADMIN_CACHE_NAME = 'hafaloha-admin-cache-v1';
+const API_CACHE_NAME = 'hafaloha-api-cache-v1';
 const OFFLINE_URL = '/offline.html';
-const VERSION = '1.0.1'; // Increment this when you update the service worker
+const VERSION = '1.1.0'; // Increment this when you update the service worker
 
 console.log(`[Service Worker] Initializing service worker version ${VERSION}`);
 
-// Files to cache for offline use
+// Core app files to cache for offline use
 const urlsToCache = [
   '/',
   '/index.html',
@@ -15,6 +17,12 @@ const urlsToCache = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/badge-96.png'
+];
+
+// Admin-specific assets to cache (will be cached on first visit to admin)
+const adminUrlsToCache = [
+  '/admin',
+  // Note: Admin JS chunks will be cached automatically when loaded
 ];
 
 // Install event - cache assets for offline use
@@ -26,13 +34,28 @@ self.addEventListener('install', event => {
   console.log('[Service Worker] Skip waiting called');
   
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('[Service Worker] Caching app shell');
-        return cache.addAll(urlsToCache);
-      })
+    Promise.all([
+      // Cache core app assets
+      caches.open(CACHE_NAME)
+        .then(cache => {
+          console.log('[Service Worker] Caching app shell');
+          return cache.addAll(urlsToCache);
+        }),
+      // Prepare admin cache (empty for now, will be populated on demand)
+      caches.open(ADMIN_CACHE_NAME)
+        .then(cache => {
+          console.log('[Service Worker] Admin cache ready');
+          return Promise.resolve();
+        }),
+      // Prepare API cache
+      caches.open(API_CACHE_NAME)
+        .then(cache => {
+          console.log('[Service Worker] API cache ready');
+          return Promise.resolve();
+        })
+    ])
       .then(() => {
-        console.log('[Service Worker] App shell cached successfully');
+        console.log('[Service Worker] All caches initialized successfully');
       })
       .catch(error => {
         console.error('[Service Worker] Cache install error:', error);
@@ -59,7 +82,10 @@ self.addEventListener('activate', event => {
       console.log('[Service Worker] Found caches:', cacheNames);
       return Promise.all(
         cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
+          // Keep current version caches
+          if (cacheName !== CACHE_NAME && 
+              cacheName !== ADMIN_CACHE_NAME && 
+              cacheName !== API_CACHE_NAME) {
             console.log('[Service Worker] Removing old cache:', cacheName);
             return caches.delete(cacheName);
           }
@@ -80,6 +106,33 @@ self.addEventListener('activate', event => {
   console.log('[Service Worker] Ready to handle push events');
 });
 
+// Helper function to determine cache strategy based on request
+function getCacheStrategy(request) {
+  const url = new URL(request.url);
+  
+  // Admin routes - cache admin chunks aggressively
+  if (url.pathname.startsWith('/admin') || 
+      url.pathname.includes('admin-') ||
+      url.pathname.includes('Admin')) {
+    return { cacheName: ADMIN_CACHE_NAME, strategy: 'cache-first' };
+  }
+  
+  // API routes - use network-first with short cache
+  if (url.pathname.startsWith('/api/')) {
+    return { cacheName: API_CACHE_NAME, strategy: 'network-first' };
+  }
+  
+  // Static assets - cache-first
+  if (request.destination === 'script' || 
+      request.destination === 'style' || 
+      request.destination === 'image') {
+    return { cacheName: CACHE_NAME, strategy: 'cache-first' };
+  }
+  
+  // Default - network-first for HTML
+  return { cacheName: CACHE_NAME, strategy: 'network-first' };
+}
+
 // Fetch event - serve from cache if available, otherwise fetch from network
 self.addEventListener('fetch', event => {
   // Skip cross-origin requests
@@ -87,77 +140,102 @@ self.addEventListener('fetch', event => {
     return;
   }
   
-  // For API requests, use network-first strategy
-  if (event.request.url.includes('/api/')) {
-    return;
-  }
+  const { cacheName, strategy } = getCacheStrategy(event.request);
   
-  // For page navigations, use cache-first strategy
-  if (event.request.mode === 'navigate') {
+  if (strategy === 'cache-first') {
+    // Cache-first strategy (good for static assets)
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          return caches.match(OFFLINE_URL);
-        })
-    );
-    return;
-  }
-  
-  // For other requests, use cache-first strategy with better error handling
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        
-        return fetch(event.request)
-          .then(response => {
-            // Don't cache responses that aren't successful
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
-            
-            // Clone the response since it can only be consumed once
-            const responseToCache = response.clone();
-            
-            // Try to cache but don't fail if caching fails (for incognito mode)
-            try {
-              caches.open(CACHE_NAME)
-                .then(cache => {
+      caches.open(cacheName)
+        .then(cache => {
+          return cache.match(event.request)
+            .then(response => {
+              if (response) {
+                return response;
+              }
+              
+              return fetch(event.request)
+                .then(response => {
+                  // Don't cache responses that aren't successful
+                  if (!response || response.status !== 200 || response.type !== 'basic') {
+                    return response;
+                  }
+                  
+                  // Clone the response since it can only be consumed once
+                  const responseToCache = response.clone();
+                  
+                  // Cache the successful response
                   try {
                     cache.put(event.request, responseToCache);
                   } catch (cacheError) {
-                    console.warn('[Service Worker] Cache put error (likely incognito mode):', cacheError);
+                    console.warn('[Service Worker] Cache put error:', cacheError);
                   }
+                  
+                  return response;
                 })
-                .catch(cacheOpenError => {
-                  console.warn('[Service Worker] Cache open error (likely incognito mode):', cacheOpenError);
+                .catch(error => {
+                  console.error('[Service Worker] Fetch error:', error);
+                  // Return offline page for navigation requests
+                  if (event.request.mode === 'navigate') {
+                    return cache.match(OFFLINE_URL);
+                  }
+                  return new Response(JSON.stringify({ error: 'Network request failed' }), {
+                    status: 503,
+                    headers: { 'Content-Type': 'application/json' }
+                  });
                 });
-            } catch (error) {
-              console.warn('[Service Worker] Caching error (likely incognito mode):', error);
-            }
-            
-            return response;
-          })
-          .catch(error => {
-            console.error('[Service Worker] Fetch error:', error);
-            // Return a proper error response instead of undefined
-            return new Response(JSON.stringify({ error: 'Network request failed' }), {
-              status: 503,
-              headers: { 'Content-Type': 'application/json' }
             });
-          });
-      })
-      .catch(error => {
-        console.error('[Service Worker] Cache match error:', error);
-        // Return a proper error response
-        return new Response(JSON.stringify({ error: 'Service worker error' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      })
-  );
+        })
+    );
+  } else {
+    // Network-first strategy (good for API calls and HTML)
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          // Clone the response for caching
+          const responseToCache = response.clone();
+          
+          // Cache successful responses
+          if (response.status === 200) {
+            caches.open(cacheName)
+              .then(cache => {
+                try {
+                  cache.put(event.request, responseToCache);
+                } catch (cacheError) {
+                  console.warn('[Service Worker] Cache put error:', cacheError);
+                }
+              })
+              .catch(cacheOpenError => {
+                console.warn('[Service Worker] Cache open error:', cacheOpenError);
+              });
+          }
+          
+          return response;
+        })
+        .catch(error => {
+          console.error('[Service Worker] Network fetch failed:', error);
+          // Try to serve from cache
+          return caches.open(cacheName)
+            .then(cache => {
+              return cache.match(event.request)
+                .then(response => {
+                  if (response) {
+                    return response;
+                  }
+                  
+                  // Return offline page for navigation requests
+                  if (event.request.mode === 'navigate') {
+                    return cache.match(OFFLINE_URL);
+                  }
+                  
+                  return new Response(JSON.stringify({ error: 'Service unavailable' }), {
+                    status: 503,
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                });
+            });
+        })
+    );
+  }
 });
 
 // Push event - handle incoming push notifications

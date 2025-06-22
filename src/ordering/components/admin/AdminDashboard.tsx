@@ -1,16 +1,15 @@
 // src/ordering/components/admin/AdminDashboard.tsx
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-// These components are used in the JSX but TypeScript doesn't detect it
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { MenuManager } from './MenuManager';
-import { OrderManager } from './OrderManager';
-import { PromoManager } from './PromoManager';
-import { AnalyticsManager } from './AnalyticsManager';
-import { SettingsManager } from './SettingsManager';
-import MerchandiseManager from './MerchandiseManager';
-import { StaffManagement } from './StaffManagement';
-import { ReservationsManager } from './reservations/ReservationsManager';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+// Lazy load heavy admin components
+const MenuManager = lazy(() => import('./MenuManager').then(module => ({ default: module.MenuManager })));
+const OrderManager = lazy(() => import('./OrderManager').then(module => ({ default: module.OrderManager })));
+const PromoManager = lazy(() => import('./PromoManager').then(module => ({ default: module.PromoManager })));
+const AnalyticsManager = lazy(() => import('./AnalyticsManager').then(module => ({ default: module.AnalyticsManager })));
+const SettingsManager = lazy(() => import('./SettingsManager').then(module => ({ default: module.SettingsManager })));
+const MerchandiseManager = lazy(() => import('./MerchandiseManager'));
+const StaffManagement = lazy(() => import('./StaffManagement').then(module => ({ default: module.StaffManagement })));
+const ReservationsManager = lazy(() => import('./reservations/ReservationsManager').then(module => ({ default: module.ReservationsManager })));
 // RestaurantSelector removed - super admins now only see data for the current restaurant
 import NotificationContainer from '../../../shared/components/notifications/NotificationContainer';
 /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -52,6 +51,28 @@ import { useMenuStore } from '../../store/menuStore';
 import { useOrderStore } from '../../store/orderStore';
 import { calculateAvailableQuantity } from '../../utils/inventoryUtils';
 import useWebSocket from '../../../shared/hooks/useWebSocket';
+import { startAdminComponentLoad, endAdminComponentLoad, trackAdminTabSwitch, printAdminPerformanceSummary } from '../../utils/adminPerformance';
+
+// Tab loading placeholder component
+function TabLoadingPlaceholder() {
+  return (
+    <div className="p-6 space-y-6 animate-pulse">
+      <div className="flex justify-between items-center">
+        <div className="h-8 bg-gray-200 rounded w-64"></div>
+        <div className="h-10 bg-gray-200 rounded w-32"></div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="bg-white rounded-lg shadow p-4 space-y-3">
+            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            <div className="h-8 bg-gray-200 rounded"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise' | 'staff' | 'reservations';
 
@@ -123,6 +144,9 @@ export function AdminDashboard() {
   });
 
   function handleTabClick(id: Tab) {
+    // Track tab switch for performance monitoring
+    trackAdminTabSwitch(activeTab, id);
+    
     // If switching to orders tab, reset the selectedOrderId to prevent auto-opening the modal
     if (id === 'orders') {
       setSelectedOrderId(null);
@@ -1328,48 +1352,64 @@ useEffect(() => {
           {/* Tab content */}
           <div className="p-4 relative overflow-hidden">
             <div className={`transition-opacity duration-300 ${activeTab === 'analytics' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-              {activeTab === 'analytics' && <AnalyticsManager restaurantId={currentRestaurantId} />}
+              {activeTab === 'analytics' && <Suspense fallback={<TabLoadingPlaceholder />}>
+                <AnalyticsManager restaurantId={currentRestaurantId} />
+              </Suspense>}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'orders' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
               {activeTab === 'orders' && (
-                <OrderManager
-                  selectedOrderId={selectedOrderId}
-                  setSelectedOrderId={setSelectedOrderId}
-                  restaurantId={currentRestaurantId}
-                />
+                <Suspense fallback={<TabLoadingPlaceholder />}>
+                  <OrderManager
+                    selectedOrderId={selectedOrderId}
+                    setSelectedOrderId={setSelectedOrderId}
+                    restaurantId={currentRestaurantId}
+                  />
+                </Suspense>
               )}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'menu' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
               {activeTab === 'menu' && (
-                <MenuManager 
-                  restaurantId={currentRestaurantId} 
-                  selectedMenuItemId={selectedMenuItemId}
-                  openInventoryForItem={openInventoryForItem}
-                  onInventoryModalClose={() => setOpenInventoryForItem(null)}
-                />
+                <Suspense fallback={<TabLoadingPlaceholder />}>
+                  <MenuManager 
+                    restaurantId={currentRestaurantId} 
+                    selectedMenuItemId={selectedMenuItemId}
+                    openInventoryForItem={openInventoryForItem}
+                    onInventoryModalClose={() => setOpenInventoryForItem(null)}
+                  />
+                </Suspense>
               )}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'reservations' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-              {activeTab === 'reservations' && <ReservationsManager />}
+              {activeTab === 'reservations' && <Suspense fallback={<TabLoadingPlaceholder />}>
+                <ReservationsManager />
+              </Suspense>}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'promos' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-              {activeTab === 'promos' && <PromoManager restaurantId={currentRestaurantId} />}
+              {activeTab === 'promos' && <Suspense fallback={<TabLoadingPlaceholder />}>
+                <PromoManager restaurantId={currentRestaurantId} />
+              </Suspense>}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'merchandise' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-              {activeTab === 'merchandise' && <MerchandiseManager />}
+              {activeTab === 'merchandise' && <Suspense fallback={<TabLoadingPlaceholder />}>
+                <MerchandiseManager />
+              </Suspense>}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'staff' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-              {activeTab === 'staff' && <StaffManagement />}
+              {activeTab === 'staff' && <Suspense fallback={<TabLoadingPlaceholder />}>
+                <StaffManagement />
+              </Suspense>}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-              {activeTab === 'settings' && <SettingsManager restaurantId={currentRestaurantId} />}
+              {activeTab === 'settings' && <Suspense fallback={<TabLoadingPlaceholder />}>
+                <SettingsManager restaurantId={currentRestaurantId} />
+              </Suspense>}
             </div>
           </div>
         </div>

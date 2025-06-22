@@ -1,6 +1,6 @@
 // src/ordering/OnlineOrderingApp.tsx
 
-import React, { useEffect, Suspense, useState } from 'react';
+import React, { useEffect, Suspense, useState, lazy } from 'react';
 import { Routes, Route, Navigate, Outlet, Link } from 'react-router-dom';
 
 import { Hero } from './components/Hero';
@@ -9,7 +9,8 @@ import { CartPage } from './components/CartPage';
 import { CheckoutPage } from './components/CheckoutPage';
 import { OrderConfirmation } from './components/OrderConfirmation';
 import MerchandisePage from './components/MerchandisePage';
-import AdminDashboard from './components/admin/AdminDashboard';
+// Lazy load AdminDashboard to reduce initial bundle size
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
 import { LoadingSpinner } from '../shared/components/ui';
 import { LoginForm, SignUpForm, ForgotPasswordForm, ResetPasswordForm, VerifyPhonePage } from '../shared/components/auth';
 import { OrderHistory } from './components/profile/OrderHistory';
@@ -28,6 +29,19 @@ import { validateRestaurantContext } from '../shared/utils/tenantUtils';
 import type { MenuItem, MenuItemFilterParams } from './types/menu';
 
 import { ProtectedRoute, AnonymousRoute, PhoneVerificationRoute } from '../shared';
+
+// Enhanced loading component for admin
+function AdminLoadingSpinner() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <LoadingSpinner />
+        <p className="mt-4 text-gray-600 font-medium">Loading Admin Dashboard...</p>
+        <p className="mt-2 text-sm text-gray-500">This may take a moment on first load</p>
+      </div>
+    </div>
+  );
+}
 
 function OrderingLayout() {
   const loadingCount = useLoadingStore((state) => state.loadingCount);
@@ -330,7 +344,9 @@ export default function OnlineOrderingApp() {
           path="admin"
           element={
             <ProtectedRoute adminOnly>
-              <AdminDashboard />
+              <Suspense fallback={<AdminLoadingSpinner />}>
+                <AdminDashboard />
+              </Suspense>
             </ProtectedRoute>
           }
         />

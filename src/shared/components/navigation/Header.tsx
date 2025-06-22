@@ -16,6 +16,7 @@ import { useAuthStore } from '../../auth';
 import toastUtils from '../../utils/toastUtils';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatPhoneNumber } from '../../utils/formatters';
+import { useLoadingStore } from '../../store/loadingStore';
 
 // Create a custom hook to safely use the order store
 function useCartItems() {
@@ -67,6 +68,15 @@ function useCartItems() {
   
   return cartItems;
 }
+
+// Preload admin components for better performance
+const preloadAdminDashboard = () => {
+  import('../../../ordering/components/admin/AdminDashboard');
+};
+
+const preloadOrderManager = () => {
+  import('../../../ordering/components/admin/OrderManager');
+};
 
 export function Header() {
   const { user, logout: signOut } = useAuth();
@@ -296,6 +306,13 @@ export function Header() {
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#c1902f]
                                    transition-colors duration-150"
                           onClick={() => setIsDropdownOpen(false)}
+                          onMouseEnter={() => {
+                            // Preload admin components on hover for better UX
+                            preloadAdminDashboard();
+                            if (isStaffOnly) {
+                              preloadOrderManager();
+                            }
+                          }}
                         >
                           {isStaffOnly ? 'Order Management' : 'Admin Dashboard'}
                         </Link>
@@ -509,6 +526,13 @@ export function Header() {
                       className="block px-3 py-2 rounded-md text-base font-medium text-gray-700
                                hover:text-[#c1902f] hover:bg-gray-50 transition-colors duration-150"
                       onClick={() => setIsMobileMenuOpen(false)}
+                      onTouchStart={() => {
+                        // Preload admin components on touch for mobile
+                        preloadAdminDashboard();
+                        if (isStaffOnly) {
+                          preloadOrderManager();
+                        }
+                      }}
                     >
                       {isStaffOnly ? 'Order Management' : 'Admin Dashboard'}
                     </Link>
