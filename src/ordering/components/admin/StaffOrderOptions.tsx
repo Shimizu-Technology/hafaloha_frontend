@@ -65,7 +65,7 @@ export function StaffOrderOptions({
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get('/staff_members?active=true');
+      const response = await apiClient.get('/staff_members?active=true&per_page=1000');
       // Ensure response.data is an array
       if (Array.isArray(response.data)) {
         setStaffMembers(response.data);
