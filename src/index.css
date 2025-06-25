@@ -62,13 +62,13 @@
   --transition-standard: all 0.2s ease;
 }
 
-/* Fix for 100vh on mobile browsers */
+/* optimize 100vh for ios */
 .full-height {
   height: 100vh;
   height: calc(var(--vh, 1vh) * 100);
 }
 
-/* Responsive container */
+/* responsive container */
 .responsive-container {
   width: 100%;
   margin-left: auto;
@@ -77,7 +77,7 @@
   padding-right: 1rem;
 }
 
-/* Desktop styles */
+/* desktop styles */
 @media (min-width: 1024px) {
   .responsive-container {
     max-width: 1280px;
@@ -85,7 +85,7 @@
     padding-right: 2rem;
   }
   
-  /* Desktop-specific scrollbar styling */
+  /* desktop-specific scrollbar styling */
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -105,20 +105,8 @@
     background: rgba(0, 0, 0, 0.3);
   }
   
-  /* Hover effects - only on devices with hover capability */
-  @media (hover: hover) {
-    .hover-card {
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    
-    .hover-card:hover {
-      transform: translateY(-4px);
-      box-shadow: var(--shadow-lg);
-    }
-  }
-}
 
-/* Tablet styles */
+/* tablet styles */
 @media (min-width: 768px) and (max-width: 1023px) {
   .responsive-container {
     padding-left: 1.5rem;
@@ -126,7 +114,7 @@
   }
 }
 
-/* Mobile styles */
+/* mobile styles */
 @media (max-width: 767px) {
   /* Improve touch targets */
   button, a, input[type="button"], input[type="submit"], [role="button"] {
@@ -180,7 +168,7 @@
 }
 
 @media (min-width: 481px) and (max-width: 768px) {
-  /* Tablets and iPad mini */
+  /* Tablets */
   .scrollable-toast-container > div > div {
     width: 90% !important;
     max-width: 400px !important;
