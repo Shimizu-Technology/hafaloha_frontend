@@ -93,7 +93,7 @@ function StaffManagementContent() {
   const [advancedFilters, setAdvancedFilters] = useState({
     sortBy: 'name' as 'name' | 'balance' | 'recent_activity',
     sortOrder: 'asc' as 'asc' | 'desc',
-    activityFilter: 'all' as 'all' | 'active' | 'inactive',
+    activityFilter: 'active' as 'all' | 'active' | 'inactive',
     balanceRange: 'all' as 'all' | 'under_10' | '10_to_50' | 'over_50'
   });
   
@@ -526,7 +526,7 @@ function StaffManagementContent() {
     setAdvancedFilters({
       sortBy: 'name',
       sortOrder: 'asc',
-      activityFilter: 'all',
+      activityFilter: 'active',
       balanceRange: 'all'
     });
   };
@@ -1244,7 +1244,9 @@ function StaffManagementContent() {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get('/staff_members');
+      // Request all staff members by setting a high per_page value
+      // This ensures we get all staff members, not just the first 20
+      const response = await apiClient.get('/staff_members?per_page=1000');
       // Ensure response.data is an array
       if (Array.isArray(response.data)) {
         setStaffMembers(response.data);
