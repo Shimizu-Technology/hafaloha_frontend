@@ -48,32 +48,118 @@
   touch-action: pan-y; /* Enable vertical touch scrolling */
 }
 
-/* Desktop scrollbar styles */
-@media (min-width: 768px) {
-  .scrollable-toast-container::-webkit-scrollbar {
-    width: 6px;
-  }
+/* Base styles for all devices */
+:root {
+  --primary-color: #c1902f;
+  --text-color: #111827;
+  --background-color: #f9fafb;
+  --card-background: #ffffff;
+  --border-color: #e5e7eb;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --border-radius: 0.5rem;
+  --transition-standard: all 0.2s ease;
+}
 
-  .scrollable-toast-container::-webkit-scrollbar-track {
+/* Fix for 100vh on mobile browsers */
+.full-height {
+  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100);
+}
+
+/* Responsive container */
+.responsive-container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Desktop styles */
+@media (min-width: 1024px) {
+  .responsive-container {
+    max-width: 1280px;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+  
+  /* Desktop-specific scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.05);
-    border-radius: 3px;
+    border-radius: 4px;
   }
-
-  .scrollable-toast-container::-webkit-scrollbar-thumb {
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
+    border-radius: 4px;
   }
-
-  .scrollable-toast-container::-webkit-scrollbar-thumb:hover {
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Hover effects - only on devices with hover capability */
+  @media (hover: hover) {
+    .hover-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .hover-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+    }
   }
 }
 
-/* Hide scrollbar on mobile but keep functionality */
+/* Tablet styles */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .responsive-container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+/* Mobile styles */
 @media (max-width: 767px) {
-  .scrollable-toast-container::-webkit-scrollbar {
+  /* Improve touch targets */
+  button, a, input[type="button"], input[type="submit"], [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Prevent text zoom on iOS */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  
+  /* Optimize scrolling */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Hide scrollbars on mobile but keep functionality */
+  .custom-scrollbar::-webkit-scrollbar {
     width: 0px;
     background: transparent;
+  }
+  
+  /* Adjust spacing for mobile */
+  .responsive-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  /* Fix fixed positioning issues with iOS keyboard */
+  .fixed-bottom {
+    position: sticky;
+    bottom: 0;
   }
 }
 
