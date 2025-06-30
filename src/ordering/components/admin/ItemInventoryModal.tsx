@@ -23,8 +23,6 @@ interface OptionInventoryGridProps {
   validationErrors: string[];
   lowStockThreshold: number;
   onLowStockThresholdChange: (threshold: number) => void;
-  originalLowStockThreshold: number;
-  hasUnsavedChanges: boolean;
 }
 
 // OptionStockUpdateForm Sub-component Props - FE-004 Implementation
@@ -50,20 +48,14 @@ const OptionInventoryGrid: React.FC<OptionInventoryGridProps> = ({
   onSave,
   validationErrors,
   lowStockThreshold,
-  onLowStockThresholdChange,
-  originalLowStockThreshold,
-  hasUnsavedChanges
+  onLowStockThresholdChange
 }) => {
   if (!optionGroup || !optionGroup.options) {
     return null;
   }
 
   const totalOptionQuantity = Object.values(optionQuantities).reduce((sum, qty) => sum + qty, 0);
-  const quantitiesMatch = totalOptionQuantity === totalStock;
-  const thresholdChanged = lowStockThreshold !== originalLowStockThreshold;
-  
-  // Enable save when quantities match AND (quantities or threshold have changed)
-  const isValid = quantitiesMatch && (hasUnsavedChanges || thresholdChanged);
+  const isValid = totalOptionQuantity === totalStock;
 
   return (
     <div className="mb-6 p-4 border border-gray-200 rounded-md bg-blue-50">
@@ -262,8 +254,7 @@ const OptionInventoryGrid: React.FC<OptionInventoryGridProps> = ({
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
-          {thresholdChanged && !hasUnsavedChanges ? 'Save Threshold' : 
-           hasUnsavedChanges && !thresholdChanged ? 'Save Quantities' : 'Save Changes'}
+          Save Option Quantities
         </button>
       </div>
     </div>
@@ -665,7 +656,6 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   
   // State for option-level low stock threshold
   const [optionLowStockThreshold, setOptionLowStockThreshold] = useState<number>(10);
-  const [originalLowStockThreshold, setOriginalLowStockThreshold] = useState<number>(10);
   
   // State for "Mark as damaged" form
   const [damageQuantity, setDamageQuantity] = useState<number>(1);
@@ -1151,9 +1141,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
       setOriginalOptionQuantities({ ...quantities }); // Deep copy for tracking changes
       
       // Initialize option-level low stock threshold from menu item threshold
-      const threshold = menuItem.low_stock_threshold || 10;
-      setOptionLowStockThreshold(threshold);
-      setOriginalLowStockThreshold(threshold);
+      setOptionLowStockThreshold(menuItem.low_stock_threshold || 10);
     } else {
       // Reset all option-related state when no tracking is enabled
       setHasOptionTracking(false);
@@ -1967,9 +1955,8 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
 
     // Check if there are actually changes to save
     const hasOptionChanges = hasUnsavedOptionChanges();
-    const hasThresholdChanges = optionLowStockThreshold !== originalLowStockThreshold;
     
-    if (!hasOptionChanges && !hasThresholdChanges) {
+    if (!hasOptionChanges) {
       setSuccess('No changes to save');
       setTimeout(() => setSuccess(null), 2000);
       return;
@@ -1978,21 +1965,13 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     const changedOptionIds = getChangedOptionIds();
 
     try {
-      // Handle threshold-only changes (no API call needed for now)
-      if (!hasOptionChanges && hasThresholdChanges) {
-        setSuccess('Low stock threshold updated successfully');
-        setOriginalLowStockThreshold(optionLowStockThreshold);
-        setTimeout(() => setSuccess(null), 3000);
-        return;
-      }
-
       // Set loading state for changed options
       changedOptionIds.forEach(optionId => {
         updateOptionLoadingState(optionId, true);
         updateOptionErrorState(optionId, null);
       });
 
-      // Save option quantities (and handle threshold changes alongside)
+      // First, save option quantities
       const result = await optionGroupsApi.updateOptionQuantities(
         parseInt(selectedOptionGroupId),
         { 
@@ -2004,22 +1983,10 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
 
       // Check for success by presence of option_group and valid message
       if (result.option_group && result.message) {
-        // Success message based on what was changed
-        let successMessage = '';
-        if (hasOptionChanges && hasThresholdChanges) {
-          successMessage = 'Option quantities and low stock threshold updated successfully';
-        } else if (hasOptionChanges) {
-          successMessage = 'Option quantities updated successfully';
-        } else {
-          successMessage = 'Low stock threshold updated successfully';
-        }
-        setSuccess(successMessage);
+        setSuccess('Option quantities updated successfully');
         
         // Update original quantities to reflect saved state
         setOriginalOptionQuantities({ ...optionQuantities });
-        
-        // Update original threshold to reflect saved state
-        setOriginalLowStockThreshold(optionLowStockThreshold);
         
         // Reset change tracking
         resetOptionChanges();
@@ -2675,8 +2642,6 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                     validationErrors={validationErrors}
                     lowStockThreshold={optionLowStockThreshold}
                     onLowStockThresholdChange={setOptionLowStockThreshold}
-                    originalLowStockThreshold={originalLowStockThreshold}
-                    hasUnsavedChanges={hasUnsavedOptionChanges()}
                   />
                   
                   <OptionStockUpdateForm
