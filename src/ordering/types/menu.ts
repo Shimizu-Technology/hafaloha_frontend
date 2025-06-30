@@ -35,6 +35,10 @@ export interface MenuOption {
   available: boolean;
   is_preselected?: boolean;
   is_available?: boolean; // Whether this option is currently available for ordering
+  
+  // Option-level inventory tracking fields (optional)
+  stock_quantity?: number;
+  damaged_quantity?: number;
 }
 
 export interface OptionGroup {

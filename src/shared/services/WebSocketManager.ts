@@ -8,7 +8,8 @@ import notificationStorageService from './NotificationStorageService';
 export enum NotificationType {
   NEW_ORDER = 'new_order',
   ORDER_UPDATED = 'order_updated',
-  LOW_STOCK = 'low_stock'
+  LOW_STOCK = 'low_stock',
+  OUT_OF_STOCK = 'out_of_stock' // RT-004: Add out of stock notification type
 }
 
 /**
@@ -102,6 +103,7 @@ class WebSocketManager {
     this.handlers.set(NotificationType.NEW_ORDER, new Map());
     this.handlers.set(NotificationType.ORDER_UPDATED, new Map());
     this.handlers.set(NotificationType.LOW_STOCK, new Map());
+    this.handlers.set(NotificationType.OUT_OF_STOCK, new Map()); // RT-004: Add out of stock handler map
     
     // Set up notification cleanup interval (every 5 minutes)
     this.cleanupInterval = setInterval(() => this.cleanupOldNotifications(), 5 * 60 * 1000);

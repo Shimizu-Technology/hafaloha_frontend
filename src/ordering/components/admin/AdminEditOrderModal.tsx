@@ -6,7 +6,7 @@ import { SetEtaModal } from './SetEtaModal';
 import { SearchableMenuItemSelector } from './SearchableMenuItemSelector';
 import { PaymentStatusSelector } from './PaymentStatusSelector';
 import { InventoryReversionDialog } from './InventoryReversionDialog';
-import { RefundModal } from './RefundModal';
+import { BulkInventoryActionDialog } from './BulkInventoryActionDialog';
 import { OrderPaymentHistory } from './OrderPaymentHistory';
 import { EnhancedAdditionalPaymentModal } from './EnhancedAdditionalPaymentModal';
 import {
@@ -83,6 +83,13 @@ export interface OrderItem {
   refundedQuantity?: number;  // How many units have been refunded
   isFullyRefunded?: boolean;  // Whether the item is fully refunded
   isPartiallyRefunded?: boolean; // Whether the item is partially refunded
+  // FE-015: Option inventory tracking fields
+  selectedOptions?: Array<{
+    option_group_id: number;
+    option_id: number;
+    option_name: string;
+    quantity: number; // How many units of this option were selected
+  }>;
 }
 
 /**
@@ -115,6 +122,90 @@ function calculateAvailableQuantity(item: OrderItem): number {
   return Math.max(0, item.stock_quantity - damagedQty);
 }
 
+// -------------- FE-015: OPTION INVENTORY HELPERS --------------
+/**
+ * Check if an option has sufficient inventory for the requested quantity
+ */
+function isOptionAvailable(option: any, requestedQuantity: number = 1): boolean {
+  // First check manual availability toggle
+  if (!option.available) {
+    return false;
+  }
+  
+  // Also check optional is_available field if present
+  if (option.is_available === false) {
+    return false;
+  }
+  
+  // If no inventory tracking, rely on manual availability
+  if (option.stock_quantity === undefined || option.stock_quantity === null) {
+    return true; // Default to available if no stock tracking
+  }
+  
+  // Calculate available quantity (stock - damaged)
+  const stockQuantity = option.stock_quantity || 0;
+  const damagedQuantity = option.damaged_quantity || 0;
+  const availableQuantity = stockQuantity - damagedQuantity;
+  
+  return availableQuantity >= requestedQuantity;
+}
+
+/**
+ * Calculate available quantity for a specific option
+ */
+function calculateOptionAvailableQuantity(option: any): number {
+  if (option.stock_quantity === undefined || option.stock_quantity === null) {
+    return Infinity; // No tracking = unlimited
+  }
+  
+  const stockQuantity = option.stock_quantity || 0;
+  const damagedQuantity = option.damaged_quantity || 0;
+  return Math.max(0, stockQuantity - damagedQuantity);
+}
+
+/**
+ * Extract selected options from order item customizations
+ */
+function extractSelectedOptionsFromCustomizations(item: OrderItem): Array<{
+  option_group_id: number;
+  option_id: number;
+  option_name: string;
+  quantity: number;
+}> {
+  if (!item.customizations || !item.option_groups) {
+    return [];
+  }
+  
+  const selectedOptions: Array<{
+    option_group_id: number;
+    option_id: number;
+    option_name: string;
+    quantity: number;
+  }> = [];
+  
+  // Parse customizations to extract selected options
+  for (const [groupName, optionNames] of Object.entries(item.customizations)) {
+    const optionGroup = item.option_groups.find((og: any) => og.name === groupName);
+    if (!optionGroup) continue;
+    
+    const optionNamesArray = Array.isArray(optionNames) ? optionNames : [optionNames];
+    
+    for (const optionName of optionNamesArray) {
+      const option = optionGroup.options.find((opt: any) => opt.name === optionName);
+      if (option) {
+        selectedOptions.push({
+          option_group_id: optionGroup.id,
+          option_id: option.id,
+          option_name: option.name,
+          quantity: item.quantity, // Each order item quantity affects option inventory
+        });
+      }
+    }
+  }
+  
+  return selectedOptions;
+}
+
 export function AdminEditOrderModal({
   order,
   onClose,
@@ -129,7 +220,7 @@ export function AdminEditOrderModal({
     // Make a deep copy with a unique _editId for each item
     return order.items.map((item: any, index: number) => {
       const itemQuantity = parseInt(String(item.quantity), 10) || 0;
-      return {
+      const orderItem = {
         ...item,
         _editId: `item-${item.id}-${index}-${JSON.stringify(
           item.customizations || {}
@@ -140,6 +231,11 @@ export function AdminEditOrderModal({
         paidQuantity: itemQuantity,
         unpaidQuantity: 0,
       };
+      
+      // FE-015: Extract selected options from existing customizations
+      orderItem.selectedOptions = extractSelectedOptionsFromCustomizations(orderItem);
+      
+      return orderItem;
     });
   });
 
@@ -189,6 +285,9 @@ export function AdminEditOrderModal({
       quantity: number;
     }[]
   >([]);
+
+  // Flag to prevent double processing of inventory when using BulkInventoryActionDialog
+  const [inventoryProcessedByRefund, setInventoryProcessedByRefund] = useState<boolean>(false);
 
   // For loading the full menu item data (e.g. inventory details)
   // Using loading state for menu item data loading
@@ -565,6 +664,13 @@ const [, setLoadingMenuItemData] = useState(false);
       originalQuantity: 0,
       paidQuantity: 0,
       unpaidQuantity: newQuantity,
+      // FE-015: Extract selected options if customizations exist
+      selectedOptions: extractSelectedOptionsFromCustomizations({
+        ...selectedItem,
+        _editId: newEditId,
+        quantity: newQuantity,
+        customizations: selectedItem.customizations || {},
+      } as OrderItem),
     };
 
     setNewlyAddedItemIds((prev) => {
@@ -1418,7 +1524,42 @@ const [, setLoadingMenuItemData] = useState(false);
       // Only set to false if no payment or refund is in progress
       setIsProcessingPayment(false);
     }
-  }, [localItems, showRefundModal, showAdditionalPaymentModal, isProcessingPayment]);
+  }, [localItems, showRefundModal, showAdditionalPaymentModal]); // Removed isProcessingPayment to prevent infinite loop
+
+  // Function to refresh menu item data (e.g., after refunds that change inventory)
+  async function refreshMenuItemData() {
+    try {
+      const menuItemPromises = localItems
+        .filter((it) => it.id)
+        .map(async (it) => {
+          try {
+            const fullItem = await menuItemsApi.getById(it.id!);
+            return {
+              ...it,
+              enable_stock_tracking: fullItem.enable_stock_tracking || false,
+              stock_quantity: fullItem.stock_quantity || 0,
+              damaged_quantity: fullItem.damaged_quantity || 0,
+              low_stock_threshold: fullItem.low_stock_threshold || 5,
+            };
+          } catch (err) {
+            console.error(`Failed to refresh data for menu item ${it.id}:`, err);
+            return it; // Return original item if refresh fails
+          }
+        });
+
+      const refreshedItems = await Promise.all(menuItemPromises);
+
+      // Update localItems with fresh data
+      setLocalItems(refreshedItems);
+      
+      // Also update originalItems
+      setOriginalItems(refreshedItems);
+      
+      console.log('[ADMIN EDIT ORDER] Refreshed menu item data after refund');
+    } catch (error) {
+      console.error('Error refreshing menu item data:', error);
+    }
+  }
 
   async function fetchPayments() {
     if (!order.id) return;
@@ -1558,9 +1699,8 @@ const [, setLoadingMenuItemData] = useState(false);
     }
   }
 
-  function handleRefundCreated(
-    // Use underscore prefix to indicate intentionally unused parameter
-    _itemsRefunded: Array<{id: number, quantity: number}>,
+  async function handleRefundCreated(
+    itemsRefunded: Array<{id: number, quantity: number}>,
     inventoryActions: Array<{
       itemId: number,
       quantity: number,
@@ -1568,38 +1708,75 @@ const [, setLoadingMenuItemData] = useState(false);
       reason?: string
     }>
   ) {
-    // Log inventory actions for debugging
-    // Processing inventory actions after refund
+    // Processing refund with inventory actions
     
-    // Process inventory actions
-    inventoryActions.forEach(action => {
-      // Ensure quantity is a valid number and greater than 0
-      const quantity = Math.max(1, action.quantity || 1); // Default to 1 if undefined or 0
+    try {
+      setIsProcessingPayment(true);
       
-      if (action.action === 'mark_as_damaged') {
-        // Marking items as damaged in inventory
-        setItemsToMarkAsDamaged(prev => [
-          ...prev,
-          {
-            itemId: action.itemId,
-            quantity: quantity,
-            reason: action.reason || 'Damaged during refund'
+      // Calculate refund amount based on selected items and quantities
+      let refundAmount = 0;
+      const refundItems = itemsRefunded.map(refundedItem => {
+        // Find the corresponding local item by menu item ID
+        const localItem = localItems.find(item => 
+          item.id && Number(item.id) === refundedItem.id
+        );
+        
+        if (!localItem) {
+          console.warn(`Could not find local item for refund item ID: ${refundedItem.id}`);
+          return null;
+        }
+        
+        // Calculate refund amount for this item
+        const itemRefundAmount = (localItem.price || 0) * refundedItem.quantity;
+        refundAmount += itemRefundAmount;
+        
+        // Find if this item has a damage action
+        const damageAction = inventoryActions.find(action => 
+          action.itemId === refundedItem.id && action.action === 'mark_as_damaged'
+        );
+        
+        return {
+          id: refundedItem.id,
+          name: localItem.name || 'Item',
+          quantity: refundedItem.quantity,
+          price: localItem.price || 0,
+          originalQuantity: refundedItem.quantity,
+          customizations: localItem.customizations || {},
+          menu_item_id: localItem.id || refundedItem.id,
+          // Add damage information if this item should be damaged
+          ...(damageAction && {
+            damage_action: {
+              mark_as_damaged: true,
+              damage_reason: damageAction.reason || 'Damaged during refund',
+              damage_quantity: damageAction.quantity || refundedItem.quantity
           }
-        ]);
-      } else if (action.action === 'return_to_inventory') {
-        // Returning items to inventory
-        setItemsToReturnToInventory(prev => [
-          ...prev,
-          {
-            itemId: action.itemId,
-            quantity: quantity
-          }
-        ]);
+          })
+        };
+      }).filter(item => item !== null);
+      
+      if (refundItems.length === 0) {
+        throw new Error('No valid items to refund');
       }
-    });
+      
+      // Create the refund via API
+      await orderPaymentOperationsApi.createPartialRefund(order.id, {
+        amount: refundAmount,
+        reason: 'Partial refund processed via admin',
+        items: refundItems,
+        refunded_items: refundItems
+      });
+      
+      console.log('[ADMIN EDIT] Refund processed successfully for order', order.id);
+      
+      // CRITICAL: Clear inventory state immediately after successful refund
+      // This prevents double processing when user clicks "Save Changes"
+      setItemsToMarkAsDamaged([]);
+      setItemsToReturnToInventory([]);
+      setInventoryProcessedByRefund(true);
     
-    // After a refund, re-fetch payments
-    fetchPayments().then(() => {
+      // After successful refund, re-fetch payments and update UI
+      await fetchPayments();
+      
       // After fetching payments, rebuild the refund tracker
       if (payments.length > 0) {
         const refundTracker = buildRefundTracker(payments);
@@ -1607,6 +1784,9 @@ const [, setLoadingMenuItemData] = useState(false);
         
         // Apply refund information to local items
         updateLocalItemsWithRefundInfo(refundTracker);
+        
+        // Refresh menu item data to get updated inventory levels after refund
+        refreshMenuItemData();
       }
       
       // Recalc local total from items
@@ -1627,16 +1807,25 @@ const [, setLoadingMenuItemData] = useState(false);
       if (allItemsRefunded) {
         setLocalStatus('refunded');
       }
-      // No longer changing status for partial refunds
       
       // Recalculate max refundable amount after refund
       const newMaxRefundable = calculateMaxRefundableAmount(payments);
-      // After refund - Recalculating max refundable amount
       setMaxRefundable(newMaxRefundable);
       
-      // Reset processing payment state since refund is complete
+      // Close the refund modal
+      setShowRefundModal(false);
+      
+    } catch (error) {
+      console.error('Error processing refund:', error);
+      // Show error message but keep modal open for retry
+      // Clear inventory state even on error to prevent inconsistent state
+      setItemsToMarkAsDamaged([]);
+      setItemsToReturnToInventory([]);
+      setInventoryProcessedByRefund(false); // Reset flag on error
+    } finally {
+      // Reset processing payment state
       setIsProcessingPayment(false);
-    });
+    }
   }
 
   function handleProcessAdditionalPayment() {
@@ -1734,6 +1923,7 @@ const [, setLoadingMenuItemData] = useState(false);
     success: boolean;
     error?: string;
     items?: Array<{ id: string | number; name: string; requested: number; available: number }>;
+    options?: Array<{ id: string | number; name: string; requested: number; available: number }>;
   }> {
     try {
       const itemsToValidate = localItems
@@ -1743,7 +1933,43 @@ const [, setLoadingMenuItemData] = useState(false);
           quantity: item.quantity,
           originalQuantity: findOriginalItem(item)?.quantity || 0,
         }));
-      if (itemsToValidate.length === 0) return { success: true };
+
+      // FE-015: Also validate option-level inventory
+      const optionsToValidate: Array<{
+        optionId: string | number;
+        optionName: string;
+        requestedQuantity: number;
+        originalQuantity: number;
+        itemId: string | number;
+        itemName: string;
+      }> = [];
+
+      // Extract all selected options from local items
+      localItems.forEach((item) => {
+        const selectedOptions = extractSelectedOptionsFromCustomizations(item);
+        const originalItem = findOriginalItem(item);
+        const originalSelectedOptions = originalItem ? extractSelectedOptionsFromCustomizations(originalItem) : [];
+        
+        selectedOptions.forEach((selectedOption) => {
+          const originalOption = originalSelectedOptions.find(
+            (orig) => orig.option_id === selectedOption.option_id
+          );
+          const originalOptionQuantity = originalOption ? originalOption.quantity : 0;
+          
+          optionsToValidate.push({
+            optionId: selectedOption.option_id,
+            optionName: selectedOption.option_name,
+            requestedQuantity: selectedOption.quantity,
+            originalQuantity: originalOptionQuantity,
+            itemId: item.id!,
+            itemName: item.name,
+          });
+        });
+      });
+
+      if (itemsToValidate.length === 0 && optionsToValidate.length === 0) {
+        return { success: true };
+      }
 
       // Perform client-side validation since there's no backend endpoint
       const validationResults = await Promise.all(
@@ -1757,6 +1983,7 @@ const [, setLoadingMenuItemData] = useState(false);
             const effectiveAvailable = availableQty + item.originalQuantity;
             
             return {
+              type: 'item',
               id: item.id,
               name: menuItem.name,
               requested: item.quantity,
@@ -1770,19 +1997,66 @@ const [, setLoadingMenuItemData] = useState(false);
         })
       );
       
-      // Filter out any null results and find invalid items
-      const validResults = validationResults.filter(r => r !== null) as Array<any>;
-      const invalidItems = validResults.filter(r => !r.isValid);
+      // FE-015: Validate option inventory
+      const optionValidationResults = await Promise.all(
+        optionsToValidate.map(async (optionData) => {
+          try {
+            // Get the latest menu item data which includes option inventory
+            const menuItem = await menuItemsApi.getById(optionData.itemId as string | number);
+            
+            // Find the option in the menu item data
+            let option = null;
+            if (menuItem.option_groups) {
+              for (const group of menuItem.option_groups) {
+                option = group.options.find((opt: any) => opt.id === optionData.optionId);
+                if (option) break;
+              }
+            }
+            
+            if (!option) {
+              console.warn(`Option ${optionData.optionId} not found in menu item ${optionData.itemId}`);
+              return null;
+            }
+            
+            // Calculate effective available quantity for the option
+            const availableQty = calculateOptionAvailableQuantity(option);
+            const effectiveAvailable = availableQty + optionData.originalQuantity;
+            
+            return {
+              type: 'option',
+              id: optionData.optionId,
+              name: `${optionData.itemName} - ${optionData.optionName}`,
+              requested: optionData.requestedQuantity,
+              available: effectiveAvailable,
+              isValid: optionData.requestedQuantity <= effectiveAvailable
+            };
+          } catch (err) {
+            console.error(`Failed to validate option ${optionData.optionId}:`, err);
+            return null;
+          }
+        })
+      );
       
-      if (invalidItems.length > 0) {
+      // Filter out any null results and find invalid items/options
+      const validResults = [...validationResults, ...optionValidationResults].filter(r => r !== null) as Array<any>;
+      const invalidItems = validResults.filter(r => r.type === 'item' && !r.isValid);
+      const invalidOptions = validResults.filter(r => r.type === 'option' && !r.isValid);
+      
+      if (invalidItems.length > 0 || invalidOptions.length > 0) {
         return {
           success: false,
-          error: 'Some items have limited availability',
+          error: invalidOptions.length > 0 ? 'Some options have limited availability' : 'Some items have limited availability',
           items: invalidItems.map(item => ({
             id: item.id,
             name: item.name,
             requested: item.requested,
             available: item.available
+          })),
+          options: invalidOptions.map(option => ({
+            id: option.id,
+            name: option.name,
+            requested: option.requested,
+            available: option.available
           }))
         };
       }
@@ -1799,15 +2073,20 @@ const [, setLoadingMenuItemData] = useState(false);
 
   function handleInventoryValidationFailure(
     error: string,
-    items?: Array<{ id: string | number; name: string; requested: number; available: number }>
+    items?: Array<{ id: string | number; name: string; requested: number; available: number }>,
+    options?: Array<{ id: string | number; name: string; requested: number; available: number }>
   ) {
-    if (items && items.length > 0) {
+    if ((items && items.length > 0) || (options && options.length > 0)) {
       toastUtils.custom(
         (t) => (
           <div className="bg-white shadow-lg rounded-lg p-4 max-w-md border border-red-200">
-            <p className="font-bold text-red-600">Some items have limited availability</p>
-            <p className="mt-1">The following items have changed since you started editing:</p>
-            <ul className="mt-2 list-disc pl-4">
+            <p className="font-bold text-red-600">Inventory availability issues</p>
+            <p className="mt-1">The following have changed since you started editing:</p>
+            
+            {items && items.length > 0 && (
+              <>
+                <p className="mt-2 font-medium">Items:</p>
+                <ul className="mt-1 list-disc pl-4">
               {items.map((item) => (
                 <li key={item.id}>
                   {item.name}: <span className="text-red-600 font-medium">
@@ -1817,8 +2096,28 @@ const [, setLoadingMenuItemData] = useState(false);
                 </li>
               ))}
             </ul>
-            <p className="mt-2">Would you like to adjust quantities to available amounts or cancel?</p>
+              </>
+            )}
+            
+            {options && options.length > 0 && (
+              <>
+                <p className="mt-2 font-medium">Options:</p>
+                <ul className="mt-1 list-disc pl-4">
+                  {options.map((option) => (
+                    <li key={option.id}>
+                      {option.name}: <span className="text-red-600 font-medium">
+                        {option.available} available
+                      </span>{' '}
+                      (you requested {option.requested})
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            
+            <p className="mt-2">Options with insufficient inventory cannot be automatically adjusted. Please modify the order manually or cancel.</p>
             <div className="mt-2 flex space-x-2">
+              {items && items.length > 0 && (
               <button
                 onClick={() => {
                   adjustToAvailableQuantities(items);
@@ -1826,8 +2125,9 @@ const [, setLoadingMenuItemData] = useState(false);
                 }}
                 className="px-3 py-1 bg-blue-500 text-white rounded"
               >
-                Adjust Quantities
+                  Adjust Item Quantities
               </button>
+              )}
               <button
                 onClick={() => toastUtils.dismiss(t.id)}
                 className="px-3 py-1 bg-gray-300 text-gray-700 rounded"
@@ -1837,7 +2137,7 @@ const [, setLoadingMenuItemData] = useState(false);
             </div>
           </div>
         ),
-        { duration: 10000 }
+        { duration: 15000 }
       );
     } else {
       toastUtils.error(`Inventory validation failed: ${error}`);
@@ -1899,7 +2199,8 @@ const [, setLoadingMenuItemData] = useState(false);
       if (!inventoryValidation.success) {
         handleInventoryValidationFailure(
           inventoryValidation.error || 'Unknown error',
-          inventoryValidation.items
+          inventoryValidation.items,
+          inventoryValidation.options
         );
         return;
       }
@@ -1907,8 +2208,8 @@ const [, setLoadingMenuItemData] = useState(false);
       // 2) Process inventory changes if needed
       await processInventoryChanges();
 
-      // 3) Mark items as damaged (if any)
-      if (itemsToMarkAsDamaged.length > 0) {
+      // 3) Mark items as damaged (if any) - Skip if already processed by refund
+      if (itemsToMarkAsDamaged.length > 0 && !inventoryProcessedByRefund) {
         const damageCalls = itemsToMarkAsDamaged.map((d) =>
           menuItemsApi.markAsDamaged(d.itemId, {
             quantity: d.quantity,
@@ -1919,15 +2220,27 @@ const [, setLoadingMenuItemData] = useState(false);
         await Promise.all(damageCalls);
       }
 
-      // 4) Return items to inventory (if any)
-      if (itemsToReturnToInventory.length > 0) {
+      // 4) Return items to inventory (if any) - Skip if already processed by refund
+      if (itemsToReturnToInventory.length > 0 && !inventoryProcessedByRefund) {
         try {
           // Processing items to return to inventory
           
           const inventoryCalls = itemsToReturnToInventory.map(async (i) => {
             try {
-              // Get current item details to know the current stock level
+              // Get current item details to check if it uses option-level inventory tracking
               const menuItem = await menuItemsApi.getById(i.itemId);
+              
+
+              
+              // Skip direct inventory updates for items with option-level tracking
+              // The refund API already handled the inventory restoration for these items
+              const usesOptionInventory = (menuItem as any).uses_option_level_inventory === true || 
+                                        (menuItem as any).uses_option_level_inventory === 'true' ||
+                                        (menuItem as any).has_option_inventory_tracking === true;
+              
+              if (usesOptionInventory) {
+                return Promise.resolve(); // No-op for option-tracked items
+              }
               
               // Calculate new stock level by adding the returned quantity
               const currentStockLevel = menuItem.stock_quantity || 0;
@@ -1935,7 +2248,7 @@ const [, setLoadingMenuItemData] = useState(false);
               const quantityToAdd = i.quantity || 1; // Default to 1 if undefined or 0
               const newStockLevel = currentStockLevel + quantityToAdd;
               
-              // Returning item to inventory with updated stock levels
+              // Returning item-level inventory with updated stock levels
               
               // Update the stock level with the new total
               const updateResult = await menuItemsApi.updateStock(i.itemId, {
@@ -2074,7 +2387,10 @@ const [, setLoadingMenuItemData] = useState(false);
         estimated_pickup_time: pickupTime || order.estimatedPickupTime,
       };
 
-      // 7) Trigger parent onSave
+      // 7) Reset inventory processing flag after successful save
+      setInventoryProcessedByRefund(false);
+      
+      // 8) Trigger parent onSave
       onSave(updatedOrder);
     } catch (error: any) {
       console.error('Error saving order changes:', error);
@@ -3370,21 +3686,36 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
         />
       )}
 
-      {/* Refund Modal */}
+      {/* Refund Modal - now using BulkInventoryActionDialog for consistency */}
       {showRefundModal && (
-        <RefundModal
-          isOpen={showRefundModal}
+        <BulkInventoryActionDialog
+          order={{...order, items: localItems}}
           onClose={() => {
             setShowRefundModal(false);
             setPreSelectedRefundItem(null);
             // Reset processing payment state if user cancels the refund
             setIsProcessingPayment(false);
           }}
-          orderId={order.id}
-          maxRefundable={maxRefundable}
-          orderItems={localItems}
-          onRefundCreated={handleRefundCreated}
-          preSelectedItem={preSelectedRefundItem}
+          onConfirm={(inventoryActions) => {
+            // Convert BulkInventoryActionDialog actions to handleRefundCreated format
+            const refundedItems = inventoryActions
+              .filter(action => action.paymentAction === 'refund')
+              .map(action => ({
+                id: Number(action.itemId),
+                quantity: action.quantity
+              }));
+            
+            const inventoryActionsFormatted = inventoryActions.map(action => ({
+              itemId: Number(action.itemId),
+              quantity: action.quantity,
+              action: action.action,
+              reason: action.reason
+            }));
+            
+            handleRefundCreated(refundedItems, inventoryActionsFormatted);
+          }}
+          isBatch={false}
+          isRefundMode={true}
         />
       )}
 

@@ -1,7 +1,7 @@
 // src/ordering/components/admin/SearchableMenuItemSelector.tsx
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMenuStore } from '../../store/menuStore';
-import { MenuItem, OptionGroup, Category } from '../../types/menu';
+import { MenuItem, OptionGroup, MenuOption } from '../../types/menu';
 import { ItemCustomizationModal } from './ItemCustomizationModal';
 import { X } from 'lucide-react';
 
@@ -19,6 +19,71 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   
   const modalRef = useRef<HTMLDivElement>(null);
+  
+  // Calculate available quantity (stock minus damaged)
+  const calculateAvailableQuantity = useCallback((item: MenuItem): number => {
+    if (!item.enable_stock_tracking || item.stock_quantity === undefined) {
+      return Infinity;
+    }
+    
+    // If damaged_quantity is defined, subtract it from stock_quantity
+    const damagedQty = item.damaged_quantity || 0;
+    return Math.max(0, item.stock_quantity - damagedQty);
+  }, []);
+
+  // Check if an individual option is available
+  const isOptionAvailable = useCallback((option: MenuOption): boolean => {
+    // Check manual availability toggle first
+    if (option.available === false) {
+      return false;
+    }
+    
+    // Check inventory-based availability if option has stock tracking
+    if (option.stock_quantity !== undefined) {
+      const damagedQty = option.damaged_quantity || 0;
+      const availableQty = Math.max(0, option.stock_quantity - damagedQty);
+      return availableQty > 0;
+    }
+    
+    // If no stock tracking, option is available (assuming manual toggle is true/undefined)
+    return true;
+  }, [menuItems]);
+
+  // Check if an option group has any available options
+  const hasAvailableOptions = useCallback((optionGroup: OptionGroup): boolean => {
+    if (!optionGroup.options || optionGroup.options.length === 0) {
+      return true; // No options means no restrictions
+    }
+    
+    return optionGroup.options.some(option => isOptionAvailable(option));
+  }, [isOptionAvailable, menuItems]);
+
+  // Get count of available options in a group
+  const getAvailableOptionsCount = useCallback((optionGroup: OptionGroup): number => {
+    if (!optionGroup.options || optionGroup.options.length === 0) {
+      return 0;
+    }
+    
+    return optionGroup.options.filter(option => isOptionAvailable(option)).length;
+  }, [isOptionAvailable, menuItems]);
+
+  // Check if a menu item has available options (for items with option groups)
+  const hasAvailableItemOptions = useCallback((item: MenuItem): boolean => {
+    if (!item.option_groups || item.option_groups.length === 0) {
+      return true; // No option groups means item is available (subject to item-level stock)
+    }
+    
+    // Check if all required option groups have available options
+    const requiredGroups = item.option_groups.filter(group => group.required);
+    
+    for (const group of requiredGroups) {
+      if (!hasAvailableOptions(group)) {
+        return false; // Required group has no available options
+      }
+    }
+    
+    return true; // All required groups have available options
+  }, [hasAvailableOptions, menuItems]);
   
   // Fetch menu items and categories on mount if not already loaded
   useEffect(() => {
@@ -65,19 +130,23 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
       console.log(`SearchableMenuItemSelector - filtered by search "${searchQuery}", ${filtered.length} items remaining`);
     }
     
-    setFilteredItems(filtered);
-  }, [searchQuery, selectedCategoryId, menuItems, currentMenuId]);
-  
-  // Calculate available quantity (stock minus damaged)
-  const calculateAvailableQuantity = (item: MenuItem): number => {
-    if (!item.enable_stock_tracking || item.stock_quantity === undefined) {
-      return Infinity;
-    }
+    // Filter out items that are completely unavailable (item-level stock or no available options)
+    filtered = filtered.filter(item => {
+      // Check item-level stock availability
+      const availableQty = calculateAvailableQuantity(item);
+      const isItemOutOfStock = item.enable_stock_tracking && availableQty <= 0;
+      
+      // Check option availability for items with option groups
+      const hasOptions = item.option_groups && item.option_groups.length > 0;
+      const hasAvailableOptions = hasOptions ? hasAvailableItemOptions(item) : true;
+      
+      // Item is available if it has stock (or no stock tracking) AND has available options (or no options)
+      return !isItemOutOfStock && hasAvailableOptions;
+    });
+    console.log(`SearchableMenuItemSelector - filtered by availability, ${filtered.length} items remaining`);
     
-    // If damaged_quantity is defined, subtract it from stock_quantity
-    const damagedQty = item.damaged_quantity || 0;
-    return Math.max(0, item.stock_quantity - damagedQty);
-  };
+    setFilteredItems(filtered);
+  }, [searchQuery, selectedCategoryId, menuItems, currentMenuId, calculateAvailableQuantity, hasAvailableItemOptions]);
   
   // Handle item selection
   const handleItemSelect = (item: MenuItem) => {
@@ -87,6 +156,14 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
       // Could add a toast notification here
       alert(`${item.name} is out of stock.`);
       return;
+    }
+    
+    // Check option availability for items with option groups
+    if (item.option_groups && item.option_groups.length > 0) {
+      if (!hasAvailableItemOptions(item)) {
+        alert(`${item.name} cannot be ordered - all required options are currently unavailable.`);
+        return;
+      }
     }
     
     setSelectedItem(item);
@@ -101,7 +178,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
   };
   
   // Handle customized item being added to cart
-  const handleAddCustomizedItem = (item: MenuItem, customizations: any[], quantity: number) => {
+  const handleAddCustomizedItem = (item: MenuItem, customizations: unknown[], quantity: number) => {
     // The item already has the customizations property set by ItemCustomizationModal
     // with a properly formatted object for display
     
@@ -264,11 +341,26 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
                 const isOutOfStock = item.enable_stock_tracking && availableQty <= 0;
                 const isLowStock = item.enable_stock_tracking && availableQty > 0 && availableQty <= (item.low_stock_threshold || 5);
                 
+                // Check option availability
+                const hasOptions = item.option_groups && item.option_groups.length > 0;
+                const hasAvailableOptions = hasOptions ? hasAvailableItemOptions(item) : true;
+                const isCompletelyUnavailable = isOutOfStock || (hasOptions && !hasAvailableOptions);
+                
+                // Get option availability summary for display
+                const optionSummary = hasOptions ? item.option_groups?.reduce((acc, group) => {
+                  const availableCount = getAvailableOptionsCount(group);
+                  const totalCount = group.options?.length || 0;
+                  if (totalCount > 0) {
+                    acc.push(`${group.name}: ${availableCount}/${totalCount} available`);
+                  }
+                  return acc;
+                }, [] as string[]) : [];
+                
                 return (
                   <li
                     key={item.id}
                     className={`py-3 px-2 hover:bg-gray-50 cursor-pointer transition-colors rounded-md ${
-                      isOutOfStock ? 'opacity-60' : ''
+                      isCompletelyUnavailable ? 'opacity-60' : ''
                     }`}
                     onClick={() => handleItemSelect(item)}
                   >
@@ -278,6 +370,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
                         {item.description && (
                           <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
                         )}
+                        
                         {/* Stock information */}
                         {item.enable_stock_tracking && item.stock_quantity !== undefined && (
                           <div className="mt-1">
@@ -290,9 +383,26 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
                             )}
                           </div>
                         )}
-                        {item.option_groups && item.option_groups.length > 0 && (
-                          <div className="mt-1 text-xs text-[#c1902f] font-medium">
+                        
+                        {/* Option availability information */}
+                        {hasOptions && (
+                          <div className="mt-1">
+                            {!hasAvailableOptions ? (
+                              <span className="text-xs font-medium text-red-600">
+                                No available options
+                              </span>
+                            ) : optionSummary && optionSummary.length > 0 ? (
+                              <div className="text-xs text-gray-500">
+                                <span className="text-[#c1902f] font-medium">Customizable</span>
+                                {optionSummary.some(summary => summary.includes('0/')) && (
+                                  <span className="ml-2 text-amber-600">Limited options</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-[#c1902f] font-medium">
                             Customizable
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

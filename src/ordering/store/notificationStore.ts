@@ -128,8 +128,47 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
     webSocketManager.registerHandler(NotificationType.LOW_STOCK, (item) => {
       console.debug('[NotificationStore] Received low stock notification:', item);
       
-      // Convert item to notification format if needed
-      const notification = typeof item.id === 'undefined' ? item : {
+      // RT-004: Handle both merchandise and option notifications
+      let notification;
+      
+      // Check if this is already a formatted notification from the backend
+      if (item.notification_type && item.resource_type && item.title) {
+        // This is a backend notification object, use it directly
+        notification = item;
+      } else {
+        // This is a raw item object, convert to notification format
+        const isOptionNotification = item.option_id || item.option_name;
+        
+        if (isOptionNotification) {
+          // RT-004: Option-level notification
+          notification = {
+            id: item.id || `option_${item.option_id}_${Date.now()}`,
+            title: `Low Stock Alert: ${item.menu_item_name || 'Menu Item'} - ${item.option_name || 'Option'}`,
+            body: `Option '${item.option_name || 'Option'}' for '${item.menu_item_name || 'Menu Item'}' is running low on stock. Available: ${item.available_stock || 0}`,
+            notification_type: 'low_stock',
+            resource_type: 'Option',
+            resource_id: item.option_id || item.id,
+            admin_path: `/admin/menu/items/${item.menu_item_id}/inventory`,
+            acknowledged: false,
+            created_at: item.created_at || new Date().toISOString(),
+            updated_at: item.updated_at || new Date().toISOString(),
+            metadata: {
+              option_id: item.option_id,
+              option_name: item.option_name,
+              option_group_id: item.option_group_id,
+              option_group_name: item.option_group_name,
+              menu_item_id: item.menu_item_id,
+              menu_item_name: item.menu_item_name,
+              available_stock: item.available_stock,
+              stock_quantity: item.stock_quantity,
+              damaged_quantity: item.damaged_quantity,
+              threshold: item.threshold,
+              restaurant_id: item.restaurant_id
+            }
+          };
+        } else {
+          // Legacy merchandise notification
+          notification = {
         id: item.id,
         title: `Low Stock Alert`,
         body: `${item.name || 'Item'} is running low on stock`,
@@ -147,6 +186,77 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
           threshold: item.threshold
         }
       };
+        }
+      }
+      
+      // Process the notification
+      get().handleNewNotification(notification as Notification);
+    }, 'notificationStore');
+    
+    // RT-004: Register handler for out of stock notifications
+    webSocketManager.registerHandler(NotificationType.OUT_OF_STOCK, (item) => {
+      console.debug('[NotificationStore] Received out of stock notification:', item);
+      
+      // RT-004: Handle both merchandise and option notifications
+      let notification;
+      
+      // Check if this is already a formatted notification from the backend
+      if (item.notification_type && item.resource_type && item.title) {
+        // This is a backend notification object, use it directly
+        notification = item;
+      } else {
+        // This is a raw item object, convert to notification format
+        const isOptionNotification = item.option_id || item.option_name;
+        
+        if (isOptionNotification) {
+          // RT-004: Option-level notification
+          notification = {
+            id: item.id || `option_${item.option_id}_${Date.now()}`,
+            title: `Out of Stock Alert: ${item.menu_item_name || 'Menu Item'} - ${item.option_name || 'Option'}`,
+            body: `Option '${item.option_name || 'Option'}' for '${item.menu_item_name || 'Menu Item'}' is out of stock.`,
+            notification_type: 'out_of_stock',
+            resource_type: 'Option',
+            resource_id: item.option_id || item.id,
+            admin_path: `/admin/menu/items/${item.menu_item_id}/inventory`,
+            acknowledged: false,
+            created_at: item.created_at || new Date().toISOString(),
+            updated_at: item.updated_at || new Date().toISOString(),
+            metadata: {
+              option_id: item.option_id,
+              option_name: item.option_name,
+              option_group_id: item.option_group_id,
+              option_group_name: item.option_group_name,
+              menu_item_id: item.menu_item_id,
+              menu_item_name: item.menu_item_name,
+              available_stock: item.available_stock,
+              stock_quantity: item.stock_quantity,
+              damaged_quantity: item.damaged_quantity,
+              threshold: item.threshold,
+              restaurant_id: item.restaurant_id
+            }
+          };
+        } else {
+          // Legacy merchandise notification
+          notification = {
+            id: item.id,
+            title: `Out of Stock Alert`,
+            body: `${item.name || 'Item'} is out of stock`,
+            notification_type: 'out_of_stock',
+            resource_type: 'MerchandiseVariant',
+            resource_id: item.id,
+            admin_path: `/admin/inventory/${item.id}`,
+            acknowledged: false,
+            created_at: item.created_at || new Date().toISOString(),
+            updated_at: item.updated_at || new Date().toISOString(),
+            metadata: {
+              variant_id: item.id,
+              item_id: item.merchandise_id,
+              stock_quantity: item.stock_quantity,
+              threshold: item.threshold
+            }
+          };
+        }
+      }
       
       // Process the notification
       get().handleNewNotification(notification as Notification);
@@ -195,6 +305,7 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
     // Unregister handlers from WebSocketManager (use source-based unregistration)
     webSocketManager.unregisterHandler(NotificationType.NEW_ORDER, undefined, 'notificationStore');
     webSocketManager.unregisterHandler(NotificationType.LOW_STOCK, undefined, 'notificationStore');
+    webSocketManager.unregisterHandler(NotificationType.OUT_OF_STOCK, undefined, 'notificationStore'); // RT-004
     
     // Update connection status
     set({ websocketConnected: false });

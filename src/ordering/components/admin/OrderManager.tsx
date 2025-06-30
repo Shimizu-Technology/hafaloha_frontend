@@ -14,7 +14,7 @@ import { CollapsibleOrderCard } from './CollapsibleOrderCard';
 import { MultiSelectActionBar } from './MultiSelectActionBar';
 import { StaffOrderModal } from './StaffOrderModal';
 import { BulkInventoryActionDialog } from './BulkInventoryActionDialog';
-import { RefundModal } from './RefundModal';
+// RefundModal replaced with BulkInventoryActionDialog for consistency
 import { LocationFilter } from './LocationFilter';
 import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
@@ -759,6 +759,24 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           continue;
         }
         
+        // Skip inventory processing for ALL items during refunds - the OrderService
+        // automatically handles inventory restoration for both option-tracked and regular items
+        if (action.paymentAction === 'refund') {
+          console.log(`[BULK INVENTORY] Skipping direct inventory action for item ${action.itemId} during refund - will be handled by refund API`);
+          continue;
+        }
+        
+        // Check if this item uses option-level inventory tracking
+        const menuItem = await menuItemsApi.getById(action.itemId);
+        const usesOptionInventory = (menuItem as any).uses_option_level_inventory === true || 
+                                  (menuItem as any).uses_option_level_inventory === 'true' ||
+                                  (menuItem as any).has_option_inventory_tracking === true;
+        
+        if (usesOptionInventory) {
+          console.log(`[BULK INVENTORY] Skipping direct inventory action for option-tracked item ${action.itemId} - will be handled by refund API`);
+          continue; // Skip direct inventory processing for option-tracked items
+        }
+        
         // Process inventory action
         if (action.action === 'mark_as_damaged') {
           // Mark items as damaged - use the orderId from the action
@@ -802,13 +820,34 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               
             if (!orderObj) continue;
             
-            // Calculate total refund amount for this order
-            const refundItems = actions.map(action => ({
-              id: action.itemId,
-              name: action.name || 'Item',
-              quantity: action.quantity,
-              price: action.price || 0
-            }));
+            // For order cancellations, refund ALL items in the order, not just inventory-tracked ones
+            const allOrderItems = orderObj.items || [];
+            const refundItems = allOrderItems.map((item: any) => {
+              // Find if this item has a damage action
+              const itemId = item.menu_item_id || item.id;
+              const damageAction = actions.find(action => 
+                action.itemId == itemId && action.action === 'mark_as_damaged'
+              );
+              
+              return {
+                id: item.id,
+                name: item.name || 'Item',
+                quantity: item.quantity,
+                price: item.price || 0,
+                originalQuantity: item.quantity,
+                // Include customizations for option-level inventory restoration
+                customizations: item.customizations || {},
+                menu_item_id: item.menu_item_id || item.id, // Backend expects menu_item_id
+                // Add damage information if this item should be damaged
+                ...(damageAction && {
+                  damage_action: {
+                    mark_as_damaged: true,
+                    damage_reason: damageAction.reason || 'Damaged during order cancellation',
+                    damage_quantity: damageAction.quantity || item.quantity
+                  }
+                })
+              };
+            });
             
             // Process based on payment action type
             switch (paymentAction) {
@@ -820,7 +859,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                     items: refundItems,
                     refunded_items: refundItems
                   });
-                  // Refund processed successfully
+                  console.log(`[BULK INVENTORY] Refund processed successfully for order ${orderId}`);
                 } catch (error) {
                   console.error(`Error processing refund for order ${orderId}:`, error);
                   toastUtils.error(`Failed to process refund for order #${orderId}`);
@@ -1268,10 +1307,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
                 viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M11 5H6a2 2 0 
-                  00-2 2v11a2 2 0 
-                  002 2h11a2 2 0 
-                  002-2v-5m-1.414-9.414a2 
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 
                   2 0 112.828 2.828L11.828 
                   15H9v-2.828l8.586-8.586z"
               />
@@ -1723,19 +1759,20 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         />
       )}
 
-      {/* 6) Refund Modal */}
+      {/* 6) Refund Modal - now using BulkInventoryActionDialog for consistency */}
       {showRefundModal && orderToRefund && (
-        <RefundModal
-          isOpen={showRefundModal}
-          orderId={Number(orderToRefund.id)}
-          maxRefundable={Number(orderToRefund.total || 0) - (orderToRefund.total_refunded || 0)}
+        <BulkInventoryActionDialog
+          order={orderToRefund}
           onClose={() => {
             setShowRefundModal(false);
             setOrderToRefund(null);
           }}
-          onRefundCreated={async () => {
+          onConfirm={async (inventoryActions) => {
             try {
               setIsStatusUpdateInProgress(true);
+              
+              // Process the refund with inventory actions (similar to cancellation logic)
+              await processInventoryActionsAndCancel(inventoryActions);
               
               // Get the refund amount to determine if it's a full or partial refund
               const result = await orderPaymentsApi.getPayments(orderToRefund.id);
@@ -1768,6 +1805,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               setIsStatusUpdateInProgress(false);
             }
           }}
+          isBatch={false}
+          isRefundMode={true}
         />
       )}
     </div>

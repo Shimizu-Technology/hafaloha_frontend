@@ -1,7 +1,7 @@
 // src/ordering/components/admin/OptionGroupsModal.tsx
 
 import React, { useState } from 'react';
-import { Trash2, X, Save, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { Trash2, X, Save, CheckSquare, Square, AlertCircle, HelpCircle } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { MenuItem } from '../../types/menu';
 import toastUtils from '../../../shared/utils/toastUtils';
@@ -45,12 +45,14 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
 
   // New group form fields
   const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupMin, setNewGroupMin] = useState(0);
+  const [newGroupMin, setNewGroupMin] = useState(1);
   const [newGroupMax, setNewGroupMax] = useState(1);
   const [newGroupFreeCount, setNewGroupFreeCount] = useState(0);
 
   // We'll generate temporary negative IDs for new groups/options
   const [tempIdCounter, setTempIdCounter] = useState(-1);
+
+
 
   React.useEffect(() => {
     fetchGroups();
@@ -93,23 +95,37 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
       (acc, g) => Math.max(acc, g.position || 0),
       0
     );
+    
+    const newGroupId = tempIdCounter;
+    const firstOptionId = tempIdCounter - 1;
+    
+    // Create the first option automatically
+    const firstOption: OptionRow = {
+      id: firstOptionId,
+      name: '',
+      additional_price: 0,
+      position: 1,
+      is_preselected: false,
+      is_available: true,
+    };
+    
     const newGroup: OptionGroup = {
-      id: tempIdCounter,
+      id: newGroupId,
       name: newGroupName,
       min_select: Math.max(0, newGroupMin),   // clamp min ≥ 0
       max_select: Math.max(1, newGroupMax),   // clamp max ≥ 1
       free_option_count: Math.max(0, Math.min(newGroupFreeCount, newGroupMax)), // clamp between 0 and max_select
       position: maxPos + 1,
-      options: [],
+      options: [firstOption], // Start with one empty option
     };
     setDraftOptionGroups((prev) => [...prev, newGroup]);
 
     // Reset fields
     setNewGroupName('');
-    setNewGroupMin(0);
+    setNewGroupMin(1);
     setNewGroupMax(1);
     setNewGroupFreeCount(0);
-    setTempIdCounter((prevId) => prevId - 1);
+    setTempIdCounter((prevId) => prevId - 2); // Decrement by 2 since we used 2 IDs
   };
 
   // Update local group
@@ -567,7 +583,7 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                   value={newGroupName}
                   onChange={(e) => setNewGroupName(e.target.value)}
                 />
-                <div className="flex items-center space-x-1 text-xs">
+                <div className="flex items-center space-x-1 text-xs relative group">
                   <span>Min:</span>
                   <input
                     type="number"
@@ -578,8 +594,12 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                       setNewGroupMin(Math.max(0, parseInt(e.target.value) || 0))
                     }
                   />
+                  <HelpCircle className="h-3 w-3 text-gray-400 cursor-help" />
+                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
+                    Minimum options customer must select (0 = optional, 1+ = required)
+                  </div>
                 </div>
-                <div className="flex items-center space-x-1 text-xs">
+                <div className="flex items-center space-x-1 text-xs relative group">
                   <span>Max:</span>
                   <input
                     type="number"
@@ -590,8 +610,12 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                       setNewGroupMax(Math.max(1, parseInt(e.target.value) || 1))
                     }
                   />
+                  <HelpCircle className="h-3 w-3 text-gray-400 cursor-help" />
+                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
+                    Maximum options customer can select from this group
+                  </div>
                 </div>
-                <div className="flex items-center space-x-1 text-xs">
+                <div className="flex items-center space-x-1 text-xs relative group">
                   <span>Free Options:</span>
                   <input
                     type="number"
@@ -604,6 +628,10 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                       setNewGroupFreeCount(Math.max(0, Math.min(value, newGroupMax)));
                     }}
                   />
+                  <HelpCircle className="h-3 w-3 text-gray-400 cursor-help" />
+                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
+                    Number of options that don't cost extra (rest will charge additional price)
+                  </div>
                 </div>
                 <button
                   onClick={handleCreateGroup}
@@ -620,7 +648,7 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
 
             {/* Existing Groups */}
             {draftOptionGroups.map((group) => (
-              <div key={group.id} className="border rounded-md p-4 mb-4">
+              <div key={group.id} className="border rounded-md p-4 mb-4 border-gray-200">
                 {/* Group header */}
                 <div className="flex justify-between items-center">
                   <div>
@@ -634,7 +662,7 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                     />
                     <div className="text-xs text-gray-500 mt-1 flex items-center space-x-3">
                       {/* Min, Max, and Free Options */}
-                      <div className="flex items-center">
+                      <div className="flex items-center relative group">
                         <span>Min:</span>
                         <input
                           type="number"
@@ -647,8 +675,12 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                             })
                           }
                         />
+                        <HelpCircle className="h-3 w-3 text-gray-400 cursor-help ml-1" />
+                        <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
+                          Minimum options customer must select (0 = optional, 1+ = required)
+                        </div>
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center relative group">
                         <span>Max:</span>
                         <input
                           type="number"
@@ -661,8 +693,12 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                             })
                           }
                         />
+                        <HelpCircle className="h-3 w-3 text-gray-400 cursor-help ml-1" />
+                        <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
+                          Maximum options customer can select from this group
+                        </div>
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center relative group">
                         <span>Free:</span>
                         <input
                           type="number"
@@ -677,7 +713,13 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                             });
                           }}
                         />
+                        <HelpCircle className="h-3 w-3 text-gray-400 cursor-help ml-1" />
+                        <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
+                          Number of options that don't cost extra (rest will charge additional price)
+                        </div>
                       </div>
+                      
+
                     </div>
                   </div>
 
@@ -693,10 +735,16 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                 {/* Options */}
                 <div className="mt-4 ml-2">
                   <div className="flex justify-between items-center mb-2">
-                    <div className="flex items-center">
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => handleLocalCreateOption(group.id)}
+                        className="flex items-center px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded"
+                      >
+                        + Add Option
+                      </button>
                       {/* Select All Checkbox */}
                       {group.options.length > 0 && (
-                        <label className="flex items-center space-x-1 text-xs mr-2 cursor-pointer">
+                        <label className="flex items-center space-x-1 text-xs cursor-pointer">
                           <div onClick={() => toggleAllOptionsInGroup(group.id, !isAllGroupSelected(group.id))} className="cursor-pointer">
                             {isAllGroupSelected(group.id) ? (
                               <CheckSquare className="h-4 w-4 text-green-600" />
@@ -708,16 +756,10 @@ export function OptionGroupsModal({ item, onClose }: OptionGroupsModalProps) {
                         </label>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleLocalCreateOption(group.id)}
-                      className="flex items-center px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded"
-                    >
-                      + Add Option
-                    </button>
                   </div>
 
                   {group.options.length === 0 && (
-                    <p className="text-sm text-gray-400 mt-2">No options yet.</p>
+                    <p className="text-sm text-gray-400 mt-2">Click "Add Option" to get started.</p>
                   )}
 
                   <DraggableOptionList

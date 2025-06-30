@@ -9,6 +9,8 @@ interface OrderItem {
   quantity: number;
   price?: number;
   enable_stock_tracking?: boolean;
+  uses_option_level_inventory?: boolean;
+  has_option_inventory_tracking?: boolean;
   orderId?: string | number; // Order ID this item belongs to
 }
 
@@ -40,18 +42,25 @@ interface BulkInventoryActionDialogProps {
   onClose: () => void;
   onConfirm: (inventoryActions: InventoryAction[]) => void;
   isBatch?: boolean; // Whether this is for a batch of orders or single order
+  isRefundMode?: boolean; // Whether this is for selective refunding vs full cancellation
 }
 
 export function BulkInventoryActionDialog({
   order,
   onClose,
   onConfirm,
-  isBatch = false
+  isBatch = false,
+  isRefundMode = false
 }: BulkInventoryActionDialogProps) {
   // State to track actions for each inventory item
   const [inventoryActions, setInventoryActions] = useState<InventoryAction[]>([]);
   const [inventoryItems, setInventoryItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Refund mode specific state
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
+  const [selectAll, setSelectAll] = useState(!isRefundMode); // Auto-select all for cancellation mode
   
   // Payment-related state
   const [orderPaymentInfo, setOrderPaymentInfo] = useState<OrderPaymentInfo[]>([]);
@@ -123,6 +132,8 @@ export function BulkInventoryActionDialog({
                     return {
                       ...item,
                       enable_stock_tracking: fullItem.enable_stock_tracking,
+                      uses_option_level_inventory: (fullItem as any).uses_option_level_inventory,
+                      has_option_inventory_tracking: (fullItem as any).has_option_inventory_tracking,
                       // Use the item quantity from the order
                       quantity: item.quantity,
                       // Store the order ID this item belongs to
@@ -185,9 +196,25 @@ export function BulkInventoryActionDialog({
           paymentReason: ''
         }));
 
+        // Initialize quantities for refund mode
+        const initialQuantities: Record<string, number> = {};
+        const initialSelectedItems = new Set<string>();
+        
+        allItems.forEach((item, index) => {
+          const uniqueId = `${item.id}-${item.orderId}-${index}`;
+          initialQuantities[uniqueId] = item.quantity;
+          
+          // In cancellation mode, auto-select all items
+          if (!isRefundMode) {
+            initialSelectedItems.add(uniqueId);
+          }
+        });
+
         setInventoryItems(allItems);
         setInventoryActions(initialActions);
         setOrderPaymentInfo(paymentInfoList);
+        setItemQuantities(initialQuantities);
+        setSelectedItems(initialSelectedItems);
       } catch (error) {
         console.error('Error fetching inventory items:', error);
       } finally {
@@ -230,6 +257,53 @@ export function BulkInventoryActionDialog({
         item.uniqueId === uniqueId 
           ? { ...item, reason } 
           : item
+      )
+    );
+  };
+
+  // Handle item selection (refund mode only)
+  const handleItemSelection = (uniqueId: string, isSelected: boolean) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (isSelected) {
+        newSet.add(uniqueId);
+      } else {
+        newSet.delete(uniqueId);
+      }
+      return newSet;
+    });
+  };
+
+  // Handle select all (refund mode only)
+  const handleSelectAll = (isSelected: boolean) => {
+    setSelectAll(isSelected);
+    if (isSelected) {
+      const allUniqueIds = inventoryItems.map((item, index) => `${item.id}-${item.orderId}-${index}`);
+      setSelectedItems(new Set(allUniqueIds));
+    } else {
+      setSelectedItems(new Set());
+    }
+  };
+
+  // Handle quantity change (refund mode only)
+  const handleQuantityChange = (uniqueId: string, newQuantity: number) => {
+    const item = inventoryItems.find((item, index) => `${item.id}-${item.orderId}-${index}` === uniqueId);
+    if (!item) return;
+    
+    // Ensure quantity is within valid range
+    const clampedQuantity = Math.max(1, Math.min(newQuantity, item.quantity));
+    
+    setItemQuantities(prev => ({
+      ...prev,
+      [uniqueId]: clampedQuantity
+    }));
+    
+    // Update inventory actions quantity
+    setInventoryActions(prev => 
+      prev.map(action => 
+        action.uniqueId === uniqueId 
+          ? { ...action, quantity: clampedQuantity } 
+          : action
       )
     );
   };
@@ -285,8 +359,18 @@ export function BulkInventoryActionDialog({
 
   // Process all items and confirm
   const handleConfirm = () => {
+    // In refund mode, only process selected items
+    const actionsToProcess = isRefundMode 
+      ? inventoryActions.filter(action => selectedItems.has(action.uniqueId))
+      : inventoryActions;
+
+    if (isRefundMode && actionsToProcess.length === 0) {
+      alert('Please select at least one item to refund.');
+      return;
+    }
+
     // Make sure all required fields are filled
-    const isValid = inventoryActions.every(action => {
+    const isValid = actionsToProcess.every(action => {
       if (action.action === 'mark_as_damaged' && !action.reason) {
         return false;
       }
@@ -309,7 +393,7 @@ export function BulkInventoryActionDialog({
     }
 
     // Update all inventory actions with the final payment information
-    const finalActions = inventoryActions.map(action => ({
+    const finalActions = actionsToProcess.map(action => ({
       ...action,
       paymentAction: selectedPaymentAction,
       paymentReason: isOtherReasonSelected ? customPaymentReason : paymentReason
@@ -360,7 +444,9 @@ export function BulkInventoryActionDialog({
         <div className="px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold text-gray-900">
-              {isBatch 
+              {isRefundMode
+                ? 'Process Refund & Manage Inventory'
+                : isBatch 
                 ? 'Manage Inventory & Payment for Cancelled Orders' 
                 : 'Manage Inventory & Payment for Cancelled Order'
               }
@@ -378,7 +464,11 @@ export function BulkInventoryActionDialog({
             </button>
           </div>
           <p className="text-sm text-gray-600 mt-1">
-            {inventoryItems.length > 0 
+            {isRefundMode
+              ? inventoryItems.length > 0 
+                ? 'Select items to refund and specify inventory handling for each selected item.'
+                : 'Please specify how you would like to handle payment for this refund.'
+              : inventoryItems.length > 0 
               ? 'The following items have inventory tracking. Please specify what should happen to each item.'
               : 'Please specify how you would like to handle payment for this cancellation.'}
           </p>
@@ -574,9 +664,25 @@ export function BulkInventoryActionDialog({
           {/* Inventory items list - only show if there are inventory items */}
           {inventoryItems.length > 0 && (
             <div className="p-6">
-              <h4 className="text-base font-medium text-gray-900 mb-4">
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="text-base font-medium text-gray-900">
                 Inventory Items
               </h4>
+                {isRefundMode && (
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="select-all-inventory"
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      checked={selectAll}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                    />
+                    <label htmlFor="select-all-inventory" className="ml-2 block text-sm text-gray-700">
+                      Select All
+                    </label>
+                  </div>
+                )}
+              </div>
               
               <div className="space-y-6">
                 {inventoryItems.map((item, index) => {
@@ -586,20 +692,54 @@ export function BulkInventoryActionDialog({
                   return (
                     <div 
                       key={uniqueItemId} 
-                      className="border border-gray-200 rounded-lg p-4 animate-fadeIn"
+                      className={`border rounded-lg p-4 animate-fadeIn ${
+                        isRefundMode && !selectedItems.has(uniqueItemId) 
+                          ? 'border-gray-200 opacity-60' 
+                          : 'border-gray-200'
+                      }`}
                     >
                       <div className="flex justify-between items-start mb-3">
-                        <div>
+                        <div className="flex items-start space-x-3 flex-1">
+                          {isRefundMode && (
+                            <div className="flex items-center pt-1">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                checked={selectedItems.has(uniqueItemId)}
+                                onChange={(e) => handleItemSelection(uniqueItemId, e.target.checked)}
+                              />
+                            </div>
+                          )}
+                          <div className="flex-1">
                           <h5 className="font-medium text-gray-900">{item.name}</h5>
+                            <div className="flex items-center space-x-4 mt-1">
+                              {isRefundMode ? (
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-sm text-gray-600">Quantity:</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={item.quantity}
+                                    value={itemQuantities[uniqueItemId] || 1}
+                                    onChange={(e) => handleQuantityChange(uniqueItemId, parseInt(e.target.value))}
+                                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                                    disabled={!selectedItems.has(uniqueItemId)}
+                                  />
+                                  <span className="text-sm text-gray-500">of {item.quantity}</span>
+                                </div>
+                              ) : (
                           <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                              )}
                           {item.price && (
                             <p className="text-sm text-gray-600">
-                              Value: ${(item.price * item.quantity).toFixed(2)}
+                                  Value: ${(item.price * (isRefundMode ? (itemQuantities[uniqueItemId] || 1) : item.quantity)).toFixed(2)}
                             </p>
                           )}
+                            </div>
                           {isBatch && item.orderId && (
-                            <p className="text-sm text-gray-600">Order: #{item.orderId}</p>
+                              <p className="text-sm text-gray-600 mt-1">Order: #{item.orderId}</p>
                           )}
+                          </div>
                         </div>
                       </div>
 
@@ -612,8 +752,11 @@ export function BulkInventoryActionDialog({
                             <button
                               type="button"
                               onClick={() => handleActionChange(uniqueItemId, 'return_to_inventory')}
-                              className={`px-4 py-2 rounded-md text-sm font-medium flex-1 ${
-                                action?.action === 'return_to_inventory'
+                              disabled={isRefundMode && !selectedItems.has(uniqueItemId)}
+                              className={`px-4 py-2 rounded-md text-sm font-medium flex-1 transition-colors ${
+                                isRefundMode && !selectedItems.has(uniqueItemId)
+                                  ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                                  : action?.action === 'return_to_inventory'
                                   ? 'bg-green-100 text-green-800 border-2 border-green-300'
                                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                               }`}
@@ -623,8 +766,11 @@ export function BulkInventoryActionDialog({
                             <button
                               type="button"
                               onClick={() => handleActionChange(uniqueItemId, 'mark_as_damaged')}
-                              className={`px-4 py-2 rounded-md text-sm font-medium flex-1 ${
-                                action?.action === 'mark_as_damaged'
+                              disabled={isRefundMode && !selectedItems.has(uniqueItemId)}
+                              className={`px-4 py-2 rounded-md text-sm font-medium flex-1 transition-colors ${
+                                isRefundMode && !selectedItems.has(uniqueItemId)
+                                  ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                                  : action?.action === 'mark_as_damaged'
                                   ? 'bg-red-100 text-red-800 border-2 border-red-300'
                                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                               }`}
@@ -644,7 +790,12 @@ export function BulkInventoryActionDialog({
                               value={action.reason || ''}
                               onChange={(e) => handleReasonChange(uniqueItemId, e.target.value)}
                               placeholder="Why is this item damaged?"
-                              className="border border-gray-300 rounded-md px-3 py-2 w-full text-sm focus:ring-[#c1902f] focus:border-[#c1902f]"
+                              disabled={isRefundMode && !selectedItems.has(uniqueItemId)}
+                              className={`border border-gray-300 rounded-md px-3 py-2 w-full text-sm focus:ring-[#c1902f] focus:border-[#c1902f] ${
+                                isRefundMode && !selectedItems.has(uniqueItemId) 
+                                  ? 'bg-gray-50 text-gray-400 cursor-not-allowed' 
+                                  : ''
+                              }`}
                             />
                           </div>
                         )}

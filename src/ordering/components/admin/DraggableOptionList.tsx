@@ -165,6 +165,8 @@ function SortableOptionItem({
         </label>
       </div>
 
+
+
       {/* Position controls for accessibility */}
       <div className="flex flex-col mr-1.5 my-0.5">
         <button

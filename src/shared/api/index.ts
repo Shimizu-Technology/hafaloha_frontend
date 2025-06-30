@@ -12,6 +12,8 @@ export * from './endpoints/auth';
 export * from './endpoints/events';
 export * from './endpoints/layouts';
 export * from './endpoints/menu';
+export * from './endpoints/options';
+export * from './endpoints/optionGroups';
 export * from './endpoints/orders';
 export * from './endpoints/reports';
 export * from './endpoints/reservations';

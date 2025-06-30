@@ -7,6 +7,7 @@ import { useMenuStore } from '../../store/menuStore';
 import type { MenuItem, MenuItemFilterParams } from '../../types/menu';
 import { useCategoryStore } from '../../store/categoryStore'; // to fetch real categories
 import { api, uploadMenuItemImage } from '../../lib/api';
+import { menuItemsApi } from '../../../shared/api/endpoints/menuItems';
 import { useLoadingOverlay } from '../../../shared/components/ui/LoadingOverlay';
 import { Tooltip } from '../../../shared/components/ui';
 import { deriveStockStatus, calculateAvailableQuantity } from '../../utils/inventoryUtils';
@@ -659,7 +660,7 @@ export function MenuManager({
   }, [storeMenuItems, isEditing, editItemPollingActive, editingItem]);
 
   /** Manage inventory => show the modal and ensure WebSocket connection. */
-  const handleManageInventory = (item: MenuItem) => {
+  const handleManageInventory = async (item: MenuItem) => {
     // First ensure any existing polling is stopped
     stopInventoryPolling();
     
@@ -672,8 +673,19 @@ export function MenuManager({
       console.debug(`[MenuManager] WebSocket already connected for inventory updates`);
     }
     
+    try {
+      // Fetch the complete menu item data with option groups from the backend
+      const fullMenuItem = await menuItemsApi.getById(item.id);
+      
+      setInventoryModalItem(fullMenuItem);
+      setInventoryModalOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch menu item data for inventory modal:', error);
+      // Fallback to the original item if API call fails
+    
     setInventoryModalItem(item);
     setInventoryModalOpen(true);
+    }
   };
   const handleCloseInventoryModal = () => {
     setInventoryModalOpen(false);
@@ -2142,13 +2154,46 @@ export function MenuManager({
           open={inventoryModalOpen}
           menuItem={inventoryModalItem}
           onClose={handleCloseInventoryModal}
-          onSave={() => {
-            // Only refresh if WebSocket is not connected
+          onSave={async () => {
+            // Always refresh the inventory modal item with latest data
+            try {
+              const updatedItem = await menuItemsApi.getById(inventoryModalItem.id);
+              setInventoryModalItem(updatedItem);
+              
+              // If we're currently editing the same item, update the editing form too
+              if (editingItem && editingItem.id && inventoryModalItem.id === String(editingItem.id)) {
+                setEditingItem((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    enable_stock_tracking: updatedItem.enable_stock_tracking,
+                    stock_quantity: updatedItem.stock_quantity || 0,
+                    damaged_quantity: updatedItem.damaged_quantity || 0,
+                    low_stock_threshold: updatedItem.low_stock_threshold || 10,
+                    available_quantity: Math.max(0, (updatedItem.stock_quantity || 0) - (updatedItem.damaged_quantity || 0)),
+                    stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'
+                  };
+                });
+              }
+            } catch (error) {
+              console.error('Failed to refresh inventory modal item:', error);
+            }
+            
+            // Only refresh the main list if WebSocket is not connected
             if (!websocketConnected) {
               refreshAfterInventoryChanges();
             }
           }}
-          onEnableTrackingChange={(enabled) => {
+          onEnableTrackingChange={async (enabled) => {
+            // Immediately update the inventory modal item
+            setInventoryModalItem((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                enable_stock_tracking: enabled
+              };
+            });
+            
             // If we're currently editing the same item in the background, sync
             if (
               editingItem &&

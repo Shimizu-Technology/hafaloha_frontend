@@ -245,6 +245,65 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
     return freeOptionIds.includes(optId);
   }
 
+  // Calculate available stock quantity for an option
+  const getOptionAvailableStock = (option: MenuOption): number => {
+    if (option.stock_quantity === undefined) {
+      return Infinity; // No stock tracking
+    }
+    const damagedQty = option.damaged_quantity || 0;
+    return Math.max(0, option.stock_quantity - damagedQty);
+  };
+
+  // Check if an option has low stock
+  const isOptionLowStock = (option: MenuOption): boolean => {
+    const availableStock = getOptionAvailableStock(option);
+    if (availableStock === Infinity) return false;
+    
+    // Consider low stock if 5 or fewer items available
+    return availableStock > 0 && availableStock <= 5;
+  };
+
+  // Check if an option is out of stock
+  const isOptionOutOfStock = (option: MenuOption): boolean => {
+    const availableStock = getOptionAvailableStock(option);
+    return availableStock === 0;
+  };
+
+  // Get stock indicator component for an option
+  const getStockIndicator = (option: MenuOption) => {
+    const availableStock = getOptionAvailableStock(option);
+    
+    if (availableStock === Infinity) {
+      return null; // No stock tracking
+    }
+    
+    if (availableStock === 0) {
+      return (
+        <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full ml-2">
+          Out of Stock
+        </span>
+      );
+    }
+    
+    if (availableStock <= 5) {
+      return (
+        <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full ml-2">
+          {availableStock} left
+        </span>
+      );
+    }
+    
+    if (availableStock <= 20) {
+      return (
+        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full ml-2">
+          {availableStock} in stock
+        </span>
+      );
+    }
+    
+    return null; // Good stock levels, no indicator needed
+  };
+
   // Check if all required groups have the minimum number of selections
   function validateSelections(): boolean {
     for (const group of optionGroups) {
@@ -264,7 +323,6 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
   const addlPrice = getAdditionalPrice();
   const totalItemPrice = (basePrice + addlPrice) * quantity;
   const isValid = validateSelections();
-  const priceBreakdown = getPriceBreakdown();
 
   // Get paid options count per group
   const paidOptionsByGroup = Object.entries(selections).map(([groupId, selectedIds]) => {
@@ -469,6 +527,9 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                           .filter(opt => opt.is_available !== false) // Only show available options
                           .map((opt) => {
                           const selected = selections[groupId]?.includes(opt.id);
+                          const isOutOfStock = isOptionOutOfStock(opt);
+                          const isLowStock = isOptionLowStock(opt);
+                          const stockIndicator = getStockIndicator(opt);
                           
                           // Try different ways to access the price
                           const extraPrice = typeof opt.additional_price === 'number' ? opt.additional_price : 
@@ -498,25 +559,40 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                             <button
                               key={opt.id}
                               type="button"
-                              onClick={() => handleOptionToggle(group, opt)}
+                              onClick={() => !isOutOfStock && handleOptionToggle(group, opt)}
+                              disabled={isOutOfStock}
                               className={`block w-full text-left px-4 py-2 border rounded-md 
-                                ${
-                                  selected
-                                    ? 'border-[#c1902f] bg-[#c1902f]/10'
-                                    : 'border-gray-200 hover:border-[#c1902f]'
+                                ${isOutOfStock 
+                                  ? 'cursor-not-allowed opacity-60 border-gray-300 bg-gray-100' 
+                                  : ''
                                 }
+                                ${!isOutOfStock && selected
+                                    ? 'border-[#c1902f] bg-[#c1902f]/10'
+                                  : !isOutOfStock 
+                                    ? 'border-gray-200 hover:border-[#c1902f]'
+                                    : ''
+                                }
+                                ${isLowStock && !isOutOfStock ? 'border-orange-200 bg-orange-50' : ''}
                               `}
                             >
-                              <div className="flex justify-between items-center w-full">
-                                <div>
-                                  {opt.name}{' '}
+                              <div className="flex justify-between items-start w-full">
+                                <div className="flex-1">
+                                  <div className="flex items-center flex-wrap">
+                                    {opt.name}
                                   {opt.is_preselected && !selected && (
                                     <span className="ml-2 text-xs text-blue-500">
                                       (Recommended)
                                     </span>
+                                    )}
+                                    {stockIndicator}
+                                  </div>
+                                  {isOutOfStock && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                      This option is currently out of stock
+                                    </p>
                                   )}
                                 </div>
-                                <div className="flex items-center">
+                                <div className="flex items-center ml-2">
                                   {priceIndicator}
                                 </div>
                               </div>

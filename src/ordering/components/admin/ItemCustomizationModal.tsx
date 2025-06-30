@@ -160,6 +160,65 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
     return 0;
   };
 
+  // Calculate available stock quantity for an option
+  const getOptionAvailableStock = (option: MenuOption): number => {
+    if (option.stock_quantity === undefined) {
+      return Infinity; // No stock tracking
+    }
+    const damagedQty = option.damaged_quantity || 0;
+    return Math.max(0, option.stock_quantity - damagedQty);
+  };
+
+  // Check if an option has low stock
+  const isOptionLowStock = (option: MenuOption): boolean => {
+    const availableStock = getOptionAvailableStock(option);
+    if (availableStock === Infinity) return false;
+    
+    // Consider low stock if 5 or fewer items available
+    return availableStock > 0 && availableStock <= 5;
+  };
+
+  // Check if an option is out of stock
+  const isOptionOutOfStock = (option: MenuOption): boolean => {
+    const availableStock = getOptionAvailableStock(option);
+    return availableStock === 0;
+  };
+
+  // Get stock indicator component for an option
+  const getStockIndicator = (option: MenuOption) => {
+    const availableStock = getOptionAvailableStock(option);
+    
+    if (availableStock === Infinity) {
+      return null; // No stock tracking
+    }
+    
+    if (availableStock === 0) {
+      return (
+        <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full ml-2">
+          Out of Stock
+        </span>
+      );
+    }
+    
+    if (availableStock <= 5) {
+      return (
+        <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full ml-2">
+          {availableStock} left
+        </span>
+      );
+    }
+    
+    if (availableStock <= 20) {
+      return (
+        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full ml-2">
+          {availableStock} in stock
+        </span>
+      );
+    }
+    
+    return null; // Good stock levels, no indicator needed
+  };
+
   // Determine if an option would be free based on current selections
   const isOptionFree = (group: OptionGroup, optId: number): boolean => {
     const chosenOptions = selectedOptions[group.id.toString()] || [];
@@ -396,8 +455,8 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
     if (!processedOptionGroups.length) return displayFormat;
     
     // Group selected options by their group name
-    Object.entries(selectedOptions).forEach(([groupId, options]) => {
-      const group = processedOptionGroups.find((g: OptionGroup) => g.id.toString() === groupId);
+    Object.entries(selectedOptions).forEach(([groupIdStr, options]) => {
+      const group = processedOptionGroups.find((g: OptionGroup) => g.id.toString() === groupIdStr);
       if (!group || options.length === 0) return;
       
       // Use the group name as the key
@@ -517,6 +576,9 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                           
                           const extraPrice = getOptionPrice(option);
                           const isFree = isOptionFree(group, option.id);
+                          const isOutOfStock = isOptionOutOfStock(option);
+                          const isLowStock = isOptionLowStock(option);
+                          const stockIndicator = getStockIndicator(option);
                           
                           // Determine what price indicator to show
                           let priceIndicator = null;
@@ -538,24 +600,39 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                             <div
                               key={option.id}
                               className={`
-                                block w-full text-left px-4 py-2 border rounded-md cursor-pointer
-                                ${isSelected
-                                  ? 'border-[#c1902f] bg-[#c1902f]/10'
-                                  : 'border-gray-200 hover:border-[#c1902f]'
+                                block w-full text-left px-4 py-2 border rounded-md
+                                ${isOutOfStock 
+                                  ? 'cursor-not-allowed opacity-60 border-gray-300 bg-gray-100' 
+                                  : 'cursor-pointer'
                                 }
+                                ${!isOutOfStock && isSelected
+                                  ? 'border-[#c1902f] bg-[#c1902f]/10'
+                                  : !isOutOfStock 
+                                    ? 'border-gray-200 hover:border-[#c1902f]'
+                                    : ''
+                                }
+                                ${isLowStock && !isOutOfStock ? 'border-orange-200 bg-orange-50' : ''}
                               `}
-                              onClick={() => toggleOption(group, option)}
+                              onClick={() => !isOutOfStock && toggleOption(group, option)}
                             >
-                              <div className="flex justify-between items-center w-full">
-                                <div>
-                                  {option.name}{' '}
+                              <div className="flex justify-between items-start w-full">
+                                <div className="flex-1">
+                                  <div className="flex items-center flex-wrap">
+                                    {option.name}
                                   {option.is_preselected && !isSelected && (
                                     <span className="ml-2 text-xs text-blue-500">
                                       (Recommended)
                                     </span>
+                                    )}
+                                    {stockIndicator}
+                                  </div>
+                                  {isOutOfStock && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                      This option is currently out of stock
+                                    </p>
                                   )}
                                 </div>
-                                <div className="flex items-center">
+                                <div className="flex items-center ml-2">
                                   {priceIndicator}
                                 </div>
                               </div>

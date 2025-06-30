@@ -23,6 +23,11 @@ interface MenuState {
   inventoryPollingInterval: number | null;
   websocketConnected: boolean;
   
+  // Option-level inventory state
+  optionInventoryLoading: boolean;
+  optionInventoryError: string | null;
+  optionInventoryUpdates: Record<string, any>; // Track option inventory changes
+  
   // Actions
   fetchMenus: () => Promise<void>;
   fetchAllMenus: (restaurantId?: number) => Promise<Menu[]>; // New function to fetch all menus
@@ -57,6 +62,16 @@ interface MenuState {
   // Get individual menu item with fresh data
   getMenuItemById: (id: number | string) => Promise<MenuItem | null>;
   
+  // Option inventory methods
+  updateOptionInventoryInStore: (menuItemId: string, optionGroupId: number, optionUpdates: any) => void;
+  refreshMenuItemWithOptions: (menuItemId: string) => Promise<MenuItem | null>;
+  clearOptionInventoryError: () => void;
+  
+  // Option inventory polling methods
+  startOptionInventoryPolling: (menuItemId: string, optionGroupId?: number) => string;
+  stopOptionInventoryPolling: (pollingId?: string) => void;
+  getActiveOptionPolling: () => Map<string, any>;
+  
   // New optimized methods for backend filtering
   fetchMenuItemsWithFilters: (params: MenuItemFilterParams) => Promise<MenuItem[]>;
   fetchFeaturedItems: (restaurantId?: number) => Promise<MenuItem[]>;
@@ -76,6 +91,11 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   inventoryPolling: false,
   inventoryPollingInterval: null,
   websocketConnected: false,
+  
+  // Option-level inventory state
+  optionInventoryLoading: false,
+  optionInventoryError: null,
+  optionInventoryUpdates: {},
 
   fetchMenus: async () => {
     set({ loading: true, error: null });
@@ -658,6 +678,41 @@ export const useMenuStore = create<MenuState>((set, get) => ({
               )
             }));
             console.debug(`[MenuStore] Updated menu item ${updatedItem.id} via WebSocket`);
+          } else if (data.type === 'option_inventory_update') {
+            // Handle option-level inventory updates
+            const { menu_item_id, option_group_id, option_group, menu_item } = data;
+            
+            console.debug(`[MenuStore] Received option inventory update for item ${menu_item_id}, group ${option_group_id}`);
+            
+            set(state => ({
+              menuItems: state.menuItems.map(item => {
+                if (item.id === menu_item_id.toString() && item.option_groups) {
+                  return {
+                    ...item,
+                    // Update menu item level inventory if provided
+                    ...(menu_item && {
+                      stock_quantity: menu_item.stock_quantity,
+                      damaged_quantity: menu_item.damaged_quantity,
+                      available_quantity: menu_item.available_quantity
+                    }),
+                    // Update the specific option group
+                    option_groups: item.option_groups.map(group => 
+                      group.id === option_group_id ? { ...group, ...option_group } : group
+                    )
+                  };
+                }
+                return item;
+              }),
+              // Track the update
+              optionInventoryUpdates: {
+                ...state.optionInventoryUpdates,
+                [`${menu_item_id}_${option_group_id}`]: {
+                  ...option_group,
+                  timestamp: Date.now(),
+                  source: 'websocket'
+                }
+              }
+            }));
           } else if (data.type === 'menu_item_created') {
             // Add the new item to our store
             const newItem = data.item;
@@ -1084,5 +1139,161 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       set({ error: errorMessage });
       return [];
     }
+  },
+
+  // Option inventory methods
+  updateOptionInventoryInStore: (menuItemId: string, optionGroupId: number, optionUpdates: any) => {
+    set(state => ({
+      menuItems: state.menuItems.map(item => {
+        if (item.id === menuItemId && item.option_groups) {
+          return {
+            ...item,
+            option_groups: item.option_groups.map(group => {
+              if (group.id === optionGroupId) {
+                return {
+                  ...group,
+                  ...optionUpdates
+                };
+              }
+              return group;
+            })
+          };
+        }
+        return item;
+      }),
+      optionInventoryUpdates: {
+        ...state.optionInventoryUpdates,
+        [`${menuItemId}_${optionGroupId}`]: {
+          ...optionUpdates,
+          timestamp: Date.now()
+        }
+      }
+    }));
+  },
+
+  refreshMenuItemWithOptions: async (menuItemId: string) => {
+    set({ optionInventoryLoading: true, optionInventoryError: null });
+    try {
+      const updatedItem = await menuItemsApi.getById(menuItemId, true);
+      
+      // Process the item to ensure image property is set
+      const processedItem = {
+        ...updatedItem,
+        image: updatedItem.image_url || '/placeholder-food.png'
+      };
+      
+      // Update the specific item in the store
+      set(state => ({
+        menuItems: state.menuItems.map(item => 
+          item.id === menuItemId ? processedItem : item
+        ),
+        optionInventoryLoading: false
+      }));
+      
+      return processedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ 
+        optionInventoryError: errorMessage,
+        optionInventoryLoading: false 
+      });
+      console.error('[MenuStore] Error refreshing menu item with options:', error);
+      return null;
+    }
+  },
+
+  clearOptionInventoryError: () => {
+    set({ optionInventoryError: null });
+  },
+
+  // Option inventory polling methods
+  startOptionInventoryPolling: (menuItemId: string, optionGroupId?: number) => {
+    
+    // If WebSocket is connected, don't start polling
+    if (get().websocketConnected) {
+      console.debug(`[MenuStore] WebSocket is connected, not starting option inventory polling for item ${menuItemId}`);
+      return '';
+    }
+    
+    console.debug(`[MenuStore] Starting option inventory polling for item ${menuItemId}${optionGroupId ? `, group ${optionGroupId}` : ''}`);
+    
+    // Define the polling handler for option inventory updates
+    const optionPollingHandler = (data: any) => {
+      if (data && data.id === menuItemId) {
+        console.debug(`[MenuStore] Received option inventory update via polling for item ${menuItemId}`);
+        
+        // Update the specific menu item in the store
+        set(state => ({
+          menuItems: state.menuItems.map(item => 
+            item.id === menuItemId ? {
+              ...item,
+              ...data,
+              image: data.image_url || item.image || '/placeholder-food.png'
+            } : item
+          ),
+          optionInventoryUpdates: {
+            ...state.optionInventoryUpdates,
+            [`${menuItemId}_polling`]: {
+              timestamp: Date.now(),
+              source: 'polling',
+              data: data
+            }
+          }
+        }));
+      }
+    };
+    
+    // Start polling using PollingManager
+    const pollingId = pollingManager.startPolling(
+      PollingResourceType.OPTION_INVENTORY,
+      optionPollingHandler,
+      {
+        resourceId: menuItemId,
+        interval: 45000, // Poll every 45 seconds
+        silent: true,
+        sourceId: 'option_inventory_polling',
+        params: {
+          include_option_groups: true,
+          include_stock: true
+        }
+      }
+    );
+    
+    console.debug(`[MenuStore] Started option inventory polling with ID: ${pollingId}`);
+    return pollingId;
+  },
+
+  stopOptionInventoryPolling: (pollingId?: string) => {
+    if (pollingId) {
+      console.debug(`[MenuStore] Stopping specific option inventory polling: ${pollingId}`);
+      pollingManager.stopPolling(pollingId);
+    } else {
+      // Stop all option inventory polling
+      console.debug(`[MenuStore] Stopping all option inventory polling`);
+      const activePolling = pollingManager.getActivePolling();
+      
+      activePolling.forEach((type: any, id: string) => {
+        if (type === PollingResourceType.OPTION_INVENTORY) {
+          pollingManager.stopPolling(id);
+        }
+      });
+    }
+  },
+
+  getActiveOptionPolling: () => {
+    const activePolling = pollingManager.getActivePolling();
+    const optionPolling = new Map();
+    
+    activePolling.forEach((type: any, id: string) => {
+      if (type === PollingResourceType.OPTION_INVENTORY) {
+        const status = pollingManager.getPollingStatus(id);
+        optionPolling.set(id, {
+          type,
+          ...status
+        });
+      }
+    });
+    
+    return optionPolling;
   }
 }));

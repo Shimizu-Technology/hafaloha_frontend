@@ -1,11 +1,13 @@
 // src/ordering/components/CartPage.tsx
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, Minus, Plus, Settings } from 'lucide-react';
 import { useOrderStore, CartItem } from '../store/orderStore';
 import { useMenuStore } from '../store/menuStore';
 import { CustomizationModal } from './CustomizationModal';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
+import { calculateAvailableQuantity } from '../utils/inventoryUtils';
+import toastUtils from '../../shared/utils/toastUtils';
 
 export function CartPage() {
   const navigate = useNavigate();
@@ -13,6 +15,88 @@ export function CartPage() {
   
   // State for customization modal
   const [itemToCustomize, setItemToCustomize] = useState<any>(null);
+
+  // FE-018: Option availability helper functions
+  const getOptionAvailableQuantity = useCallback((option: any): number => {
+    if (option.stock_quantity === undefined) {
+      return Infinity; // No stock tracking
+    }
+    const damagedQty = option.damaged_quantity || 0;
+    return Math.max(0, option.stock_quantity - damagedQty);
+  }, [menuItems]);
+
+  const isOptionAvailable = useCallback((option: any, requestedQuantity: number = 1): boolean => {
+    // First check manual availability toggle
+    if (!option.available) {
+      return false;
+    }
+    
+    // Also check optional is_available field if present
+    if (option.is_available === false) {
+      return false;
+    }
+    
+    // If no inventory tracking, rely on manual availability
+    if (option.stock_quantity === undefined || option.stock_quantity === null) {
+      return true; // Default to available if no stock tracking
+    }
+    
+    // Calculate available quantity (stock - damaged)
+    const availableQuantity = getOptionAvailableQuantity(option);
+    return availableQuantity >= requestedQuantity;
+  }, [getOptionAvailableQuantity, menuItems]);
+
+  const validateCartItemOptions = useCallback((cartItem: CartItem, menuItem: any): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+    
+    if (!cartItem.customizations || !menuItem?.option_groups) {
+      return { isValid: true, errors };
+    }
+    
+    // Extract selected options from customizations
+    const selectedOptions: Array<{
+      option_group_id: number;
+      option_id: number;
+      option_name: string;
+      quantity: number;
+    }> = [];
+    
+    Object.entries(cartItem.customizations).forEach(([groupName, selections]) => {
+      if (Array.isArray(selections)) {
+        selections.forEach((selectionName) => {
+          // Find the option group and option
+          const optionGroup = menuItem.option_groups.find((group: any) => group.name === groupName);
+          const option = optionGroup?.options.find((opt: any) => opt.name === selectionName);
+          
+          if (optionGroup && option) {
+            selectedOptions.push({
+              option_group_id: optionGroup.id,
+              option_id: option.id,
+              option_name: option.name,
+              quantity: cartItem.quantity
+            });
+          }
+        });
+      }
+    });
+    
+    // Validate each selected option
+    selectedOptions.forEach((selectedOption) => {
+      const optionGroup = menuItem.option_groups.find((group: any) => group.id === selectedOption.option_group_id);
+      const option = optionGroup?.options.find((opt: any) => opt.id === selectedOption.option_id);
+      
+      if (option && !isOptionAvailable(option, selectedOption.quantity)) {
+        const availableQty = getOptionAvailableQuantity(option);
+        if (availableQty === 0) {
+          errors.push(`${selectedOption.option_name} is out of stock`);
+        } else {
+          errors.push(`${selectedOption.option_name} has only ${availableQty} available (need ${selectedOption.quantity})`);
+        }
+      }
+    });
+    
+    return { isValid: errors.length === 0, errors };
+  }, [isOptionAvailable, getOptionAvailableQuantity, menuItems]);
 
   // We pull the actions from our store
   const {
@@ -109,6 +193,49 @@ export function CartPage() {
                       </div>
                     )}
 
+                    {/* FE-018: Availability warnings */}
+                    {(() => {
+                      const menuItem = menuItems.find(mi => mi.id === item.id);
+                      if (!menuItem) return null;
+                      
+                      const warnings: string[] = [];
+                      
+                      // Check item-level stock
+                      if (menuItem.enable_stock_tracking && menuItem.available_quantity !== undefined) {
+                        const availableQty = calculateAvailableQuantity(menuItem);
+                        if (availableQty < item.quantity) {
+                          warnings.push(`Only ${availableQty} available in stock (you have ${item.quantity} in cart)`);
+                        } else if (availableQty <= item.quantity + 2) {
+                          warnings.push(`Low stock: ${availableQty} remaining`);
+                        }
+                      }
+                      
+                      // Check option-level availability
+                      const optionValidation = validateCartItemOptions(item, menuItem);
+                      if (!optionValidation.isValid) {
+                        warnings.push(...optionValidation.errors);
+                      }
+                      
+                      if (warnings.length === 0) return null;
+                      
+                      return (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
+                          <div className="flex items-start">
+                            <svg className="w-4 h-4 text-amber-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <div className="text-sm text-amber-800">
+                              {warnings.map((warning, index) => (
+                                <p key={index} className={index > 0 ? 'mt-1' : ''}>
+                                  {warning}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* NEW: Per-item notes text area */}
                     <textarea
                       className="mt-2 w-full border border-gray-300 rounded-md p-2 text-sm
@@ -129,8 +256,53 @@ export function CartPage() {
                         </button>
                         <span className="px-4 py-2 border-x">{item.quantity}</span>
                         <button
-                          className="p-2 text-gray-600 hover:text-gray-900"
-                          onClick={() => setCartQuantity(itemKey, item.quantity + 1)}
+                          className="p-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            // FE-018: Validate item-level and option-level availability before increasing quantity
+                            const menuItem = menuItems.find(mi => mi.id === item.id);
+                            
+                            if (menuItem) {
+                              // Check item-level stock availability
+                              if (menuItem.enable_stock_tracking && menuItem.available_quantity !== undefined) {
+                                const availableQty = calculateAvailableQuantity(menuItem);
+                                if (availableQty <= item.quantity) {
+                                  toastUtils.error(`Cannot add more ${item.name}. Only ${availableQty} available in stock.`);
+                                  return;
+                                }
+                              }
+                              
+                              // Check option-level availability
+                              const optionValidation = validateCartItemOptions(
+                                { ...item, quantity: item.quantity + 1 }, 
+                                menuItem
+                              );
+                              
+                              if (!optionValidation.isValid) {
+                                toastUtils.error(`Cannot add more ${item.name}. ${optionValidation.errors.join(', ')}`);
+                                return;
+                              }
+                            }
+                            
+                            setCartQuantity(itemKey, item.quantity + 1);
+                          }}
+                          disabled={(() => {
+                            const menuItem = menuItems.find(mi => mi.id === item.id);
+                            if (!menuItem) return false;
+                            
+                            // Check item-level stock
+                            if (menuItem.enable_stock_tracking && menuItem.available_quantity !== undefined) {
+                              const availableQty = calculateAvailableQuantity(menuItem);
+                              if (availableQty <= item.quantity) return true;
+                            }
+                            
+                            // Check option-level availability
+                            const optionValidation = validateCartItemOptions(
+                              { ...item, quantity: item.quantity + 1 }, 
+                              menuItem
+                            );
+                            
+                            return !optionValidation.isValid;
+                          })()}
                         >
                           <Plus className="h-4 w-4" />
                         </button>
@@ -191,8 +363,54 @@ export function CartPage() {
                 <button
                   className="w-full flex items-center justify-center px-6 py-3 border
                            border-transparent text-base font-medium rounded-md text-white
-                           bg-[#c1902f] hover:bg-[#d4a43f]"
-                  onClick={() => navigate('/checkout')}
+                           bg-[#c1902f] hover:bg-[#d4a43f] disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    // FE-018: Validate all cart items before proceeding to checkout
+                    const validationIssues: string[] = [];
+                    
+                    cartItems.forEach((item) => {
+                      const menuItem = menuItems.find(mi => mi.id === item.id);
+                      if (!menuItem) return;
+                      
+                      // Check item-level stock
+                      if (menuItem.enable_stock_tracking && menuItem.available_quantity !== undefined) {
+                        const availableQty = calculateAvailableQuantity(menuItem);
+                        if (availableQty < item.quantity) {
+                          validationIssues.push(`${item.name}: Only ${availableQty} available (you have ${item.quantity} in cart)`);
+                        }
+                      }
+                      
+                      // Check option-level availability
+                      const optionValidation = validateCartItemOptions(item, menuItem);
+                      if (!optionValidation.isValid) {
+                        validationIssues.push(`${item.name}: ${optionValidation.errors.join(', ')}`);
+                      }
+                    });
+                    
+                    if (validationIssues.length > 0) {
+                      toastUtils.error(`Cannot proceed to checkout. Please resolve the following issues:\n${validationIssues.join('\n')}`);
+                      return;
+                    }
+                    
+                    navigate('/checkout');
+                  }}
+                  disabled={(() => {
+                    // Check if any cart items have availability issues
+                    return cartItems.some((item) => {
+                      const menuItem = menuItems.find(mi => mi.id === item.id);
+                      if (!menuItem) return false;
+                      
+                      // Check item-level stock
+                      if (menuItem.enable_stock_tracking && menuItem.available_quantity !== undefined) {
+                        const availableQty = calculateAvailableQuantity(menuItem);
+                        if (availableQty < item.quantity) return true;
+                      }
+                      
+                      // Check option-level availability
+                      const optionValidation = validateCartItemOptions(item, menuItem);
+                      return !optionValidation.isValid;
+                    });
+                  })()}
                 >
                   Proceed to Checkout
                   <ArrowRight className="ml-2 h-5 w-5" />

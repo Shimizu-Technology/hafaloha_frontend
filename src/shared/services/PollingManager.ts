@@ -10,7 +10,8 @@ export enum PollingResourceType {
   ORDERS = 'orders',
   INVENTORY = 'inventory',
   RESTAURANT = 'restaurant',
-  MENU_ITEMS = 'menu_items'
+  MENU_ITEMS = 'menu_items',
+  OPTION_INVENTORY = 'option_inventory'
 }
 
 /**
@@ -58,6 +59,7 @@ class PollingManager {
     this.defaultIntervals.set(PollingResourceType.ORDERS, 30000); // 30 seconds
     this.defaultIntervals.set(PollingResourceType.INVENTORY, 60000); // 1 minute
     this.defaultIntervals.set(PollingResourceType.RESTAURANT, 60000); // 1 minute
+    this.defaultIntervals.set(PollingResourceType.OPTION_INVENTORY, 45000); // 45 seconds
     
     // Set up periodic check to ensure we're not polling when WebSocket is connected
     setInterval(() => this.checkWebSocketStatus(), 10000); // Check every 10 seconds
@@ -328,6 +330,9 @@ class PollingManager {
         case PollingResourceType.RESTAURANT:
           data = await this.pollRestaurant(pollOptions);
           break;
+        case PollingResourceType.OPTION_INVENTORY:
+          data = await this.pollOptionInventory(pollOptions);
+          break;
         default:
           console.error(`[PollingManager] Unknown polling type: ${entry.type}`);
           return;
@@ -422,6 +427,39 @@ class PollingManager {
       return response;
     } catch (error) {
       console.error(`[PollingManager] Error polling restaurant ${resourceId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Poll for option inventory
+   * @param options The polling options
+   * @returns The poll results
+   */
+  private async pollOptionInventory(options: PollingOptions): Promise<any> {
+    const { resourceId, params = {} } = options;
+    
+    if (!resourceId) {
+      console.error('[PollingManager] No menu item ID provided for option inventory polling');
+      return null;
+    }
+    
+    // Create params object with source ID
+    const apiParams = {
+      ...params,
+      _sourceId: options.sourceId || 'polling'
+    };
+    
+    try {
+      // Use the updated API with silent option to fetch menu item with option groups
+      const response = await api.get(
+        `/menu_items/${resourceId}`,
+        apiParams,
+        { silent: true } // Always use silent mode for polling
+      );
+      return response;
+    } catch (error) {
+      console.error(`[PollingManager] Error polling option inventory for item ${resourceId}:`, error);
       return null;
     }
   }

@@ -7,7 +7,7 @@ import { useRestaurantStore } from '../../../shared/store/restaurantStore';
 import OptimizedImage from '../../../shared/components/ui/OptimizedImage';
 import useIntersectionObserver from '../../../shared/hooks/useIntersectionObserver';
 import { useAuthStore } from '../../store/authStore';
-import { MenuItem } from '../../types/menu';
+import { MenuItem, MenuOption } from '../../types/menu';
 import { apiClient } from '../../../shared/api/apiClient';
 // import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
 
@@ -78,6 +78,49 @@ const LazyStaffOrderImage = memo(function LazyStaffOrderImage({
 /** Validate phone e.g. +16711234567 */
 function isValidPhone(phoneStr: string) {
   return /^\+\d{3,4}\d{7}$/.test(phoneStr);
+}
+
+/** FE-014: Check if an option has sufficient inventory for the requested quantity */
+function isOptionAvailable(option: MenuOption & { stock_quantity?: number; damaged_quantity?: number }, requestedQuantity: number = 1): boolean {
+  // First check manual availability toggle - use the required 'available' field
+  if (!option.available) {
+    return false;
+  }
+  
+  // Also check optional is_available field if present
+  if (option.is_available === false) {
+    return false;
+  }
+  
+  // If no inventory tracking, rely on manual availability
+  if (option.stock_quantity === undefined || option.stock_quantity === null) {
+    return true; // Default to available if no stock tracking
+  }
+  
+  // Calculate available quantity (stock - damaged)
+  const stockQuantity = option.stock_quantity || 0;
+  const damagedQuantity = option.damaged_quantity || 0;
+  const availableQuantity = Math.max(0, stockQuantity - damagedQuantity);
+  
+  return availableQuantity >= requestedQuantity;
+}
+
+/** FE-014: Check if an option group has any available options */
+function hasAvailableOptions(optionGroup: { options?: (MenuOption & { stock_quantity?: number; damaged_quantity?: number })[] }): boolean {
+  if (!optionGroup?.options) return false;
+  return optionGroup.options.some((option) => isOptionAvailable(option));
+}
+
+/** FE-014: Get available quantity for an option */
+function getOptionAvailableQuantity(option: any): number {
+  // If no inventory tracking, return a large number to indicate unlimited
+  if (!option.stock_quantity && option.stock_quantity !== 0) {
+    return option.is_available !== false ? 999 : 0;
+  }
+  
+  const stockQuantity = option.stock_quantity || 0;
+  const damagedQuantity = option.damaged_quantity || 0;
+  return Math.max(0, stockQuantity - damagedQuantity);
 }
 
 /** Hook that returns true if width < 768px (mobile) */
@@ -352,6 +395,39 @@ function MenuItemsPanel({
                             </p>
                           )}
 
+                          {/* FE-014: Option availability indicator */}
+                          {item.option_groups && item.option_groups.length > 0 && (() => {
+                            const requiredGroupsWithoutAvailableOptions = item.option_groups.filter(group => 
+                              group.min_select > 0 && !hasAvailableOptions(group)
+                            );
+                            
+                            if (requiredGroupsWithoutAvailableOptions.length > 0) {
+                              return (
+                                <p className="text-xs text-red-500 mb-1">
+                                  Required options unavailable
+                                </p>
+                              );
+                            }
+                            
+                            // Check if any options have limited availability
+                            const optionsWithLimitedStock = item.option_groups.flatMap(group => 
+                              group.options.filter(option => {
+                                const availableQty = getOptionAvailableQuantity(option);
+                                return availableQty > 0 && availableQty < 10 && ((option as any).stock_quantity || 0) > 0;
+                              })
+                            );
+                            
+                            if (optionsWithLimitedStock.length > 0) {
+                              return (
+                                <p className="text-xs text-amber-600 mb-1">
+                                  Some options limited
+                                </p>
+                              );
+                            }
+                            
+                            return null;
+                          })()}
+
                           {/* Add / Customize / Stock buttons */}
                           <div className="flex justify-end">
                             {(item.stock_status === 'out_of_stock' ||
@@ -419,12 +495,31 @@ function MenuItemsPanel({
                                 </button>
                               </div>
                             ) : hasOptions ? (
+                              (() => {
+                                // FE-014: Check if required options are available
+                                const requiredGroupsWithoutAvailableOptions = item.option_groups?.filter(group => 
+                                  group.min_select > 0 && !hasAvailableOptions(group)
+                                ) || [];
+                                
+                                const hasUnavailableRequiredOptions = requiredGroupsWithoutAvailableOptions.length > 0;
+                                
+                                return (
                               <button
-                                onClick={() => setCustomizingItem(item)}
-                                className="bg-[#c1902f] text-white px-2 py-2.5 rounded text-base font-medium hover:bg-[#a97c28]"
+                                    onClick={() => hasUnavailableRequiredOptions ? null : setCustomizingItem(item)}
+                                    disabled={hasUnavailableRequiredOptions}
+                                    className={`px-2 py-2.5 rounded text-base font-medium ${
+                                      hasUnavailableRequiredOptions
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-[#c1902f] text-white hover:bg-[#a97c28]'
+                                    }`}
                               >
-                                {isInCart ? 'Add Another' : 'Customize'}
+                                    {hasUnavailableRequiredOptions 
+                                      ? 'Options Unavailable' 
+                                      : (isInCart ? 'Add Another' : 'Customize')
+                                    }
                               </button>
+                                );
+                              })()
                             ) : (
                               <button
                                 onClick={() => handleAddItem(item)}
@@ -2014,8 +2109,20 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       }
     }
     
-    // If item has custom options, open customization modal
+    // FE-014: Check option availability if item has options
     if (item.option_groups?.length) {
+      // Check if any required option groups have no available options
+      const requiredGroupsWithoutAvailableOptions = item.option_groups.filter(group => 
+        group.min_select > 0 && !hasAvailableOptions(group)
+      );
+      
+      if (requiredGroupsWithoutAvailableOptions.length > 0) {
+        const groupNames = requiredGroupsWithoutAvailableOptions.map(g => g.name).join(', ');
+        toastUtils.error(`${item.name} cannot be ordered. Required options are out of stock: ${groupNames}`);
+        return;
+      }
+      
+      // Open customization modal (option availability will be checked there too)
       setCustomizingItem(item);
     } else {
       addToCart({ ...item, type: 'food' }, 1);
@@ -2042,6 +2149,32 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       }
       if (qty > effectiveQuantity) {
         toastUtils.error(`Cannot add ${qty} more ${item.name}. Only ${effectiveQuantity} available.`);
+        setCustomizingItem(null);
+        return;
+      }
+    }
+    
+    // FE-014: Validate selected option availability
+    if (custom && custom.length > 0) {
+      const unavailableOptions: string[] = [];
+      
+      for (const customization of custom) {
+        // Find the option in the item's option groups
+        const optionGroup = item.option_groups?.find(group => group.id === customization.option_group_id);
+        const option = optionGroup?.options.find(opt => opt.id === customization.option_id);
+        
+        if (option && !isOptionAvailable(option, qty)) {
+          const availableQty = getOptionAvailableQuantity(option);
+          if (availableQty === 0) {
+            unavailableOptions.push(`${customization.option_name} (out of stock)`);
+          } else {
+            unavailableOptions.push(`${customization.option_name} (only ${availableQty} available, requested ${qty})`);
+          }
+        }
+      }
+      
+      if (unavailableOptions.length > 0) {
+        toastUtils.error(`Cannot add ${item.name}. Selected options are unavailable: ${unavailableOptions.join(', ')}`);
         setCustomizingItem(null);
         return;
       }
