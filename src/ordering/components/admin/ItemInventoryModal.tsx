@@ -55,7 +55,10 @@ const OptionInventoryGrid: React.FC<OptionInventoryGridProps> = ({
   }
 
   const totalOptionQuantity = Object.values(optionQuantities).reduce((sum, qty) => sum + qty, 0);
-  const isValid = totalOptionQuantity === totalStock;
+  // For option-level tracking, allow inventory adjustments - validate based on individual option constraints instead
+  const hasNegativeQuantities = Object.values(optionQuantities).some(qty => qty < 0);
+  const hasInvalidQuantities = Object.values(optionQuantities).some(qty => !Number.isInteger(qty) || qty > 999999);
+  const isValid = !hasNegativeQuantities && !hasInvalidQuantities;
 
   return (
     <div className="mb-6 p-4 border border-gray-200 rounded-md bg-blue-50">
@@ -65,7 +68,7 @@ const OptionInventoryGrid: React.FC<OptionInventoryGridProps> = ({
         </h4>
         <div className={`text-sm font-medium ${isValid ? 'text-green-600' : 'text-red-600'}`}>
           Total: {totalOptionQuantity} / {totalStock} 
-          {isValid ? ' ✓' : ' ⚠️'}
+          {totalOptionQuantity === totalStock ? ' ✓' : ' ⚠️'}
         </div>
       </div>
 
@@ -169,7 +172,7 @@ const OptionInventoryGrid: React.FC<OptionInventoryGridProps> = ({
           <div>
             <span className="text-gray-600">Difference:</span>
             <span className={`font-medium ml-1 ${
-              totalOptionQuantity === totalStock ? 'text-green-600' : 'text-red-600'
+              totalOptionQuantity === totalStock ? 'text-green-600' : 'text-orange-600'
             }`}>
               {totalOptionQuantity - totalStock}
             </span>
@@ -237,10 +240,10 @@ const OptionInventoryGrid: React.FC<OptionInventoryGridProps> = ({
         </div>
       </div>
 
-      {/* Help Text */}
+      {/* Help Text - Updated for option-level tracking */}
       <p className="mt-3 text-xs text-gray-500">
-        Tip: The total of all option quantities must equal the menu item's stock quantity ({totalStock}). 
-        Adjust the quantities above to distribute your inventory across the different options.
+        Tip: Adjust quantities to set your desired inventory levels. 
+        Changes that don't match the current menu item stock will be treated as inventory adjustments and logged in the audit trail.
       </p>
 
       {/* Save Button */}
@@ -1236,34 +1239,27 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   }, [hasOptionTracking, selectedOptionGroupId, open, menuItem, startOptionInventoryPolling, stopOptionInventoryPolling]);
 
   // Function to refresh inventory data with optimizations to prevent page shaking
-  const refreshInventoryData = useCallback(async (options: { 
+  const refreshInventoryData = useCallback(async (options: {
     refreshAuditHistory?: boolean;
     notifyParent?: boolean;
-    checkSynchronization?: boolean; // FE-008: Check for sync issues
-    skipParentNotification?: boolean; // NEW: Skip parent notification to prevent double calls
+    skipParentNotification?: boolean;
+    skipConflictResolution?: boolean; // NEW: Skip auto-sync when we've just made targeted updates
   } = {}) => {
-    const {
-      refreshAuditHistory = true,
-      notifyParent = true,
-      checkSynchronization = true,
-      skipParentNotification = false // NEW: Default to false for backward compatibility
+    const { 
+      refreshAuditHistory = false, 
+      notifyParent = false, 
+      skipParentNotification = false,
+      skipConflictResolution = false // NEW: Default to false to maintain existing behavior
     } = options;
-    if (!menuItem?.id) return;
-    
+
+    if (!menuItem) return null;
+
     try {
-      // Fetch the latest menu item data
-      const updatedItem = await menuItemsApi.getById(menuItem.id);
+             // Get fresh menu item data from the server
+       const updatedItem = await menuItemsApi.getById(menuItem.id);
       
-      // Update local state with the latest values using functional updates
-      // to ensure we're working with the most current state
-      setEnableTracking(updatedItem.enable_stock_tracking || false);
-      setStockQuantity(updatedItem.stock_quantity || 0);
-      setDamagedQuantity(updatedItem.damaged_quantity || 0);
-      setLowStockThreshold(updatedItem.low_stock_threshold || 10);
-      setStockAdjustmentAmount(0); // Reset adjustment amount after refresh
-      
-      // FE-008: Check for synchronization issues between menu item and option inventory
-      if (checkSynchronization && hasOptionTracking && selectedOptionGroupId) {
+      // Only check for option inventory conflicts if we're not skipping conflict resolution
+      if (hasOptionTracking && selectedOptionGroupId && !skipConflictResolution) {
         const menuItemStock = updatedItem.stock_quantity || 0;
         const isOutOfSync = isOptionInventoryOutOfSync(menuItemStock, optionQuantities);
         
@@ -1285,7 +1281,17 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
             setTimeout(() => setError(null), 5000);
           }
         }
+      } else if (skipConflictResolution) {
+        console.log('Skipping automatic conflict resolution due to recent targeted update');
       }
+      
+      // Update local state with the latest values using functional updates
+      // to ensure we're working with the most current state
+      setEnableTracking(updatedItem.enable_stock_tracking || false);
+      setStockQuantity(updatedItem.stock_quantity || 0);
+      setDamagedQuantity(updatedItem.damaged_quantity || 0);
+      setLowStockThreshold(updatedItem.low_stock_threshold || 10);
+      setStockAdjustmentAmount(0); // Reset adjustment amount after refresh
       
       // Update option state if menu item has changed
       if (updatedItem.option_groups) {
@@ -1384,11 +1390,15 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     }
 
     setLoadingOptionAudits(true);
+    
+    // CACHE BUSTING: Clear existing audit data first to force fresh display
+    setOptionAudits([]);
+    
     try {
-      // Get all audits for the option group (no specific option filter)
+      // Get all audits for the option group with high limit to ensure we get all records
       const audits = await optionGroupsApi.getAuditHistory(
         parseInt(selectedOptionGroupId),
-        {} // No filter to get all options in the group
+        { limit: 1000 } // High limit to get all records
       );
       setOptionAudits(audits);
     } catch (error: any) {
@@ -1701,14 +1711,14 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         reason_details: reasonDetails
       });
       
-      // FE-008: Synchronize option quantities with the backend
-      if (hasOptionTracking && selectedOptionGroupId) {
-        const syncResult = await synchronizeOptionsWithMenuItemStock(calculatedNewQuantity);
-        if (!syncResult) {
-          setError('Stock updated but failed to synchronize options. Please check option quantities.');
-          setTimeout(() => setError(null), 5000);
-        }
-      }
+      // DISABLED: Auto-sync was causing unwanted redistribution - users should manually adjust options
+      // if (hasOptionTracking && selectedOptionGroupId) {
+      //   const syncResult = await synchronizeOptionsWithMenuItemStock(calculatedNewQuantity);
+      //   if (!syncResult) {
+      //     setError('Stock updated but failed to synchronize options. Please check option quantities.');
+      //     setTimeout(() => setError(null), 5000);
+      //   }
+      // }
       
       // Refresh inventory data in the background with minimal UI disruption
       await refreshInventoryData({ 
@@ -1846,6 +1856,10 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
           setTimeout(() => {
             console.log('[TRACKING MODE SWITCH] Delayed onSave call executing now');
             onSave();
+            // TIMING FIX: Also refresh audit history after backend commits
+            setTimeout(() => {
+              loadOptionAuditHistory();
+            }, 500); // Additional delay for audit history
           }, 1000); // 1 second delay to allow backend to commit
         }
         
@@ -1864,6 +1878,9 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
   };
 
   // Auto-sync menu item stock with option quantities total
+  // DEPRECATED: This function was causing automatic redistribution issues
+  // It's now replaced by targeted single option updates and menu item stock adjustments
+  /*
   const syncMenuItemStockWithOptions = (optionQuantities: Record<string, number>) => {
     if (!hasOptionTracking) return;
     
@@ -1874,6 +1891,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
       // Note: We'll save this when the user saves option quantities
     }
   };
+  */
 
   // Enhanced handle individual option quantity changes with real-time validation - FE-007
   const handleOptionQuantityChange = (optionId: string, newQuantity: number) => {
@@ -1897,9 +1915,6 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     
     setOptionQuantities(updatedQuantities);
     
-    // Auto-sync menu item stock with new option total
-    syncMenuItemStockWithOptions(updatedQuantities);
-    
     // Update availability based on new quantity (only if quantity is valid and positive)
     if (singleValidation.isValid) {
       updateOptionAvailability(optionId, inputQuantity);
@@ -1911,7 +1926,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     // Track if this option has changed from its original value
     markOptionAsChanged(optionId, inputQuantity !== originalQuantity);
     
-    // Comprehensive validation of all option quantities (use updated stock quantity)
+    // Comprehensive validation of all option quantities (calculate new total for display only)
     const newStockTotal = Object.values(updatedQuantities).reduce((sum, qty) => sum + qty, 0);
     const fullValidation = validateOptionQuantities(updatedQuantities, newStockTotal);
     
@@ -1927,7 +1942,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     };
   };
 
-  // Enhanced save option quantities with comprehensive validation - FE-007
+  // Enhanced save option quantities with confirmation for significant changes - FE-007
   const handleSaveOptionQuantities = async () => {
     if (!selectedOptionGroupId) {
       setError('No option group selected');
@@ -1938,19 +1953,13 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     // Calculate current total for validation
     const currentTotal = Object.values(optionQuantities).reduce((sum, qty) => sum + qty, 0);
     
-    // Comprehensive pre-save validation (use current total instead of stockQuantity for option-level tracking)
+    // Comprehensive pre-save validation
     const validation = validateOptionQuantities(optionQuantities, hasOptionTracking ? currentTotal : stockQuantity);
     
     if (!validation.isValid) {
       setError(`Cannot save: ${validation.summary.criticalErrors.length} critical error(s) found. Please fix all errors before saving.`);
       setTimeout(() => setError(null), 5000);
       return;
-    }
-    
-    if (validation.hasWarnings) {
-      // Show warning but allow save to continue
-      setSuccess(`Saving with ${validation.summary.warningErrors.length} warning(s). Review warnings after save.`);
-      setTimeout(() => setSuccess(null), 4000);
     }
 
     // Check if there are actually changes to save
@@ -1964,6 +1973,40 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
 
     const changedOptionIds = getChangedOptionIds();
 
+    // Check for significant changes that need confirmation
+    const significantChanges = changedOptionIds.filter(optionId => {
+      const originalQuantity = originalOptionQuantities[optionId] || 0;
+      const newQuantity = optionQuantities[optionId];
+      const changeAmount = Math.abs(newQuantity - originalQuantity);
+      return changeAmount > 5 || (originalQuantity > 0 && (changeAmount / originalQuantity) > 0.3);
+    });
+
+    let adjustmentReason = '';
+    
+    // For significant changes, ask for a reason
+    if (significantChanges.length > 0 && validation.hasWarnings) {
+      const totalChange = Math.abs(currentTotal - stockQuantity);
+      const changeType = currentTotal > stockQuantity ? 'increase' : 'decrease';
+      
+      const userInput = prompt(
+        `You're making a significant inventory ${changeType} of ${totalChange} units.\n\n` +
+        `This will be recorded in the audit logs. Please provide a reason for this adjustment:\n\n` +
+        `Examples: "Received new shipment", "Found damaged items", "Inventory recount", "Manager adjustment"`
+      );
+      
+      // If user cancels, don't proceed
+      if (userInput === null) {
+        return;
+      }
+      
+      // If no reason provided, use a default
+      if (userInput.trim() === '') {
+        adjustmentReason = `Manual inventory adjustment (${changeType} of ${totalChange} units)`;
+      } else {
+        adjustmentReason = userInput.trim();
+      }
+    }
+
     try {
       // Set loading state for changed options
       changedOptionIds.forEach(optionId => {
@@ -1971,19 +2014,48 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         updateOptionErrorState(optionId, null);
       });
 
-      // First, save option quantities
-      const result = await optionGroupsApi.updateOptionQuantities(
-        parseInt(selectedOptionGroupId),
-        { 
-          quantities: Object.fromEntries(
-            Object.entries(optionQuantities).map(([key, value]) => [key, value])
-          )
-        }
-      );
+      let result;
 
-      // Check for success by presence of option_group and valid message
+      // Use single option update if only one option changed
+      if (changedOptionIds.length === 1) {
+        const changedOptionId = changedOptionIds[0];
+        const newQuantity = optionQuantities[changedOptionId];
+        const originalQuantity = originalOptionQuantities[changedOptionId] || 0;
+        
+        console.log('Using single option update for option:', changedOptionId, 'with quantity:', newQuantity);
+        
+        result = await optionGroupsApi.updateSingleOptionQuantity(
+          parseInt(selectedOptionGroupId),
+          {
+            option_id: parseInt(changedOptionId),
+            quantity: newQuantity,
+            reason: adjustmentReason || `Option quantity adjusted from ${originalQuantity} to ${newQuantity}`
+          }
+        );
+      } else {
+        // Use bulk update if multiple options changed
+        console.log('Using bulk option update for options:', changedOptionIds);
+        
+        // Only send quantities for changed options
+        const changedQuantities = Object.fromEntries(
+          changedOptionIds.map(optionId => [optionId, optionQuantities[optionId]])
+        );
+        
+        result = await optionGroupsApi.updateOptionQuantities(
+          parseInt(selectedOptionGroupId),
+          { 
+            quantities: changedQuantities,
+            reason: adjustmentReason || 'Bulk inventory adjustment'
+          }
+        );
+      }
+
+      // Check for success
       if (result.option_group && result.message) {
-        setSuccess('Option quantities updated successfully');
+        const successMessage = adjustmentReason 
+          ? 'Inventory adjustment completed and logged successfully'
+          : 'Option quantities updated successfully';
+        setSuccess(successMessage);
         
         // Update original quantities to reflect saved state
         setOriginalOptionQuantities({ ...optionQuantities });
@@ -1997,10 +2069,17 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         });
         
         // Refresh inventory data to get updated information
+        // Skip conflict resolution to prevent unwanted redistribution after targeted updates
         await refreshInventoryData({
-          refreshAuditHistory: false,
-          notifyParent: true
+          refreshAuditHistory: false, // Don't refresh immediately - we'll do it with a delay
+          notifyParent: true,
+          skipConflictResolution: true // NEW: Prevent auto-redistribution after targeted option updates
         });
+        
+        // TIMING FIX: Delay audit history refresh to ensure database commits are complete
+        setTimeout(async () => {
+          await loadOptionAuditHistory(); // Reload option audit history after delay
+        }, 1000); // 1000ms delay to ensure backend transactions are committed
         
         setTimeout(() => setSuccess(null), 3000);
       } else {
@@ -2037,15 +2116,35 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
     const criticalErrors: string[] = [];
     const warningErrors: string[] = [];
     
-    // Global validation: Total sum check (relaxed for option-level tracking)
+    // Global validation: Total sum check (enhanced messaging for option-level tracking)
     const total = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
-    if (hasOptionTracking && total !== totalStock) {
-      // For option-level tracking, this is just informational - we'll sync automatically
-      const message = total > totalStock 
-        ? `Option quantities (${total}) exceed menu item stock (${totalStock}) - menu item will be updated`
-        : `Option quantities (${total}) less than menu item stock (${totalStock}) - menu item will be updated`;
-      globalErrors.push(message);
-      warningErrors.push(message); // Make it a warning, not critical error
+    if (hasOptionTracking) {
+      // For option-level tracking, provide clearer messaging about inventory adjustments
+      if (total !== stockQuantity) {
+        const difference = total - stockQuantity;
+        const isIncrease = difference > 0;
+        const changeType = isIncrease ? 'increase' : 'decrease';
+        const changeAmount = Math.abs(difference);
+        
+        // Determine if this is a significant change (more than 20% or more than 10 units)
+        const isSignificantChange = changeAmount > 10 || (stockQuantity > 0 && (changeAmount / stockQuantity) > 0.2);
+        
+        let message;
+        if (isIncrease) {
+          message = `Inventory adjustment: Adding ${changeAmount} units (${total - stockQuantity} net increase). This will be recorded in audit logs.`;
+        } else {
+          message = `Inventory adjustment: Removing ${changeAmount} units (${stockQuantity - total} net decrease). This will be recorded in audit logs.`;
+        }
+        
+        // For option-level tracking, this is informational/warning only, not a critical error
+        globalErrors.push(message);
+        warningErrors.push(message); // Add to warnings so it doesn't block saving
+        
+        // Mark significant changes as requiring special attention
+        if (isSignificantChange) {
+          warningErrors.push(`Significant inventory ${changeType} detected (${changeAmount} units). Consider providing a reason for this adjustment.`);
+        }
+      }
     } else if (!hasOptionTracking && total !== totalStock) {
       // For menu-level tracking, keep strict validation
       const error = `Option quantities (${total}) must equal menu item stock (${totalStock})`;
@@ -2053,9 +2152,11 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
       criticalErrors.push(error);
     }
     
-    // Individual option validation
+    // Individual option validation with change detection
     Object.entries(quantities).forEach(([optionId, quantity]) => {
       const errors: string[] = [];
+      const originalQuantity = originalOptionQuantities[optionId] || 0;
+      const changeAmount = Math.abs(quantity - originalQuantity);
       
       // Non-negative validation
       if (quantity < 0) {
@@ -2076,9 +2177,18 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
       }
       
       // Zero quantity warning (not an error, but worth noting)
-      if (quantity === 0) {
-        errors.push('Zero quantity - option will be unavailable');
-        warningErrors.push(`Option ${optionId}: Will be unavailable (zero stock)`);
+      if (quantity === 0 && originalQuantity > 0) {
+        errors.push('Setting to zero - option will become unavailable');
+        warningErrors.push(`Option ${optionId}: Will become unavailable (removing ${originalQuantity} units)`);
+      }
+      
+      // Significant individual option change detection
+      if (changeAmount > 0) {
+        const isSignificantOptionChange = changeAmount > 5 || (originalQuantity > 0 && (changeAmount / originalQuantity) > 0.3);
+        if (isSignificantOptionChange) {
+          const changeType = quantity > originalQuantity ? 'increase' : 'decrease';
+          warningErrors.push(`Option ${optionId}: Significant ${changeType} of ${changeAmount} units detected`);
+        }
       }
       
       // Store per-option errors
@@ -2203,8 +2313,16 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
         // Mark this option as unchanged since it's now saved
         markOptionAsChanged(optionId, false);
 
-        // Refresh the entire inventory data to sync everything
-        await refreshInventoryData();
+        // Refresh the entire inventory data to sync everything (without immediate audit history)
+        await refreshInventoryData({
+          refreshAuditHistory: false, // Don't refresh immediately - we'll do it with a delay
+          notifyParent: true
+        });
+        
+        // TIMING FIX: Delay audit history refresh to ensure database commits are complete
+        setTimeout(async () => {
+          await loadOptionAuditHistory(); // Reload option audit history after delay
+        }, 1000); // 1000ms delay to ensure backend transactions are committed
         
         setSuccess(`Successfully ${operation === 'add' ? 'added' : 'removed'} ${amount} items`);
         setTimeout(() => setSuccess(null), 3000);
@@ -2263,13 +2381,19 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
               setTimeout(() => {
                 loadAuditHistory(true);
                 if (hasOptionTracking && selectedOptionGroupId) {
-                  loadOptionAuditHistory();
+                  // TIMING FIX: Additional delay for option audit history when first enabling tracking
+                  setTimeout(() => {
+                    loadOptionAuditHistory();
+                  }, 800);
                 }
               }, 300);
             } else {
               loadAuditHistory();
               if (hasOptionTracking && selectedOptionGroupId) {
-                loadOptionAuditHistory();
+                // TIMING FIX: Small delay for option audit history even in normal loading
+                setTimeout(() => {
+                  loadOptionAuditHistory();
+                }, 500);
               }
             }
           }

@@ -7,6 +7,7 @@ export interface EnableInventoryTrackingParams {
 
 export interface UpdateOptionQuantitiesParams {
   quantities: Record<string, number>; // optionId -> quantity
+  reason?: string; // Optional reason for the adjustment
 }
 
 export interface UpdateOptionStockParams {
@@ -99,6 +100,30 @@ export const optionGroupsApi = {
   }> => {
     const response = await apiClient.patch(
       `/option_groups/${optionGroupId}/update_option_quantities`,
+      params
+    );
+    return response.data;
+  },
+
+  /**
+   * Update a single option quantity without affecting other options
+   * This endpoint only updates the specific option and adjusts menu item stock accordingly
+   */
+  updateSingleOptionQuantity: async (
+    optionGroupId: number,
+    params: {
+      option_id: number;
+      quantity: number;
+      reason?: string; // Optional reason for the adjustment
+    }
+  ): Promise<{ 
+    success: boolean; 
+    message: string; 
+    option_group: OptionGroup;
+    menu_item: UpdatedMenuItem;
+  }> => {
+    const response = await apiClient.patch(
+      `/option_groups/${optionGroupId}/update_single_option_quantity`,
       params
     );
     return response.data;
