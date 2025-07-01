@@ -603,7 +603,7 @@ const OptionAuditHistory: React.FC<OptionAuditHistoryProps> = ({
                   {optionAuditHistory.map((audit) => (
                     <tr key={audit.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {format(new Date(audit.created_at), 'MM/dd/yyyy HH:mm')}
+                        {format(new Date(audit.created_at), 'MMMM do, yyyy h:mm a')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {audit.action}
@@ -3002,7 +3002,7 @@ const ItemInventoryModal: React.FC<ItemInventoryModalProps> = ({
                           {sortedAudits.map((audit, index) => (
                             <tr key={`${audit.source}-${audit.id}-${index}`}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {format(new Date(audit.created_at), 'MM/dd/yyyy HH:mm')}
+                            {format(new Date(audit.created_at), 'MMMM do, yyyy h:mm a')}
                           </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                 {audit.source === 'menu_item' ? (
