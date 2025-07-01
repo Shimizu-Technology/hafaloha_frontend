@@ -1183,22 +1183,32 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           {/* Only show workflow buttons if not refunded */}
           {!isRefunded && (
             <>
-              {/* Staff Order Quick Actions - Show for pending and preparing staff orders only */}
-              {isStaffOrder && (order.status === 'pending' || order.status === 'preparing') && (
-                <div className="flex gap-1 bg-blue-50 p-1 rounded-md border border-blue-200">
-                  <div className="text-xs text-blue-600 font-medium px-1 py-1 self-center whitespace-nowrap">
+              {/* Quick Actions - Show for both staff and customer orders when pending or preparing */}
+              {(order.status === 'pending' || order.status === 'preparing') && (
+                <div className={`flex gap-1 p-1 rounded-md border ${
+                  isStaffOrder 
+                    ? 'bg-blue-50 border-blue-200' 
+                    : 'bg-amber-50 border-amber-200'
+                }`}>
+                  <div className={`text-xs font-medium px-1 py-1 self-center whitespace-nowrap ${
+                    isStaffOrder ? 'text-blue-600' : 'text-amber-600'
+                  }`}>
                     Quick:
                   </div>
                   <button
                     className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-medium hover:bg-gray-700 whitespace-nowrap"
                     onClick={() => {
                       setIsStatusUpdateInProgress(true);
-                      updateOrderStatusQuietly(order.id, 'completed', undefined, selectedStatus)
+                      const targetStatus = isStaffOrder ? 'completed' : 'ready';
+                      updateOrderStatusQuietly(order.id, targetStatus, undefined, selectedStatus)
                         .finally(() => setIsStatusUpdateInProgress(false));
                     }}
-                    title="Complete order immediately (for instant fulfillment)"
+                    title={isStaffOrder 
+                      ? "Complete order immediately (for instant fulfillment)" 
+                      : "Mark as ready and notify customer for pickup"
+                    }
                   >
-                    Done
+                    {isStaffOrder ? 'Done' : 'Ready'}
                   </button>
                 </div>
               )}
