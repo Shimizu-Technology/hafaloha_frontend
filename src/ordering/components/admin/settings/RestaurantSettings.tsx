@@ -538,6 +538,31 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
                 Only set this when pickup is not at the usual restaurant address. Leave empty to use regular address.
               </p>
 
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Custom Pickup Instructions
+                </label>
+                <textarea
+                  value={restaurant.admin_settings?.custom_pickup_instructions || ''}
+                  onChange={(e) => setRestaurant({
+                    ...restaurant, 
+                    admin_settings: {
+                      ...restaurant.admin_settings,
+                      custom_pickup_instructions: e.target.value
+                    }
+                  })}
+                  placeholder="Enter custom pickup instructions for special events or temporary changes..."
+                  rows={3}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
+                />
+                <p className="mt-1 text-sm text-gray-500 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  When set, these instructions will override the default pickup instructions. Leave empty to use default instructions.
+                </p>
+              </div>
+
               <Input
                 label="Contact Email"
                 value={restaurant.contact_email || ''}

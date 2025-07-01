@@ -56,12 +56,39 @@ export function PickupInfo({ locationId }: PickupInfoProps = {}) {
     }
   }, [locationId]);
   
-  // Use location info if available, otherwise fall back to restaurant info
+  // Determine pickup information with proper priority:
+  // 1. Custom pickup location/instructions (highest priority)
+  // 2. Selected location details
+  // 3. Restaurant default info (fallback)
+  
   const hasCustomLocation = !!restaurant?.custom_pickup_location;
-  const address = location?.address || restaurant?.custom_pickup_location || restaurant?.address || "Barrigada, Guam";
+  const hasCustomInstructions = !!restaurant?.admin_settings?.custom_pickup_instructions;
+  
+  // Priority: Custom location > Location address > Restaurant address
+  const address = restaurant?.custom_pickup_location || location?.address || restaurant?.address || "Barrigada, Guam";
+  
+  // Priority: Location phone > Restaurant phone
   const phoneNumber = formatPhoneNumber(location?.phone_number || restaurant?.phone_number) || "+1 (702) 742-1168";
-  const locationTitle = location ? location.name : (hasCustomLocation ? 'Special Pickup Location' : 'Location');
+  
+  // Determine the location title
+  let locationTitle;
+  if (hasCustomLocation) {
+    locationTitle = 'Special Pickup Location';
+  } else if (location) {
+    locationTitle = location.name;
+  } else {
+    locationTitle = restaurant?.name || 'Location';
+  }
+  
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  
+  // Get custom pickup instructions or use defaults
+  const customInstructions = restaurant?.admin_settings?.custom_pickup_instructions;
+  const defaultInstructions = [
+    "Park in the designated pickup spots",
+    "Come inside and show your order number at the counter", 
+    "Your order will be ready at the time indicated"
+  ];
 
   return (
     <div className="bg-white p-2 rounded-lg border border-gray-200">
@@ -79,9 +106,9 @@ export function PickupInfo({ locationId }: PickupInfoProps = {}) {
               <div>
                 <p className="font-medium">{locationTitle}</p>
                 <p className="text-gray-600">{address}</p>
-                {hasCustomLocation && !location && (
+                {hasCustomLocation && (
                   <p className="text-amber-600 text-sm font-medium mt-1">
-                    Please note: This is not our usual address
+                    ⚠️ Special pickup location - please note this is not our usual address
                   </p>
                 )}
                 <a
@@ -119,12 +146,26 @@ export function PickupInfo({ locationId }: PickupInfoProps = {}) {
           </div>
 
           <div className="mt-6 p-4 bg-gray-50 rounded-md">
-            <h4 className="font-medium mb-2">Pickup Instructions</h4>
-            <ol className="list-decimal list-inside text-gray-600 space-y-2">
-              <li>Park in the designated pickup spots</li>
-              <li>Come inside and show your order number at the counter</li>
-              <li>Your order will be ready at the time indicated</li>
-            </ol>
+            <h4 className="font-medium mb-2">
+              Pickup Instructions
+              {hasCustomInstructions && (
+                <span className="ml-2 text-xs text-amber-600 font-normal">
+                  (Special Instructions)
+                </span>
+              )}
+            </h4>
+            
+            {hasCustomInstructions ? (
+              <div className="text-gray-600 whitespace-pre-line">
+                {customInstructions}
+              </div>
+            ) : (
+              <ol className="list-decimal list-inside text-gray-600 space-y-2">
+                {defaultInstructions.map((instruction, index) => (
+                  <li key={index}>{instruction}</li>
+                ))}
+              </ol>
+            )}
           </div>
         </>
       )}
