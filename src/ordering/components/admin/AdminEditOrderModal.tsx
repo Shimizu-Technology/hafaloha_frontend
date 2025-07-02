@@ -1,6 +1,7 @@
 // src/ordering/components/admin/AdminEditOrderModal.tsx
 
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { SetEtaModal } from './SetEtaModal';
 import { SearchableMenuItemSelector } from './SearchableMenuItemSelector';
@@ -3154,7 +3155,7 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-2 text-base sm:text-sm">
             <div className="text-gray-500 font-medium sm:font-normal">Created</div>
             <div className="text-gray-900 -mt-2 sm:mt-0">
-              {new Date(order.createdAt).toLocaleString()}
+              {format(new Date(order.createdAt), 'MMMM d, yyyy h:mm a')}
             </div>
 
             {order.created_by_user_id && (
@@ -3173,13 +3174,27 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
               </>
             )}
 
+            {order.contact_phone && (
+              <>
+                <div className="text-gray-500 font-medium sm:font-normal">Phone</div>
+                <div className="text-gray-900 -mt-2 sm:mt-0">{order.contact_phone}</div>
+              </>
+            )}
+
+            {order.contact_email && (
+              <>
+                <div className="text-gray-500 font-medium sm:font-normal">Email</div>
+                <div className="text-gray-900 -mt-2 sm:mt-0">{order.contact_email}</div>
+              </>
+            )}
+
             {(order.estimatedPickupTime || order.estimated_pickup_time) && (
               <>
                 <div className="text-gray-500 font-medium sm:font-normal">Pickup Time</div>
                 <div className="text-gray-900 -mt-2 sm:mt-0">
-                  {new Date(
+                  {format(new Date(
                     order.estimatedPickupTime || order.estimated_pickup_time
-                  ).toLocaleString()}
+                  ), 'MMMM d, yyyy h:mm a')}
                 </div>
               </>
             )}
@@ -3247,9 +3262,9 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
                 {order.estimatedPickupTime || order.estimated_pickup_time ? (
                   <p className="text-sm text-amber-700 mt-1">
                     Current ETA:{' '}
-                    {new Date(
+                    {format(new Date(
                       order.estimatedPickupTime || order.estimated_pickup_time
-                    ).toLocaleString()}
+                    ), 'MMMM d, yyyy h:mm a')}
                   </p>
                 ) : (
                   <p className="text-sm text-amber-700 mt-1">No ETA set</p>

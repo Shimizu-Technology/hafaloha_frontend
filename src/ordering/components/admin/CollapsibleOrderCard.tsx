@@ -824,7 +824,7 @@ export function CollapsibleOrderCard({
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-gray-600 mt-1 flex flex-wrap">
+                <div className="text-sm text-gray-600 mt-1 space-y-2">
                   {order.items && order.items.map((item: any, index: number) => {
                     // Get refund info for this specific item
                     const itemKey = `${item.id || ''}-${item.name}-${index}`;
@@ -835,40 +835,115 @@ export function CollapsibleOrderCard({
                     const refundAmount = isRefunded ? calculateRefundAmount(refundInfo) : 0;
                     
                     return (
-                      <div key={index} className="inline-flex items-center mr-2 mb-1">
-                        <span 
-                          className={`
-                            px-2 py-0.5 rounded-full text-xs flex items-center
-                            ${isRefunded 
-                              ? refundInfo.isFullyRefunded 
-                                ? 'bg-red-100 text-red-800 line-through' 
-                                : 'bg-orange-100 text-orange-800'
-                              : 'bg-gray-100 text-gray-800'
-                            }
-                          `}
-                          title={isRefunded ? `${refundInfo.refundedQuantity} of ${item.quantity} refunded ($${refundAmount.toFixed(2)})` : ''}
-                        >
-                          {isRefunded && (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                            </svg>
-                          )}
-                          <span className={isRefunded && refundInfo.isFullyRefunded ? 'line-through' : ''}>
-                            {item.quantity}× {item.name}
-                          </span>
-                          {isRefunded && !refundInfo.isFullyRefunded && (
-                            <span className="ml-1 font-medium text-red-700">
-                              (-${refundAmount.toFixed(2)})
+                      <div key={index} className="flex flex-col mr-2 mb-1 w-full sm:w-auto">
+                        <div className="inline-flex items-center">
+                          <span 
+                            className={`
+                              px-2 py-0.5 rounded-full text-xs flex items-center
+                              ${isRefunded 
+                                ? refundInfo.isFullyRefunded 
+                                  ? 'bg-red-100 text-red-800 line-through' 
+                                  : 'bg-orange-100 text-orange-800'
+                                : 'bg-gray-100 text-gray-800'
+                              }
+                            `}
+                            title={isRefunded ? `${refundInfo.refundedQuantity} of ${item.quantity} refunded ($${refundAmount.toFixed(2)})` : ''}
+                          >
+                            {isRefunded && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                              </svg>
+                            )}
+                            <span className={isRefunded && refundInfo.isFullyRefunded ? 'line-through' : ''}>
+                              {item.quantity}× {item.name}
                             </span>
-                          )}
-                        </span>
+                            {isRefunded && !refundInfo.isFullyRefunded && (
+                              <span className="ml-1 font-medium text-red-700">
+                                (-${refundAmount.toFixed(2)})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        
+                                                 {/* Display customizations in collapsed view */}
+                         {item.customizations && Object.keys(item.customizations).length > 0 && (
+                           <div className="mt-1 ml-1 text-xs space-y-1">
+                             {Array.isArray(item.customizations) ? (
+                               // array format
+                               <div className="space-y-1">
+                                 {item.customizations.map((custom: any, cidx: number) => (
+                                   <div key={`custom-${index}-${cidx}`}>
+                                     <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs">
+                                       {custom.option_name}
+                                       {custom.price > 0 && ` (+$${custom.price.toFixed(2)})`}
+                                     </span>
+                                   </div>
+                                 ))}
+                               </div>
+                             ) : (
+                               // object format
+                               <div className="space-y-1">
+                                 {Object.entries(item.customizations).map(
+                                   ([group, options]: [string, any], cidx: number) => (
+                                     <div key={`custom-${index}-${cidx}`} className="text-gray-600">
+                                       <span className="font-medium text-gray-700">{group}:</span>{' '}
+                                       <span className="text-gray-800">
+                                         {Array.isArray(options) ? (
+                                           options.map((option: string, optIdx: number) => (
+                                             <span key={`option-${index}-${cidx}-${optIdx}`} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs mr-1 mb-1 inline-block">
+                                               {option}
+                                             </span>
+                                           ))
+                                         ) : (
+                                           <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs">
+                                             {options}
+                                           </span>
+                                         )}
+                                       </span>
+                                     </div>
+                                   )
+                                 )}
+                               </div>
+                             )}
+                           </div>
+                         )}
+                        
+                                                 {/* Display option groups in collapsed view */}
+                         {item.option_groups && item.option_groups.length > 0 && (
+                           <div className="mt-1 ml-1 text-xs space-y-1">
+                             {item.option_groups.map((group: any, gidx: number) => {
+                               const selectedOptions = group.options.filter((opt: any) => opt.selected);
+                               if (selectedOptions.length === 0) return null;
+                               
+                               return (
+                                 <div key={`option-group-${index}-${gidx}`} className="text-gray-600">
+                                   <span className="font-medium text-gray-700">{group.name}:</span>{' '}
+                                   <span className="text-gray-800">
+                                     {selectedOptions.map((opt: any, optIdx: number) => (
+                                       <span key={`option-group-${index}-${gidx}-${optIdx}`} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded text-xs mr-1 mb-1 inline-block">
+                                         {opt.name}
+                                       </span>
+                                     ))}
+                                   </span>
+                                 </div>
+                               );
+                             })}
+                           </div>
+                         )}
+                        
+                        {/* Display notes in collapsed view */}
+                        {item.notes && item.notes.trim() && (
+                          <div className="mt-1 ml-1 text-xs text-gray-500 italic">
+                            Note: {item.notes}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                   
                   {/* Display refund summary in collapsed view */}
                   {totalRefunded > 0 && (
-                    <div className="w-full mt-1">
+                    <div className="w-full">
                       <span className="refund-summary text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full flex items-center inline-flex">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />

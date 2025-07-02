@@ -1,6 +1,7 @@
 // src/ordering/components/admin/OrderPaymentHistory.tsx
 
 import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { apiClient } from '../../../shared/api/apiClient';
 
 interface RefundedItem {
@@ -94,7 +95,7 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
   // Helper function to format dates
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleString();
+      return format(new Date(dateString), 'MMMM d, yyyy h:mm a');
     } catch (e) {
       return dateString;
     }
@@ -277,7 +278,17 @@ export function OrderPaymentHistory({ payments }: OrderPaymentHistoryProps) {
                                   <div><span className="font-medium">Amount:</span> ${payment.payment_details.amount}</div>
                                 )}
                                 {payment.payment_details.payment_date && (
-                                  <div><span className="font-medium">Payment Date:</span> {payment.payment_details.payment_date}</div>
+                                  <div><span className="font-medium">Payment Date:</span> {
+                                    (() => {
+                                      try {
+                                        // Check if it's already a formatted date string or needs parsing
+                                        const date = new Date(payment.payment_details.payment_date);
+                                        return isNaN(date.getTime()) ? payment.payment_details.payment_date : format(date, 'MMMM d, yyyy');
+                                      } catch (e) {
+                                        return payment.payment_details.payment_date;
+                                      }
+                                    })()
+                                  }</div>
                                 )}
                                 {payment.payment_details.transaction_id && (
                                   <div><span className="font-medium">Transaction ID:</span> {payment.payment_details.transaction_id}</div>
