@@ -110,7 +110,16 @@ export function calculateAvailableQuantity(item: MenuItem): number {
     return Infinity;
   }
   
-  // When inventory tracking is enabled, use the available quantity
+  // When inventory tracking is enabled, check if option-level inventory is used
+  const hasOptionInventory = (item as any).uses_option_level_inventory;
+  const effectiveQuantity = (item as any).effective_available_quantity;
+  
+  if (hasOptionInventory && effectiveQuantity !== undefined) {
+    // Use effective_available_quantity which accounts for option-level damage
+    return Math.max(0, effectiveQuantity);
+  }
+  
+  // Fallback to menu item level available_quantity
   if (item.available_quantity === undefined) {
     return Infinity;
   }
@@ -134,17 +143,28 @@ export function deriveStockStatus(item: MenuItem): 'out_of_stock' | 'low_stock' 
     return 'in_stock';
   }
   
-  // When inventory tracking is enabled, calculate based on available quantity
-  if (item.available_quantity === undefined) {
+  // When inventory tracking is enabled, check if option-level inventory is used
+  const hasOptionInventory = (item as any).uses_option_level_inventory;
+  const effectiveQuantity = (item as any).effective_available_quantity;
+  
+  let availableQty: number;
+  
+  if (hasOptionInventory && effectiveQuantity !== undefined) {
+    // Use effective_available_quantity which accounts for option-level damage
+    availableQty = effectiveQuantity;
+  } else if (item.available_quantity !== undefined) {
+    // Fallback to menu item level available_quantity
+    availableQty = item.available_quantity;
+  } else {
     return 'in_stock';
   }
   
-  if (item.available_quantity <= 0) {
+  if (availableQty <= 0) {
     return 'out_of_stock';
   }
   
   const lowStockThreshold = item.low_stock_threshold || 5;
-  if (item.available_quantity <= lowStockThreshold) {
+  if (availableQty <= lowStockThreshold) {
     return 'low_stock';
   }
   

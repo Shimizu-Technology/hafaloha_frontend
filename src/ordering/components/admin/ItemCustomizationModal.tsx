@@ -7,9 +7,10 @@ interface ItemCustomizationModalProps {
   item: MenuItem;
   onClose: () => void;
   onAddToCart: (item: MenuItem, customizations: any[], quantity: number) => void;
+  cartItems: any[];
 }
 
-export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCustomizationModalProps) {
+export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }: ItemCustomizationModalProps) {
   const [quantity, setQuantity] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, MenuOption[]>>({});
   
@@ -71,7 +72,7 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
       processedOptionGroups.forEach((group: OptionGroup) => {
         // For preselected options (only if they're available)
         const preselectedOptions = group.options
-          .filter(opt => opt.is_preselected && opt.is_available !== false)
+          .filter(opt => opt.is_preselected && isOptionAvailable(opt, 1, group))
           .map(opt => opt);
         
         if (preselectedOptions.length > 0) {
@@ -160,39 +161,126 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
     return 0;
   };
 
-  // Calculate available stock quantity for an option
-  const getOptionAvailableStock = (option: MenuOption): number => {
-    if (option.stock_quantity === undefined) {
-      return Infinity; // No stock tracking
-    }
-    const damagedQty = option.damaged_quantity || 0;
-    return Math.max(0, option.stock_quantity - damagedQty);
+  // Calculate how much of each option is already used in the cart
+  const getCartOptionUsage = (optionId: number): number => {
+    let usage = 0;
+    
+    cartItems.forEach(cartItem => {
+      if (cartItem.customizations) {
+        // Handle array format (from backend/API)
+        if (Array.isArray(cartItem.customizations)) {
+          cartItem.customizations.forEach((customization: any) => {
+            if (customization.option_id === optionId) {
+              usage += cartItem.quantity || 1;
+            }
+          });
+        } 
+        // Handle object format (from display formatting)
+        else if (typeof cartItem.customizations === 'object') {
+          // cartItem.customizations is an object where keys are group names and values are arrays of option names
+          // We need to find the option by ID from the original item data
+          Object.values(cartItem.customizations).forEach((optionNames: any) => {
+            if (Array.isArray(optionNames)) {
+              optionNames.forEach((optionName: string) => {
+                // Find the option in our current item's option groups that matches this name
+                if (item.option_groups) {
+                  item.option_groups.forEach(group => {
+                    const option = group.options.find(opt => opt.name === optionName && opt.id === optionId);
+                    if (option) {
+                      usage += cartItem.quantity || 1;
+                    }
+                  });
+                }
+              });
+            }
+          });
+        }
+      }
+    });
+    
+    return usage;
   };
 
-  // Check if an option has low stock
-  const isOptionLowStock = (option: MenuOption): boolean => {
-    const availableStock = getOptionAvailableStock(option);
-    if (availableStock === Infinity) return false;
+  // Calculate available quantity for an option (with availability checks and cart usage)
+  const getOptionAvailableQuantity = (option: MenuOption): number => {
+    // First check manual availability toggles
+    if (!option.available) {
+      return 0;
+    }
+    
+    // Also check optional is_available field if present
+    if (option.is_available === false) {
+      return 0;
+    }
+    
+    // If no inventory tracking, return a large number to indicate unlimited
+    if (option.stock_quantity === undefined || option.stock_quantity === null) {
+      return 999; // Available but not tracked
+    }
+    
+    // Calculate available quantity (stock - damaged - cart usage)
+    const stockQuantity = option.stock_quantity || 0;
+    const damagedQuantity = option.damaged_quantity || 0;
+    const cartUsage = getCartOptionUsage(option.id);
+    return Math.max(0, stockQuantity - damagedQuantity - cartUsage);
+  };
+
+  // Check if an option is available for the requested quantity (option group aware)
+  const isOptionAvailable = (option: MenuOption, requestedQuantity: number = 1, optionGroup?: any): boolean => {
+    // First check manual availability toggle
+    if (!option.available) {
+      return false;
+    }
+    
+    // Also check optional is_available field if present
+    if (option.is_available === false) {
+      return false;
+    }
+    
+    // Only check stock if this option group has inventory tracking enabled
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    
+    // If no inventory tracking for this group, rely only on manual availability
+    if (!groupHasInventoryTracking || option.stock_quantity === undefined || option.stock_quantity === null) {
+      return true; // Available based on manual toggle only
+    }
+    
+    // Calculate available quantity and check if sufficient for tracked groups
+    const availableQuantity = getOptionAvailableQuantity(option);
+    return availableQuantity >= requestedQuantity;
+  };
+
+  // Check if an option has low stock (group-aware)
+  const isOptionLowStock = (option: MenuOption, optionGroup?: any): boolean => {
+    // Only show stock info for groups with inventory tracking
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    if (!groupHasInventoryTracking) return false;
+    
+    const availableQuantity = getOptionAvailableQuantity(option);
+    if (availableQuantity === 999) return false; // No stock tracking
     
     // Consider low stock if 5 or fewer items available
-    return availableStock > 0 && availableStock <= 5;
+    return availableQuantity > 0 && availableQuantity <= 5;
   };
 
-  // Check if an option is out of stock
-  const isOptionOutOfStock = (option: MenuOption): boolean => {
-    const availableStock = getOptionAvailableStock(option);
-    return availableStock === 0;
+  // Check if an option is out of stock (group-aware)
+  const isOptionOutOfStock = (option: MenuOption, optionGroup?: any): boolean => {
+    return !isOptionAvailable(option, 1, optionGroup);
   };
 
-  // Get stock indicator component for an option
-  const getStockIndicator = (option: MenuOption) => {
-    const availableStock = getOptionAvailableStock(option);
+  // Get stock indicator component for an option (group-aware)
+  const getStockIndicator = (option: MenuOption, optionGroup?: any) => {
+    // Only show stock indicators for groups with inventory tracking
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    if (!groupHasInventoryTracking) return null;
     
-    if (availableStock === Infinity) {
+    const availableQuantity = getOptionAvailableQuantity(option);
+    
+    if (availableQuantity === 999) {
       return null; // No stock tracking
     }
     
-    if (availableStock === 0) {
+    if (availableQuantity === 0) {
       return (
         <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full ml-2">
           Out of Stock
@@ -200,18 +288,18 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
       );
     }
     
-    if (availableStock <= 5) {
+    if (availableQuantity <= 5) {
       return (
         <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full ml-2">
-          {availableStock} left
+          {availableQuantity} left
         </span>
       );
     }
     
-    if (availableStock <= 20) {
+    if (availableQuantity <= 20) {
       return (
         <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full ml-2">
-          {availableStock} in stock
+          {availableQuantity} in stock
         </span>
       );
     }
@@ -420,31 +508,54 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
 
   // Handle adding to cart
   const handleAddToCart = () => {
-    if (isValid()) {
-      // Get the original array format for compatibility
-      const customizationsArray = formatCustomizations();
-      
-      // Create a copy of the item with the updated price and formatted customizations
-      const itemWithUpdatedPrice = {
-        ...item,
-        price: basePrice + additionalPrice,
-        // Add a properly formatted customizations object that will display correctly
-        customizations: formatCustomizationsForDisplay()
-      };
-      
-      // Debug log to help troubleshoot price calculations
-      console.log('Adding to cart:', {
-        itemName: item.name,
-        basePrice: basePrice,
-        additionalPrice: additionalPrice,
-        totalItemPrice: totalPrice,
-        quantity: quantity,
-        customizations: itemWithUpdatedPrice.customizations
-      });
-      
-      // Pass the updated item and the array of customizations
-      onAddToCart(itemWithUpdatedPrice, customizationsArray, quantity);
+    if (!isValid()) {
+      return;
     }
+
+    // Validate stock quantities for selected options
+    const stockValidationErrors: string[] = [];
+    
+    Object.entries(selectedOptions).forEach(([groupIdStr, options]) => {
+      options.forEach(option => {
+        const availableQuantity = getOptionAvailableQuantity(option);
+        if (availableQuantity < quantity) {
+          if (availableQuantity === 0) {
+            stockValidationErrors.push(`${option.name} is out of stock`);
+          } else {
+            stockValidationErrors.push(`${option.name} has only ${availableQuantity} available (requested ${quantity})`);
+          }
+        }
+      });
+    });
+
+    if (stockValidationErrors.length > 0) {
+      alert(`Cannot add to cart:\n\n${stockValidationErrors.join('\n')}`);
+      return;
+    }
+
+    // Get the original array format for compatibility
+    const customizationsArray = formatCustomizations();
+    
+    // Create a copy of the item with the updated price and formatted customizations
+    const itemWithUpdatedPrice = {
+      ...item,
+      price: basePrice + additionalPrice,
+      // Add a properly formatted customizations object that will display correctly
+      customizations: formatCustomizationsForDisplay()
+    };
+    
+    // Debug log to help troubleshoot price calculations
+    console.log('Adding to cart:', {
+      itemName: item.name,
+      basePrice: basePrice,
+      additionalPrice: additionalPrice,
+      totalItemPrice: totalPrice,
+      quantity: quantity,
+      customizations: itemWithUpdatedPrice.customizations
+    });
+    
+    // Pass the updated item and the array of customizations
+    onAddToCart(itemWithUpdatedPrice, customizationsArray, quantity);
   };
   
   // Format customizations in a way that can be properly displayed in AdminEditOrderModal
@@ -470,6 +581,68 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
     });
     
     return displayFormat;
+  };
+
+  // Get unified option indicator that combines price and stock information (group-aware)
+  const getUnifiedOptionIndicator = (option: MenuOption, optionGroup?: any, isSelected: boolean = false) => {
+    // Only show stock info for groups with inventory tracking
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    
+    const availableQuantity = getOptionAvailableQuantity(option);
+    const extraPrice = getOptionPrice(option);
+    const isFree = isOptionFree(optionGroup, option.id);
+    
+    // Determine the display components
+    let priceText = '';
+    let stockText = '';
+    let badgeStyle = '';
+    
+    // Handle stock information
+    if (groupHasInventoryTracking && availableQuantity !== 999) {
+      if (availableQuantity === 0) {
+        return (
+          <span className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded-full font-medium">
+            Out of Stock
+          </span>
+        );
+      } else if (availableQuantity <= 5) {
+        stockText = `${availableQuantity} left`;
+      } else if (availableQuantity <= 20) {
+        stockText = `${availableQuantity} in stock`;
+      }
+    }
+    
+    // Handle price information
+    if (isSelected && isFree) {
+      priceText = 'Free';
+    } else if (extraPrice > 0) {
+      priceText = `+$${extraPrice.toFixed(2)}`;
+    }
+    
+    // If no price or stock info to show, return null
+    if (!priceText && !stockText) {
+      return null;
+    }
+    
+    // Combine price and stock text
+    const combinedText = [priceText, stockText].filter(Boolean).join(' • ');
+    
+    // Determine badge styling based on content
+    if (isSelected && isFree) {
+      badgeStyle = "text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium";
+    } else if (stockText.includes('left')) {
+      badgeStyle = "text-xs bg-orange-100 text-orange-800 px-3 py-1 rounded-full font-medium";
+    } else if (stockText.includes('in stock')) {
+      badgeStyle = "text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium";
+    } else {
+      badgeStyle = "text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full font-medium";
+    }
+    
+    return (
+      <span className={badgeStyle}>
+        {combinedText}
+      </span>
+    );
   };
 
   return (
@@ -568,33 +741,14 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                       
                       <div className="space-y-2">
                         {group.options.map((option: MenuOption) => {
-                          // Skip unavailable options
-                          if (option.is_available === false) return null;
+                          // Skip unavailable options using comprehensive availability check
+                          if (!isOptionAvailable(option, 1, group)) return null;
                           
                           const isSelected = (selectedOptions[groupId.toString()] || [])
                             .some(opt => opt.id === option.id);
                           
-                          const extraPrice = getOptionPrice(option);
-                          const isFree = isOptionFree(group, option.id);
-                          const isOutOfStock = isOptionOutOfStock(option);
-                          const isLowStock = isOptionLowStock(option);
-                          const stockIndicator = getStockIndicator(option);
-                          
-                          // Determine what price indicator to show
-                          let priceIndicator = null;
-                          if (isSelected && isFree) {
-                            priceIndicator = (
-                              <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
-                                Free
-                              </span>
-                            );
-                          } else if (extraPrice > 0) {
-                            priceIndicator = (
-                              <span className="text-sm text-gray-500">
-                                +${extraPrice.toFixed(2)}
-                              </span>
-                            );
-                          }
+                          const isOutOfStock = isOptionOutOfStock(option, group);
+                          const unifiedIndicator = getUnifiedOptionIndicator(option, group, isSelected);
                           
                           return (
                             <div
@@ -611,20 +765,19 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                                     ? 'border-gray-200 hover:border-[#c1902f]'
                                     : ''
                                 }
-                                ${isLowStock && !isOutOfStock ? 'border-orange-200 bg-orange-50' : ''}
+
                               `}
                               onClick={() => !isOutOfStock && toggleOption(group, option)}
                             >
-                              <div className="flex justify-between items-start w-full">
-                                <div className="flex-1">
+                              <div className="flex justify-between items-center w-full">
+                                <div className="flex-1 min-w-0">
                                   <div className="flex items-center flex-wrap">
-                                    {option.name}
-                                  {option.is_preselected && !isSelected && (
-                                    <span className="ml-2 text-xs text-blue-500">
-                                      (Recommended)
-                                    </span>
+                                    <span className="font-medium">{option.name}</span>
+                                    {option.is_preselected && !isSelected && (
+                                      <span className="ml-2 text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                                        Recommended
+                                      </span>
                                     )}
-                                    {stockIndicator}
                                   </div>
                                   {isOutOfStock && (
                                     <p className="text-xs text-red-600 mt-1">
@@ -632,9 +785,11 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                                     </p>
                                   )}
                                 </div>
-                                <div className="flex items-center ml-2">
-                                  {priceIndicator}
-                                </div>
+                                {unifiedIndicator && (
+                                  <div className="ml-3 flex-shrink-0">
+                                    {unifiedIndicator}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -757,7 +912,28 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart }: ItemCusto
                   // Force update to recalculate prices
                   forceUpdate({});
                 }}
-                className="px-3 py-1 border rounded"
+                disabled={(() => {
+                  // Check if increasing quantity would exceed stock for any selected option
+                  const selectedOptionsList = Object.values(selectedOptions).flat();
+                  
+                  for (const option of selectedOptionsList) {
+                    const availableQuantity = getOptionAvailableQuantity(option);
+                    if (availableQuantity <= quantity) {
+                      return true; // Disable if any option doesn't have enough stock
+                    }
+                  }
+                  
+                  return false;
+                })()}
+                className={`px-3 py-1 border rounded ${
+                  (() => {
+                    const selectedOptionsList = Object.values(selectedOptions).flat();
+                    const hasStockIssue = selectedOptionsList.some(option => 
+                      getOptionAvailableQuantity(option) <= quantity
+                    );
+                    return hasStockIssue ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'hover:bg-gray-50';
+                  })()
+                }`}
               >
                 +
               </button>

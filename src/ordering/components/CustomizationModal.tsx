@@ -39,7 +39,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
     
     optionGroups.forEach(group => {
       const preselectedOptions = group.options
-        .filter(opt => opt.is_preselected && opt.is_available !== false) // Only include available options
+        .filter(opt => opt.is_preselected && isOptionAvailable(opt, 1, group)) // Only include available options
         .map(opt => opt.id);
       
       if (preselectedOptions.length > 0) {
@@ -245,39 +245,153 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
     return freeOptionIds.includes(optId);
   }
 
-  // Calculate available stock quantity for an option
-  const getOptionAvailableStock = (option: MenuOption): number => {
-    if (option.stock_quantity === undefined) {
-      return Infinity; // No stock tracking
+  // Calculate available quantity for an option (with availability checks)
+  const getOptionAvailableQuantity = (option: MenuOption): number => {
+    // First check manual availability toggles
+    if (!option.available) {
+      return 0;
     }
-    const damagedQty = option.damaged_quantity || 0;
-    return Math.max(0, option.stock_quantity - damagedQty);
+    
+    // Also check optional is_available field if present
+    if (option.is_available === false) {
+      return 0;
+    }
+    
+    // If no inventory tracking, return a large number to indicate unlimited
+    if (option.stock_quantity === undefined || option.stock_quantity === null) {
+      return 999; // Available but not tracked
+    }
+    
+    // Calculate available quantity (stock - damaged)
+    const stockQuantity = option.stock_quantity || 0;
+    const damagedQuantity = option.damaged_quantity || 0;
+    return Math.max(0, stockQuantity - damagedQuantity);
   };
 
-  // Check if an option has low stock
-  const isOptionLowStock = (option: MenuOption): boolean => {
-    const availableStock = getOptionAvailableStock(option);
-    if (availableStock === Infinity) return false;
+  // Check if an option is available for the requested quantity (option group aware)
+  const isOptionAvailable = (option: MenuOption, requestedQuantity: number = 1, optionGroup?: any): boolean => {
+    // First check manual availability toggle
+    if (!option.available) {
+      return false;
+    }
+    
+    // Also check optional is_available field if present
+    if (option.is_available === false) {
+      return false;
+    }
+    
+    // Only check stock if this option group has inventory tracking enabled
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    
+    // If no inventory tracking for this group, rely only on manual availability
+    if (!groupHasInventoryTracking || option.stock_quantity === undefined || option.stock_quantity === null) {
+      return true; // Available based on manual toggle only
+    }
+    
+    // Calculate available quantity and check if sufficient for tracked groups
+    const availableQuantity = getOptionAvailableQuantity(option);
+    return availableQuantity >= requestedQuantity;
+  };
+
+  // Get unified option indicator that combines price and stock information (group-aware)
+  const getUnifiedOptionIndicator = (option: MenuOption, optionGroup?: any, isSelected: boolean = false) => {
+    // Only show stock info for groups with inventory tracking
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    
+    const availableQuantity = getOptionAvailableQuantity(option);
+    
+    // Try different ways to access the price
+    const extraPrice = typeof option.additional_price === 'number' ? option.additional_price : 
+                      typeof option.additional_price_float === 'number' ? option.additional_price_float : 
+                      typeof (option as any).additional_price_float === 'number' ? (option as any).additional_price_float : 
+                      2.0;
+    
+    const isFree = isOptionFree(optionGroup, option.id);
+    
+    // Determine the display components
+    let priceText = '';
+    let stockText = '';
+    let badgeStyle = '';
+    
+    // Handle stock information
+    if (groupHasInventoryTracking && availableQuantity !== 999) {
+      if (availableQuantity === 0) {
+        return (
+          <span className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded-full font-medium">
+            Out of Stock
+          </span>
+        );
+      } else if (availableQuantity <= 5) {
+        stockText = `${availableQuantity} left`;
+      } else if (availableQuantity <= 20) {
+        stockText = `${availableQuantity} in stock`;
+      }
+    }
+    
+    // Handle price information
+    if (isSelected && isFree) {
+      priceText = 'Free';
+    } else if (extraPrice > 0) {
+      priceText = `+$${extraPrice.toFixed(2)}`;
+    }
+    
+    // If no price or stock info to show, return null
+    if (!priceText && !stockText) {
+      return null;
+    }
+    
+    // Combine price and stock text
+    const combinedText = [priceText, stockText].filter(Boolean).join(' • ');
+    
+    // Determine badge styling based on content
+    if (isSelected && isFree) {
+      badgeStyle = "text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium";
+    } else if (stockText.includes('left')) {
+      badgeStyle = "text-xs bg-orange-100 text-orange-800 px-3 py-1 rounded-full font-medium";
+    } else if (stockText.includes('in stock')) {
+      badgeStyle = "text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium";
+    } else {
+      badgeStyle = "text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full font-medium";
+    }
+    
+    return (
+      <span className={badgeStyle}>
+        {combinedText}
+      </span>
+    );
+  };
+
+  // Check if an option has low stock (group-aware)
+  const isOptionLowStock = (option: MenuOption, optionGroup?: any): boolean => {
+    // Only show stock info for groups with inventory tracking
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    if (!groupHasInventoryTracking) return false;
+    
+    const availableQuantity = getOptionAvailableQuantity(option);
+    if (availableQuantity === 999) return false; // No stock tracking
     
     // Consider low stock if 5 or fewer items available
-    return availableStock > 0 && availableStock <= 5;
+    return availableQuantity > 0 && availableQuantity <= 5;
   };
 
-  // Check if an option is out of stock
-  const isOptionOutOfStock = (option: MenuOption): boolean => {
-    const availableStock = getOptionAvailableStock(option);
-    return availableStock === 0;
+  // Check if an option is out of stock (group-aware)
+  const isOptionOutOfStock = (option: MenuOption, optionGroup?: any): boolean => {
+    return !isOptionAvailable(option, 1, optionGroup);
   };
 
-  // Get stock indicator component for an option
-  const getStockIndicator = (option: MenuOption) => {
-    const availableStock = getOptionAvailableStock(option);
+  // Get stock indicator component for an option (group-aware) - DEPRECATED: Use getUnifiedOptionIndicator instead
+  const getStockIndicator = (option: MenuOption, optionGroup?: any) => {
+    // Only show stock indicators for groups with inventory tracking
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    if (!groupHasInventoryTracking) return null;
     
-    if (availableStock === Infinity) {
+    const availableQuantity = getOptionAvailableQuantity(option);
+    
+    if (availableQuantity === 999) {
       return null; // No stock tracking
     }
     
-    if (availableStock === 0) {
+    if (availableQuantity === 0) {
       return (
         <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full ml-2">
           Out of Stock
@@ -285,18 +399,18 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
       );
     }
     
-    if (availableStock <= 5) {
+    if (availableQuantity <= 5) {
       return (
         <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full ml-2">
-          {availableStock} left
+          {availableQuantity} left
         </span>
       );
     }
     
-    if (availableStock <= 20) {
+    if (availableQuantity <= 20) {
       return (
         <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full ml-2">
-          {availableStock} in stock
+          {availableQuantity} in stock
         </span>
       );
     }
@@ -524,36 +638,12 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                       
                       <div className="space-y-2">
                         {group.options
-                          .filter(opt => opt.is_available !== false) // Only show available options
+                          .filter(opt => isOptionAvailable(opt, 1, group)) // Only show available options
                           .map((opt) => {
                           const selected = selections[groupId]?.includes(opt.id);
-                          const isOutOfStock = isOptionOutOfStock(opt);
-                          const isLowStock = isOptionLowStock(opt);
-                          const stockIndicator = getStockIndicator(opt);
-                          
-                          // Try different ways to access the price
-                          const extraPrice = typeof opt.additional_price === 'number' ? opt.additional_price : 
-                                            typeof opt.additional_price_float === 'number' ? opt.additional_price_float : 
-                                            typeof (opt as any).additional_price_float === 'number' ? (opt as any).additional_price_float : 
-                                            2.0;
-                          
-                          const isFree = isOptionFree(group, opt.id);
-                          
-                          // Determine what price indicator to show
-                          let priceIndicator = null;
-                          if (selected && isFree) {
-                            priceIndicator = (
-                              <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
-                                Free
-                              </span>
-                            );
-                          } else if (extraPrice > 0) {
-                            priceIndicator = (
-                              <span className="text-sm text-gray-500">
-                                +${extraPrice.toFixed(2)}
-                              </span>
-                            );
-                          }
+                          const isOutOfStock = isOptionOutOfStock(opt, group);
+
+                          const unifiedIndicator = getUnifiedOptionIndicator(opt, group, selected);
                           
                           return (
                             <button
@@ -572,19 +662,18 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                                     ? 'border-gray-200 hover:border-[#c1902f]'
                                     : ''
                                 }
-                                ${isLowStock && !isOutOfStock ? 'border-orange-200 bg-orange-50' : ''}
+
                               `}
                             >
-                              <div className="flex justify-between items-start w-full">
-                                <div className="flex-1">
+                              <div className="flex justify-between items-center w-full">
+                                <div className="flex-1 min-w-0">
                                   <div className="flex items-center flex-wrap">
-                                    {opt.name}
-                                  {opt.is_preselected && !selected && (
-                                    <span className="ml-2 text-xs text-blue-500">
-                                      (Recommended)
-                                    </span>
+                                    <span className="font-medium">{opt.name}</span>
+                                    {opt.is_preselected && !selected && (
+                                      <span className="ml-2 text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                                        Recommended
+                                      </span>
                                     )}
-                                    {stockIndicator}
                                   </div>
                                   {isOutOfStock && (
                                     <p className="text-xs text-red-600 mt-1">
@@ -592,9 +681,11 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
                                     </p>
                                   )}
                                 </div>
-                                <div className="flex items-center ml-2">
-                                  {priceIndicator}
-                                </div>
+                                {unifiedIndicator && (
+                                  <div className="ml-3 flex-shrink-0">
+                                    {unifiedIndicator}
+                                  </div>
+                                )}
                               </div>
                             </button>
                           );

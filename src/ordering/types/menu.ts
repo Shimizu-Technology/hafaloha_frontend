@@ -23,6 +23,7 @@ export interface MenuItemFilterParams {
   layout_type?: 'gallery' | 'list'; // For layout-specific responses
   include_stock?: boolean;
   include_option_groups?: boolean; // Always include option groups info even in list view
+  admin?: boolean; // For admin access to hidden items and bypassing normal filters
   page?: number;
   per_page?: number;
 }
@@ -51,6 +52,7 @@ export interface OptionGroup {
   has_available_options?: boolean;
   required_but_unavailable?: boolean;
   required?: boolean; // Whether this option group is required
+  enable_inventory_tracking?: boolean; // Whether this option group tracks inventory
 }
 
 /**

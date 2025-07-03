@@ -81,23 +81,21 @@ function isValidPhone(phoneStr: string) {
 }
 
 /** FE-014: Check if an option has sufficient inventory for the requested quantity */
-function isOptionAvailable(option: MenuOption & { stock_quantity?: number; damaged_quantity?: number }, requestedQuantity: number = 1): boolean {
-  // First check manual availability toggle - use the required 'available' field
-  if (!option.available) {
+function isOptionAvailable(option: MenuOption & { stock_quantity?: number; damaged_quantity?: number }, requestedQuantity: number = 1, optionGroup?: any): boolean {
+  // Check manual availability first
+  if (!option.available || option.is_available === false) {
     return false;
   }
   
-  // Also check optional is_available field if present
-  if (option.is_available === false) {
-    return false;
+  // Only check stock if THIS GROUP has inventory tracking enabled
+  const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+  
+  // If no tracking for this group, rely only on manual availability
+  if (!groupHasInventoryTracking || option.stock_quantity === undefined) {
+    return true; // Available based on manual toggle only
   }
   
-  // If no inventory tracking, rely on manual availability
-  if (option.stock_quantity === undefined || option.stock_quantity === null) {
-    return true; // Default to available if no stock tracking
-  }
-  
-  // Calculate available quantity (stock - damaged)
+  // Only check stock quantities for tracked groups
   const stockQuantity = option.stock_quantity || 0;
   const damagedQuantity = option.damaged_quantity || 0;
   const availableQuantity = Math.max(0, stockQuantity - damagedQuantity);
@@ -106,9 +104,9 @@ function isOptionAvailable(option: MenuOption & { stock_quantity?: number; damag
 }
 
 /** FE-014: Check if an option group has any available options */
-function hasAvailableOptions(optionGroup: { options?: (MenuOption & { stock_quantity?: number; damaged_quantity?: number })[] }): boolean {
+function hasAvailableOptions(optionGroup: { options?: (MenuOption & { stock_quantity?: number; damaged_quantity?: number })[]; enable_inventory_tracking?: boolean }): boolean {
   if (!optionGroup?.options) return false;
-  return optionGroup.options.some((option) => isOptionAvailable(option));
+  return optionGroup.options.some((option) => isOptionAvailable(option, 1, optionGroup));
 }
 
 /** FE-014: Get available quantity for an option */
@@ -121,6 +119,17 @@ function getOptionAvailableQuantity(option: any): number {
   const stockQuantity = option.stock_quantity || 0;
   const damagedQuantity = option.damaged_quantity || 0;
   return Math.max(0, stockQuantity - damagedQuantity);
+}
+
+/** FE-014: Get available quantity for a menu item (option-aware) */
+function getMenuItemAvailableQuantity(item: MenuItem): number {
+  // Use option-aware quantity if available, otherwise fallback to menu item level
+  const hasOptionInventory = (item as any).uses_option_level_inventory;
+  if (hasOptionInventory && (item as any).effective_available_quantity !== undefined) {
+    return (item as any).effective_available_quantity;
+  }
+  
+  return item.available_quantity || 0;
 }
 
 /** Hook that returns true if width < 768px (mobile) */
@@ -385,7 +394,7 @@ function MenuItemsPanel({
                                   // Calculate effective available quantity by subtracting cart quantity
                                   const cartItem = findCartItem(item.id);
                                   const cartQuantity = cartItem ? cartItem.quantity : 0;
-                                  const effectiveQuantity = item.available_quantity - cartQuantity;
+                                  const effectiveQuantity = getMenuItemAvailableQuantity(item) - cartQuantity;
                                   return effectiveQuantity > 0
                                     ? `${effectiveQuantity} left`
                                     : 'Out of stock';
@@ -397,8 +406,9 @@ function MenuItemsPanel({
 
                           {/* FE-014: Option availability indicator */}
                           {item.option_groups && item.option_groups.length > 0 && (() => {
+                            // Only check for required groups that have inventory tracking enabled
                             const requiredGroupsWithoutAvailableOptions = item.option_groups.filter(group => 
-                              group.min_select > 0 && !hasAvailableOptions(group)
+                              group.min_select > 0 && group.enable_inventory_tracking === true && !hasAvailableOptions(group)
                             );
                             
                             if (requiredGroupsWithoutAvailableOptions.length > 0) {
@@ -409,13 +419,15 @@ function MenuItemsPanel({
                               );
                             }
                             
-                            // Check if any options have limited availability
-                            const optionsWithLimitedStock = item.option_groups.flatMap(group => 
-                              group.options.filter(option => {
-                                const availableQty = getOptionAvailableQuantity(option);
-                                return availableQty > 0 && availableQty < 10 && ((option as any).stock_quantity || 0) > 0;
-                              })
-                            );
+                            // Check if any options have limited availability - only for groups with inventory tracking
+                            const optionsWithLimitedStock = item.option_groups
+                              .filter(group => group.enable_inventory_tracking === true)
+                              .flatMap(group => 
+                                group.options.filter(option => {
+                                  const availableQty = getOptionAvailableQuantity(option);
+                                  return availableQty > 0 && availableQty < 10;
+                                })
+                              );
                             
                             if (optionsWithLimitedStock.length > 0) {
                               return (
@@ -435,7 +447,7 @@ function MenuItemsPanel({
                                 // Calculate effective available quantity by subtracting cart quantity
                                 const cartItem = findCartItem(item.id);
                                 const cartQuantity = cartItem ? cartItem.quantity : 0;
-                                const effectiveQuantity = item.available_quantity - cartQuantity;
+                                const effectiveQuantity = getMenuItemAvailableQuantity(item) - cartQuantity;
                                 return effectiveQuantity <= 0;
                               })())
                             ) ? (
@@ -496,9 +508,9 @@ function MenuItemsPanel({
                               </div>
                             ) : hasOptions ? (
                               (() => {
-                                // FE-014: Check if required options are available
+                                // FE-014: Check if required options are available - only for groups with inventory tracking
                                 const requiredGroupsWithoutAvailableOptions = item.option_groups?.filter(group => 
-                                  group.min_select > 0 && !hasAvailableOptions(group)
+                                  group.min_select > 0 && group.enable_inventory_tracking === true && !hasAvailableOptions(group)
                                 ) || [];
                                 
                                 const hasUnavailableRequiredOptions = requiredGroupsWithoutAvailableOptions.length > 0;
@@ -828,15 +840,80 @@ function OrderPanel({
                         }}
                         disabled={(() => {
                           const menuItem = menuItems.find(m => m.id === item.id);
+                          
+                          // Check item-level inventory first
                           if (menuItem?.enable_stock_tracking && menuItem.available_quantity !== undefined) {
                             const cartItem = findCartItem(menuItem.id);
                             const cartQuantity = cartItem ? cartItem.quantity : 0;
                             const effectiveQuantity = menuItem.available_quantity - cartQuantity;
-                            return effectiveQuantity <= 0;
+                            if (effectiveQuantity <= 0) {
+                              return true;
+                            }
                           }
+                          
+                          // Check option-level inventory for customized items
+                          if (item.customizations && menuItem?.option_groups) {
+                            const newQuantity = item.quantity + 1;
+                            
+                            // Check each customization
+                            for (const [groupName, selectedOptionNames] of Object.entries(item.customizations)) {
+                              const optionGroup = menuItem.option_groups.find(g => g.name === groupName);
+                              if (!optionGroup) continue;
+                              
+                              // Check each selected option in this group
+                              const selectedOptions = Array.isArray(selectedOptionNames) ? selectedOptionNames : [selectedOptionNames];
+                              for (const optionName of selectedOptions) {
+                                const option = optionGroup.options.find(o => o.name === optionName);
+                                if (option) {
+                                  const availableQuantity = getOptionAvailableQuantity(option);
+                                  // Check if this option has enough stock for the new quantity
+                                  if (availableQuantity < newQuantity) {
+                                    return true; // Disable button if any option doesn't have enough stock
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          
                           return false;
                         })()}
-                        className="text-gray-600 hover:text-[#c1902f] p-2.5 rounded-r"
+                        className={`text-gray-600 hover:text-[#c1902f] p-2.5 rounded-r ${
+                          (() => {
+                            const menuItem = menuItems.find(m => m.id === item.id);
+                            
+                            // Check if disabled due to stock issues
+                            if (menuItem?.enable_stock_tracking && menuItem.available_quantity !== undefined) {
+                              const cartItem = findCartItem(menuItem.id);
+                              const cartQuantity = cartItem ? cartItem.quantity : 0;
+                              const effectiveQuantity = menuItem.available_quantity - cartQuantity;
+                              if (effectiveQuantity <= 0) {
+                                return 'opacity-50 cursor-not-allowed';
+                              }
+                            }
+                            
+                            // Check option-level stock - only for groups with inventory tracking
+                            if (item.customizations && menuItem?.option_groups) {
+                              const newQuantity = item.quantity + 1;
+                              for (const [groupName, selectedOptionNames] of Object.entries(item.customizations)) {
+                                const optionGroup = menuItem.option_groups.find(g => g.name === groupName);
+                                if (!optionGroup || !optionGroup.enable_inventory_tracking) continue; // Skip non-tracked groups
+                                
+                                const selectedOptions = Array.isArray(selectedOptionNames) ? selectedOptionNames : [selectedOptionNames];
+                                for (const optionName of selectedOptions) {
+                                  const option = optionGroup.options.find(o => o.name === optionName);
+                                  if (option) {
+                                    const availableQuantity = getOptionAvailableQuantity(option);
+                                    if (availableQuantity < newQuantity) {
+                                      return 'opacity-50 cursor-not-allowed';
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            
+                            return '';
+                          })()
+                        }`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor">
                           <path
@@ -858,7 +935,7 @@ function OrderPanel({
                         onClick={() => {
                           const mi = menuItems.find(m => m.id === item.id);
                           if (mi?.option_groups?.length) {
-                            // Check stock before adding
+                            // Check item-level stock before adding
                             if (mi.enable_stock_tracking && mi.available_quantity !== undefined) {
                               const cartItem = findCartItem(mi.id);
                               const cartQuantity = cartItem ? cartItem.quantity : 0;
@@ -868,22 +945,113 @@ function OrderPanel({
                                 return;
                               }
                             }
+                            
+                            // Check option-level stock for current item's customizations - only for groups with inventory tracking
+                            if (item.customizations && mi.option_groups) {
+                              const stockErrors: string[] = [];
+                              
+                              // Check each customization in the current cart item
+                              for (const [groupName, selectedOptionNames] of Object.entries(item.customizations)) {
+                                const optionGroup = mi.option_groups.find(g => g.name === groupName);
+                                if (!optionGroup || !optionGroup.enable_inventory_tracking) continue; // Skip non-tracked groups
+                                
+                                const selectedOptions = Array.isArray(selectedOptionNames) ? selectedOptionNames : [selectedOptionNames];
+                                for (const optionName of selectedOptions) {
+                                  const option = optionGroup.options.find(o => o.name === optionName);
+                                  if (option) {
+                                    const availableQuantity = getOptionAvailableQuantity(option);
+                                    if (availableQuantity < 1) {
+                                      stockErrors.push(`${optionName} is out of stock`);
+                                    }
+                                  }
+                                }
+                              }
+                              
+                              if (stockErrors.length > 0) {
+                                toastUtils.error(`Cannot add another ${mi.name}:\n\n${stockErrors.join('\n')}`);
+                                return;
+                              }
+                            }
+                            
                             setCustomizingItem(mi);
                           }
                         }}
                         disabled={(() => {
                           const menuItem = menuItems.find(m => m.id === item.id);
+                          
+                          // Check item-level inventory
                           if (menuItem?.enable_stock_tracking && menuItem.available_quantity !== undefined) {
                             const cartItem = findCartItem(menuItem.id);
                             const cartQuantity = cartItem ? cartItem.quantity : 0;
                             const effectiveQuantity = menuItem.available_quantity - cartQuantity;
-                            return effectiveQuantity <= 0;
+                            if (effectiveQuantity <= 0) {
+                              return true;
+                            }
                           }
+                          
+                          // Check option-level inventory for current customizations - only for tracked groups
+                          if (item.customizations && menuItem?.option_groups) {
+                            for (const [groupName, selectedOptionNames] of Object.entries(item.customizations)) {
+                              const optionGroup = menuItem.option_groups.find(g => g.name === groupName);
+                              if (!optionGroup || !optionGroup.enable_inventory_tracking) continue; // Skip non-tracked groups
+                              
+                              const selectedOptions = Array.isArray(selectedOptionNames) ? selectedOptionNames : [selectedOptionNames];
+                              for (const optionName of selectedOptions) {
+                                const option = optionGroup.options.find(o => o.name === optionName);
+                                if (option) {
+                                  const availableQuantity = getOptionAvailableQuantity(option);
+                                  if (availableQuantity < 1) {
+                                    return true; // Disable if any option is out of stock
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          
                           return false;
                         })()}
-                        className="mt-1 sm:mt-0 text-[#c1902f] border border-[#c1902f]
-                                   hover:bg-[#c1902f] hover:text-white px-4 py-2
-                                   rounded text-sm font-medium transition-colors"
+                        className={`mt-1 sm:mt-0 text-[#c1902f] border border-[#c1902f] px-4 py-2
+                                   rounded text-sm font-medium transition-colors ${
+                          (() => {
+                            const menuItem = menuItems.find(m => m.id === item.id);
+                            
+                            // Check if disabled due to stock issues
+                            let isDisabled = false;
+                            
+                            if (menuItem?.enable_stock_tracking && menuItem.available_quantity !== undefined) {
+                              const cartItem = findCartItem(menuItem.id);
+                              const cartQuantity = cartItem ? cartItem.quantity : 0;
+                              const effectiveQuantity = menuItem.available_quantity - cartQuantity;
+                              if (effectiveQuantity <= 0) {
+                                isDisabled = true;
+                              }
+                            }
+                            
+                            if (item.customizations && menuItem?.option_groups) {
+                              for (const [groupName, selectedOptionNames] of Object.entries(item.customizations)) {
+                                const optionGroup = menuItem.option_groups.find(g => g.name === groupName);
+                                if (!optionGroup || !optionGroup.enable_inventory_tracking) continue; // Skip non-tracked groups
+                                
+                                const selectedOptions = Array.isArray(selectedOptionNames) ? selectedOptionNames : [selectedOptionNames];
+                                for (const optionName of selectedOptions) {
+                                  const option = optionGroup.options.find(o => o.name === optionName);
+                                  if (option) {
+                                    const availableQuantity = getOptionAvailableQuantity(option);
+                                    if (availableQuantity < 1) {
+                                      isDisabled = true;
+                                      break;
+                                    }
+                                  }
+                                }
+                                if (isDisabled) break;
+                              }
+                            }
+                            
+                            return isDisabled 
+                              ? 'opacity-50 cursor-not-allowed bg-gray-100' 
+                              : 'hover:bg-[#c1902f] hover:text-white';
+                          })()
+                        }`}
                       >
                         Add Another
                       </button>
@@ -1742,9 +1910,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       if (restaurant?.id) {
         fetchMenuItemsForAdmin({
           menu_id: currentMenuId,
-          view_type: 'admin',
           include_stock: true,
-          restaurant_id: restaurant.id
+          restaurant_id: restaurant.id,
+          hidden: false // Only show visible items in staff order modal
         }).then(() => {
           dataLoadingState.current.menuItemsLoaded = true;
           console.debug(`[StaffOrderModal] Reloaded menu items for menu ID: ${currentMenuId}`);
@@ -1926,9 +2094,9 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           // Load menu items for the specific current menu only
           await fetchMenuItemsForAdmin({
             menu_id: activeMenuId,
-            view_type: 'admin',
             include_stock: true,
-            restaurant_id: restaurant.id
+            restaurant_id: restaurant.id,
+            hidden: false // Only show visible items in staff order modal
           });
           console.debug(`[StaffOrderModal] Loaded menu items for menu ID: ${activeMenuId}`);
         } else {
@@ -2925,6 +3093,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
           item={customizingItem}
           onClose={() => setCustomizingItem(null)}
           onAddToCart={handleAddCustomizedItem}
+          cartItems={cartItems}
         />
       )}
     </div>

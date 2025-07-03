@@ -87,6 +87,11 @@ interface MenuItemFormData {
   damaged_quantity?: number;
   low_stock_threshold?: number;
   available_quantity?: number; // Computed: stock_quantity - damaged_quantity
+  
+  // Option-level inventory fields
+  effective_available_quantity?: number; // Option-aware available quantity
+  uses_option_level_inventory?: boolean; // Whether this item uses option-level inventory
+  has_option_inventory_tracking?: boolean; // Whether this item has option groups with inventory tracking
 }
 
 /**
@@ -248,26 +253,20 @@ export function MenuManager({
       try {
         // Create filter params for backend filtering - only major filters
         const filterParams: MenuItemFilterParams = {
-          view_type: 'admin',
           include_stock: true,
           restaurant_id: restaurant?.id
         };
         
-        // Add menu filter if selected
-        if (selectedMenuId) {
-          filterParams.menu_id = selectedMenuId;
-        }
-        
-        // Add category filter if selected
-        if (selectedCategory) {
-          filterParams.category_id = selectedCategory;
-        }
-        
-        // Add visibility filter
-        if (visibilityFilter === 'active') {
-          filterParams.hidden = false;
-        } else if (visibilityFilter === 'hidden') {
+        // Add existing filters (only major backend filters)
+        if (selectedMenuId) filterParams.menu_id = selectedMenuId;
+        if (selectedCategory) filterParams.category_id = selectedCategory;
+        if (visibilityFilter === 'active') filterParams.hidden = false;
+        if (visibilityFilter === 'hidden') {
           filterParams.hidden = true;
+          filterParams.admin = true; // Need admin flag to access hidden items
+        }
+        if (visibilityFilter === 'all') {
+          filterParams.admin = true; // Need admin flag to access all items (hidden + visible)
         }
         
         // Use optimized backend filtering - removed featured/seasonal/search from here
@@ -369,7 +368,6 @@ export function MenuManager({
         // Prefetch this category's items
         try {
           const filterParams: MenuItemFilterParams = {
-            view_type: 'admin',
             include_stock: true,
             restaurant_id: restaurant?.id,
             menu_id: selectedMenuId,
@@ -381,6 +379,9 @@ export function MenuManager({
             filterParams.hidden = false;
           } else if (visibilityFilter === 'hidden') {
             filterParams.hidden = true;
+            filterParams.admin = true; // Need admin flag to access hidden items
+          } else if (visibilityFilter === 'all') {
+            filterParams.admin = true; // Need admin flag to access all items (hidden + visible)
           }
           
           if (showFeaturedOnly) {
@@ -430,8 +431,7 @@ export function MenuManager({
     if (selectedMenuId) {
       // Create filter params for backend filtering
       const filterParams: MenuItemFilterParams = {
-        menu_id: selectedMenuId,
-        view_type: 'admin',
+        menu_id: selectedMenuId, // CRITICAL: Always include menu_id to ensure proper scoping
         include_stock: true,
         restaurant_id: restaurant?.id
       };
@@ -439,7 +439,13 @@ export function MenuManager({
       // Add existing filters (only major backend filters)
       if (selectedCategory) filterParams.category_id = selectedCategory;
       if (visibilityFilter === 'active') filterParams.hidden = false;
-      if (visibilityFilter === 'hidden') filterParams.hidden = true;
+      if (visibilityFilter === 'hidden') {
+        filterParams.hidden = true;
+        filterParams.admin = true; // Need admin flag to access hidden items
+      }
+      if (visibilityFilter === 'all') {
+        filterParams.admin = true; // Need admin flag to access all items (hidden + visible)
+      }
       
       // Fetch with current filters
       setLoading(true);
@@ -499,7 +505,6 @@ export function MenuManager({
     
     // Create filter params for backend filtering
     const filterParams: MenuItemFilterParams = {
-      view_type: 'admin',
       include_stock: true,
       restaurant_id: restaurant?.id
     };
@@ -508,7 +513,13 @@ export function MenuManager({
     if (selectedMenuId) filterParams.menu_id = selectedMenuId;
     if (selectedCategory) filterParams.category_id = selectedCategory;
     if (visibilityFilter === 'active') filterParams.hidden = false;
-    if (visibilityFilter === 'hidden') filterParams.hidden = true;
+    if (visibilityFilter === 'hidden') {
+      filterParams.hidden = true;
+      filterParams.admin = true; // Need admin flag to access hidden items
+    }
+    if (visibilityFilter === 'all') {
+      filterParams.admin = true; // Need admin flag to access all items (hidden + visible)
+    }
     
     // Fetch with current filters
     setLoading(true);
@@ -583,6 +594,11 @@ export function MenuManager({
       damaged_quantity: damagedQty,
       low_stock_threshold: item.low_stock_threshold || 10,
       available_quantity: availableQty,
+      
+      // Option-level inventory fields
+      effective_available_quantity: (item as any).effective_available_quantity,
+      uses_option_level_inventory: (item as any).uses_option_level_inventory,
+      has_option_inventory_tracking: (item as any).has_option_inventory_tracking,
     });
     setIsEditing(true);
     
@@ -640,7 +656,8 @@ export function MenuManager({
           damagedQty !== editingItem.damaged_quantity ||
           threshold !== editingItem.low_stock_threshold ||
           updatedItem.stock_status !== editingItem.stock_status ||
-          !!updatedItem.enable_stock_tracking !== editingItem.enable_stock_tracking
+          !!updatedItem.enable_stock_tracking !== editingItem.enable_stock_tracking ||
+          (updatedItem as any).effective_available_quantity !== editingItem.effective_available_quantity
         ) {
           setEditingItem((prevItem) => {
             if (!prevItem) return prevItem;
@@ -652,6 +669,11 @@ export function MenuManager({
               low_stock_threshold: threshold,
               available_quantity: availableQty,
               stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock',
+              
+              // Update option-level inventory fields
+              effective_available_quantity: (updatedItem as any).effective_available_quantity,
+              uses_option_level_inventory: (updatedItem as any).uses_option_level_inventory,
+              has_option_inventory_tracking: (updatedItem as any).has_option_inventory_tracking,
             };
           });
         }
@@ -825,6 +847,11 @@ export function MenuManager({
                 0,
                 (updatedItem.stock_quantity || 0) - (updatedItem.damaged_quantity || 0)
               ),
+              
+              // Option-level inventory fields
+              effective_available_quantity: (updatedItem as any).effective_available_quantity,
+              uses_option_level_inventory: (updatedItem as any).uses_option_level_inventory,
+              has_option_inventory_tracking: (updatedItem as any).has_option_inventory_tracking,
             });
             
             // Show success toast for updated item
@@ -2171,7 +2198,12 @@ export function MenuManager({
                     damaged_quantity: updatedItem.damaged_quantity || 0,
                     low_stock_threshold: updatedItem.low_stock_threshold || 10,
                     available_quantity: Math.max(0, (updatedItem.stock_quantity || 0) - (updatedItem.damaged_quantity || 0)),
-                    stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock'
+                    stock_status: updatedItem.stock_status as 'in_stock' | 'out_of_stock' | 'low_stock',
+                    
+                    // Update option-level inventory fields
+                    effective_available_quantity: (updatedItem as any).effective_available_quantity,
+                    uses_option_level_inventory: (updatedItem as any).uses_option_level_inventory,
+                    has_option_inventory_tracking: (updatedItem as any).has_option_inventory_tracking,
                   };
                 });
               }
