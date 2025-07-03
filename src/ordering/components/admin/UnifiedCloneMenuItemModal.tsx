@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Save, Layers, Copy } from 'lucide-react';
+import { X, Save, Layers, Copy, ArrowRight } from 'lucide-react';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { useCategoryStore } from '../../store/categoryStore';
 import { MenuItem } from '../../types/menu';
@@ -14,7 +14,7 @@ interface UnifiedCloneMenuItemModalProps {
   onClose: () => void;
 }
 
-type CloneMode = 'same_menu' | 'different_menu';
+type OperationType = 'clone_same_menu' | 'copy_different_menu' | 'move_different_menu';
 
 export function UnifiedCloneMenuItemModal({ 
   item, 
@@ -22,8 +22,8 @@ export function UnifiedCloneMenuItemModal({
   isOpen, 
   onClose 
 }: UnifiedCloneMenuItemModalProps) {
-  // Mode selection - default to same menu cloning as it's likely the more common use case
-  const [cloneMode, setCloneMode] = useState<CloneMode>('same_menu');
+  // Operation type selection - default to cloning in same menu
+  const [operationType, setOperationType] = useState<OperationType>('clone_same_menu');
   
   // Shared state
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
@@ -37,13 +37,13 @@ export function UnifiedCloneMenuItemModal({
   const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null);
   const [targetMenuCategories, setTargetMenuCategories] = useState<Category[]>([]);
   
-  const { copyMenuItem, cloneMenuItemInSameMenu } = useMenuStore();
+  const { copyMenuItem, cloneMenuItemInSameMenu, moveMenuItem } = useMenuStore();
   const { categories, fetchCategoriesForMenu } = useCategoryStore();
   
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
-      setCloneMode('same_menu');
+      setOperationType('clone_same_menu');
       setNewName(`${item.name} (Copy)`);
       setSelectedMenuId(null);
       setSelectedCategories(item.category_ids || []);
@@ -78,8 +78,8 @@ export function UnifiedCloneMenuItemModal({
     }
   }, [categories, selectedMenuId]);
   
-  const handleClone = async () => {
-    if (cloneMode === 'same_menu') {
+  const handleOperation = async () => {
+    if (operationType === 'clone_same_menu') {
       // Validate same menu cloning
       if (!newName.trim()) {
         toastUtils.error('Please enter a name for the cloned item');
@@ -101,8 +101,8 @@ export function UnifiedCloneMenuItemModal({
       } finally {
         setLoading(false);
       }
-    } else {
-      // Validate different menu cloning
+    } else if (operationType === 'copy_different_menu') {
+      // Validate copying to different menu
       if (!selectedMenuId) {
         toastUtils.error('Please select a destination menu');
         return;
@@ -123,6 +123,54 @@ export function UnifiedCloneMenuItemModal({
       } finally {
         setLoading(false);
       }
+    } else if (operationType === 'move_different_menu') {
+      // Validate moving to different menu
+      if (!selectedMenuId) {
+        toastUtils.error('Please select a destination menu');
+        return;
+      }
+      
+      if (selectedCategories.length === 0) {
+        toastUtils.error('Please select at least one category');
+        return;
+      }
+      
+      setLoading(true);
+      try {
+        await moveMenuItem(item.id, selectedMenuId, selectedCategories);
+        toastUtils.success('Item moved successfully!');
+        onClose();
+      } catch (error) {
+        toastUtils.error('Failed to move item');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+  
+  const getOperationDescription = () => {
+    switch (operationType) {
+      case 'clone_same_menu':
+        return `Create a fresh copy of "${item.name}" in the same menu. The copy will have no inventory tracking, no stock quantities, and no audit history - it's a completely fresh start.`;
+      case 'copy_different_menu':
+        return `Create a fresh copy of "${item.name}" in another menu. The copy will have no inventory tracking, no stock quantities, and no audit history - it's a completely fresh start.`;
+      case 'move_different_menu':
+        return `Move "${item.name}" to another menu, preserving ALL data including inventory levels, damaged quantities, audit history, and any option-level inventory tracking. The item will no longer exist in the current menu.`;
+      default:
+        return '';
+    }
+  };
+  
+  const getActionButtonText = () => {
+    switch (operationType) {
+      case 'clone_same_menu':
+        return loading ? 'Cloning...' : 'Clone Item';
+      case 'copy_different_menu':
+        return loading ? 'Copying...' : 'Copy Item';
+      case 'move_different_menu':
+        return loading ? 'Moving...' : 'Move Item';
+      default:
+        return 'Process';
     }
   };
   
@@ -130,9 +178,9 @@ export function UnifiedCloneMenuItemModal({
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-white rounded-lg max-w-md w-full p-6 animate-slideUp">
+      <div className="bg-white rounded-lg max-w-lg w-full p-6 animate-slideUp">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-semibold">Clone Menu Item</h3>
+          <h3 className="text-xl font-semibold">Menu Item Operations</h3>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 transition-colors duration-200"
@@ -142,37 +190,45 @@ export function UnifiedCloneMenuItemModal({
         </div>
         
         <div className="mb-6">
-          {/* Mode Selection Tabs */}
-          <div className="flex border-b mb-4">
+          {/* Operation Type Selection Tabs */}
+          <div className="flex border-b mb-4 text-sm">
             <button
-              className={`flex items-center px-4 py-2 ${cloneMode === 'same_menu' 
+              className={`flex items-center px-3 py-2 ${operationType === 'clone_same_menu' 
                 ? 'border-b-2 border-[#c1902f] text-[#c1902f] font-medium' 
                 : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setCloneMode('same_menu')}
+              onClick={() => setOperationType('clone_same_menu')}
             >
               <Layers className="h-4 w-4 mr-2" />
-              Clone in This Menu
+              Clone Here
             </button>
             <button
-              className={`flex items-center px-4 py-2 ${cloneMode === 'different_menu' 
+              className={`flex items-center px-3 py-2 ${operationType === 'copy_different_menu' 
                 ? 'border-b-2 border-[#c1902f] text-[#c1902f] font-medium' 
                 : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setCloneMode('different_menu')}
+              onClick={() => setOperationType('copy_different_menu')}
             >
               <Copy className="h-4 w-4 mr-2" />
-              Copy to Another Menu
+              Copy Fresh
+            </button>
+            <button
+              className={`flex items-center px-3 py-2 ${operationType === 'move_different_menu' 
+                ? 'border-b-2 border-[#c1902f] text-[#c1902f] font-medium' 
+                : 'text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setOperationType('move_different_menu')}
+            >
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Move Complete
             </button>
           </div>
           
-          <p className="text-gray-600 mb-4">
-            {cloneMode === 'same_menu' 
-              ? `Create a copy of "${item.name}" in the same menu. You can customize the name and select which categories the cloned item should appear in.`
-              : `Copy "${item.name}" to another menu. You'll need to select which menu to copy to and which categories the item should appear in.`
-            }
-          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4">
+            <p className="text-sm text-blue-800">
+              {getOperationDescription()}
+            </p>
+          </div>
           
           {/* Same Menu Form */}
-          {cloneMode === 'same_menu' && (
+          {operationType === 'clone_same_menu' && (
             <>
               {/* Name Input */}
               <div className="mb-4">
@@ -229,7 +285,7 @@ export function UnifiedCloneMenuItemModal({
           )}
           
           {/* Different Menu Form */}
-          {cloneMode === 'different_menu' && (
+          {(operationType === 'copy_different_menu' || operationType === 'move_different_menu') && (
             <>
               {/* Destination Menu Selection */}
               <div className="mb-4">
@@ -310,18 +366,16 @@ export function UnifiedCloneMenuItemModal({
           </button>
           <button
             type="button"
-            onClick={handleClone}
+            onClick={handleOperation}
             className="inline-flex items-center px-4 py-2 bg-[#c1902f] text-white rounded-md hover:bg-[#d4a43f] transition-colors duration-200"
             disabled={loading || 
-              (cloneMode === 'same_menu' && (!newName.trim() || selectedCategories.length === 0)) ||
-              (cloneMode === 'different_menu' && (!selectedMenuId || selectedCategories.length === 0))
+              (operationType === 'clone_same_menu' && (!newName.trim() || selectedCategories.length === 0)) ||
+              (operationType === 'copy_different_menu' && (!selectedMenuId || selectedCategories.length === 0)) ||
+              (operationType === 'move_different_menu' && (!selectedMenuId || selectedCategories.length === 0))
             }
           >
             <Save className="h-5 w-5 mr-2" />
-            {loading 
-              ? (cloneMode === 'same_menu' ? 'Cloning...' : 'Copying...') 
-              : (cloneMode === 'same_menu' ? 'Clone Item' : 'Copy Item')
-            }
+            {getActionButtonText()}
           </button>
         </div>
       </div>

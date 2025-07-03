@@ -47,6 +47,7 @@ interface MenuState {
   fetchMenuItemsByMenu: (menuId: number) => Promise<MenuItem[]>;
   copyMenuItem: (itemId: string, targetMenuId: number, categoryIds: number[]) => Promise<MenuItem | null>;
   cloneMenuItemInSameMenu: (itemId: string, newName: string, categoryIds: number[]) => Promise<MenuItem | null>;
+  moveMenuItem: (itemId: string, targetMenuId: number, categoryIds: number[]) => Promise<MenuItem | null>;
   
   // Visibility actions
   hideMenuItem: (id: number | string) => Promise<MenuItem | null>;
@@ -889,7 +890,8 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     try {
       const response = await apiClient.post(`/menu_items/${itemId}/copy`, {
         target_menu_id: targetMenuId,
-        category_ids: categoryIds
+        category_ids: categoryIds,
+        operation_type: 'clone'
       });
       
       const newItem = {
@@ -923,7 +925,8 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       const response = await apiClient.post(`/menu_items/${itemId}/copy`, {
         target_menu_id: sourceItem.menu_id, // Same menu ID
         category_ids: categoryIds,
-        new_name: newName
+        new_name: newName,
+        operation_type: 'clone'
       });
       
       const newItem = {
@@ -1295,5 +1298,34 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     });
     
     return optionPolling;
+  },
+
+  moveMenuItem: async (itemId: string, targetMenuId: number, categoryIds: number[]) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.post(`/menu_items/${itemId}/move`, {
+        target_menu_id: targetMenuId,
+        category_ids: categoryIds
+      });
+      
+      const updatedItem = {
+        ...response.data,
+        image: response.data.image_url || '/placeholder-food.png'
+      };
+      
+      // Update the specific item in the store
+      set(state => ({
+        menuItems: state.menuItems.map(item => 
+          item.id === itemId ? updatedItem : item
+        ),
+        loading: false
+      }));
+      
+      return updatedItem;
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, loading: false });
+      return null;
+    }
   }
 }));
