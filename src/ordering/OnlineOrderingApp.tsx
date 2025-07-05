@@ -338,6 +338,7 @@ export default function OnlineOrderingApp() {
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="order-confirmation" element={<OrderConfirmation />} />
+        <Route path="order-confirmation/:orderId" element={<OrderConfirmation />} />
 
         {/* Admin only => /admin */}
         <Route

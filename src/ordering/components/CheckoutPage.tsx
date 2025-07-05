@@ -255,6 +255,13 @@ export function CheckoutPage() {
       
       navigate('/order-confirmation', {
         state: {
+          orderDetails: {
+            ...newOrder,
+            location_name: locationName,
+            location_address: locationAddress,
+            requires_advance_notice: hasAny24hrItem,
+            max_advance_notice_hours: hasAny24hrItem ? 24 : undefined,
+          },
           orderId: newOrder.order_number || newOrder.id || '12345',
           total: finalTotal,
           estimatedTime,
