@@ -38,6 +38,8 @@ import { MenuItemPerformance } from './reports/MenuItemPerformance';
 import { PaymentMethodReport } from './reports/PaymentMethodReport';
 import { VipCustomerReport } from './reports/VipCustomerReport';
 import { RefundsReport } from './reports/RefundsReport';
+import { EnhancedCustomerOrderRow } from './EnhancedCustomerOrderRow';
+import { EnhancedStaffOrderRow } from './EnhancedStaffOrderRow';
 
 // ------------------- Types -------------------
 type SortColumn = 'user_name' | 'total_spent' | 'order_count';
@@ -377,8 +379,6 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   const [staffSortBy, setStaffSortBy] = useState<'total_spent' | 'order_count' | 'user_name'>('total_spent');
   const [customerSortDirection, setCustomerSortDirection] = useState<'asc' | 'desc'>('desc');
   const [staffSortDirection, setStaffSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [expandedCustomers, setExpandedCustomers] = useState<Set<number>>(new Set());
-  const [expandedStaff, setExpandedStaff] = useState<Set<number>>(new Set());
   
   const ITEMS_PER_PAGE = 10;
   
@@ -663,26 +663,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   const totalCustomerPages = Math.ceil(filteredAndSortedCustomers.length / ITEMS_PER_PAGE);
   const totalStaffPages = Math.ceil(filteredAndSortedStaff.length / ITEMS_PER_PAGE);
 
-  // Toggle expanded state
-  const toggleCustomerExpanded = (index: number) => {
-    const newExpanded = new Set(expandedCustomers);
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index);
-    } else {
-      newExpanded.add(index);
-    }
-    setExpandedCustomers(newExpanded);
-  };
 
-  const toggleStaffExpanded = (index: number) => {
-    const newExpanded = new Set(expandedStaff);
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index);
-    } else {
-      newExpanded.add(index);
-    }
-    setExpandedStaff(newExpanded);
-  };
 
   // Reset pagination when search changes
   React.useEffect(() => {
@@ -704,53 +685,123 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       return;
     }
 
-    // Guest Orders Summary
-    const guestSummary = guestRows.map((r) => ({
+    // Enhanced Customer Summary with detailed information
+    const enhancedCustomerSummary = [...guestRows, ...registeredRows].map((r) => ({
       Customer: r.user_name,
+      'Customer Type': r.order_type === 'guest' ? 'Guest' : 'Registered',
+      'Email': r.primary_contact_email || r.user_email || 'Not provided',
+      'Phone': r.primary_contact_phone || 'Not provided',
       'Total Spent': r.total_spent,
       'Order Count': r.order_count,
       'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
+      'Payment Methods': r.payment_methods_used?.join(', ') || 'Unknown',
+      'First Order': r.first_order_date ? new Date(r.first_order_date).toLocaleDateString() : 'N/A',
+      'Last Order': r.last_order_date ? new Date(r.last_order_date).toLocaleDateString() : 'N/A',
+      'Date Range': `${new Date(r.first_order_date).toLocaleDateString()} - ${new Date(r.last_order_date).toLocaleDateString()}`
     }));
 
-    // Registered Users Summary  
-    const regSummary = registeredRows.map((r) => ({
-      Customer: r.user_name,
-      'Total Spent': r.total_spent,
-      'Order Count': r.order_count,
-      'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
-    }));
-
-    // Customer Details
-    const customerDetails: Array<Record<string, any>> = [];
+    // Individual Order Details with comprehensive information
+    const detailedOrders: Array<Record<string, any>> = [];
     
-    guestRows.forEach((r) => {
-      r.items.forEach((itm) => {
-        const customizationsText = itm.customizations 
-          ? formatCustomizationsForDisplay(itm.customizations)
-          : '';
-          
-        customerDetails.push({
-          Customer: r.user_name,
-          'Item Name': itm.name,
-          Quantity: itm.quantity,
-          'Customizations': customizationsText,
-          'Order Type': 'Guest',
+    [...guestRows, ...registeredRows].forEach((customer) => {
+      customer.detailed_orders?.forEach((order) => {
+        const baseOrderInfo = {
+          'Customer Name': customer.user_name,
+          'Customer Type': customer.order_type === 'guest' ? 'Guest' : 'Registered',
+          'Customer Email': customer.primary_contact_email || customer.user_email || 'Not provided',
+          'Customer Phone': customer.primary_contact_phone || 'Not provided',
+          'Order Number': order.order_number,
+          'Order Date': new Date(order.created_at).toLocaleDateString(),
+          'Order Time': new Date(order.created_at).toLocaleTimeString(),
+          'Status': order.status,
+          'Total Amount': order.total,
+          'Net Amount': order.net_amount,
+          'Refunded Amount': order.total_refunded,
+          'Has Refunds': order.has_refunds ? 'Yes' : 'No',
+          'Payment Method': order.payment_method || 'Unknown',
+          'Payment Status': order.payment_status,
+          'Payment Amount': order.payment_amount || 'N/A',
+          'Transaction ID': order.transaction_id || 'N/A',
+          'Contact Name': order.contact_name || 'N/A',
+          'Contact Email': order.contact_email || 'N/A',
+          'Contact Phone': order.contact_phone || 'N/A',
+          'Special Instructions': order.special_instructions || 'None',
+          'Location': order.location_name || 'N/A',
+          'Location Address': order.location_address || 'N/A',
+          'VIP Code': order.vip_code || 'N/A',
+          'Is Staff Order': order.is_staff_order ? 'Yes' : 'No',
+          'Staff Member': order.staff_member_name || 'N/A',
+          'Created by Staff': order.created_by_staff_name || 'N/A',
+          'Created by User': order.created_by_user_name || 'N/A',
+          'Estimated Pickup': order.estimated_pickup_time ? new Date(order.estimated_pickup_time).toLocaleString() : 'N/A',
+          'Pre-discount Total': order.pre_discount_total || 'N/A',
+          'Discount Amount': order.discount_amount || 'N/A'
+        };
+
+        // Add each item as a separate row
+        order.items?.forEach((item) => {
+          const customizationsText = item.customizations 
+            ? formatCustomizationsForDisplay(item.customizations)
+            : '';
+            
+          detailedOrders.push({
+            ...baseOrderInfo,
+            'Item Name': item.name || 'Unknown Item',
+            'Item Quantity': item.quantity || 1,
+            'Item Price': item.price || 0,
+            'Item Customizations': customizationsText,
+            'Item Type': 'Food'
+          });
         });
+
+        // Add merchandise items
+        order.merchandise_items?.forEach((item) => {
+          const customizationsText = item.customizations 
+            ? formatCustomizationsForDisplay(item.customizations)
+            : '';
+            
+          detailedOrders.push({
+            ...baseOrderInfo,
+            'Item Name': item.name || 'Unknown Item',
+            'Item Quantity': item.quantity || 1,
+            'Item Price': item.price || 0,
+            'Item Customizations': customizationsText,
+            'Item Type': 'Merchandise'
+          });
+        });
+
+        // If no items, add the order info anyway
+        if ((!order.items || order.items.length === 0) && (!order.merchandise_items || order.merchandise_items.length === 0)) {
+          detailedOrders.push({
+            ...baseOrderInfo,
+            'Item Name': 'No items recorded',
+            'Item Quantity': 0,
+            'Item Price': 0,
+            'Item Customizations': '',
+            'Item Type': 'N/A'
+          });
+        }
       });
     });
 
-    registeredRows.forEach((r) => {
-      r.items.forEach((itm) => {
-        const customizationsText = itm.customizations 
-          ? formatCustomizationsForDisplay(itm.customizations)
+    // Aggregated Item Details (original format maintained for compatibility)
+    const aggregatedItemDetails: Array<Record<string, any>> = [];
+    
+    [...guestRows, ...registeredRows].forEach((customer) => {
+      customer.items.forEach((item) => {
+        const customizationsText = item.customizations 
+          ? formatCustomizationsForDisplay(item.customizations)
           : '';
           
-        customerDetails.push({
-          Customer: r.user_name,
-          'Item Name': itm.name,
-          Quantity: itm.quantity,
+        aggregatedItemDetails.push({
+          Customer: customer.user_name,
+          'Customer Type': customer.order_type === 'guest' ? 'Guest' : 'Registered',
+          'Item Name': item.name,
+          'Total Quantity': item.quantity,
           'Customizations': customizationsText,
-          'Order Type': 'Registered Customer',
+          'Email': customer.primary_contact_email || customer.user_email || 'Not provided',
+          'Phone': customer.primary_contact_phone || 'Not provided',
+          'Payment Methods': customer.payment_methods_used?.join(', ') || 'Unknown'
         });
       });
     });
@@ -758,67 +809,135 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     // Construct workbook
     const wb = XLSX.utils.book_new();
 
-    // Add Guest Orders sheet
-    if (guestSummary.length > 0) {
+    // Add Enhanced Customer Summary sheet
+    if (enhancedCustomerSummary.length > 0) {
+      const summarySheet = XLSX.utils.json_to_sheet(enhancedCustomerSummary);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Customer Summary');
+    }
+
+    // Add Detailed Orders sheet (most comprehensive)
+    if (detailedOrders.length > 0) {
+      const detailsSheet = XLSX.utils.json_to_sheet(detailedOrders);
+      XLSX.utils.book_append_sheet(wb, detailsSheet, 'Detailed Orders');
+    }
+
+    // Add Aggregated Items sheet (for backward compatibility)
+    if (aggregatedItemDetails.length > 0) {
+      const itemsSheet = XLSX.utils.json_to_sheet(aggregatedItemDetails);
+      XLSX.utils.book_append_sheet(wb, itemsSheet, 'Aggregated Items');
+    }
+
+    // Add separate sheets for guests and registered customers if needed
+    if (guestRows.length > 0) {
+      const guestSummary = guestRows.map((r) => ({
+        Customer: r.user_name,
+        'Total Spent': r.total_spent,
+        'Order Count': r.order_count,
+        'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
+        'Email': r.primary_contact_email || 'Not provided',
+        'Phone': r.primary_contact_phone || 'Not provided',
+        'Payment Methods': r.payment_methods_used?.join(', ') || 'Unknown',
+        'First Order': new Date(r.first_order_date).toLocaleDateString(),
+        'Last Order': new Date(r.last_order_date).toLocaleDateString()
+      }));
       const guestSheet = XLSX.utils.json_to_sheet(guestSummary);
       XLSX.utils.book_append_sheet(wb, guestSheet, 'Guest Orders');
     }
 
-    // Add Registered Users sheet
-    if (regSummary.length > 0) {
+    if (registeredRows.length > 0) {
+      const regSummary = registeredRows.map((r) => ({
+        Customer: r.user_name,
+        'Total Spent': r.total_spent,
+        'Order Count': r.order_count,
+        'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
+        'Email': r.user_email || r.primary_contact_email || 'Not provided',
+        'Phone': r.primary_contact_phone || 'Not provided',
+        'Payment Methods': r.payment_methods_used?.join(', ') || 'Unknown',
+        'First Order': new Date(r.first_order_date).toLocaleDateString(),
+        'Last Order': new Date(r.last_order_date).toLocaleDateString()
+      }));
       const regSheet = XLSX.utils.json_to_sheet(regSummary);
       XLSX.utils.book_append_sheet(wb, regSheet, 'Registered Customers');
     }
 
-    // Add customer details sheet
-    if (customerDetails.length > 0) {
-      const detailsSheet = XLSX.utils.json_to_sheet(customerDetails);
-      XLSX.utils.book_append_sheet(wb, detailsSheet, 'Customer Order Details');
-    }
-
     // Include time in filename if time filter is enabled
     const filename = useTimeFilter
-      ? `CustomerOrders_${startDate}T${startTime}_to_${endDate}T${endTime}.xlsx`
-      : `CustomerOrders_${startDate}_to_${endDate}.xlsx`;
+      ? `CustomerOrders_Enhanced_${startDate}T${startTime}_to_${endDate}T${endTime}.xlsx`
+      : `CustomerOrders_Enhanced_${startDate}_to_${endDate}.xlsx`;
     
     XLSX.writeFile(wb, filename);
   }
 
-  // Export only staff orders
+  // Export only staff orders with enhanced data
   function exportStaffOrdersToExcel() {
     if (staffRows.length === 0) {
       alert('No staff orders to export');
       return;
     }
 
-    // Staff Orders Summary
-    const staffSummary = staffRows.map((r) => ({
+    // Enhanced Staff Orders Summary
+    const enhancedStaffSummary = staffRows.map((r) => ({
       Employee: r.user_name,
+      'Employee Name': r.staff_order_details?.employee_name || 'Unknown',
+      'Employee Email': r.staff_order_details?.employee_email || 'No email',
       'Total Spent': r.total_spent,
       'Order Count': r.order_count,
       'Total Items': r.items.reduce((sum, i) => sum + i.quantity, 0),
-      'Employee Name': r.staff_order_details?.employee_name || 'Unknown',
-      'Employee Email': r.staff_order_details?.employee_email || 'No email',
       'Total Employee Orders': r.staff_order_details?.total_orders_for_staff || 0,
       'Avg Order Value': r.staff_order_details?.average_order_value || 0,
+      'Payment Methods': r.payment_methods_used?.join(', ') || 'N/A',
+      'First Order Date': r.first_order_date ? new Date(r.first_order_date).toLocaleDateString() : 'N/A',
+      'Last Order Date': r.last_order_date ? new Date(r.last_order_date).toLocaleDateString() : 'N/A'
     }));
 
-    // Staff Details
+    // Detailed Individual Orders
+    const detailedOrders: Array<Record<string, any>> = [];
+    staffRows.forEach((r) => {
+      if (r.detailed_orders && r.detailed_orders.length > 0) {
+        r.detailed_orders.forEach((order) => {
+          detailedOrders.push({
+            Employee: r.user_name,
+            'Employee Name': r.staff_order_details?.employee_name || 'Unknown',
+            'Order Number': order.order_number,
+            'Order Date': new Date(order.created_at).toLocaleString(),
+            'Status': order.status,
+            'Total': order.total,
+            'Net Amount': order.net_amount,
+            'Payment Method': order.payment_method,
+            'Payment Status': order.payment_status,
+            'Transaction ID': order.transaction_id || 'N/A',
+            'Contact Name': order.contact_name || 'N/A',
+            'Contact Phone': order.contact_phone || 'N/A',
+            'Contact Email': order.contact_email || 'N/A',
+            'Special Instructions': order.special_instructions || 'N/A',
+            'VIP Code': order.vip_code || 'N/A',
+            'Location': order.location_name || 'N/A',
+            'Has Refunds': order.has_refunds ? 'Yes' : 'No',
+            'Total Refunded': order.total_refunded || 0,
+            'Pickup Time': order.estimated_pickup_time ? new Date(order.estimated_pickup_time).toLocaleString() : 'N/A'
+          });
+        });
+      }
+    });
+
+    // Aggregated Items (backward compatibility)
     const staffDetails: Array<Record<string, any>> = [];
     staffRows.forEach((r) => {
       r.items.forEach((itm) => {
         const customizationsText = itm.customizations 
-          ? formatCustomizationsForDisplay(itm.customizations)
+          ? Object.entries(itm.customizations).map(([group, selection]) => 
+              `${group}: ${Array.isArray(selection) ? selection.join(', ') : String(selection)}`
+            ).join(' | ')
           : '';
           
         staffDetails.push({
           Employee: r.user_name,
+          'Employee Name': r.staff_order_details?.employee_name || 'Unknown',
+          'Employee Email': r.staff_order_details?.employee_email || 'No email',
           'Item Name': itm.name,
           Quantity: itm.quantity,
           'Customizations': customizationsText,
-          'Order Type': 'Staff',
-          'Employee Name': r.staff_order_details?.employee_name || 'Unknown',
-          'Employee Email': r.staff_order_details?.employee_email || 'No email',
+          'Order Type': 'Staff'
         });
       });
     });
@@ -826,20 +945,26 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     // Construct workbook
     const wb = XLSX.utils.book_new();
 
-    // Add Staff Orders sheet
-    const staffSheet = XLSX.utils.json_to_sheet(staffSummary);
-    XLSX.utils.book_append_sheet(wb, staffSheet, 'Staff Orders Summary');
+    // Add Enhanced Staff Summary sheet
+    const enhancedSummarySheet = XLSX.utils.json_to_sheet(enhancedStaffSummary);
+    XLSX.utils.book_append_sheet(wb, enhancedSummarySheet, 'Enhanced Staff Summary');
 
-    // Add Staff Details sheet
+    // Add Detailed Orders sheet
+    if (detailedOrders.length > 0) {
+      const detailedOrdersSheet = XLSX.utils.json_to_sheet(detailedOrders);
+      XLSX.utils.book_append_sheet(wb, detailedOrdersSheet, 'Detailed Orders');
+    }
+
+    // Add Aggregated Items sheet (backward compatibility)
     if (staffDetails.length > 0) {
-      const detailsSheet = XLSX.utils.json_to_sheet(staffDetails);
-      XLSX.utils.book_append_sheet(wb, detailsSheet, 'Staff Order Details');
+      const itemsSheet = XLSX.utils.json_to_sheet(staffDetails);
+      XLSX.utils.book_append_sheet(wb, itemsSheet, 'Aggregated Items');
     }
 
     // Include time in filename if time filter is enabled
     const filename = useTimeFilter
-      ? `StaffOrders_${startDate}T${startTime}_to_${endDate}T${endTime}.xlsx`
-      : `StaffOrders_${startDate}_to_${endDate}.xlsx`;
+      ? `Enhanced_StaffOrders_${startDate}T${startTime}_to_${endDate}T${endTime}.xlsx`
+      : `Enhanced_StaffOrders_${startDate}_to_${endDate}.xlsx`;
     
     XLSX.writeFile(wb, filename);
   }
@@ -1659,64 +1784,15 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           <div className="space-y-2">
             {paginatedCustomers.map((customer, index) => {
               const actualIndex = (customerPage - 1) * ITEMS_PER_PAGE + index;
-              const isExpanded = expandedCustomers.has(actualIndex);
               const isRegistered = registeredRows.includes(customer);
               
               return (
-                <div key={`customer-${actualIndex}`} className="border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
-                  {/* Customer Summary Row */}
-                  <div className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium ${
-                          isRegistered ? 'bg-blue-500' : 'bg-amber-500'
-                        }`}>
-                          {actualIndex + 1}
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">{customer.user_name}</h3>
-                          <div className="flex items-center space-x-2 text-sm text-gray-600">
-                            <span>{isRegistered ? 'Registered' : 'Guest'}</span>
-                            <span>•</span>
-                            <span>{customer.order_count} order{customer.order_count !== 1 ? 's' : ''}</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-3">
-                        <div className="text-right">
-                          <div className="font-semibold text-gray-900">
-                            ${customer.total_spent.toFixed(2)}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => toggleCustomerExpanded(actualIndex)}
-                          className="p-1 rounded-full hover:bg-gray-100 transition-colors text-gray-400"
-                        >
-                          <svg className={`w-4 h-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded Details */}
-                  {isExpanded && (
-                    <div className="px-4 pb-4 border-t border-gray-200">
-                      <div className="pt-3">
-                        <h4 className="text-sm font-medium mb-2 text-gray-700">Items Ordered:</h4>
-                        <div className="space-y-1 text-sm">
-                          {customer.items.map((item, itemIndex) => (
-                            <div key={itemIndex}>
-                              {renderItemWithCustomizations(item, 'text-gray-600')}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <EnhancedCustomerOrderRow
+                  key={`customer-${actualIndex}`}
+                  customer={customer}
+                  index={actualIndex}
+                  isRegistered={isRegistered}
+                />
               );
             })}
           </div>
@@ -1866,85 +1942,13 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             <div className="space-y-2">
               {paginatedStaff.map((staff, index) => {
                 const actualIndex = (staffPage - 1) * ITEMS_PER_PAGE + index;
-                const isExpanded = expandedStaff.has(actualIndex);
                 
                 return (
-                  <div key={`staff-${actualIndex}`} className="border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
-                    {/* Staff Summary Row */}
-                    <div className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                            {actualIndex + 1}
-                          </div>
-                          <div>
-                            <h3 className="font-medium text-gray-900">{staff.user_name}</h3>
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
-                              <span>Staff</span>
-                              {staff.staff_order_details && (
-                                <>
-                                  <span>•</span>
-                                  <span>{staff.staff_order_details.employee_name || 'Unknown Employee'}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center space-x-3">
-                          <div className="text-right">
-                            <div className="font-semibold text-gray-900">
-                              ${staff.total_spent.toFixed(2)}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              {staff.order_count} order{staff.order_count !== 1 ? 's' : ''}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => toggleStaffExpanded(actualIndex)}
-                            className="p-1 rounded-full hover:bg-gray-100 transition-colors text-gray-400"
-                          >
-                            <svg className={`w-4 h-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Expanded Details */}
-                    {isExpanded && (
-                      <div className="px-4 pb-4 border-t border-gray-200">
-                        <div className="pt-3">
-                          {/* Employee Stats */}
-                          {staff.staff_order_details && (
-                            <div className="grid grid-cols-2 gap-4 mb-4 bg-gray-50 rounded-md p-3">
-                              <div>
-                                <div className="text-sm text-gray-600">Total Employee Orders</div>
-                                <div className="font-semibold text-gray-900">{staff.staff_order_details.total_orders_for_staff}</div>
-                              </div>
-                              <div>
-                                <div className="text-sm text-gray-600">Average Order Value</div>
-                                <div className="font-semibold text-gray-900">${staff.staff_order_details.average_order_value.toFixed(2)}</div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Items Ordered */}
-                          <div>
-                            <h4 className="text-sm font-medium mb-2 text-gray-700">Items Ordered:</h4>
-                            <div className="space-y-1 text-sm">
-                              {staff.items.map((item, itemIndex) => (
-                                <div key={itemIndex}>
-                                  {renderItemWithCustomizations(item, 'text-gray-600')}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <EnhancedStaffOrderRow
+                    key={`staff-${actualIndex}`}
+                    staff={staff}
+                    index={actualIndex}
+                  />
                 );
               })}
             </div>

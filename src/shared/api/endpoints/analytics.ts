@@ -9,14 +9,54 @@ export interface CustomerOrderItem {
   customizations?: Record<string, any>; // More flexible to handle different data structures
 }
 
+export interface DetailedOrder {
+  id: number;
+  order_number: string;
+  status: string;
+  total: number;
+  net_amount: number;
+  payment_method: string;
+  payment_status: string;
+  payment_amount?: number;
+  transaction_id: string;
+  created_at: string;
+  estimated_pickup_time?: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  special_instructions?: string;
+  location_name?: string;
+  location_address?: string;
+  vip_code?: string;
+  is_staff_order: boolean;
+  staff_member_name?: string;
+  created_by_staff_name?: string;
+  created_by_user_name?: string;
+  has_refunds: boolean;
+  total_refunded: number;
+  pre_discount_total?: number;
+  discount_amount?: number;
+  items: any[];
+  merchandise_items: any[];
+}
+
 export interface CustomerOrderReport {
   user_id: number | null;
   user_name: string;
+  user_email?: string;
   total_spent: number;
   order_count: number;
   items: CustomerOrderItem[];
   order_type?: 'customer' | 'guest' | 'staff';
   created_by_user_id?: number | null;
+  // Enhanced detailed information
+  detailed_orders: DetailedOrder[];
+  primary_contact_phone?: string;
+  primary_contact_email?: string;
+  primary_contact_name?: string;
+  first_order_date: string;
+  last_order_date: string;
+  payment_methods_used: string[];
   staff_order_details?: {
     total_orders_for_staff: number;
     average_order_value: number;
