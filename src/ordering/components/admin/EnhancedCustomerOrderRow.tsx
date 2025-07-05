@@ -120,34 +120,38 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
 
   return (
     <div className="border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
-      {/* Customer Summary Row */}
-      <div className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+      {/* Customer Summary Row - Mobile Optimized */}
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+          <div className="flex items-start space-x-3">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium ${
               isRegistered ? 'bg-blue-500' : 'bg-amber-500'
             }`}>
               {index + 1}
             </div>
             <div className="flex-1">
-              <h3 className="font-medium text-gray-900">{customer.user_name}</h3>
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <span>{isRegistered ? 'Registered' : 'Guest'}</span>
-                <span>•</span>
+              <h3 className="font-medium text-gray-900 text-base sm:text-lg">{customer.user_name}</h3>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mt-1">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  isRegistered ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {isRegistered ? 'Registered' : 'Guest'}
+                </span>
+                <span className="hidden sm:inline">•</span>
                 <span>{customer.order_count} order{customer.order_count !== 1 ? 's' : ''}</span>
                 {customer.payment_methods_used && customer.payment_methods_used.length > 0 && (
                   <>
-                    <span>•</span>
-                    <span>{customer.payment_methods_used.join(', ')}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="text-xs sm:text-sm">{customer.payment_methods_used.join(', ')}</span>
                   </>
                 )}
               </div>
               
-              {/* Contact Information - Quick View */}
-              <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+              {/* Contact Information - Mobile Optimized */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-xs text-gray-500 mt-2">
                 {customer.primary_contact_email && (
-                  <span className="flex items-center">
-                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <span className="flex items-center break-all">
+                    <svg className="w-3 h-3 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                     </svg>
                     {customer.primary_contact_email}
@@ -155,7 +159,7 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
                 )}
                 {customer.primary_contact_phone && (
                   <span className="flex items-center">
-                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
                     {customer.primary_contact_phone}
@@ -165,21 +169,26 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
             </div>
           </div>
           
-          <div className="flex items-center space-x-3">
-            <div className="text-right">
-              <div className="font-semibold text-gray-900">
+          <div className="flex items-center justify-between sm:justify-end space-x-3">
+            <div className="text-left sm:text-right">
+              <div className="font-semibold text-gray-900 text-lg sm:text-xl">
                 {formatCurrency(customer.total_spent)}
               </div>
-              <div className="text-xs text-gray-500">
-                {formatDate(customer.first_order_date)} - {formatDate(customer.last_order_date)}
+              <div className="text-xs text-gray-500 mt-1">
+                <div className="sm:hidden">
+                  {formatDate(customer.first_order_date).split(',')[0]} - {formatDate(customer.last_order_date).split(',')[0]}
+                </div>
+                <div className="hidden sm:block">
+                  {formatDate(customer.first_order_date)} - {formatDate(customer.last_order_date)}
+                </div>
               </div>
             </div>
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1 rounded-full hover:bg-gray-100 transition-colors text-gray-400"
+              className="p-2 sm:p-1 rounded-full hover:bg-gray-100 transition-colors text-gray-400 min-w-[40px] sm:min-w-0"
               title="Toggle detailed view"
             >
-              <svg className={`w-4 h-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-5 h-5 sm:w-4 sm:h-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -187,28 +196,28 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
         </div>
       </div>
 
-      {/* Expanded Details */}
+      {/* Expanded Details - Mobile Optimized */}
       {isExpanded && (
         <div className="border-t border-gray-200">
-          {/* Toggle between Summary and Individual Orders */}
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <div className="flex space-x-4">
+          {/* Toggle between Summary and Individual Orders - Mobile Optimized */}
+          <div className="px-3 sm:px-4 py-3 bg-gray-50 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               <button
                 onClick={() => setShowOrderDetails(false)}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                className={`w-full sm:w-auto px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   !showOrderDetails 
                     ? 'bg-blue-100 text-blue-700' 
-                    : 'text-gray-600 hover:text-gray-800'
+                    : 'text-gray-600 hover:text-gray-800 bg-white border border-gray-300'
                 }`}
               >
                 Summary View
               </button>
               <button
                 onClick={() => setShowOrderDetails(true)}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                className={`w-full sm:w-auto px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   showOrderDetails 
                     ? 'bg-blue-100 text-blue-700' 
-                    : 'text-gray-600 hover:text-gray-800'
+                    : 'text-gray-600 hover:text-gray-800 bg-white border border-gray-300'
                 }`}
               >
                 Individual Orders ({customer.detailed_orders?.length || 0})
@@ -216,40 +225,42 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
             </div>
           </div>
 
-          <div className="p-4">
+          <div className="p-3 sm:p-4">
             {!showOrderDetails ? (
-              /* Summary View - Aggregated Items */
+              /* Summary View - Aggregated Items - Mobile Optimized */
               <div>
                 <h4 className="text-sm font-medium mb-3 text-gray-700">Items Ordered (Aggregated):</h4>
                 <div className="space-y-2 text-sm">
                   {customer.items.map((item, itemIndex) => (
-                    <div key={itemIndex}>
+                    <div key={itemIndex} className="bg-gray-50 rounded-lg p-3">
                       {renderItemWithCustomizations(item, 'text-gray-600')}
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              /* Individual Orders View */
+              /* Individual Orders View - Mobile Optimized */
               <div>
                 <h4 className="text-sm font-medium mb-3 text-gray-700">Individual Order Details:</h4>
                 <div className="space-y-4">
                   {customer.detailed_orders?.map((order: DetailedOrder, orderIndex) => (
-                    <div key={order.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      {/* Order Header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
+                    <div key={order.id} className="bg-gray-50 rounded-lg p-3 sm:p-4 border border-gray-200">
+                      {/* Order Header - Mobile Optimized */}
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 space-y-2 sm:space-y-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
                           <h5 className="font-medium text-gray-900">Order #{order.order_number}</h5>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
-                            {order.status}
-                          </span>
-                          {order.has_refunds && (
-                            <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
-                              Refunded: {formatCurrency(order.total_refunded)}
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
+                              {order.status}
                             </span>
-                          )}
+                            {order.has_refunds && (
+                              <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                                Refunded: {formatCurrency(order.total_refunded)}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-left sm:text-right">
                           <div className="font-semibold text-gray-900">{formatCurrency(order.net_amount)}</div>
                           {order.total !== order.net_amount && (
                             <div className="text-xs text-gray-500 line-through">{formatCurrency(order.total)}</div>
@@ -257,9 +268,9 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
                         </div>
                       </div>
 
-                      {/* Order Details Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                        <div>
+                      {/* Order Details Grid - Mobile Optimized */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3">
+                        <div className="bg-white rounded p-3">
                           <div className="text-xs text-gray-600 mb-1">Date & Time</div>
                           <div className="text-sm font-medium">{formatDate(order.created_at)}</div>
                           {order.estimated_pickup_time && (
@@ -267,31 +278,31 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
                           )}
                         </div>
                         
-                        <div>
+                        <div className="bg-white rounded p-3">
                           <div className="text-xs text-gray-600 mb-1">Payment</div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-1 sm:space-y-0">
                             <span className="text-sm font-medium">{order.payment_method || 'Unknown'}</span>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusBadgeColor(order.payment_status)}`}>
                               {order.payment_status}
                             </span>
                           </div>
                           {order.transaction_id && (
-                            <div className="text-xs text-gray-600 font-mono">ID: {order.transaction_id}</div>
+                            <div className="text-xs text-gray-600 font-mono mt-1">ID: {order.transaction_id}</div>
                           )}
                         </div>
 
-                        {/* Contact Information */}
-                        <div>
+                        {/* Contact Information - Mobile Optimized */}
+                        <div className="bg-white rounded p-3">
                           <div className="text-xs text-gray-600 mb-1">Contact</div>
-                          <div className="text-sm">
+                          <div className="text-sm space-y-1">
                             {order.contact_name && <div className="font-medium">{order.contact_name}</div>}
-                            {order.contact_email && <div className="text-xs text-gray-600">{order.contact_email}</div>}
+                            {order.contact_email && <div className="text-xs text-gray-600 break-all">{order.contact_email}</div>}
                             {order.contact_phone && <div className="text-xs text-gray-600">{order.contact_phone}</div>}
                           </div>
                         </div>
 
-                        {/* Additional Details */}
-                        <div>
+                        {/* Additional Details - Mobile Optimized */}
+                        <div className="bg-white rounded p-3">
                           <div className="text-xs text-gray-600 mb-1">Additional Info</div>
                           <div className="text-sm space-y-1">
                             {order.location_name && (
@@ -310,7 +321,7 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
                         </div>
                       </div>
 
-                      {/* Special Instructions */}
+                      {/* Special Instructions - Mobile Optimized */}
                       {order.special_instructions && (
                         <div className="mb-3">
                           <div className="text-xs text-gray-600 mb-1">Special Instructions</div>
@@ -320,23 +331,23 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
                         </div>
                       )}
 
-                      {/* Order Items */}
+                      {/* Order Items - Mobile Optimized */}
                       <div>
                         <div className="text-xs text-gray-600 mb-2">Items ({order.items?.length || 0}):</div>
                         <div className="space-y-1 bg-white rounded border border-gray-200 p-3">
                           {order.items?.map((item, itemIndex) => (
-                            <div key={itemIndex}>
+                            <div key={itemIndex} className="border-b border-gray-100 last:border-b-0 pb-2 last:pb-0">
                               {renderOrderItem(item)}
                             </div>
                           ))}
                           
-                          {/* Merchandise Items */}
+                          {/* Merchandise Items - Mobile Optimized */}
                           {order.merchandise_items && order.merchandise_items.length > 0 && (
                             <>
                               <div className="border-t border-gray-200 pt-2 mt-2">
                                 <div className="text-xs text-gray-600 mb-1">Merchandise:</div>
                                 {order.merchandise_items.map((item, itemIndex) => (
-                                  <div key={itemIndex}>
+                                  <div key={itemIndex} className="border-b border-gray-100 last:border-b-0 pb-2 last:pb-0">
                                     {renderOrderItem(item)}
                                   </div>
                                 ))}
@@ -346,10 +357,10 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
                         </div>
                       </div>
 
-                      {/* Staff Discount Information */}
+                      {/* Staff Discount Information - Mobile Optimized */}
                       {order.is_staff_order && order.discount_amount && order.discount_amount > 0 && (
-                        <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
-                          <div className="flex justify-between">
+                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                          <div className="flex justify-between mb-1">
                             <span>Pre-discount Total:</span>
                             <span>{formatCurrency(order.pre_discount_total || 0)}</span>
                           </div>
@@ -361,7 +372,10 @@ export function EnhancedCustomerOrderRow({ customer, index, isRegistered }: Enha
                       )}
                     </div>
                   )) || (
-                    <div className="text-center py-4 text-gray-500">
+                    <div className="text-center py-8 text-gray-500">
+                      <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
                       No detailed order information available
                     </div>
                   )}

@@ -232,7 +232,7 @@ export default function FloorManager({
   useEffect(() => {
     if (!selectedLayoutId) return;
     fetchSeatAllocsForDate(selectedLayoutId, date);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [selectedLayoutId, date]);
 
   async function fetchSeatAllocsForDate(layoutId: number, theDate: string) {

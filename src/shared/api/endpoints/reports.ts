@@ -2,6 +2,52 @@
 
 import { apiClient } from '../apiClient';
 
+// Order detail interface for menu item reports
+export interface MenuItemOrderDetail {
+  // Item information
+  item_id: number;
+  item_name: string;
+  category: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  customizations?: Record<string, any>;
+  
+  // Order information
+  order_id: number;
+  order_number: string;
+  order_status: string;
+  order_total: number;
+  payment_method: string;
+  payment_status: string;
+  created_at: string;
+  estimated_pickup_time?: string;
+  special_instructions?: string;
+  vip_code?: string;
+  
+  // Location information
+  location_name?: string;
+  location_address?: string;
+  
+  // Customer or Staff information
+  is_staff_order: boolean;
+  
+  // For regular customer orders
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  
+  // For staff orders
+  staff_member_name?: string;
+  created_by_staff_name?: string;
+  created_by_user_name?: string;
+  
+  // Payment and refund details
+  has_refunds: boolean;
+  total_refunded: number;
+  net_amount: number;
+}
+
 // Menu Item Report Types
 export interface MenuItemReport {
   id: number;
@@ -22,6 +68,55 @@ export interface CategoryReport {
 export interface MenuItemReportResponse {
   items: MenuItemReport[];
   categories: CategoryReport[];
+  detailed_orders: MenuItemOrderDetail[];
+}
+
+// Payment Method Order Detail Interface
+export interface PaymentMethodOrderDetail {
+  // Payment information
+  payment_id?: number;
+  payment_method: string;
+  payment_amount: number;
+  payment_status: string;
+  payment_type: string;
+  payment_description?: string;
+  transaction_id?: string;
+  
+  // Order information
+  order_id: number;
+  order_number: string;
+  order_status: string;
+  order_total: number;
+  created_at: string;
+  estimated_pickup_time?: string;
+  special_instructions?: string;
+  vip_code?: string;
+  
+  // Location information
+  location_name?: string;
+  location_address?: string;
+  
+  // Customer or Staff information
+  is_staff_order: boolean;
+  
+  // For regular customer orders
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  
+  // For staff orders
+  staff_member_name?: string;
+  created_by_staff_name?: string;
+  created_by_user_name?: string;
+  
+  // Payment and refund details
+  has_refunds: boolean;
+  total_refunded: number;
+  net_amount: number;
+  
+  // Cash payment details
+  cash_received?: number;
+  change_due?: number;
 }
 
 // Payment Method Report Types
@@ -36,6 +131,7 @@ export interface PaymentMethodReportResponse {
   payment_methods: PaymentMethodReport[];
   total_amount: number;
   total_count: number;
+  detailed_orders: PaymentMethodOrderDetail[];
 }
 
 // VIP Customer Report Types

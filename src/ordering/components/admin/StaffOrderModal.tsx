@@ -17,7 +17,7 @@ import { PayPalCheckout, PayPalCheckoutRef } from '../../components/payment/PayP
 
 // Child components
 // Used in JSX below - TypeScript doesn't detect this correctly
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 import { ItemCustomizationModal } from './ItemCustomizationModal';
 import { StaffOrderOptions } from './StaffOrderOptions';
 import { StaffDiscountConfiguration, staffDiscountConfigurationsApi } from '../../../shared/api/endpoints/staffDiscountConfigurations';
@@ -2471,7 +2471,7 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
       // Preparing staff order parameters
       
       // Use the current user's staff ID as the creator
-      let finalCreatedByStaffId = createdByStaffId;
+      const finalCreatedByStaffId = createdByStaffId;
       if (!finalCreatedByStaffId) {
         // No staff ID found for current user
       } else {

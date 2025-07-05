@@ -72,7 +72,7 @@ export const fetchWaitlistEntries = async (params?: string | { date?: string; re
     console.log('Fetching waitlist entries with params:', params);
     
     // Handle both string and object parameters
-    let searchParams = new URLSearchParams();
+    const searchParams = new URLSearchParams();
     
     if (typeof params === 'string') {
       // If params is a string, assume it's a date or stringified JSON

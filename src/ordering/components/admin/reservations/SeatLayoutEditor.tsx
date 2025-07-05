@@ -2024,7 +2024,7 @@ const SeatLayoutEditor = ({
       const seatDistance = SEAT_SPACING_FIXED; // Fixed distance from table edge
       
       // Calculate appropriate positions for rectangle table seats
-      let seatPositions = [];
+      const seatPositions = [];
       
       if (finalSeatCount === 1) {
         // Just one seat in the center of the bottom edge
@@ -2871,8 +2871,8 @@ const SeatLayoutEditor = ({
                   {/* Render the seats for this section */}
                   {section.seats && section.seats.map((seat: Seat, seatIndex: number) => {
                     // Calculate rotated position for the seat based on table rotation
-                    let finalX = seat.position_x;
-                    let finalY = seat.position_y;
+                    const finalX = seat.position_x;
+                    const finalY = seat.position_y;
                     
                     // IMPORTANT: We don't need to apply rotation here
                     // The seat positions are already rotated in the handleCreateSection function

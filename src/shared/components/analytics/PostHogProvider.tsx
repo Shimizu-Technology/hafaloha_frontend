@@ -12,7 +12,7 @@ const posthogOptions = {
   capture_pageleave: true,
   disable_session_recording: false, // Enable session recording
   // Add safe localStorage handling for incognito mode
-  persistence: "memory" as "memory", // Use memory persistence in incognito mode
+  persistence: "memory" as const, // Use memory persistence in incognito mode
   bootstrap: {
     distinctID: `anonymous-${Date.now()}`, // Generate a temporary ID
   },

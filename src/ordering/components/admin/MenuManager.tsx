@@ -770,7 +770,7 @@ export function MenuManager({
     
     // Determine final stock status
     // Only use derived status when inventory tracking is enabled
-    let finalStockStatus = editingItem.enable_stock_tracking
+    const finalStockStatus = editingItem.enable_stock_tracking
       ? deriveStockStatus(editingItem as any)
       : editingItem.stock_status;
 

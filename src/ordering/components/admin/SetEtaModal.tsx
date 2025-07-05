@@ -37,7 +37,7 @@ export function SetEtaModal({
     const slots = [];
     // Start at 10 AM, end at 6 PM, 30-minute intervals
     for (let hour = 10; hour <= 18; hour++) {
-      for (let minute of [0, 30]) {
+      for (const minute of [0, 30]) {
         if (hour === 18 && minute === 30) continue; // Skip 6:30 PM
         
         const timeString = `${hour % 12 || 12}:${minute === 0 ? '00' : '30'} ${hour < 12 ? 'AM' : 'PM'}`;

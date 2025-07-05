@@ -415,7 +415,7 @@ const useNotificationStore = create<NotificationStoreState>((set, get) => ({
       console.debug('[NotificationStore] Fetching notifications with params:', { type, hours });
       
       // First, try to get notifications from the storage service
-      let storedNotifications = notificationStorageService.getNotifications({ 
+      const storedNotifications = notificationStorageService.getNotifications({ 
         onlyUnacknowledged: true,
         type
       });

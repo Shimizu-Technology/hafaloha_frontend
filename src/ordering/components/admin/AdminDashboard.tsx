@@ -12,7 +12,7 @@ const StaffManagement = lazy(() => import('./StaffManagement').then(module => ({
 const ReservationsManager = lazy(() => import('./reservations/ReservationsManager').then(module => ({ default: module.ReservationsManager })));
 // RestaurantSelector removed - super admins now only see data for the current restaurant
 import NotificationContainer from '../../../shared/components/notifications/NotificationContainer';
-/* eslint-enable @typescript-eslint/no-unused-vars */
+ 
 
 import notificationStore from '../../store/notificationStore';
 
@@ -212,11 +212,11 @@ export function AdminDashboard() {
   const [unacknowledgedOrders, setUnacknowledgedOrders] = useState<Order[]>([]);
   
   // Stock notification states
-  /* eslint-disable @typescript-eslint/no-unused-vars */
+   
   // Stock notification state - commented out as not currently in use
   // const [showStockNotifications, setShowStockNotifications] = useState(false);
   // const [stockAlertCount, setStockAlertCount] = useState(0);
-  /* eslint-enable @typescript-eslint/no-unused-vars */
+   
   // Commented out getStockAlerts as stock notifications are not currently in use
   const { /* getStockAlerts, */ fetchNotifications } = useNotificationStore();
   const { menuItems } = useMenuStore();
@@ -298,7 +298,7 @@ export function AdminDashboard() {
       existingToasts.forEach(toastElement => {
         try {
           // Find the closest toast container which should have a data-id attribute
-          let container = toastElement.closest('[data-id]');
+          const container = toastElement.closest('[data-id]');
           if (container && container.getAttribute('data-id')) {
             const toastId = container.getAttribute('data-id') || '';
             if (toastId) {

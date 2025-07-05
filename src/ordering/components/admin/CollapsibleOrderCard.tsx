@@ -522,7 +522,7 @@ export function CollapsibleOrderCard({
         if (refund.refunded_items && refund.refunded_items.length > 0) {
           refund.refunded_items.forEach((refundedItem: RefundedItem) => {
             // Find the best matching item in our map for this refunded item
-            let bestMatchKey = findBestMatchingItem(itemsMap, refundedItem);
+            const bestMatchKey = findBestMatchingItem(itemsMap, refundedItem);
             
             if (bestMatchKey) {
               // Add to refund details with transaction ID for tracking

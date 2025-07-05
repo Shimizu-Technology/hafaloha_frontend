@@ -27,12 +27,14 @@ import {
   MenuItemReport,
   CategoryReport,
   PaymentMethodReport as PaymentMethodReportType,
+  PaymentMethodOrderDetail,
   VipCustomerReport as VipCustomerReportType,
   VipReportSummary,
   RefundDetail,
   RefundsByMethod,
   RefundDailyTrend,
-  RefundSummary
+  RefundSummary,
+  MenuItemOrderDetail
 } from '../../../shared/api';
 import { MenuItemPerformance } from './reports/MenuItemPerformance';
 import { PaymentMethodReport } from './reports/PaymentMethodReport';
@@ -399,8 +401,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   // VIP Reports States
   const [menuItems, setMenuItems] = useState<MenuItemReport[]>([]);
   const [categories, setCategories] = useState<CategoryReport[]>([]);
+  const [detailedOrders, setDetailedOrders] = useState<MenuItemOrderDetail[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodReportType[]>([]);
   const [paymentTotals, setPaymentTotals] = useState({ amount: 0, count: 0 });
+  const [paymentMethodDetailedOrders, setPaymentMethodDetailedOrders] = useState<PaymentMethodOrderDetail[]>([]);
   const [vipCustomers, setVipCustomers] = useState<VipCustomerReportType[]>([]);
   const [vipSummary, setVipSummary] = useState<VipReportSummary>({
     total_vip_customers: 0,
@@ -495,6 +499,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       const menuItemRes = await getMenuItemReport(apiStartDate, apiEndDate);
       setMenuItems(menuItemRes.data.items || []);
       setCategories(menuItemRes.data.categories || []);
+      setDetailedOrders(menuItemRes.data.detailed_orders || []);
       
       // 8) Payment Method Report
       const paymentMethodRes = await getPaymentMethodReport(apiStartDate, apiEndDate);
@@ -503,6 +508,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         amount: paymentMethodRes.data.total_amount || 0,
         count: paymentMethodRes.data.total_count || 0
       });
+      setPaymentMethodDetailedOrders(paymentMethodRes.data.detailed_orders || []);
       
       // 9) VIP Customer Report
       const vipRes = await getVipCustomerReport(apiStartDate, apiEndDate);
@@ -742,8 +748,8 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         order.items?.forEach((item) => {
           const customizationsText = item.customizations 
             ? formatCustomizationsForDisplay(item.customizations)
-            : '';
-            
+          : '';
+          
           detailedOrders.push({
             ...baseOrderInfo,
             'Item Name': item.name || 'Unknown Item',
@@ -767,8 +773,8 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             'Item Price': item.price || 0,
             'Item Customizations': customizationsText,
             'Item Type': 'Merchandise'
-          });
-        });
+      });
+    });
 
         // If no items, add the order info anyway
         if ((!order.items || order.items.length === 0) && (!order.merchandise_items || order.merchandise_items.length === 0)) {
@@ -1437,9 +1443,9 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   return (
     <div className="p-2 sm:p-4">
       {/* Header section */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h2>
-        <p className="text-gray-600 mt-1">View and analyze customer data and sales trends</p>
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Analytics Dashboard</h2>
+        <p className="text-gray-600 mt-1 text-sm sm:text-base">View and analyze customer data and sales trends</p>
       </div>
 
       {/* 
@@ -1447,10 +1453,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         (A) Analytics Controls - Clean & Intuitive
         ============================================
       */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Analytics Date Range</h3>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div className="mb-4 sm:mb-0">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Analytics Date Range</h3>
             <p className="text-gray-600 text-sm mt-1">Select time period and filters for your analytics reports</p>
           </div>
         </div>
@@ -1460,7 +1466,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Quick Time Presets
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2">
             <button
               onClick={() => applyTimePreset('30min')}
               className={`px-3 py-2 text-sm rounded-lg transition-colors ${
@@ -1619,7 +1625,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         </div>
         
         {/* Custom Date Range */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           {/* Start Date and Time */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1633,14 +1639,14 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                   handleChangeStartDate(e.target.value);
                   setTimePreset('custom');
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-base sm:text-sm"
               />
               {useTimeFilter && (
                 <input
                   type="time"
                   value={startTime}
                   onChange={(e) => handleChangeStartTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-base sm:text-sm"
                 />
               )}
             </div>
@@ -1659,14 +1665,14 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                   handleChangeEndDate(e.target.value);
                   setTimePreset('custom');
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-base sm:text-sm"
               />
               {useTimeFilter && (
                 <input
                   type="time"
                   value={endTime}
                   onChange={(e) => handleChangeEndTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-base sm:text-sm"
                 />
               )}
             </div>
@@ -1680,7 +1686,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             <select
               value={timeGranularity}
               onChange={(e) => setTimeGranularity(e.target.value as TimeFrame)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-base sm:text-sm"
             >
               <option value="30min">30 Minutes</option>
               <option value="hour">Hourly</option>
@@ -1694,10 +1700,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
 
 
         {/* Action buttons */}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={loadAnalytics}
-            className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+            className="w-full sm:w-auto px-6 py-3 sm:py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium text-base sm:text-sm"
           >
             Load Analytics
           </button>
@@ -1715,13 +1721,14 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             refundDetails.length > 0) && (
             <button
               onClick={exportAllReports}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center"
-              title="Export comprehensive analytics report with all charts and data"
+              className="w-full sm:w-auto px-6 py-3 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center text-base sm:text-sm"
+              title="Export analytics report with all charts and data"
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
-              Export All Analytics
+              <span className="hidden sm:inline">Export All Analytics</span>
+              <span className="sm:hidden">Export All</span>
             </button>
           )}
         </div>
@@ -1732,10 +1739,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         (B) Customer Orders - Simplified Design
         ============================================
       */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Customer Orders</h3>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div className="mb-4 sm:mb-0">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Customer Orders</h3>
             <p className="text-gray-600 text-sm mt-1">
               {filteredAndSortedCustomers.length} customers • {registeredRows.length} registered • {guestRows.length} guests
             </p>
@@ -1745,24 +1752,25 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
           {(guestRows.length > 0 || registeredRows.length > 0) && (
             <button
               onClick={exportCustomerOrdersToExcel}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base sm:text-sm"
             >
-              Export Customers
+              <span className="hidden sm:inline">Export Customers</span>
+              <span className="sm:hidden">Export</span>
             </button>
           )}
         </div>
 
         {/* Search and Sort Controls */}
         {filteredAndSortedCustomers.length > 0 && (
-          <div className="flex gap-4 items-center mb-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center mb-4">
             {/* Search */}
-            <div className="flex-1 max-w-md">
+            <div className="flex-1 sm:max-w-md">
               <input
                 type="text"
                 placeholder="Search customers..."
                 value={customerSearchTerm}
                 onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm"
               />
             </div>
 
@@ -1770,7 +1778,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             <select
               value={customerSortBy}
               onChange={(e) => setCustomerSortBy(e.target.value as 'total_spent' | 'order_count' | 'user_name')}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full sm:w-auto px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm"
             >
               <option value="total_spent">Sort by Spending</option>
               <option value="order_count">Sort by Orders</option>
@@ -1804,9 +1812,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             <button
               onClick={() => setCustomerPage(Math.max(1, customerPage - 1))}
               disabled={customerPage === 1}
-              className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              className="px-4 py-3 sm:px-3 sm:py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 text-base sm:text-sm"
             >
-              Previous
+              <span className="hidden sm:inline">Previous</span>
+              <span className="sm:hidden">←</span>
             </button>
             
             <div className="flex space-x-1">
@@ -1826,7 +1835,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                   <button
                     key={pageNum}
                     onClick={() => setCustomerPage(pageNum)}
-                    className={`px-3 py-2 border rounded-lg ${
+                    className={`min-w-[40px] sm:min-w-0 px-4 py-3 sm:px-3 sm:py-2 border rounded-lg text-base sm:text-sm ${
                       customerPage === pageNum
                         ? 'bg-blue-500 text-white border-blue-500'
                         : 'border-gray-300 hover:bg-gray-100'
@@ -1841,9 +1850,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             <button
               onClick={() => setCustomerPage(Math.min(totalCustomerPages, customerPage + 1))}
               disabled={customerPage === totalCustomerPages}
-              className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              className="px-4 py-3 sm:px-3 sm:py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 text-base sm:text-sm"
             >
-              Next
+              <span className="hidden sm:inline">Next</span>
+              <span className="sm:hidden">→</span>
             </button>
           </div>
         )}
@@ -1864,14 +1874,14 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         ============================================
       */}
       {(staffRows.length > 0 || staffMembers.length > 0) && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900">Staff Orders</h3>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+            <div className="mb-4 sm:mb-0">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Staff Orders</h3>
               <p className="text-gray-600 text-sm mt-1">
                 {filteredAndSortedStaff.length} staff orders
                 {selectedStaffMember !== 'all' && staffMembers.length > 0 && (
-                  <span className="ml-2 text-green-600">
+                  <span className="block sm:inline ml-0 sm:ml-2 text-green-600">
                     • Filtered by: {staffMembers.find(s => s.id.toString() === selectedStaffMember)?.name}
                   </span>
                 )}
@@ -1881,9 +1891,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             {filteredAndSortedStaff.length > 0 && (
               <button
                 onClick={exportStaffOrdersToExcel}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-base sm:text-sm"
               >
-                Export Staff
+                <span className="hidden sm:inline">Export Staff</span>
+                <span className="sm:hidden">Export</span>
               </button>
             )}
           </div>
@@ -1912,15 +1923,15 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
 
           {/* Staff Search and Sort Controls */}
           {filteredAndSortedStaff.length > 0 && (
-            <div className="flex gap-4 items-center mb-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center mb-4">
               {/* Search */}
-              <div className="flex-1 max-w-md">
+              <div className="flex-1 sm:max-w-md">
                 <input
                   type="text"
                   placeholder="Search staff members..."
                   value={staffSearchTerm}
                   onChange={(e) => setStaffSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-base sm:text-sm"
                 />
               </div>
 
@@ -1928,7 +1939,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               <select
                 value={staffSortBy}
                 onChange={(e) => setStaffSortBy(e.target.value as 'total_spent' | 'order_count' | 'user_name')}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                className="w-full sm:w-auto px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-base sm:text-sm"
               >
                 <option value="total_spent">Sort by Spending</option>
                 <option value="order_count">Sort by Orders</option>
@@ -1979,9 +1990,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               <button
                 onClick={() => setStaffPage(Math.max(1, staffPage - 1))}
                 disabled={staffPage === 1}
-                className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                className="px-4 py-3 sm:px-3 sm:py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 text-base sm:text-sm"
               >
-                Previous
+                <span className="hidden sm:inline">Previous</span>
+                <span className="sm:hidden">←</span>
               </button>
               
               <div className="flex space-x-1">
@@ -2001,7 +2013,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                     <button
                       key={pageNum}
                       onClick={() => setStaffPage(pageNum)}
-                      className={`px-3 py-2 border rounded-lg ${
+                      className={`min-w-[40px] sm:min-w-0 px-4 py-3 sm:px-3 sm:py-2 border rounded-lg text-base sm:text-sm ${
                         staffPage === pageNum
                           ? 'bg-green-500 text-white border-green-500'
                           : 'border-gray-300 hover:bg-gray-100'
@@ -2016,9 +2028,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               <button
                 onClick={() => setStaffPage(Math.min(totalStaffPages, staffPage + 1))}
                 disabled={staffPage === totalStaffPages}
-                className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                className="px-4 py-3 sm:px-3 sm:py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 text-base sm:text-sm"
               >
-                Next
+                <span className="hidden sm:inline">Next</span>
+                <span className="sm:hidden">→</span>
               </button>
             </div>
           )}
@@ -2033,6 +2046,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       <MenuItemPerformance
         menuItems={menuItems}
         categories={categories}
+        detailedOrders={detailedOrders}
       />
 
       {/*
@@ -2044,22 +2058,35 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         paymentMethods={paymentMethods}
         totalAmount={paymentTotals.amount}
         totalCount={paymentTotals.count}
+        detailedOrders={paymentMethodDetailedOrders}
+      />
+
+      {/*
+        ============================================
+        (F) Refunds Report - HIGH PRIORITY
+        ============================================
+      */}
+      <RefundsReport
+        summary={refundSummary}
+        refundsByMethod={refundsByMethod}
+        dailyTrends={refundDailyTrends}
+        refundDetails={refundDetails}
       />
 
       {/* 
         ============================================
-        (F) Revenue Trend - MEDIUM PRIORITY
+        (G) Revenue Trend - MEDIUM PRIORITY
         ============================================
       */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <h3 className="text-xl font-bold mb-4">Revenue Trend</h3>
+      <div className="bg-white rounded-lg shadow p-3 sm:p-4 mb-6">
+        <h3 className="text-lg sm:text-xl font-bold mb-4">Revenue Trend</h3>
         {revenueTrend.length > 0 ? (
           <div className="h-64 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={revenueTrend} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <LineChart data={revenueTrend} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" fontSize={12} />
-                <YAxis fontSize={12} />
+                <XAxis dataKey="label" fontSize={10} />
+                <YAxis fontSize={10} />
                 <Tooltip />
                 <Legend />
                 <Line
@@ -2081,7 +2108,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
 
       {/*
         ============================================
-        (G) VIP Customer Report - MEDIUM PRIORITY
+        (H) VIP Customer Report - MEDIUM PRIORITY
         ============================================
       */}
       <VipCustomerReport
@@ -2089,27 +2116,15 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         summary={vipSummary}
       />
 
-      {/*
-        ============================================
-        (H) Refunds Report - HIGH PRIORITY
-        ============================================
-      */}
-      <RefundsReport
-        summary={refundSummary}
-        refundsByMethod={refundsByMethod}
-        dailyTrends={refundDailyTrends}
-        refundDetails={refundDetails}
-      />
-
       {/* 
         ============================================
-        (H) Income Statement - LOW PRIORITY
+        (I) Income Statement - LOW PRIORITY
         ============================================
       */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Income Statement</h3>
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div className="mb-4 sm:mb-0">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Income Statement</h3>
             <p className="text-gray-600 text-sm mt-1">
               {incomeStatement.length} months • ${incomeStatement.reduce((sum, row) => sum + row.revenue, 0).toFixed(2)} total revenue
             </p>
@@ -2120,7 +2135,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               type="number"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="border border-gray-300 rounded-md px-3 py-1 w-20 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="border border-gray-300 rounded-md px-3 py-2 sm:py-1 w-20 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
         </div>
@@ -2153,9 +2168,9 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         (I) User Signups - LOW PRIORITY
         ============================================
       */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-6 mb-6">
         <div className="mb-6">
-          <h3 className="text-xl font-semibold text-gray-900">User Signups</h3>
+          <h3 className="text-lg sm:text-xl font-semibold text-gray-900">User Signups</h3>
           <p className="text-gray-600 text-sm mt-1">
             {userSignups.reduce((sum, item) => sum + item.count, 0)} total signups • Daily breakdown
           </p>
@@ -2164,10 +2179,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         {userSignups.length > 0 ? (
           <div className="h-64 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={userSignups} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <LineChart data={userSignups} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="date" fontSize={12} stroke="#6b7280" />
-                <YAxis fontSize={12} stroke="#6b7280" />
+                <XAxis dataKey="date" fontSize={10} stroke="#6b7280" />
+                <YAxis fontSize={10} stroke="#6b7280" />
                 <Tooltip 
                   contentStyle={{ 
                     backgroundColor: 'white', 
@@ -2200,9 +2215,9 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         (J) User Activity Heatmap - LOW PRIORITY
         ============================================
       */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-6 mb-6">
         <div className="mb-6">
-          <h3 className="text-xl font-semibold text-gray-900">User Activity Heatmap</h3>
+          <h3 className="text-lg sm:text-xl font-semibold text-gray-900">User Activity Heatmap</h3>
           <p className="text-gray-600 text-sm mt-1">
             Peak activity patterns • Times shown in Guam time (UTC+10)
           </p>
@@ -2214,7 +2229,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               <table className="w-full min-w-[700px] border-collapse">
                 <thead>
                   <tr>
-                    <th className="w-20 text-left"></th>
+                    <th className="w-12 sm:w-20 text-left"></th>
                     {Array.from({ length: 24 }).map((_, hour) => {
                       const hour12 = hour === 0 ? '12A' : 
                                     hour < 12 ? `${hour}A` : 
@@ -2224,7 +2239,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                       return (
                         <th 
                           key={hour} 
-                          className="w-10 h-8 text-center text-xs font-medium text-gray-600"
+                          className="w-6 sm:w-10 h-8 text-center text-xs font-medium text-gray-600"
                         >
                           {hour12}
                         </th>
@@ -2236,7 +2251,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                   {dayNames.map((dayName, dayIndex) => {
                     return (
                       <tr key={dayIndex}>
-                        <td className="w-20 py-2 text-sm font-medium text-gray-700">
+                        <td className="w-12 sm:w-20 py-2 text-xs sm:text-sm font-medium text-gray-700">
                           {dayName.slice(0, 3)}
                         </td>
                         
@@ -2261,7 +2276,7 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                           return (
                             <td 
                               key={hour}
-                              className="w-10 h-10 text-center text-xs border border-gray-100 rounded-sm"
+                              className="w-6 sm:w-10 h-8 sm:h-10 text-center text-xs border border-gray-100 rounded-sm"
                               style={{ backgroundColor: bgColor }}
                               title={`${dayName} ${hour12}: ${value} orders`}
                             >
@@ -2276,15 +2291,15 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               </table>
             </div>
             
-            <div className="mt-4 flex items-center justify-end text-sm">
+            <div className="mt-4 flex items-center justify-center sm:justify-end text-sm">
               <span className="text-gray-600 mr-3">Activity:</span>
               <div className="flex items-center space-x-1">
                 <span className="text-gray-500">Low</span>
                 <div className="flex space-x-1 mx-2">
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.15)' }}></div>
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.35)' }}></div>
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.55)' }}></div>
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.75)' }}></div>
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.15)' }}></div>
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.35)' }}></div>
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.55)' }}></div>
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-sm" style={{ backgroundColor: 'rgba(249, 115, 22, 0.75)' }}></div>
                 </div>
                 <span className="text-gray-500">High</span>
               </div>

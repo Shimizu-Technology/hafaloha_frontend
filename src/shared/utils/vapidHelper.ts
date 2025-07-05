@@ -11,7 +11,7 @@
 export function urlBase64ToUint8Array(base64String: string): Uint8Array {
   try {
     // Normalize the base64 string
-    let normalizedBase64 = base64String.trim();
+    const normalizedBase64 = base64String.trim();
     
     // Add padding if needed
     const padding = '='.repeat((4 - (normalizedBase64.length % 4)) % 4);

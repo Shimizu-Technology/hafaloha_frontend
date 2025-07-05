@@ -174,37 +174,37 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
 
   return (
     <div className="border border-gray-200 rounded-lg">
-      {/* Summary Row */}
-      <div className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+      {/* Summary Row - Mobile Optimized */}
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+          <div className="flex items-start space-x-3">
             <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
               {index + 1}
             </div>
             <div className="flex-1">
-              <h3 className="font-medium text-gray-900">{staff.user_name}</h3>
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <h3 className="font-medium text-gray-900 text-base sm:text-lg">{staff.user_name}</h3>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mt-1">
                 <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
                   Staff
                 </span>
-                <span>•</span>
+                <span className="hidden sm:inline">•</span>
                 <span>{employeeName}</span>
                 {employeeEmail && employeeEmail !== 'No email' && (
                   <>
-                    <span>•</span>
-                    <span className="text-gray-500">{employeeEmail}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="text-gray-500 text-xs sm:text-sm break-all">{employeeEmail}</span>
                   </>
                 )}
               </div>
               
-              {/* Summary Stats */}
-              <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+              {/* Summary Stats - Mobile Optimized */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-xs text-gray-500 mt-2">
                 <span>Total Orders: {totalOrdersCount}</span>
-                <span>•</span>
+                <span className="hidden sm:inline">•</span>
                 <span>Avg: {safeFormatCurrency(staffDetails?.average_order_value)}</span>
                 {staff.payment_methods_used && staff.payment_methods_used.length > 0 && (
                   <>
-                    <span>•</span>
+                    <span className="hidden sm:inline">•</span>
                     <span>Payment: {staff.payment_methods_used.join(', ')}</span>
                   </>
                 )}
@@ -212,9 +212,9 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
             </div>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <div className="font-semibold text-gray-900">
+          <div className="flex items-center justify-between sm:justify-end space-x-3">
+            <div className="text-left sm:text-right">
+              <div className="font-semibold text-gray-900 text-lg sm:text-xl">
                 {safeFormatCurrency(staff.total_spent)}
               </div>
               <div className="text-sm text-gray-600">
@@ -224,11 +224,11 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
             
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-2 sm:p-1 text-gray-400 hover:text-gray-600 transition-colors min-w-[40px] sm:min-w-0"
               title={isExpanded ? 'Collapse details' : 'Expand details'}
             >
               <svg 
-                className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                className={`w-5 h-5 sm:w-4 sm:h-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24"
@@ -240,14 +240,14 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
         </div>
       </div>
 
-      {/* Expandable Details */}
+      {/* Expandable Details - Mobile Optimized */}
       {isExpanded && (
-        <div className="border-t border-gray-200 p-4 bg-gray-50">
-          {/* View Mode Tabs */}
-          <div className="flex space-x-2 mb-4">
+        <div className="border-t border-gray-200 p-3 sm:p-4 bg-gray-50">
+          {/* View Mode Tabs - Mobile Optimized */}
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
             <button
               onClick={() => setViewMode('summary')}
-              className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+              className={`w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 viewMode === 'summary'
                   ? 'bg-green-500 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -257,7 +257,7 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
             </button>
             <button
               onClick={() => setViewMode('orders')}
-              className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+              className={`w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 viewMode === 'orders'
                   ? 'bg-green-500 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -267,67 +267,67 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
             </button>
           </div>
 
-          {/* Summary View */}
+          {/* Summary View - Mobile Optimized */}
           {viewMode === 'summary' && (
             <div className="space-y-4">
-              {/* Staff Information */}
-              <div className="bg-white rounded-lg p-4">
+              {/* Staff Information - Mobile Optimized */}
+              <div className="bg-white rounded-lg p-3 sm:p-4">
                 <h4 className="font-medium text-gray-900 mb-3">Staff Information</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Employee Name:</span>
-                    <span className="ml-2 font-medium">{employeeName}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Employee Name:</span>
+                    <span className="sm:ml-2 font-medium">{employeeName}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Employee Email:</span>
-                    <span className="ml-2 font-medium">{employeeEmail}</span>
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Employee Email:</span>
+                    <span className="sm:ml-2 font-medium break-all">{employeeEmail}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Total Staff Orders:</span>
-                    <span className="ml-2 font-medium">{staffDetails?.total_orders_for_staff || 0}</span>
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Total Staff Orders:</span>
+                    <span className="sm:ml-2 font-medium">{staffDetails?.total_orders_for_staff || 0}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Average Order Value:</span>
-                    <span className="ml-2 font-medium">{safeFormatCurrency(staffDetails?.average_order_value)}</span>
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Average Order Value:</span>
+                    <span className="sm:ml-2 font-medium">{safeFormatCurrency(staffDetails?.average_order_value)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Order Summary */}
-              <div className="bg-white rounded-lg p-4">
+              {/* Order Summary - Mobile Optimized */}
+              <div className="bg-white rounded-lg p-3 sm:p-4">
                 <h4 className="font-medium text-gray-900 mb-3">Order Summary</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Date Range:</span>
-                    <span className="ml-2 font-medium">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Date Range:</span>
+                    <span className="sm:ml-2 font-medium">
                       {safeFormatDateOnly(staff.first_order_date)} - {safeFormatDateOnly(staff.last_order_date)}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Payment Methods:</span>
-                    <span className="ml-2 font-medium">
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Payment Methods:</span>
+                    <span className="sm:ml-2 font-medium">
                       {staff.payment_methods_used && staff.payment_methods_used.length > 0
                         ? staff.payment_methods_used.join(', ')
                         : 'N/A'}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Total Spent:</span>
-                    <span className="ml-2 font-medium text-green-600">{safeFormatCurrency(staff.total_spent)}</span>
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Total Spent:</span>
+                    <span className="sm:ml-2 font-medium text-green-600">{safeFormatCurrency(staff.total_spent)}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Total Orders:</span>
-                    <span className="ml-2 font-medium">{staff.order_count}</span>
+                  <div className="flex flex-col sm:flex-row">
+                    <span className="text-gray-600 font-medium">Total Orders:</span>
+                    <span className="sm:ml-2 font-medium">{staff.order_count}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Items Ordered */}
-              <div className="bg-white rounded-lg p-4">
+              {/* Items Ordered - Mobile Optimized */}
+              <div className="bg-white rounded-lg p-3 sm:p-4">
                 <h4 className="font-medium text-gray-900 mb-3">Items Ordered</h4>
                 <div className="space-y-2 text-sm">
                   {staff.items.map((item, itemIndex) => (
-                    <div key={itemIndex} className="p-2 bg-gray-50 rounded">
+                    <div key={itemIndex} className="p-3 bg-gray-50 rounded-lg">
                       {renderItemWithCustomizations(item)}
                     </div>
                   ))}
@@ -336,23 +336,26 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
             </div>
           )}
 
-          {/* Individual Orders View */}
+          {/* Individual Orders View - Mobile Optimized */}
           {viewMode === 'orders' && (
             <div className="space-y-4">
               {staff.detailed_orders && staff.detailed_orders.length > 0 ? (
                 staff.detailed_orders.map((order, orderIndex) => (
-                  <div key={order.id} className="bg-white rounded-lg p-4 border">
-                    <div className="flex items-center justify-between mb-3">
+                  <div key={order.id} className="bg-white rounded-lg p-3 sm:p-4 border">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 space-y-2 sm:space-y-0">
                       <div className="flex items-center space-x-3">
                         <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-xs font-medium">
                           {orderIndex + 1}
                         </div>
                         <div>
                           <h5 className="font-medium text-gray-900">Order #{order.order_number}</h5>
-                          <p className="text-sm text-gray-600">{safeFormatDate(order.created_at)}</p>
+                          <p className="text-sm text-gray-600">
+                            <span className="sm:hidden">{safeFormatDate(order.created_at).split(',')[0]}</span>
+                            <span className="hidden sm:inline">{safeFormatDate(order.created_at)}</span>
+                          </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <div className="font-semibold text-gray-900">
                           {safeFormatCurrency(order.total)}
                         </div>
@@ -364,89 +367,89 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-3">
-                      <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm mb-3">
+                      <div className="bg-gray-50 p-2 rounded">
                         <span className="text-gray-600">Status:</span>
                         <span className="ml-2">{getStatusBadge(order.status)}</span>
                       </div>
-                      <div>
+                      <div className="bg-gray-50 p-2 rounded">
                         <span className="text-gray-600">Payment:</span>
                         <span className="ml-2">{order.payment_method || 'N/A'}</span>
                         {order.payment_status && (
-                          <span className="ml-2">{getPaymentStatusBadge(order.payment_status)}</span>
+                          <span className="ml-2 block sm:inline sm:ml-2">{getPaymentStatusBadge(order.payment_status)}</span>
                         )}
                       </div>
                       {order.transaction_id && (
-                        <div>
+                        <div className="bg-gray-50 p-2 rounded">
                           <span className="text-gray-600">Transaction ID:</span>
-                          <span className="ml-2 font-mono text-xs">{order.transaction_id}</span>
+                          <span className="ml-2 font-mono text-xs break-all">{order.transaction_id}</span>
                         </div>
                       )}
                       {order.estimated_pickup_time && (
-                        <div>
+                        <div className="bg-gray-50 p-2 rounded">
                           <span className="text-gray-600">Pickup Time:</span>
-                          <span className="ml-2">{safeFormatDate(order.estimated_pickup_time)}</span>
+                          <span className="ml-2 text-xs sm:text-sm">{safeFormatDate(order.estimated_pickup_time)}</span>
                         </div>
                       )}
                     </div>
 
-                    {/* Contact Info */}
+                    {/* Contact Info - Mobile Optimized */}
                     {(order.contact_name || order.contact_phone || order.contact_email) && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-3 p-2 bg-gray-50 rounded">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm mb-3 p-3 bg-gray-50 rounded-lg">
                         {order.contact_name && (
-                          <div>
-                            <span className="text-gray-600">Contact:</span>
-                            <span className="ml-2 font-medium">{order.contact_name}</span>
+                          <div className="flex flex-col sm:flex-row">
+                            <span className="text-gray-600 font-medium">Contact:</span>
+                            <span className="sm:ml-2 font-medium">{order.contact_name}</span>
                           </div>
                         )}
                         {order.contact_phone && (
-                          <div>
-                            <span className="text-gray-600">Phone:</span>
-                            <span className="ml-2 font-medium">{order.contact_phone}</span>
+                          <div className="flex flex-col sm:flex-row">
+                            <span className="text-gray-600 font-medium">Phone:</span>
+                            <span className="sm:ml-2 font-medium">{order.contact_phone}</span>
                           </div>
                         )}
                         {order.contact_email && (
-                          <div>
-                            <span className="text-gray-600">Email:</span>
-                            <span className="ml-2 font-medium">{order.contact_email}</span>
+                          <div className="flex flex-col sm:flex-row">
+                            <span className="text-gray-600 font-medium">Email:</span>
+                            <span className="sm:ml-2 font-medium break-all">{order.contact_email}</span>
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* Special Info */}
+                    {/* Special Info - Mobile Optimized */}
                     {(order.special_instructions || order.vip_code || order.location_name) && (
                       <div className="space-y-2 text-sm mb-3">
                         {order.special_instructions && (
-                          <div className="p-2 bg-yellow-50 rounded">
+                          <div className="p-3 bg-yellow-50 rounded-lg">
                             <span className="text-yellow-800 font-medium">Special Instructions:</span>
                             <span className="ml-2 text-yellow-700">{order.special_instructions}</span>
                           </div>
                         )}
                         {order.vip_code && (
-                          <div className="p-2 bg-purple-50 rounded">
+                          <div className="p-3 bg-purple-50 rounded-lg">
                             <span className="text-purple-800 font-medium">VIP Code:</span>
                             <span className="ml-2 text-purple-700">{order.vip_code}</span>
                           </div>
                         )}
                         {order.location_name && (
-                          <div className="p-2 bg-blue-50 rounded">
+                          <div className="p-3 bg-blue-50 rounded-lg">
                             <span className="text-blue-800 font-medium">Location:</span>
                             <span className="ml-2 text-blue-700">{order.location_name}</span>
                             {order.location_address && (
-                              <span className="ml-1 text-blue-600">({order.location_address})</span>
+                              <span className="ml-1 text-blue-600 block sm:inline">({order.location_address})</span>
                             )}
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* Items */}
+                    {/* Items - Mobile Optimized */}
                     <div>
                       <h6 className="font-medium text-gray-900 mb-2">Items:</h6>
-                      <div className="space-y-1 text-sm">
+                      <div className="space-y-2 text-sm">
                         {order.items.map((item, itemIndex) => (
-                          <div key={itemIndex} className="flex justify-between items-start p-2 bg-gray-50 rounded">
+                          <div key={itemIndex} className="flex justify-between items-start p-3 bg-gray-50 rounded-lg">
                             <div className="flex-1">
                               <span className="font-medium">{item.name}</span>
                               {item.customizations && Object.keys(item.customizations).length > 0 && (
@@ -467,20 +470,20 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
                         ))}
                         {order.merchandise_items && order.merchandise_items.length > 0 && (
                           <>
-                            <div className="text-xs text-gray-500 mt-2 mb-1">Merchandise:</div>
+                            <div className="text-xs text-gray-500 mt-2 mb-1 font-medium">Merchandise:</div>
                             {order.merchandise_items.map((item, itemIndex) => (
-                              <div key={itemIndex} className="flex justify-between items-start p-2 bg-blue-50 rounded">
+                              <div key={itemIndex} className="flex justify-between items-start p-3 bg-blue-50 rounded-lg">
                                 <div className="flex-1">
                                   <span className="font-medium">{item.name}</span>
-                                                                      {item.customizations && Object.keys(item.customizations).length > 0 && (
-                                      <div className="text-xs text-gray-500 mt-1 pl-2 border-l-2 border-gray-200">
-                                        {Object.entries(item.customizations).map(([group, selection], idx) => (
-                                          <div key={idx}>
-                                            <span className="font-medium">{group}:</span> {Array.isArray(selection) ? selection.join(', ') : String(selection)}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
+                                  {item.customizations && Object.keys(item.customizations).length > 0 && (
+                                    <div className="text-xs text-gray-500 mt-1 pl-2 border-l-2 border-gray-200">
+                                      {Object.entries(item.customizations).map(([group, selection], idx) => (
+                                        <div key={idx}>
+                                          <span className="font-medium">{group}:</span> {Array.isArray(selection) ? selection.join(', ') : String(selection)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="text-right">
                                   <span className="text-gray-600 font-medium">×{item.quantity}</span>
@@ -496,6 +499,9 @@ export function EnhancedStaffOrderRow({ staff, index }: EnhancedStaffOrderRowPro
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500">
+                  <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
                   No detailed order information available
                 </div>
               )}
