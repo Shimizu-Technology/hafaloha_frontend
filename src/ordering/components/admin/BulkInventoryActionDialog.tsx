@@ -127,11 +127,12 @@ export function BulkInventoryActionDialog({
                   // Get full menu item details
                   const fullItem = await menuItemsApi.getById(item.id);
                   
-                  // Return if item has inventory tracking
-                  if (fullItem.enable_stock_tracking) {
+                  // In refund mode, include ALL items (inventory tracking optional)
+                  // In cancellation mode, only include items with inventory tracking
+                  if (isRefundMode || fullItem.enable_stock_tracking) {
                     return {
                       ...item,
-                      enable_stock_tracking: fullItem.enable_stock_tracking,
+                      enable_stock_tracking: fullItem.enable_stock_tracking || false,
                       uses_option_level_inventory: (fullItem as any).uses_option_level_inventory,
                       has_option_inventory_tracking: (fullItem as any).has_option_inventory_tracking,
                       // Use the item quantity from the order
@@ -149,9 +150,11 @@ export function BulkInventoryActionDialog({
               })
             );
 
-            // Filter out null items (no inventory tracking) and add to our collection
+            // Filter out null items and add to our collection
+            // In refund mode: include all successfully fetched items
+            // In cancellation mode: only include items with inventory tracking
             const validItems = itemsWithDetails.filter((item): item is OrderItem => 
-              item !== null && item.enable_stock_tracking === true
+              item !== null && (isRefundMode || item.enable_stock_tracking === true)
             );
             
             allItems.push(...validItems);
@@ -223,7 +226,7 @@ export function BulkInventoryActionDialog({
     };
 
     findInventoryItems();
-  }, [order, isBatch]);
+  }, [order, isBatch, isRefundMode]);
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -369,8 +372,22 @@ export function BulkInventoryActionDialog({
       return;
     }
 
-    // Make sure all required fields are filled
-    const isValid = actionsToProcess.every(action => {
+    // Find the corresponding inventory items for validation
+    const itemsToValidate = actionsToProcess.map(action => {
+      const item = inventoryItems.find((item, index) => 
+        `${item.id}-${item.orderId}-${index}` === action.uniqueId
+      );
+      return { action, item };
+    });
+
+    // Make sure all required fields are filled for items with inventory tracking
+    const isValid = itemsToValidate.every(({ action, item }) => {
+      // Skip validation for items without inventory tracking
+      if (!item || !item.enable_stock_tracking) {
+        return true;
+      }
+      
+      // Validate items with inventory tracking
       if (action.action === 'mark_as_damaged' && !action.reason) {
         return false;
       }
@@ -378,7 +395,7 @@ export function BulkInventoryActionDialog({
     });
 
     if (!isValid) {
-      alert('Please provide reasons for all damaged items.');
+      alert('Please provide reasons for all damaged items with inventory tracking.');
       return;
     }
 
@@ -393,6 +410,8 @@ export function BulkInventoryActionDialog({
     }
 
     // Update all inventory actions with the final payment information
+    // For items without inventory tracking, we still include them in the actions
+    // but the backend will know to skip inventory operations for them
     const finalActions = actionsToProcess.map(action => ({
       ...action,
       paymentAction: selectedPaymentAction,
@@ -404,8 +423,9 @@ export function BulkInventoryActionDialog({
 
   // If no inventory items, we still need to handle payment actions
   useEffect(() => {
-    if (!loading && inventoryItems.length === 0) {
-      // Instead of closing, just skip to payment handling
+    if (!loading && inventoryItems.length === 0 && !isRefundMode) {
+      // Only create placeholder for cancellation mode when no items have inventory tracking
+      // In refund mode, we should always have items to show since we include all order items
       setInventoryActions([{
         itemId: 0, // Placeholder
         uniqueId: 'order-payment-only',
@@ -416,7 +436,7 @@ export function BulkInventoryActionDialog({
         paymentReason: ''
       }]);
     }
-  }, [loading, inventoryItems, isBatch, order]);
+  }, [loading, inventoryItems, isBatch, order, isRefundMode]);
 
   if (loading) {
     return (
@@ -466,7 +486,7 @@ export function BulkInventoryActionDialog({
           <p className="text-sm text-gray-600 mt-1">
             {isRefundMode
               ? inventoryItems.length > 0 
-                ? 'Select items to refund and specify inventory handling for each selected item.'
+                ? 'Select items to refund. Inventory actions will only apply to items with inventory tracking enabled.'
                 : 'Please specify how you would like to handle payment for this refund.'
               : inventoryItems.length > 0 
               ? 'The following items have inventory tracking. Please specify what should happen to each item.'
@@ -666,7 +686,7 @@ export function BulkInventoryActionDialog({
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h4 className="text-base font-medium text-gray-900">
-                Inventory Items
+                {isRefundMode ? 'Order Items' : 'Inventory Items'}
               </h4>
                 {isRefundMode && (
                   <div className="flex items-center">
@@ -712,6 +732,11 @@ export function BulkInventoryActionDialog({
                           )}
                           <div className="flex-1">
                           <h5 className="font-medium text-gray-900">{item.name}</h5>
+                            {!item.enable_stock_tracking && isRefundMode && (
+                              <span className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full mt-1">
+                                No inventory tracking
+                              </span>
+                            )}
                             <div className="flex items-center space-x-4 mt-1">
                               {isRefundMode ? (
                                 <div className="flex items-center space-x-2">
@@ -744,43 +769,51 @@ export function BulkInventoryActionDialog({
                       </div>
 
                       <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Action
-                          </label>
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleActionChange(uniqueItemId, 'return_to_inventory')}
-                              disabled={isRefundMode && !selectedItems.has(uniqueItemId)}
-                              className={`px-4 py-2 rounded-md text-sm font-medium flex-1 transition-colors ${
-                                isRefundMode && !selectedItems.has(uniqueItemId)
-                                  ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
-                                  : action?.action === 'return_to_inventory'
-                                  ? 'bg-green-100 text-green-800 border-2 border-green-300'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              Return to Inventory
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleActionChange(uniqueItemId, 'mark_as_damaged')}
-                              disabled={isRefundMode && !selectedItems.has(uniqueItemId)}
-                              className={`px-4 py-2 rounded-md text-sm font-medium flex-1 transition-colors ${
-                                isRefundMode && !selectedItems.has(uniqueItemId)
-                                  ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
-                                  : action?.action === 'mark_as_damaged'
-                                  ? 'bg-red-100 text-red-800 border-2 border-red-300'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              Mark as Damaged
-                            </button>
+                        {item.enable_stock_tracking ? (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Inventory Action
+                            </label>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleActionChange(uniqueItemId, 'return_to_inventory')}
+                                disabled={isRefundMode && !selectedItems.has(uniqueItemId)}
+                                className={`px-4 py-2 rounded-md text-sm font-medium flex-1 transition-colors ${
+                                  isRefundMode && !selectedItems.has(uniqueItemId)
+                                    ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                                    : action?.action === 'return_to_inventory'
+                                    ? 'bg-green-100 text-green-800 border-2 border-green-300'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                Return to Inventory
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleActionChange(uniqueItemId, 'mark_as_damaged')}
+                                disabled={isRefundMode && !selectedItems.has(uniqueItemId)}
+                                className={`px-4 py-2 rounded-md text-sm font-medium flex-1 transition-colors ${
+                                  isRefundMode && !selectedItems.has(uniqueItemId)
+                                    ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                                    : action?.action === 'mark_as_damaged'
+                                    ? 'bg-red-100 text-red-800 border-2 border-red-300'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                Mark as Damaged
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm text-gray-500 italic">
+                              No inventory action required (item does not use inventory tracking)
+                            </p>
+                          </div>
+                        )}
 
-                        {action?.action === 'mark_as_damaged' && (
+                        {action?.action === 'mark_as_damaged' && item.enable_stock_tracking && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Reason (Required)
