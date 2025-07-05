@@ -109,9 +109,17 @@ function hasAvailableOptions(optionGroup: { options?: (MenuOption & { stock_quan
   return optionGroup.options.some((option) => isOptionAvailable(option, 1, optionGroup));
 }
 
-/** FE-014: Get available quantity for an option */
-function getOptionAvailableQuantity(option: any): number {
-  // If no inventory tracking, return a large number to indicate unlimited
+/** FE-014: Get available quantity for an option (group-aware) */
+function getOptionAvailableQuantity(option: any, optionGroup?: any): number {
+  // Check if the option's group has inventory tracking enabled
+  const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+  
+  // If no tracking for this group, return a large number to indicate unlimited availability
+  if (!groupHasInventoryTracking) {
+    return option.is_available !== false ? 999 : 0;
+  }
+  
+  // Only apply stock logic for groups with inventory tracking enabled
   if (!option.stock_quantity && option.stock_quantity !== 0) {
     return option.is_available !== false ? 999 : 0;
   }
@@ -424,7 +432,7 @@ function MenuItemsPanel({
                               .filter(group => group.enable_inventory_tracking === true)
                               .flatMap(group => 
                                 group.options.filter(option => {
-                                  const availableQty = getOptionAvailableQuantity(option);
+                                  const availableQty = getOptionAvailableQuantity(option, group);
                                   return availableQty > 0 && availableQty < 10;
                                 })
                               );
@@ -865,7 +873,7 @@ function OrderPanel({
                               for (const optionName of selectedOptions) {
                                 const option = optionGroup.options.find(o => o.name === optionName);
                                 if (option) {
-                                  const availableQuantity = getOptionAvailableQuantity(option);
+                                  const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
                                   // Check if this option has enough stock for the new quantity
                                   if (availableQuantity < newQuantity) {
                                     return true; // Disable button if any option doesn't have enough stock
@@ -902,7 +910,7 @@ function OrderPanel({
                                 for (const optionName of selectedOptions) {
                                   const option = optionGroup.options.find(o => o.name === optionName);
                                   if (option) {
-                                    const availableQuantity = getOptionAvailableQuantity(option);
+                                    const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
                                     if (availableQuantity < newQuantity) {
                                       return 'opacity-50 cursor-not-allowed';
                                     }
@@ -959,7 +967,7 @@ function OrderPanel({
                                 for (const optionName of selectedOptions) {
                                   const option = optionGroup.options.find(o => o.name === optionName);
                                   if (option) {
-                                    const availableQuantity = getOptionAvailableQuantity(option);
+                                    const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
                                     if (availableQuantity < 1) {
                                       stockErrors.push(`${optionName} is out of stock`);
                                     }
@@ -999,7 +1007,7 @@ function OrderPanel({
                               for (const optionName of selectedOptions) {
                                 const option = optionGroup.options.find(o => o.name === optionName);
                                 if (option) {
-                                  const availableQuantity = getOptionAvailableQuantity(option);
+                                  const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
                                   if (availableQuantity < 1) {
                                     return true; // Disable if any option is out of stock
                                   }
@@ -1036,7 +1044,7 @@ function OrderPanel({
                                 for (const optionName of selectedOptions) {
                                   const option = optionGroup.options.find(o => o.name === optionName);
                                   if (option) {
-                                    const availableQuantity = getOptionAvailableQuantity(option);
+                                    const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
                                     if (availableQuantity < 1) {
                                       isDisabled = true;
                                       break;
@@ -2331,8 +2339,8 @@ export function StaffOrderModal({ onClose, onOrderCreated }: StaffOrderModalProp
         const optionGroup = item.option_groups?.find(group => group.id === customization.option_group_id);
         const option = optionGroup?.options.find(opt => opt.id === customization.option_id);
         
-        if (option && !isOptionAvailable(option, qty)) {
-          const availableQty = getOptionAvailableQuantity(option);
+        if (option && !isOptionAvailable(option, qty, optionGroup)) {
+          const availableQty = getOptionAvailableQuantity(option, optionGroup);
           if (availableQty === 0) {
             unavailableOptions.push(`${customization.option_name} (out of stock)`);
           } else {

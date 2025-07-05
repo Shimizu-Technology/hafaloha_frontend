@@ -202,19 +202,32 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
   };
 
   // Calculate available quantity for an option (with availability checks and cart usage)
-  const getOptionAvailableQuantity = (option: MenuOption): number => {
+  const getOptionAvailableQuantity = (option: MenuOption, optionGroup?: any): number => {
     // First check manual availability toggles
     if (!option.available) {
+      console.log(`[ItemCustomizationModal] Option ${option.name} not available (manual toggle)`);
       return 0;
     }
     
     // Also check optional is_available field if present
     if (option.is_available === false) {
+      console.log(`[ItemCustomizationModal] Option ${option.name} not available (is_available=false)`);
       return 0;
     }
     
-    // If no inventory tracking, return a large number to indicate unlimited
+    // Check if the option's group has inventory tracking enabled
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    console.log(`[ItemCustomizationModal] Option ${option.name}, Group: ${optionGroup?.name}, Tracking: ${groupHasInventoryTracking}`);
+    
+    // If no tracking for this group, return unlimited availability
+    if (!groupHasInventoryTracking) {
+      console.log(`[ItemCustomizationModal] No inventory tracking for group, returning 999 for ${option.name}`);
+      return 999; // Available based on manual toggle only
+    }
+    
+    // For tracked groups, apply normal stock quantity logic
     if (option.stock_quantity === undefined || option.stock_quantity === null) {
+      console.log(`[ItemCustomizationModal] No stock_quantity defined for tracked option ${option.name}, returning 999`);
       return 999; // Available but not tracked
     }
     
@@ -222,7 +235,9 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
     const stockQuantity = option.stock_quantity || 0;
     const damagedQuantity = option.damaged_quantity || 0;
     const cartUsage = getCartOptionUsage(option.id);
-    return Math.max(0, stockQuantity - damagedQuantity - cartUsage);
+    const available = Math.max(0, stockQuantity - damagedQuantity - cartUsage);
+    console.log(`[ItemCustomizationModal] Stock calculation for ${option.name}: ${stockQuantity} - ${damagedQuantity} - ${cartUsage} = ${available}`);
+    return available;
   };
 
   // Check if an option is available for the requested quantity (option group aware)
@@ -246,7 +261,7 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
     }
     
     // Calculate available quantity and check if sufficient for tracked groups
-    const availableQuantity = getOptionAvailableQuantity(option);
+    const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
     return availableQuantity >= requestedQuantity;
   };
 
@@ -256,7 +271,7 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
     const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
     if (!groupHasInventoryTracking) return false;
     
-    const availableQuantity = getOptionAvailableQuantity(option);
+    const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
     if (availableQuantity === 999) return false; // No stock tracking
     
     // Consider low stock if 5 or fewer items available
@@ -274,7 +289,7 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
     const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
     if (!groupHasInventoryTracking) return null;
     
-    const availableQuantity = getOptionAvailableQuantity(option);
+    const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
     
     if (availableQuantity === 999) {
       return null; // No stock tracking
@@ -516,8 +531,13 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
     const stockValidationErrors: string[] = [];
     
     Object.entries(selectedOptions).forEach(([groupIdStr, options]) => {
+      // Find the option group for this groupId
+      const optionGroup = processedOptionGroups.find(g => g.id.toString() === groupIdStr);
+      console.log(`[ItemCustomizationModal] Validating group ${optionGroup?.name} (ID: ${groupIdStr}), tracking: ${optionGroup?.enable_inventory_tracking}`);
+      
       options.forEach(option => {
-        const availableQuantity = getOptionAvailableQuantity(option);
+        const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
+        console.log(`[ItemCustomizationModal] Validation: ${option.name} has ${availableQuantity} available, requested ${quantity}`);
         if (availableQuantity < quantity) {
           if (availableQuantity === 0) {
             stockValidationErrors.push(`${option.name} is out of stock`);
@@ -588,7 +608,7 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
     // Only show stock info for groups with inventory tracking
     const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
     
-    const availableQuantity = getOptionAvailableQuantity(option);
+    const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
     const extraPrice = getOptionPrice(option);
     const isFree = isOptionFree(optionGroup, option.id);
     
@@ -913,13 +933,15 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
                   forceUpdate({});
                 }}
                 disabled={(() => {
-                  // Check if increasing quantity would exceed stock for any selected option
-                  const selectedOptionsList = Object.values(selectedOptions).flat();
-                  
-                  for (const option of selectedOptionsList) {
-                    const availableQuantity = getOptionAvailableQuantity(option);
-                    if (availableQuantity <= quantity) {
-                      return true; // Disable if any option doesn't have enough stock
+                  // Check if increasing quantity would exceed stock for any selected option (group-aware)
+                  for (const [groupIdStr, options] of Object.entries(selectedOptions)) {
+                    const optionGroup = processedOptionGroups.find(g => g.id.toString() === groupIdStr);
+                    
+                    for (const option of options) {
+                      const availableQuantity = getOptionAvailableQuantity(option, optionGroup);
+                      if (availableQuantity <= quantity) {
+                        return true; // Disable if any option doesn't have enough stock
+                      }
                     }
                   }
                   
@@ -927,10 +949,16 @@ export function ItemCustomizationModal({ item, onClose, onAddToCart, cartItems }
                 })()}
                 className={`px-3 py-1 border rounded ${
                   (() => {
-                    const selectedOptionsList = Object.values(selectedOptions).flat();
-                    const hasStockIssue = selectedOptionsList.some(option => 
-                      getOptionAvailableQuantity(option) <= quantity
-                    );
+                    // Check for stock issues across all selected options (group-aware)
+                    let hasStockIssue = false;
+                    for (const [groupIdStr, options] of Object.entries(selectedOptions)) {
+                      const optionGroup = processedOptionGroups.find(g => g.id.toString() === groupIdStr);
+                      
+                      if (options.some(option => getOptionAvailableQuantity(option, optionGroup) <= quantity)) {
+                        hasStockIssue = true;
+                        break;
+                      }
+                    }
                     return hasStockIssue ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'hover:bg-gray-50';
                   })()
                 }`}

@@ -31,22 +31,30 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
     return Math.max(0, item.stock_quantity - damagedQty);
   }, []);
 
-  // Check if an individual option is available
-  const isOptionAvailable = useCallback((option: MenuOption): boolean => {
+  // Check if an individual option is available (option group aware)
+  const isOptionAvailable = useCallback((option: MenuOption, optionGroup?: OptionGroup): boolean => {
     // Check manual availability toggle first
     if (option.available === false) {
       return false;
     }
     
-    // Check inventory-based availability if option has stock tracking
-    if (option.stock_quantity !== undefined) {
-      const damagedQty = option.damaged_quantity || 0;
-      const availableQty = Math.max(0, option.stock_quantity - damagedQty);
-      return availableQty > 0;
+    // Also check optional is_available field if present
+    if (option.is_available === false) {
+      return false;
     }
     
-    // If no stock tracking, option is available (assuming manual toggle is true/undefined)
-    return true;
+    // Only check stock if this option group has inventory tracking enabled
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    
+    // If no inventory tracking for this group, rely only on manual availability
+    if (!groupHasInventoryTracking || option.stock_quantity === undefined || option.stock_quantity === null) {
+      return true; // Available based on manual toggle only
+    }
+    
+    // Check inventory-based availability if option has stock tracking
+    const damagedQty = option.damaged_quantity || 0;
+    const availableQty = Math.max(0, option.stock_quantity - damagedQty);
+    return availableQty > 0;
   }, [menuItems]);
 
   // Check if an option group has any available options
@@ -55,7 +63,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
       return true; // No options means no restrictions
     }
     
-    return optionGroup.options.some(option => isOptionAvailable(option));
+    return optionGroup.options.some(option => isOptionAvailable(option, optionGroup));
   }, [isOptionAvailable, menuItems]);
 
   // Get count of available options in a group
@@ -64,7 +72,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
       return 0;
     }
     
-    return optionGroup.options.filter(option => isOptionAvailable(option)).length;
+    return optionGroup.options.filter(option => isOptionAvailable(option, optionGroup)).length;
   }, [isOptionAvailable, menuItems]);
 
   // Check if a menu item has available options (for items with option groups)
@@ -446,6 +454,7 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
             item={selectedItem}
             onClose={() => setShowCustomizationModal(false)}
             onAddToCart={handleAddCustomizedItem}
+            cartItems={[]}
           />
         </div>
       )}

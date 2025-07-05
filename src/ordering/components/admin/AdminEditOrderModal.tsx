@@ -127,7 +127,7 @@ function calculateAvailableQuantity(item: OrderItem): number {
 /**
  * Check if an option has sufficient inventory for the requested quantity
  */
-function isOptionAvailable(option: any, requestedQuantity: number = 1): boolean {
+function isOptionAvailable(option: any, requestedQuantity: number = 1, optionGroup?: any): boolean {
   // First check manual availability toggle
   if (!option.available) {
     return false;
@@ -138,12 +138,15 @@ function isOptionAvailable(option: any, requestedQuantity: number = 1): boolean 
     return false;
   }
   
-  // If no inventory tracking, rely on manual availability
-  if (option.stock_quantity === undefined || option.stock_quantity === null) {
-    return true; // Default to available if no stock tracking
+  // Only check stock if this option group has inventory tracking enabled
+  const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+  
+  // If no inventory tracking for this group, rely only on manual availability
+  if (!groupHasInventoryTracking || option.stock_quantity === undefined || option.stock_quantity === null) {
+    return true; // Available based on manual toggle only
   }
   
-  // Calculate available quantity (stock - damaged)
+  // Calculate available quantity (stock - damaged) for tracked groups
   const stockQuantity = option.stock_quantity || 0;
   const damagedQuantity = option.damaged_quantity || 0;
   const availableQuantity = stockQuantity - damagedQuantity;
@@ -816,7 +819,7 @@ const [, setLoadingMenuItemData] = useState(false);
     field: keyof OrderItem,
     value: any
   ) {
-    // If user changes quantity from an input box, use our “updateItemQuantity” function
+    // If user changes quantity from an input box, use our "updateItemQuantity" function
     if (field === 'quantity') {
       const parsedValue = parseInt(String(value), 10);
       if (!isNaN(parsedValue) && parsedValue > 0) {
@@ -1008,7 +1011,7 @@ const [, setLoadingMenuItemData] = useState(false);
       0
     );
 
-    // Check if any items are currently in “needs_payment” status
+    // Check if any items are currently in "needs_payment" status
     const hasPendingPayments = localItems.some(
       (it) => it.paymentStatus === 'needs_payment'
     );

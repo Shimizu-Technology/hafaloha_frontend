@@ -25,7 +25,7 @@ export function CartPage() {
     return Math.max(0, option.stock_quantity - damagedQty);
   }, [menuItems]);
 
-  const isOptionAvailable = useCallback((option: any, requestedQuantity: number = 1): boolean => {
+  const isOptionAvailable = useCallback((option: any, requestedQuantity: number = 1, optionGroup?: any): boolean => {
     // First check manual availability toggle
     if (!option.available) {
       return false;
@@ -36,12 +36,15 @@ export function CartPage() {
       return false;
     }
     
-    // If no inventory tracking, rely on manual availability
-    if (option.stock_quantity === undefined || option.stock_quantity === null) {
-      return true; // Default to available if no stock tracking
+    // Only check stock if this option group has inventory tracking enabled
+    const groupHasInventoryTracking = optionGroup?.enable_inventory_tracking === true;
+    
+    // If no inventory tracking for this group, rely only on manual availability
+    if (!groupHasInventoryTracking || option.stock_quantity === undefined || option.stock_quantity === null) {
+      return true; // Available based on manual toggle only
     }
     
-    // Calculate available quantity (stock - damaged)
+    // Calculate available quantity and check if sufficient for tracked groups
     const availableQuantity = getOptionAvailableQuantity(option);
     return availableQuantity >= requestedQuantity;
   }, [getOptionAvailableQuantity, menuItems]);
@@ -85,7 +88,7 @@ export function CartPage() {
       const optionGroup = menuItem.option_groups.find((group: any) => group.id === selectedOption.option_group_id);
       const option = optionGroup?.options.find((opt: any) => opt.id === selectedOption.option_id);
       
-      if (option && !isOptionAvailable(option, selectedOption.quantity)) {
+      if (option && !isOptionAvailable(option, selectedOption.quantity, optionGroup)) {
         const availableQty = getOptionAvailableQuantity(option);
         if (availableQty === 0) {
           errors.push(`${selectedOption.option_name} is out of stock`);
