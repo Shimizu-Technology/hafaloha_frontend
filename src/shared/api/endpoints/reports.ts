@@ -68,6 +68,51 @@ export interface VipReportResponse {
   summary: VipReportSummary;
 }
 
+// Refunds Report Types
+export interface RefundDetail {
+  id: number;
+  order_id: number;
+  order_number: string;
+  amount: number;
+  payment_method: string;
+  status: string;
+  description: string;
+  created_at: string;
+  customer_name: string;
+  customer_email: string;
+  refunded_items: any[];
+  original_order_total: number;
+}
+
+export interface RefundsByMethod {
+  payment_method: string;
+  count: number;
+  amount: number;
+  percentage: number;
+}
+
+export interface RefundDailyTrend {
+  date: string;
+  amount: number;
+}
+
+export interface RefundSummary {
+  total_refunds_count: number;
+  total_refund_amount: number;
+  average_refund_amount: number;
+  refund_rate_by_orders: number;
+  refund_rate_by_amount: number;
+  total_orders_in_period: number;
+  total_revenue_in_period: number;
+}
+
+export interface RefundsReportResponse {
+  summary: RefundSummary;
+  refunds_by_method: RefundsByMethod[];
+  daily_trends: RefundDailyTrend[];
+  refund_details: RefundDetail[];
+}
+
 // API Functions
 export const getMenuItemReport = (startDate: string, endDate: string) => {
   return apiClient.get<MenuItemReportResponse>('/admin/reports/menu_items', {
@@ -83,6 +128,12 @@ export const getPaymentMethodReport = (startDate: string, endDate: string) => {
 
 export const getVipCustomerReport = (startDate: string, endDate: string) => {
   return apiClient.get<VipReportResponse>('/admin/reports/vip_customers', {
+    params: { start_date: startDate, end_date: endDate }
+  });
+};
+
+export const getRefundsReport = (startDate: string, endDate: string) => {
+  return apiClient.get<RefundsReportResponse>('/admin/reports/refunds', {
     params: { start_date: startDate, end_date: endDate }
   });
 };

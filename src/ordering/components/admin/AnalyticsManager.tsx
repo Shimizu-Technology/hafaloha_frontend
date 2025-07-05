@@ -16,6 +16,7 @@ import {
   getMenuItemReport,
   getPaymentMethodReport,
   getVipCustomerReport,
+  getRefundsReport,
   getStaffUsers,
   CustomerOrderItem,
   CustomerOrderReport,
@@ -27,11 +28,16 @@ import {
   CategoryReport,
   PaymentMethodReport as PaymentMethodReportType,
   VipCustomerReport as VipCustomerReportType,
-  VipReportSummary
+  VipReportSummary,
+  RefundDetail,
+  RefundsByMethod,
+  RefundDailyTrend,
+  RefundSummary
 } from '../../../shared/api';
 import { MenuItemPerformance } from './reports/MenuItemPerformance';
 import { PaymentMethodReport } from './reports/PaymentMethodReport';
 import { VipCustomerReport } from './reports/VipCustomerReport';
+import { RefundsReport } from './reports/RefundsReport';
 
 // ------------------- Types -------------------
 type SortColumn = 'user_name' | 'total_spent' | 'order_count';
@@ -405,6 +411,20 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     repeat_customer_rate: 0
   });
 
+  // Refunds Report States
+  const [refundSummary, setRefundSummary] = useState<RefundSummary>({
+    total_refunds_count: 0,
+    total_refund_amount: 0,
+    average_refund_amount: 0,
+    refund_rate_by_orders: 0,
+    refund_rate_by_amount: 0,
+    total_orders_in_period: 0,
+    total_revenue_in_period: 0
+  });
+  const [refundsByMethod, setRefundsByMethod] = useState<RefundsByMethod[]>([]);
+  const [refundDailyTrends, setRefundDailyTrends] = useState<RefundDailyTrend[]>([]);
+  const [refundDetails, setRefundDetails] = useState<RefundDetail[]>([]);
+
   // ----- 3) Derived: Guest vs Registered vs Staff -----
   const guestRows = useMemo(() => {
     return sortReports(guestOrders, guestSortCol, guestSortDir);
@@ -495,6 +515,21 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         average_spend_per_vip: 0,
         repeat_customer_rate: 0
       });
+
+      // 10) Refunds Report
+      const refundsRes = await getRefundsReport(apiStartDate, apiEndDate);
+      setRefundSummary(refundsRes.data.summary || {
+        total_refunds_count: 0,
+        total_refund_amount: 0,
+        average_refund_amount: 0,
+        refund_rate_by_orders: 0,
+        refund_rate_by_amount: 0,
+        total_orders_in_period: 0,
+        total_revenue_in_period: 0
+      });
+      setRefundsByMethod(refundsRes.data.refunds_by_method || []);
+      setRefundDailyTrends(refundsRes.data.daily_trends || []);
+      setRefundDetails(refundsRes.data.refund_details || []);
 
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -961,7 +996,8 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
                    userSignups.length > 0 ||
                    menuItems.length > 0 ||
                    paymentMethods.length > 0 ||
-                   vipCustomers.length > 0;
+                   vipCustomers.length > 0 ||
+                   refundDetails.length > 0;
     
     if (!hasData) {
       alert('No data to export');
@@ -1210,6 +1246,57 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       // Add VIP customers sheet
       const vipCustomerSheet = XLSX.utils.json_to_sheet(customerData);
       XLSX.utils.book_append_sheet(wb, vipCustomerSheet, 'VIP Customers');
+    }
+
+    // Add refunds data
+    if (refundDetails.length > 0) {
+      // Format refunds summary data
+      const refundsSummaryData = [
+        { 'Metric': 'Total Refunds Count', 'Value': refundSummary.total_refunds_count },
+        { 'Metric': 'Total Refund Amount', 'Value': `$${Number(refundSummary.total_refund_amount).toFixed(2)}` },
+        { 'Metric': 'Average Refund Amount', 'Value': `$${Number(refundSummary.average_refund_amount).toFixed(2)}` },
+        { 'Metric': 'Refund Rate by Orders', 'Value': `${Number(refundSummary.refund_rate_by_orders).toFixed(2)}%` },
+        { 'Metric': 'Refund Rate by Amount', 'Value': `${Number(refundSummary.refund_rate_by_amount).toFixed(2)}%` },
+        { 'Metric': 'Total Orders in Period', 'Value': refundSummary.total_orders_in_period },
+        { 'Metric': 'Total Revenue in Period', 'Value': `$${Number(refundSummary.total_revenue_in_period).toFixed(2)}` }
+      ];
+
+      // Format refund details data
+      const refundsDetailData = refundDetails.map(refund => ({
+        'Order Number': refund.order_number,
+        'Customer': refund.customer_name || 'N/A',
+        'Customer Email': refund.customer_email || 'N/A',
+        'Refund Date': new Date(refund.created_at).toLocaleDateString(),
+        'Refund Amount': `$${Number(refund.amount).toFixed(2)}`,
+        'Original Order Total': `$${Number(refund.original_order_total).toFixed(2)}`,
+        'Payment Method': refund.payment_method.replace(/_/g, ' ').split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' '),
+        'Status': refund.status,
+        'Description': refund.description || 'N/A'
+      }));
+
+      // Format refunds by method data
+      const refundsByMethodData = refundsByMethod.map(method => ({
+        'Payment Method': method.payment_method.replace(/_/g, ' ').split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' '),
+        'Count': method.count,
+        'Total Amount': `$${Number(method.amount).toFixed(2)}`,
+        'Percentage': `${Number(method.percentage).toFixed(2)}%`
+      }));
+
+      // Add refunds summary sheet
+      const refundsSummarySheet = XLSX.utils.json_to_sheet(refundsSummaryData);
+      XLSX.utils.book_append_sheet(wb, refundsSummarySheet, 'Refunds Summary');
+
+      // Add refund details sheet
+      const refundsDetailSheet = XLSX.utils.json_to_sheet(refundsDetailData);
+      XLSX.utils.book_append_sheet(wb, refundsDetailSheet, 'Refund Details');
+
+      // Add refunds by method sheet
+      const refundsByMethodSheet = XLSX.utils.json_to_sheet(refundsByMethodData);
+      XLSX.utils.book_append_sheet(wb, refundsByMethodSheet, 'Refunds by Method');
     }
 
     // Write file
@@ -1499,7 +1586,8 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             userSignups.length > 0 ||
             menuItems.length > 0 ||
             paymentMethods.length > 0 ||
-            vipCustomers.length > 0) && (
+            vipCustomers.length > 0 ||
+            refundDetails.length > 0) && (
             <button
               onClick={exportAllReports}
               className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center"
@@ -1995,6 +2083,18 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       <VipCustomerReport
         vipCustomers={vipCustomers}
         summary={vipSummary}
+      />
+
+      {/*
+        ============================================
+        (H) Refunds Report - HIGH PRIORITY
+        ============================================
+      */}
+      <RefundsReport
+        summary={refundSummary}
+        refundsByMethod={refundsByMethod}
+        dailyTrends={refundDailyTrends}
+        refundDetails={refundDetails}
       />
 
       {/* 
