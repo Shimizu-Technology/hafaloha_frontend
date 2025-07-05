@@ -42,6 +42,9 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
     prefix: 'VIP',
     maxUses: '',
     oneCodePerBatch: true,
+    useCustomCodes: false,
+    customCodes: '',
+    customCode: '',
   });
   const [availableCodes, setAvailableCodes] = useState<VipAccessCode[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<number[]>([]);
@@ -109,6 +112,37 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
       return;
     }
     
+    // Validation for custom codes in generate mode
+    if (mode === 'generate' && bulkOptions.useCustomCodes) {
+      if (bulkOptions.oneCodePerBatch && !bulkOptions.customCode.trim()) {
+        toastUtils.error('Please enter a custom code');
+        return;
+      }
+      
+      if (!bulkOptions.oneCodePerBatch && !bulkOptions.customCodes.trim()) {
+        toastUtils.error('Please enter at least one custom code');
+        return;
+      }
+      
+      // For unique codes per recipient, check if we have enough custom codes
+      if (!bulkOptions.oneCodePerBatch) {
+        const emailList = emails
+          .split(/[\n,;]/)
+          .map(email => email.trim())
+          .filter(email => email.length > 0 && email.includes('@'));
+          
+        const customCodesList = bulkOptions.customCodes
+          .split(/[\n,;]+/)
+          .map(code => code.trim())
+          .filter(code => code.length > 0);
+          
+        if (customCodesList.length < emailList.length) {
+          toastUtils.error(`You provided ${customCodesList.length} custom codes but have ${emailList.length} email recipients. Please provide at least ${emailList.length} custom codes or switch to "One code for all recipients".`);
+          return;
+        }
+      }
+    }
+    
     setLoading(true);
     
     try {
@@ -127,14 +161,24 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
       
       if (mode === 'generate') {
         // Send bulk emails with newly generated VIP codes
-        response = await bulkSendVipCodes({
+        const params: any = {
           email_list: emailList,
           batch_size: parseInt(bulkOptions.batchSize.toString()),
           name: bulkOptions.name,
-          prefix: bulkOptions.prefix || undefined,
           max_uses: bulkOptions.maxUses ? parseInt(bulkOptions.maxUses) : undefined,
           one_code_per_batch: bulkOptions.oneCodePerBatch,
-        });
+        };
+        
+        // Add custom codes or prefix
+        if (bulkOptions.useCustomCodes && bulkOptions.oneCodePerBatch && bulkOptions.customCode.trim()) {
+          params.custom_code = bulkOptions.customCode;
+        } else if (bulkOptions.useCustomCodes && !bulkOptions.oneCodePerBatch && bulkOptions.customCodes.trim()) {
+          params.custom_codes = bulkOptions.customCodes;
+        } else if (!bulkOptions.useCustomCodes) {
+          params.prefix = bulkOptions.prefix || undefined;
+        }
+        
+        response = await bulkSendVipCodes(params);
       } else {
         // Send emails with existing VIP codes
         response = await sendExistingVipCodes({
@@ -225,6 +269,27 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
             <div className="space-y-4 border p-4 rounded-md bg-gray-50">
               <h3 className="font-medium">New VIP Code Options</h3>
               
+              {/* Custom Codes Toggle */}
+              <div className="mb-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="useCustomCodesEmail"
+                    checked={bulkOptions.useCustomCodes}
+                    onChange={() => setBulkOptions(prev => ({ ...prev, useCustomCodes: !prev.useCustomCodes }))}
+                    className="mr-2 h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="useCustomCodesEmail" className="text-sm font-medium text-gray-700">
+                    Use custom codes instead of generating random codes
+                  </label>
+                </div>
+                {bulkOptions.useCustomCodes && (
+                  <p className="mt-1 text-sm text-gray-500">
+                    Specify your own VIP codes (e.g., "VIP-123", "SPECIAL-2024", etc.)
+                  </p>
+                )}
+              </div>
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center mb-1">
@@ -263,17 +328,19 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Code Prefix (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={bulkOptions.prefix}
-                    onChange={(e) => setBulkOptions({...bulkOptions, prefix: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
+                {!bulkOptions.useCustomCodes && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Code Prefix (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={bulkOptions.prefix}
+                      onChange={(e) => setBulkOptions({...bulkOptions, prefix: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                )}
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -288,6 +355,50 @@ export const VipCodeEmailModal: React.FC<VipCodeEmailModalProps> = ({ onClose, s
                   />
                 </div>
               </div>
+              
+              {/* Custom Code Inputs */}
+              {bulkOptions.useCustomCodes && (
+                <div className="mt-4">
+                  {bulkOptions.oneCodePerBatch ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Custom VIP Code (for all recipients)
+                      </label>
+                      <input
+                        type="text"
+                        value={bulkOptions.customCode}
+                        onChange={(e) => setBulkOptions({...bulkOptions, customCode: e.target.value})}
+                        placeholder="VIP-GROUP-2024"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                      <p className="mt-1 text-sm text-gray-500">
+                        All recipients will receive this custom code.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Custom VIP Codes (one per line)
+                      </label>
+                      <textarea
+                        value={bulkOptions.customCodes}
+                        onChange={(e) => setBulkOptions({...bulkOptions, customCodes: e.target.value})}
+                        rows={6}
+                        placeholder="VIP-123&#10;SPECIAL-2024&#10;PREMIUM-001&#10;..."
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                      <p className="mt-1 text-sm text-gray-500">
+                        Enter each custom code on a new line. Each recipient will receive their own unique code.
+                      </p>
+                      {bulkOptions.customCodes.trim() && (
+                        <p className="mt-1 text-sm text-blue-600">
+                          {bulkOptions.customCodes.split(/[\n,;]+/).map(code => code.trim()).filter(code => code.length > 0).length} custom codes provided
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

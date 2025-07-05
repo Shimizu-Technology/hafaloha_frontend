@@ -54,6 +54,9 @@ export const VipCodesManager: React.FC = () => {
     prefix: 'VIP',
     maxUses: '',
     limitedUses: false,
+    useCustomCodes: false,
+    customCodes: '',
+    customCode: '',
   });
   const [copiedCode, setCopiedCode] = useState<number | null>(null);
   const [editingCode, setEditingCode] = useState<VipAccessCode | null>(null);
@@ -271,7 +274,7 @@ export const VipCodesManager: React.FC = () => {
     performSearch();
   }, [searchTerm, searchType, showArchived]);
   
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -279,27 +282,60 @@ export const VipCodesManager: React.FC = () => {
   const handleGenerateCodes = async () => {
     if (!restaurant) return;
     
+    // Validation for custom codes
+    if (formData.useCustomCodes && codeType === 'individual') {
+      if (!formData.customCodes.trim()) {
+        toastUtils.error('Please enter at least one custom code');
+        return;
+      }
+      
+      const customCodesList = formData.customCodes.split(/[\n,;]+/).map(code => code.trim()).filter(code => code.length > 0);
+      const requestedCount = parseInt(formData.count.toString());
+      
+      if (customCodesList.length < requestedCount) {
+        toastUtils.error(`You provided ${customCodesList.length} custom codes but requested ${requestedCount} codes. Please provide at least ${requestedCount} custom codes or reduce the count.`);
+        return;
+      }
+    }
+    
+    if (formData.useCustomCodes && codeType === 'group' && !formData.customCode.trim()) {
+      toastUtils.error('Please enter a custom code for the group');
+      return;
+    }
+    
     setLoading(true);
     try {
       let newCodes;
       
       if (codeType === 'individual') {
         // Generate individual codes
-        const params = {
+        const params: any = {
           count: parseInt(formData.count.toString()),
-          name: formData.name || 'Individual VIP',
-          prefix: formData.prefix || undefined,
+          name: formData.name || (formData.useCustomCodes ? 'Custom VIP' : 'Individual VIP'),
           max_uses: formData.limitedUses && formData.maxUses ? parseInt(formData.maxUses) : null,
         };
+        
+        // Add custom codes or prefix
+        if (formData.useCustomCodes && formData.customCodes.trim()) {
+          params.custom_codes = formData.customCodes;
+        } else if (!formData.useCustomCodes) {
+          params.prefix = formData.prefix || undefined;
+        }
         
         newCodes = await generateIndividualCodes(params) as VipAccessCode[];
       } else {
         // Generate group code
-        const params = {
-          name: formData.name || 'Group VIP',
-          prefix: formData.prefix || undefined,
+        const params: any = {
+          name: formData.name || (formData.useCustomCodes ? 'Custom Group VIP' : 'Group VIP'),
           max_uses: formData.limitedUses && formData.maxUses ? parseInt(formData.maxUses) : null,
         };
+        
+        // Add custom code or prefix for group
+        if (formData.useCustomCodes && formData.customCode.trim()) {
+          params.custom_code = formData.customCode;
+        } else if (!formData.useCustomCodes) {
+          params.prefix = formData.prefix || undefined;
+        }
         
         const groupCode = await generateGroupCode(params) as VipAccessCode;
         newCodes = [groupCode]; // Wrap single code in array for consistent handling
@@ -794,11 +830,32 @@ export const VipCodesManager: React.FC = () => {
             </div>
           </div>
           
+          {/* Custom Codes Toggle */}
+          <div className="mb-4">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="useCustomCodes"
+                checked={formData.useCustomCodes}
+                onChange={() => setFormData(prev => ({ ...prev, useCustomCodes: !prev.useCustomCodes }))}
+                className="mr-2 h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+              />
+              <label htmlFor="useCustomCodes" className="text-sm font-medium text-gray-700">
+                Use custom codes instead of generating random codes
+              </label>
+            </div>
+            {formData.useCustomCodes && (
+              <p className="mt-1 text-sm text-gray-500">
+                Specify your own VIP codes (e.g., "VIP-123", "SPECIAL-2024", etc.)
+              </p>
+            )}
+          </div>
+
           <div className="grid md:grid-cols-2 gap-4">
             {codeType === 'individual' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Number of Codes
+                  {formData.useCustomCodes ? 'Number of Codes to Create' : 'Number of Codes'}
                 </label>
                 <input
                   type="number"
@@ -809,6 +866,11 @@ export const VipCodesManager: React.FC = () => {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
+                {formData.useCustomCodes && (
+                  <p className="mt-1 text-sm text-gray-500">
+                    This will use the first {formData.count} codes from your custom list below.
+                  </p>
+                )}
               </div>
             )}
             
@@ -826,19 +888,21 @@ export const VipCodesManager: React.FC = () => {
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Custom Prefix (optional)
-              </label>
-              <input
-                type="text"
-                name="prefix"
-                value={formData.prefix}
-                onChange={handleInputChange}
-                placeholder="VIP"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
-              />
-            </div>
+            {!formData.useCustomCodes && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Custom Prefix (optional)
+                </label>
+                <input
+                  type="text"
+                  name="prefix"
+                  value={formData.prefix}
+                  onChange={handleInputChange}
+                  placeholder="VIP"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            )}
             
             {formData.limitedUses && (
               <div>
@@ -857,6 +921,55 @@ export const VipCodesManager: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Custom Code Inputs */}
+          {formData.useCustomCodes && (
+            <div className="mt-4">
+              {codeType === 'individual' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Custom VIP Codes (one per line)
+                  </label>
+                  <textarea
+                    name="customCodes"
+                    value={formData.customCodes}
+                    onChange={handleInputChange}
+                    rows={6}
+                    placeholder="VIP-123&#10;SPECIAL-2024&#10;PREMIUM-001&#10;..."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Enter each custom code on a new line. Codes can contain letters, numbers, hyphens, and underscores.
+                  </p>
+                  {formData.customCodes.trim() && (
+                    <p className="mt-1 text-sm text-blue-600">
+                      {formData.customCodes.split(/[\n,;]+/).map(code => code.trim()).filter(code => code.length > 0).length} custom codes provided
+                      {formData.customCodes.split(/[\n,;]+/).map(code => code.trim()).filter(code => code.length > 0).length < parseInt(formData.count.toString()) && 
+                        <span className="text-amber-600"> (need {parseInt(formData.count.toString())} total)</span>
+                      }
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Custom Group VIP Code
+                  </label>
+                  <input
+                    type="text"
+                    name="customCode"
+                    value={formData.customCode}
+                    onChange={handleInputChange}
+                    placeholder="VIP-GROUP-2024"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Enter your custom group code. Can contain letters, numbers, hyphens, and underscores.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
           
           <div className="flex flex-wrap gap-3">
             <button
