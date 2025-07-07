@@ -1362,7 +1362,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Search by order #, name, email, or phone"
+              placeholder="Search by order # (e.g., HAF-O-123, 123), name, email, or phone"
               className="w-full h-12 shadow-sm border-gray-300 rounded-md"
             />
           </div>
