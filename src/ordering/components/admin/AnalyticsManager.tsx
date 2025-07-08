@@ -18,6 +18,7 @@ import {
   getVipCustomerReport,
   getRefundsReport,
   getStaffUsers,
+  getMenuItemsWithSales,
   CustomerOrderItem,
   CustomerOrderReport,
   RevenueTrendItem,
@@ -34,7 +35,8 @@ import {
   RefundsByMethod,
   RefundDailyTrend,
   RefundSummary,
-  MenuItemOrderDetail
+  MenuItemOrderDetail,
+  MenuItemWithSales
 } from '../../../shared/api';
 import { MenuItemPerformance } from './reports/MenuItemPerformance';
 import { PaymentMethodReport } from './reports/PaymentMethodReport';
@@ -371,6 +373,10 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
   const [staffOrders, setStaffOrders] = useState<CustomerOrderReport[]>([]);
   const [staffMembers, setStaffMembers] = useState<Array<{ id: number; name: string; email: string; role: string; }>>([]);
   const [selectedStaffMember, setSelectedStaffMember] = useState<string>('all');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('all');
+  const [menuItemsWithSales, setMenuItemsWithSales] = useState<MenuItemWithSales[]>([]);
+  const [selectedMenuItems, setSelectedMenuItems] = useState<string[]>([]);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState<boolean>(false);
 
   // ----- Pagination and Search States -----
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
@@ -444,6 +450,12 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
 
   // ----- 4) Load Analytics -----
   async function loadAnalytics() {
+    // Prevent concurrent requests
+    if (isLoadingAnalytics) {
+      return;
+    }
+    
+    setIsLoadingAnalytics(true);
     try {
       let apiStartDate: string;
       let apiEndDate: string;
@@ -465,8 +477,14 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         apiEndDate = endDate;
       }
       
-      // 1) Customer Orders with staff filtering
-      const custRes = await getCustomerOrdersReport(apiStartDate, apiEndDate, selectedStaffMember === 'all' ? null : selectedStaffMember);
+      // 1) Customer Orders with staff, payment method, and menu item filtering
+      const custRes = await getCustomerOrdersReport(
+        apiStartDate, 
+        apiEndDate, 
+        selectedStaffMember === 'all' ? null : selectedStaffMember,
+        selectedPaymentMethod === 'all' ? null : selectedPaymentMethod,
+        selectedMenuItems.length > 0 ? selectedMenuItems : null
+      );
       
       // Set the separate order types
       setCustomerOrders(custRes.customer_orders || []);
@@ -540,6 +558,8 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     } catch (err) {
       console.error('Failed to load analytics:', err);
       alert('Failed to load analytics. Check console for details.');
+    } finally {
+      setIsLoadingAnalytics(false);
     }
   }
 
@@ -554,21 +574,39 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
     }
   }
 
+  // Load menu items with sales for filtering
+  async function loadMenuItemsForFiltering() {
+    try {
+      const menuItemsRes = await getMenuItemsWithSales();
+      setMenuItemsWithSales(menuItemsRes.menu_items || []);
+    } catch (err) {
+      console.error('Failed to load menu items for filtering:', err);
+      // Don't show alert for this as it's not critical
+    }
+  }
+
   // ----- 5) On Mount: Load default data -----
   React.useEffect(() => {
     // On first mount, fetch with the default date range and load staff users
     loadAnalytics();
     loadStaffUsers();
+    loadMenuItemsForFiltering();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload analytics when staff member filter changes
+  // Reload analytics when staff member, payment method, or menu item filter changes
   React.useEffect(() => {
+    // Only reload if we have staff members loaded and filters have actually changed
     if (staffMembers.length > 0) {
-      loadAnalytics();
+      // Use setTimeout to debounce rapid filter changes
+      const timeoutId = setTimeout(() => {
+        loadAnalytics();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStaffMember]);
+  }, [selectedStaffMember, selectedPaymentMethod, selectedMenuItems.join(',')]);
 
   // ----- Helper Functions for Filtering and Pagination -----
   
@@ -967,10 +1005,38 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
       XLSX.utils.book_append_sheet(wb, itemsSheet, 'Aggregated Items');
     }
 
-    // Include time in filename if time filter is enabled
-    const filename = useTimeFilter
-      ? `Enhanced_StaffOrders_${startDate}T${startTime}_to_${endDate}T${endTime}.xlsx`
-      : `Enhanced_StaffOrders_${startDate}_to_${endDate}.xlsx`;
+    // Build filename with filter information
+    let filename = useTimeFilter
+      ? `Enhanced_StaffOrders_${startDate}T${startTime}_to_${endDate}T${endTime}`
+      : `Enhanced_StaffOrders_${startDate}_to_${endDate}`;
+    
+    // Add filter information to filename
+    const filterParts = [];
+    if (selectedStaffMember !== 'all' && staffMembers.length > 0) {
+      const staffName = staffMembers.find(s => s.id.toString() === selectedStaffMember)?.name;
+      if (staffName) {
+        filterParts.push(`Staff_${staffName.replace(/[^a-zA-Z0-9]/g, '_')}`);
+      }
+    }
+    if (selectedPaymentMethod !== 'all') {
+      filterParts.push(`Payment_${selectedPaymentMethod}`);
+    }
+    if (selectedMenuItems.length > 0) {
+      if (selectedMenuItems.length === 1) {
+        const menuItem = menuItemsWithSales.find(mi => mi.id.toString() === selectedMenuItems[0]);
+        if (menuItem) {
+          filterParts.push(`Item_${menuItem.name.replace(/[^a-zA-Z0-9]/g, '_')}`);
+        }
+      } else {
+        filterParts.push(`Items_${selectedMenuItems.length}_selected`);
+      }
+    }
+    
+    if (filterParts.length > 0) {
+      filename += `_${filterParts.join('_')}`;
+    }
+    
+    filename += '.xlsx';
     
     XLSX.writeFile(wb, filename);
   }
@@ -1703,9 +1769,20 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={loadAnalytics}
-            className="w-full sm:w-auto px-6 py-3 sm:py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium text-base sm:text-sm"
+            disabled={isLoadingAnalytics}
+            className="w-full sm:w-auto px-6 py-3 sm:py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium text-base sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Load Analytics
+            {isLoadingAnalytics ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Loading...
+              </span>
+            ) : (
+              'Load Analytics'
+            )}
           </button>
           
           {/* Export button - only show if we have data */}
@@ -1880,9 +1957,29 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Staff Orders</h3>
               <p className="text-gray-600 text-sm mt-1">
                 {filteredAndSortedStaff.length} staff orders
-                {selectedStaffMember !== 'all' && staffMembers.length > 0 && (
+                {(selectedStaffMember !== 'all' || selectedPaymentMethod !== 'all') && (
                   <span className="block sm:inline ml-0 sm:ml-2 text-green-600">
-                    • Filtered by: {staffMembers.find(s => s.id.toString() === selectedStaffMember)?.name}
+                    • Filtered by: {[
+                      selectedStaffMember !== 'all' && staffMembers.length > 0 
+                        ? staffMembers.find(s => s.id.toString() === selectedStaffMember)?.name
+                        : null,
+                      selectedPaymentMethod !== 'all' 
+                        ? (() => {
+                            const paymentMethodNames: Record<string, string> = {
+                              'cash': 'Cash',
+                              'stripe_reader': 'Card Reader',
+                              'credit_card': 'Credit Card',
+                              'stripe': 'Stripe',
+                              'house_account': 'House Account',
+                              'clover': 'Clover',
+                              'revel': 'Revel',
+                              'paypal': 'PayPal',
+                              'other': 'Other'
+                            };
+                            return paymentMethodNames[selectedPaymentMethod] || selectedPaymentMethod;
+                          })()
+                        : null
+                    ].filter(Boolean).join(' + ')}
                   </span>
                 )}
               </p>
@@ -1899,26 +1996,168 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
             )}
           </div>
 
-          {/* Staff Filter */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filter by Staff Member
-            </label>
-            <select
-              value={selectedStaffMember}
-              onChange={(e) => setSelectedStaffMember(e.target.value)}
-              className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            >
-              <option value="all">All Staff Members</option>
-              {staffMembers.map((staff) => (
-                <option key={staff.id} value={staff.id.toString()}>
-                  {staff.name} ({staff.email || 'No email'})
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-              Filter staff orders by specific employee.
-            </p>
+          {/* Filter Controls */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center mb-3">
+              <svg className="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+              </svg>
+              <h4 className="text-sm font-semibold text-gray-700">Staff Order Filters</h4>
+            </div>
+            
+            {/* Filters Grid - Horizontal on Desktop, Stacked on Mobile */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Staff Filter */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Staff Member
+                </label>
+                <select
+                  value={selectedStaffMember}
+                  onChange={(e) => setSelectedStaffMember(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-sm"
+                >
+                  <option value="all">All Staff Members</option>
+                  {staffMembers.map((staff) => (
+                    <option key={staff.id} value={staff.id.toString()}>
+                      {staff.name} ({staff.email || 'No email'})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500">
+                  Filter by specific employee
+                </p>
+              </div>
+
+              {/* Payment Method Filter */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Payment Method
+                </label>
+                <select
+                  value={selectedPaymentMethod}
+                  onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-sm"
+                >
+                  <option value="all">All Payment Methods</option>
+                  <option value="cash">💰 Cash</option>
+                  <option value="stripe_reader">💳 Card Reader</option>
+                  <option value="credit_card">💳 Credit Card</option>
+                  <option value="stripe">🌐 Stripe</option>
+                  <option value="house_account">🏠 House Account</option>
+                  <option value="clover">☘️ Clover</option>
+                  <option value="revel">🎭 Revel</option>
+                  <option value="paypal">🅿️ PayPal</option>
+                  <option value="other">❓ Other</option>
+                </select>
+                <p className="text-xs text-gray-500">
+                  Filter by payment method used
+                </p>
+              </div>
+
+              {/* Menu Items Filter */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Menu Items
+                </label>
+                <div className="relative">
+                  <select
+                    multiple
+                    value={selectedMenuItems}
+                    onChange={(e) => {
+                      const values = Array.from(e.target.selectedOptions, option => option.value);
+                      setSelectedMenuItems(values);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-sm min-h-[38px] max-h-32 overflow-y-auto"
+                    size={Math.min(6, Math.max(1, menuItemsWithSales.length))}
+                  >
+                    {menuItemsWithSales.map((item) => (
+                      <option key={item.id} value={item.id.toString()}>
+                        🍽️ {item.name} ({item.category_name})
+                      </option>
+                    ))}
+                  </select>
+                  {menuItemsWithSales.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400 pointer-events-none">
+                      Loading menu items...
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  Hold Ctrl/Cmd to select multiple items
+                </p>
+              </div>
+            </div>
+            
+            {/* Active Filters Display */}
+            {(selectedStaffMember !== 'all' || selectedPaymentMethod !== 'all' || selectedMenuItems.length > 0) && (
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex items-start space-x-2">
+                  <span className="text-xs font-medium text-gray-600 mt-1">Active Filters:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedStaffMember !== 'all' && staffMembers.length > 0 && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        👤 {staffMembers.find(s => s.id.toString() === selectedStaffMember)?.name}
+                        <button
+                          onClick={() => setSelectedStaffMember('all')}
+                          className="ml-1 text-green-600 hover:text-green-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )}
+                    {selectedPaymentMethod !== 'all' && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        💳 {(() => {
+                          const paymentMethodNames: Record<string, string> = {
+                            'cash': 'Cash',
+                            'stripe_reader': 'Card Reader',
+                            'credit_card': 'Credit Card',
+                            'stripe': 'Stripe',
+                            'house_account': 'House Account',
+                            'clover': 'Clover',
+                            'revel': 'Revel',
+                            'paypal': 'PayPal',
+                            'other': 'Other'
+                          };
+                          return paymentMethodNames[selectedPaymentMethod] || selectedPaymentMethod;
+                        })()}
+                        <button
+                          onClick={() => setSelectedPaymentMethod('all')}
+                          className="ml-1 text-blue-600 hover:text-blue-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )}
+                    {selectedMenuItems.map((itemId) => {
+                      const item = menuItemsWithSales.find(mi => mi.id.toString() === itemId);
+                      return item ? (
+                        <span key={itemId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          🍽️ {item.name}
+                          <button
+                            onClick={() => setSelectedMenuItems(prev => prev.filter(id => id !== itemId))}
+                            className="ml-1 text-purple-600 hover:text-purple-800"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ) : null;
+                    })}
+                    <button
+                      onClick={() => {
+                        setSelectedStaffMember('all');
+                        setSelectedPaymentMethod('all');
+                        setSelectedMenuItems([]);
+                      }}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Staff Search and Sort Controls */}
@@ -1973,13 +2212,13 @@ export function AnalyticsManager({ restaurantId }: AnalyticsManagerProps) {
               </div>
               <p className="text-gray-500 text-lg font-medium">No staff orders found</p>
               <p className="text-gray-400 text-sm mt-1">
-                {selectedStaffMember !== 'all' && staffMembers.length > 0 
-                  ? `No orders found for ${staffMembers.find(s => s.id.toString() === selectedStaffMember)?.name || 'selected staff member'} in this date range.`
+                {(selectedStaffMember !== 'all' || selectedPaymentMethod !== 'all' || selectedMenuItems.length > 0)
+                  ? `No orders found with the current filters in this date range.`
                   : 'No staff orders found in the selected date range.'
                 }
               </p>
               <p className="text-gray-400 text-sm mt-2">
-                Try adjusting your date range or selecting a different staff member.
+                Try adjusting your date range, staff member filter, payment method filter, or menu item selection.
               </p>
             </div>
           )}

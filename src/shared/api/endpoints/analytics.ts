@@ -74,6 +74,20 @@ export interface CustomerOrdersResponse {
   end_date: string;
   restaurant_id: number;
   restaurant_name: string;
+  staff_member_filter?: string | null;
+  payment_method_filter?: string | null;
+  menu_item_ids_filter?: string[] | null;
+}
+
+export interface MenuItemWithSales {
+  id: number;
+  name: string;
+  category_id: number;
+  category_name: string;
+}
+
+export interface MenuItemsWithSalesResponse {
+  menu_items: MenuItemWithSales[];
 }
 
 export interface RevenueTrendItem {
@@ -130,13 +144,25 @@ export interface UserActivityHeatmapResponse {
 export const getCustomerOrdersReport = async (
   startDate: string, 
   endDate: string,
-  staffMemberId?: string | null
+  staffMemberId?: string | null,
+  paymentMethod?: string | null,
+  menuItemIds?: string[] | null
 ): Promise<CustomerOrdersResponse> => {
   const params: Record<string, string> = { start: startDate, end: endDate };
   
   // Add staff member filter if provided
   if (staffMemberId && staffMemberId !== 'all') {
     params.staff_member_id = staffMemberId;
+  }
+  
+  // Add payment method filter if provided
+  if (paymentMethod && paymentMethod !== 'all') {
+    params.payment_method = paymentMethod;
+  }
+  
+  // Add menu item IDs filter if provided
+  if (menuItemIds && menuItemIds.length > 0) {
+    params.menu_item_ids = menuItemIds.join(',');
   }
   
   return api.get<CustomerOrdersResponse>('/admin/analytics/customer_orders', params);
@@ -182,4 +208,11 @@ export const getUserActivityHeatmap = async (startDate: string, endDate: string)
  */
 export const getStaffUsers = async (): Promise<{ staff_users: Array<{ id: number; name: string; email: string; role: string; }> }> => {
   return api.get('/admin/analytics/staff_users');
+};
+
+/**
+ * Get menu items that have sales data
+ */
+export const getMenuItemsWithSales = async (): Promise<MenuItemsWithSalesResponse> => {
+  return api.get<MenuItemsWithSalesResponse>('/admin/analytics/menu_items_with_sales');
 };
