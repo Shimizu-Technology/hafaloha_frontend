@@ -157,6 +157,32 @@ const MerchandiseManager: React.FC<MerchandiseManagerProps> = ({ restaurantId })
 
   // ---------- Inventory modal ----------
   const [showInventoryModal, setShowInventoryModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showInventoryModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showInventoryModal]);
+
   const [selectedItemForInventory, setSelectedItemForInventory] = useState<any>(null);
 
   // ---------- Collection form state ----------

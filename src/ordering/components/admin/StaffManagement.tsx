@@ -102,6 +102,32 @@ function StaffManagementContent() {
   
   // Bulk payment modal state
   const [showBulkPaymentModal, setShowBulkPaymentModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showBulkPaymentModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showBulkPaymentModal]);
+
   const [bulkPaymentForm, setBulkPaymentForm] = useState({
     amount: '',
     type: 'payment' as 'payment' | 'charge',
@@ -126,6 +152,32 @@ function StaffManagementContent() {
   
   // User linking state
   const [showUserLinkModal, setShowUserLinkModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showUserLinkModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showUserLinkModal]);
+
   const [userLinkingStaff, setUserLinkingStaff] = useState<StaffMember | null>(null);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [loadingAvailableUsers, setLoadingAvailableUsers] = useState(false);
@@ -151,6 +203,32 @@ function StaffManagementContent() {
   
   // Enhanced export functions
   const [showExportModal, setShowExportModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showExportModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showExportModal]);
+
   const [exportOptions, setExportOptions] = useState({
     exportType: 'staff_only' as 'staff_only' | 'staff_with_transactions' | 'transactions_only',
     includeUserAssociations: true,

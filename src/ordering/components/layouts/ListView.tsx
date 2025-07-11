@@ -84,6 +84,32 @@ export const ListView: React.FC<ListViewProps> = ({
 const ListViewItem: React.FC<{ item: MenuItem }> = ({ item }) => {
   const addToCart = useOrderStore((state) => state.addToCart);
   const [showCustomization, setShowCustomization] = useState(false);
+
+// Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showCustomization) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showCustomization]);
+
   const [buttonClicked, setButtonClicked] = useState(false);
   const { restaurant } = useRestaurantStore();
   

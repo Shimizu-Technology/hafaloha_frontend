@@ -26,6 +26,31 @@ export const LayoutEditorManager: React.FC<LayoutEditorManagerProps> = ({ onNavi
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showUnsavedModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showUnsavedModal]);
   
   // Store the navigation callback that triggered the modal
   const pendingNavigationRef = useRef<(() => void) | null>(null);

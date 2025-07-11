@@ -58,12 +58,64 @@ export function MenusSettings({ restaurantId }: MenusSettingsProps) {
 
   // Modal state for creating or editing a menu
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (isModalOpen) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [isModalOpen]);
+
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingMenu, setEditingMenu] = useState<Partial<Menu>>({ name: '' });
   
   // State for category management modal
   const [selectedMenuForCategories, setSelectedMenuForCategories] = useState<Menu | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (isCategoryModalOpen) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [isCategoryModalOpen]);
+
   const [categoryModalLoading, setCategoryModalLoading] = useState(false);
   const [prefetchedCategories, setPrefetchedCategories] = useState<Category[]>([]);
   

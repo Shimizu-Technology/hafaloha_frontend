@@ -1,6 +1,6 @@
 // src/ordering/components/admin/AdminEditOrderModal.tsx
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import toastUtils from '../../../shared/utils/toastUtils';
 import { SetEtaModal } from './SetEtaModal';
 import { SearchableMenuItemSelector } from './SearchableMenuItemSelector';
@@ -211,6 +211,30 @@ export function AdminEditOrderModal({
   onClose,
   onSave,
 }: AdminEditOrderModalProps): JSX.Element {
+
+  // ----------------------------------------------------------------
+  // Prevent body scroll when modal is open
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    // Store the original overflow style
+    const originalOverflow = document.body.style.overflow;
+    
+    // Disable body scrolling
+    document.body.style.overflow = 'hidden';
+    
+    // Cleanup function to restore scrolling when modal unmounts
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+  
+  // Enhanced onClose to ensure scroll is restored
+  const handleClose = useCallback(() => {
+    // Restore body scrolling before closing
+    document.body.style.overflow = '';
+    onClose();
+  }, [onClose]);
+
   // ----------------------------------------------------------------
   // 1) Original vs. local items
   // ----------------------------------------------------------------
@@ -548,12 +572,64 @@ const [, setLoadingMenuItemData] = useState(false);
 
   // ETA modals (for pending -> preparing transitions)
   const [showEtaModal, setShowEtaModal] = useState(false);
+
+  // // Lock body scroll when modal is open
+  // useEffect(() => {
+  //   const html = document.documentElement;
+  //   const body = document.body;
+
+  //   if (showEtaModal) {
+  //     body.style.overflow = 'hidden';
+  //     html.style.overflow = 'hidden';
+  //     body.style.position = 'fixed'; // Prevent iOS scroll bounce
+  //     body.style.width = '100%';
+  //   } else {
+  //     body.style.overflow = '';
+  //     html.style.overflow = '';
+  //     body.style.position = '';
+  //     body.style.width = '';
+  //   }
+
+  //   return () => {
+  //     body.style.overflow = '';
+  //     html.style.overflow = '';
+  //     body.style.position = '';
+  //     body.style.width = '';
+  //   };
+  // }, [showEtaModal]);
+
   const [etaMinutes, setEtaMinutes] = useState(
     requiresAdvanceNotice(order) ? 10 : 5
   );
 
   // If status is preparing, we might let user update the ETA
   const [showEtaUpdateModal, setShowEtaUpdateModal] = useState(false);
+
+  //   // Lock body scroll when modal is open
+  //   useEffect(() => {
+  //     const html = document.documentElement;
+  //     const body = document.body;
+  
+  //     if (showEtaUpdateModal) {
+  //       body.style.overflow = 'hidden';
+  //       html.style.overflow = 'hidden';
+  //       body.style.position = 'fixed'; // Prevent iOS scroll bounce
+  //       body.style.width = '100%';
+  //     } else {
+  //       body.style.overflow = '';
+  //       html.style.overflow = '';
+  //       body.style.position = '';
+  //       body.style.width = '';
+  //     }
+  
+  //     return () => {
+  //       body.style.overflow = '';
+  //       html.style.overflow = '';
+  //       body.style.position = '';
+  //       body.style.width = '';
+  //     };
+  //   }, [showEtaUpdateModal]);
+
   const [updateEtaMinutes, setUpdateEtaMinutes] = useState(() => {
     if (order.estimatedPickupTime || order.estimated_pickup_time) {
       const etaDate = new Date(
@@ -581,8 +657,60 @@ const [, setLoadingMenuItemData] = useState(false);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [maxRefundable, setMaxRefundable] = useState<number>(0);
   const [showRefundModal, setShowRefundModal] = useState(false);
+
+  // // Lock body scroll when modal is open
+  // useEffect(() => {
+  //   const html = document.documentElement;
+  //   const body = document.body;
+
+  //   if (showRefundModal) {
+  //     body.style.overflow = 'hidden';
+  //     html.style.overflow = 'hidden';
+  //     body.style.position = 'fixed'; // Prevent iOS scroll bounce
+  //     body.style.width = '100%';
+  //   } else {
+  //     body.style.overflow = '';
+  //     html.style.overflow = '';
+  //     body.style.position = '';
+  //     body.style.width = '';
+  //   }
+
+  //   return () => {
+  //     body.style.overflow = '';
+  //     html.style.overflow = '';
+  //     body.style.position = '';
+  //     body.style.width = '';
+  //   };
+  // }, [showRefundModal]);
+
   const [showAdditionalPaymentModal, setShowAdditionalPaymentModal] =
     useState(false);
+
+  // // Lock body scroll when modal is open
+  // useEffect(() => {
+  //   const html = document.documentElement;
+  //   const body = document.body;
+
+  //   if (showAdditionalPaymentModal) {
+  //     body.style.overflow = 'hidden';
+  //     html.style.overflow = 'hidden';
+  //     body.style.position = 'fixed'; // Prevent iOS scroll bounce
+  //     body.style.width = '100%';
+  //   } else {
+  //     body.style.overflow = '';
+  //     html.style.overflow = '';
+  //     body.style.position = '';
+  //     body.style.width = '';
+  //   }
+
+  //   return () => {
+  //     body.style.overflow = '';
+  //     html.style.overflow = '';
+  //     body.style.position = '';
+  //     body.style.width = '';
+  //   };
+  // }, [showAdditionalPaymentModal]);
+
   const [showPaymentHandlingDialog, setShowPaymentHandlingDialog] =
     useState(false);
   
@@ -3501,7 +3629,7 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
                 Order #{order.order_number || order.id}
               </h3>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="text-gray-400 hover:text-gray-600 transition-colors p-2
                   rounded-full hover:bg-gray-100 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label="Close"
@@ -3629,7 +3757,7 @@ toastUtils.error('Network issue when verifying inventory. Please try again or ch
           {/* Footer */}
           <div className="bg-white border-t border-gray-200 p-4 flex justify-end space-x-3 shrink-0">
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm md:text-base font-medium hover:bg-gray-50 focus:outline-none min-h-[44px]"
             >
               Cancel

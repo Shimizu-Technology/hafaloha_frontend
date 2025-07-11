@@ -48,6 +48,31 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // which order is selected for the "details" modal
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (selectedOrder) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [selectedOrder]);
+
   // which "tab" we are viewing
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
 
@@ -111,17 +136,119 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
   // for the "Set ETA" modal
   const [showEtaModal, setShowEtaModal] = useState(false);
+
+    // Lock body scroll when modal is open
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      if (showEtaModal) {
+        body.style.overflow = 'hidden';
+        html.style.overflow = 'hidden';
+        body.style.position = 'fixed'; // Prevent iOS scroll bounce
+        body.style.width = '100%';
+      } else {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      }
+  
+      return () => {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      };
+    }, [showEtaModal]);
+
   const [etaMinutes, setEtaMinutes] = useState(5);
   const [orderToPrep, setOrderToPrep] = useState<any | null>(null);
 
   // for the "Edit Order" modal
   const [editingOrder, setEditingOrder] = useState<any | null>(null);
 
+    // Lock body scroll when modal is open
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      if (editingOrder) {
+        body.style.overflow = 'hidden';
+        html.style.overflow = 'hidden';
+        body.style.position = 'fixed'; // Prevent iOS scroll bounce
+        body.style.width = '100%';
+      } else {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      }
+  
+      return () => {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      };
+    }, [editingOrder]);
+
   // for the "Staff Order" modal (POS)
   const [showStaffOrderModal, setShowStaffOrderModal] = useState(false);
+
+    // Lock body scroll when modal is open
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      if (showStaffOrderModal) {
+        body.style.overflow = 'hidden';
+        html.style.overflow = 'hidden';
+        body.style.position = 'fixed'; // Prevent iOS scroll bounce
+        body.style.width = '100%';
+      } else {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      }
+  
+      return () => {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      };
+    }, [showStaffOrderModal]);
   
   // for the "Refund" modal
   const [showRefundModal, setShowRefundModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showRefundModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showRefundModal]);
+
   const [orderToRefund, setOrderToRefund] = useState<any | null>(null);
 
   // for mobile menu (if you have a contextual menu or dropdown) - not used with server-side pagination
@@ -147,6 +274,32 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   // NEW: State for inventory-based cancellation flow
   //
   const [showInventoryDialog, setShowInventoryDialog] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showInventoryDialog) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showInventoryDialog]);
+
   const [orderToCancel, setOrderToCancel] = useState<any | null>(null);
   const [batchOrdersToCancel, setBatchOrdersToCancel] = useState<any[]>([]);
   const [isBatchCancel, setIsBatchCancel] = useState(false);

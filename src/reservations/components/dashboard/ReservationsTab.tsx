@@ -75,6 +75,31 @@ export default function ReservationsTab() {
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showCreateModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showCreateModal]);
+
   // Status and error handling
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

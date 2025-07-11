@@ -38,6 +38,32 @@ export const LocationCapacitiesManager: React.FC = () => {
   const [isCapacitiesLoading, setIsCapacitiesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (isModalOpen) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [isModalOpen]);
+
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [selectedCapacity, setSelectedCapacity] = useState<LocationCapacity | null>(null);
 

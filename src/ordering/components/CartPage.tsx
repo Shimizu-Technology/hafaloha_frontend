@@ -1,5 +1,5 @@
 // src/ordering/components/CartPage.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, Minus, Plus, Settings } from 'lucide-react';
 import { useOrderStore, CartItem } from '../store/orderStore';
@@ -15,6 +15,31 @@ export function CartPage() {
   
   // State for customization modal
   const [itemToCustomize, setItemToCustomize] = useState<any>(null);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (itemToCustomize) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [itemToCustomize]);
 
   // FE-018: Option availability helper functions
   const getOptionAvailableQuantity = useCallback((option: any): number => {

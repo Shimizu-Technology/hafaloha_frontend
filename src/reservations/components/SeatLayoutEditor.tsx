@@ -114,6 +114,32 @@ export default function SeatLayoutEditor() {
 
   // Rename seats modal
   const [renameModalOpen, setRenameModalOpen] = useState(false);
+
+    // Lock body scroll when modal is open
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      if (renameModalOpen) {
+        body.style.overflow = 'hidden';
+        html.style.overflow = 'hidden';
+        body.style.position = 'fixed'; // Prevent iOS scroll bounce
+        body.style.width = '100%';
+      } else {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      }
+  
+      return () => {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      };
+    }, [renameModalOpen]);
+
   const [renameModalSeats, setRenameModalSeats] = useState<DBSeat[]>([]);
   const [renameModalSectionName, setRenameModalSectionName] = useState('');
 

@@ -1,5 +1,5 @@
 // src/ordering/components/Hero.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ReservationModal } from './reservation/ReservationModal';
 
@@ -10,6 +10,31 @@ import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 
 export function Hero() {
   const [showReservationModal, setShowReservationModal] = useState(false);
+
+  // Lock body scroll when modal is open
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      if (showReservationModal) {
+        body.style.overflow = 'hidden';
+        html.style.overflow = 'hidden';
+        body.style.position = 'fixed'; // Prevent iOS scroll bounce
+        body.style.width = '100%';
+      } else {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      }
+  
+      return () => {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      };
+    }, [showReservationModal]);
 
   // Get the restaurant from the store
   const restaurant = useRestaurantStore((state) => state.restaurant);

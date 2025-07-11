@@ -122,6 +122,31 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
 
   // States for delete confirmation modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showDeleteModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showDeleteModal]);
   
   // Open delete confirmation modal
   function openDeleteModal() {
@@ -166,6 +191,32 @@ export function UserModal({ user, isCreateMode, onClose, restaurantId }: UserMod
 
   // States for reset password modal
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+
+  // Lock body scroll when modal is open
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      if (showPasswordResetModal) {
+        body.style.overflow = 'hidden';
+        html.style.overflow = 'hidden';
+        body.style.position = 'fixed'; // Prevent iOS scroll bounce
+        body.style.width = '100%';
+      } else {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      }
+  
+      return () => {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      };
+    }, [showPasswordResetModal]);
+  
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);

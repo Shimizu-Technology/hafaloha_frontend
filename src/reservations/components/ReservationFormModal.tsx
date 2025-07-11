@@ -81,6 +81,31 @@ export default function ReservationFormModal({ onClose, onSuccess, defaultDate }
   const [allSets, setAllSets] = useState<string[][]>([[], [], []]);
   const [showSeatMapModal, setShowSeatMapModal] = useState(false);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showSeatMapModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showSeatMapModal]);
+
   // Layout
   const [layoutSections, setLayoutSections] = useState<SeatSectionData[]>([]);
   const [layoutLoading, setLayoutLoading]   = useState(false);

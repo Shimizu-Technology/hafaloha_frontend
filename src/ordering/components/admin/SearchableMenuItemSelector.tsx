@@ -17,6 +17,31 @@ export function SearchableMenuItemSelector({ onSelect, onClose }: SearchableMenu
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
+
+    // Lock body scroll when modal is open
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      if (showCustomizationModal) {
+        body.style.overflow = 'hidden';
+        html.style.overflow = 'hidden';
+        body.style.position = 'fixed'; // Prevent iOS scroll bounce
+        body.style.width = '100%';
+      } else {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      }
+  
+      return () => {
+        body.style.overflow = '';
+        html.style.overflow = '';
+        body.style.position = '';
+        body.style.width = '';
+      };
+    }, [showCustomizationModal]);
   
   const modalRef = useRef<HTMLDivElement>(null);
   

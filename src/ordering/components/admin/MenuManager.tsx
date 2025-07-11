@@ -175,6 +175,32 @@ export function MenuManager({
   
   // Unified clone/copy menu item modal state
   const [cloneModalOpen, setCloneModalOpen] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (cloneModalOpen) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [cloneModalOpen]);
+
   const [itemToClone, setItemToClone] = useState<MenuItem | null>(null);
 
   // Additional filter checkboxes - these will be client-side filters
@@ -198,6 +224,32 @@ export function MenuManager({
 
   // Inventory modal state
   const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (inventoryModalOpen) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [inventoryModalOpen]);
+
   const [inventoryModalItem, setInventoryModalItem] = useState<MenuItem | null>(null);
   
   // For item-specific polling when editing

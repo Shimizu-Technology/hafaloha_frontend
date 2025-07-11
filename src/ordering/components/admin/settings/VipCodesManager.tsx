@@ -74,6 +74,32 @@ export const VipCodesManager: React.FC = () => {
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [emailingCode, setEmailingCode] = useState<VipAccessCode | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (showEmailModal) {
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      body.style.position = 'fixed'; // Prevent iOS scroll bounce
+      body.style.width = '100%';
+    } else {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    }
+
+    return () => {
+      body.style.overflow = '';
+      html.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+    };
+  }, [showEmailModal]);
+
   const [codeRecipients, setCodeRecipients] = useState<{[key: number]: Recipient[]}>({});
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   
