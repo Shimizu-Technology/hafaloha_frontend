@@ -999,26 +999,7 @@ export function FundraiserManager({ restaurantId, onManage, editingFundraiser, o
                     </label>
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Display Settings
-                    </label>
-                    
-                    <div className="space-y-2">
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.settings.show_progress_bar}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            settings: { ...prev.settings, show_progress_bar: e.target.checked }
-                          }))}
-                          className="mr-2"
-                        />
-                        <span className="text-sm text-gray-700">Show fundraiser progress bar</span>
-                      </label>
-                    </div>
-                  </div>
+                  {/* Display settings removed: progress bar option is not configurable for now */}
                 </div>
               </div>
 

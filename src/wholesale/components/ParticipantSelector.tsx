@@ -1,5 +1,5 @@
 // src/wholesale/components/ParticipantSelector.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { WholesaleParticipant } from '../services/wholesaleApi';
 
 interface ParticipantSelectorProps {
@@ -143,14 +143,9 @@ export default function ParticipantSelector({
                       </svg>
                     </div>
                   )}
-                  <div className="flex-grow">
-                    <div className="font-medium text-gray-900">{participant.name}</div>
-                    {participant.description && (
-                      <div className="text-xs text-gray-400 mt-1 line-clamp-2">
-                        {participant.description}
-                      </div>
-                    )}
-                  </div>
+                   <div className="flex-grow">
+                     <div className="font-medium text-gray-900">{participant.name}</div>
+                   </div>
 
                 </div>
               </button>
@@ -159,16 +154,12 @@ export default function ParticipantSelector({
         )}
       </div>
 
-      {/* Selected Participant Details */}
+      {/* Selected Participant Details (description removed for current scope) */}
       {selectedParticipant && (
         <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
           <div className="flex items-start space-x-3">
             {selectedParticipant.photoUrl ? (
-              <img 
-                src={selectedParticipant.photoUrl} 
-                alt={selectedParticipant.name}
-                className="w-12 h-12 rounded-full object-cover"
-              />
+              <img src={selectedParticipant.photoUrl} alt={selectedParticipant.name} className="w-12 h-12 rounded-full object-cover" />
             ) : (
               <div className="w-12 h-12 bg-blue-200 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -177,15 +168,7 @@ export default function ParticipantSelector({
               </div>
             )}
             <div className="flex-grow">
-              <h4 className="font-medium text-blue-900">
-                Supporting: {selectedParticipant.name}
-              </h4>
-
-              {selectedParticipant.description && (
-                <p className="text-sm text-blue-600 mt-2">
-                  {selectedParticipant.description}
-                </p>
-              )}
+              <h4 className="font-medium text-blue-900">Supporting: {selectedParticipant.name}</h4>
             </div>
           </div>
         </div>

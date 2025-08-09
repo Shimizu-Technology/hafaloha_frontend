@@ -2,16 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { wholesaleApi } from '../services/wholesaleApi';
 
-interface PaymentResponse {
-  success: boolean;
-  payment?: any;
-  stripe?: {
-    clientSecret: string;
-    publishableKey: string;
-  };
-  errors?: string[];
-  message?: string;
-}
+// (unused) Placeholder for future API typings – intentionally omitted to avoid linter noise
 
 interface WholesaleStripeCheckoutProps {
   amount: number; // Amount in cents
@@ -42,16 +33,16 @@ export const WholesaleStripeCheckout = React.forwardRef<WholesaleStripeCheckoutR
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [stripe, setStripe] = useState<any>(null);
   const [elements, setElements] = useState<any>(null);
-  const [currentOrderId, setCurrentOrderId] = useState<number | null>(null);
+  const [cardElement, setCardElement] = useState<any>(null);
+  // Track current order if needed later (removed unused state to satisfy linter)
 
   // Use refs to track initialization state
   const stripeLoaded = useRef(false);
   const elementsInitialized = useRef(false);
-  const paymentElementMounted = useRef(false);
-  const paymentElementRef = useRef<HTMLDivElement>(null);
+  const cardElementMounted = useRef(false);
+  const cardElementRef = useRef<HTMLDivElement>(null);
 
   // Load Stripe.js
   useEffect(() => {
@@ -94,9 +85,9 @@ export const WholesaleStripeCheckout = React.forwardRef<WholesaleStripeCheckoutR
     };
   }, [publishableKey, testMode]);
 
-  // Initialize Stripe Elements when we have clientSecret
+  // Initialize Stripe Elements once
   useEffect(() => {
-    if (testMode || !stripe || !clientSecret || elementsInitialized.current || error) {
+    if (testMode || !stripe || elementsInitialized.current || error) {
       return;
     }
 
@@ -104,11 +95,10 @@ export const WholesaleStripeCheckout = React.forwardRef<WholesaleStripeCheckoutR
 
     try {
       const options = {
-        clientSecret,
         appearance: {
           theme: 'stripe' as const,
           variables: {
-            colorPrimary: '#2563eb', // Blue-600
+            colorPrimary: '#2563eb',
             colorBackground: '#ffffff',
             colorText: '#374151',
             colorDanger: '#dc2626',
@@ -125,34 +115,30 @@ export const WholesaleStripeCheckout = React.forwardRef<WholesaleStripeCheckoutR
       setError(err.message || 'Failed to initialize Stripe Elements');
       onPaymentError(err);
     }
-  }, [stripe, clientSecret, testMode, error, onPaymentError]);
+  }, [stripe, testMode, error, onPaymentError]);
 
-  // Mount Payment Element
+  // Mount Card Element (always visible)
   useEffect(() => {
-    if (testMode || !elements || paymentElementMounted.current || !paymentElementRef.current) {
+    if (testMode || !elements || cardElementMounted.current || !cardElementRef.current) {
       return;
     }
 
-    paymentElementMounted.current = true;
+    cardElementMounted.current = true;
 
     try {
-      const paymentElement = elements.create('payment');
-      paymentElement.mount(paymentElementRef.current);
+      const card = elements.create('card', { hidePostalCode: true });
+      card.mount(cardElementRef.current);
+      setCardElement(card);
 
-      paymentElement.on('ready', () => {
-        console.log('Wholesale Stripe Payment Element ready');
-      });
-
-      paymentElement.on('change', (event: any) => {
+      card.on('change', (event: any) => {
         if (event.error) {
           setError(event.error.message);
         } else {
           setError(null);
         }
       });
-
     } catch (err: any) {
-      setError(err.message || 'Failed to mount payment element');
+      setError(err.message || 'Failed to mount card element');
       onPaymentError(err);
     }
   }, [elements, testMode, onPaymentError]);
@@ -189,40 +175,23 @@ export const WholesaleStripeCheckout = React.forwardRef<WholesaleStripeCheckoutR
       return true;
     }
 
-    if (!stripe || !elements) {
+    if (!stripe || !elements || !cardElement) {
       setError('Stripe is not initialized');
       return false;
     }
 
     setProcessing(true);
     setError(null);
-    setCurrentOrderId(orderId);
 
     try {
-      // Create payment intent for this order
-      const newClientSecret = await createPaymentIntent(orderId);
-      if (!newClientSecret) {
-        return false;
-      }
-      
-      setClientSecret(newClientSecret);
+      // Create payment intent for this order and confirm with card element
+      const clientSecret = await createPaymentIntent(orderId);
+      if (!clientSecret) return false;
 
-      // Wait a moment for elements to update with new client secret
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Confirm payment
-      const { error: submitError } = await elements.submit();
-      if (submitError) {
-        throw new Error(submitError.message);
-      }
-
-      const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        clientSecret: newClientSecret,
-        confirmParams: {
-          return_url: `${window.location.origin}/wholesale/orders/${orderId}/confirmation`
-        },
-        redirect: 'if_required'
+      const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElement
+        }
       });
 
       if (confirmError) {
@@ -317,26 +286,10 @@ export const WholesaleStripeCheckout = React.forwardRef<WholesaleStripeCheckoutR
           Enter your payment details below. All transactions are secure and encrypted.
         </p>
       </div>
-
-      {/* If client secret isn't ready yet (order not created), show a friendly placeholder */}
-      {!clientSecret ? (
-        <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-          <div className="flex items-start">
-            <svg className="w-5 h-5 text-gray-500 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div className="text-sm text-gray-700">
-              We’ll display the secure card form after you click <span className="font-medium">Place Order</span>. We first create your order and then open a Stripe payment session tied to that order.
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="border border-gray-300 rounded-lg p-4 bg-white">
-          <div ref={paymentElementRef} className="min-h-[120px]">
-            {/* Stripe Payment Element will be mounted here */}
-          </div>
-        </div>
-      )}
+      {/* Card fields are always visible */}
+      <div className="border border-gray-300 rounded-lg p-4 bg-white">
+        <div ref={cardElementRef} className="min-h-[48px]"></div>
+      </div>
 
       {/* Error Display */}
       {error && (

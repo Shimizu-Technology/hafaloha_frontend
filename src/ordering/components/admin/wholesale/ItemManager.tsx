@@ -1020,50 +1020,9 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                 </div>
               </div>
 
-              {/* Inventory Management */}
-              <div>
+              {/* Inventory Management temporarily disabled */}
+              <div className="hidden">
                 <h4 className="text-md font-medium text-gray-900 mb-4">Inventory Management</h4>
-                <div className="space-y-4">
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.track_inventory}
-                      onChange={(e) => setFormData(prev => ({ ...prev, track_inventory: e.target.checked }))}
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-gray-700">Track inventory for this item</span>
-                  </label>
-
-                  {formData.track_inventory && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Stock Quantity
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={formData.stock_quantity}
-                          onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Low Stock Threshold
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={formData.low_stock_threshold}
-                          onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* Image Upload */}

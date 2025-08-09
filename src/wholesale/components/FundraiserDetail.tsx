@@ -483,9 +483,6 @@ export default function FundraiserDetail() {
                   )}
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900">{participant.name || 'Unnamed Participant'}</h3>
-                    <div className="text-sm text-[#c1902f] font-medium">
-                      Raised: {formatCurrency(participant.totalRaised || 0)}
-                    </div>
                     {participant.hasGoal && participant.goalAmount && (
                       <div className="text-xs text-gray-500">
                         Goal: {formatCurrency(participant.goalAmount)}

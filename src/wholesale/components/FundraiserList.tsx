@@ -179,13 +179,26 @@ export default function FundraiserList() {
             const hasConflict = hasCartItems && !isCurrentFundraiser;
             
             return (
-              <div key={fundraiser.id} className={`bg-white rounded-lg shadow-sm border overflow-hidden group transition-all h-full flex flex-col ${
+              <div
+                key={fundraiser.id}
+                onClick={() => {
+                  if (hasConflict) {
+                    checkCartConflict(
+                      { id: fundraiser.id, name: fundraiser.name, slug: fundraiser.slug },
+                      () => { window.location.href = `/wholesale/${fundraiser.slug}`; }
+                    );
+                  } else {
+                    window.location.href = `/wholesale/${fundraiser.slug}`;
+                  }
+                }}
+                className={`cursor-pointer bg-white rounded-lg shadow-sm border overflow-hidden group transition-all h-full flex flex-col ${
                 isCurrentFundraiser 
                   ? 'border-[#c1902f] ring-2 ring-[#c1902f]/20' 
                   : hasConflict
                     ? 'border-orange-200 hover:shadow-md'
                     : 'border-gray-200 hover:shadow-md'
-              }`}>
+              }`}
+              >
                 {/* Cart Status Badge */}
                 {isCurrentFundraiser && (
                   <div className="absolute top-3 right-3 z-10">

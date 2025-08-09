@@ -142,8 +142,8 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
     setFormData({
       fundraiser_id: participant.fundraiser_id,
       name: participant.name || '',
-      description: participant.description || '',
-      goal_amount: participant.goal_amount ? participant.goal_amount.toString() : '',
+      description: '',
+      goal_amount: '',
       position: participant.position,
       sort_order: participant.sort_order
     });
@@ -162,11 +162,7 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
         return;
       }
       
-      // Validate goal amount if provided
-      if (formData.goal_amount && parseFloat(formData.goal_amount) <= 0) {
-        toastUtils.error('Goal amount must be greater than 0 if provided');
-        return;
-      }
+      // Goal amount/description temporarily disabled; no validation needed
 
       // Make actual API calls using apiClient
       if (isCreating) {
@@ -370,8 +366,7 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
           >
             <option value="created_at">Created Date</option>
             <option value="name">Name</option>
-            <option value="goal_progress_percentage">Progress</option>
-            <option value="total_raised">Amount Raised</option>
+            {/* Progress and amount raised temporarily removed */}
           </select>
 
           {/* Sort order */}
@@ -425,9 +420,7 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
                       Fundraiser
                     </th>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Goal Progress
-                  </th>
+                  {/* Goal Progress column removed */}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Performance
                   </th>
@@ -465,32 +458,7 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
                         {participant.fundraiser_name}
                       </td>
                     )}
-                    <td className="px-6 py-4">
-                      {participant.goal_amount ? (
-                        <div className="flex items-center">
-                          <div className="flex-1 mr-3">
-                            <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
-                              <span>
-                                {formatCurrency(participant.current_amount)} / {formatCurrency(participant.goal_amount)}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded-full font-medium ${getProgressBadgeColor(participant.goal_progress_percentage)}`}>
-                                {participant.goal_progress_percentage || 0}%
-                              </span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div
-                                className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(participant.goal_progress_percentage)}`}
-                                style={{ width: `${Math.min(participant.goal_progress_percentage || 0, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-400 italic">
-                          No goal set
-                        </div>
-                      )}
-                    </td>
+                    {/* Goal progress cell removed */}
                     <td className="px-6 py-4 text-sm text-gray-900">
                       <div className="space-y-1">
                         <div className="flex items-center text-xs text-gray-600">
@@ -592,33 +560,7 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Goal Amount
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.goal_amount}
-                      onChange={(e) => setFormData(prev => ({ ...prev, goal_amount: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="0.00 (optional)"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Description
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Tell us about this participant and their goals"
-                    />
-                  </div>
+                  {/* Goal amount and description temporarily removed */}
                 </div>
               </div>
 
