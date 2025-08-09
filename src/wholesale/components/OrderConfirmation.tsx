@@ -188,37 +188,7 @@ export default function OrderConfirmation() {
           </div>
         </div>
 
-        {/* Fundraiser Information */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-          <button
-            onClick={() => toggleSection('fundraiser')}
-            className="w-full px-4 py-4 flex items-center justify-between text-left hover:bg-gray-50 rounded-t-lg"
-          >
-            <h3 className="text-lg font-semibold text-gray-900">Fundraiser Details</h3>
-            {expandedSections.fundraiser ? (
-              <ChevronUp className="h-5 w-5 text-gray-500" />
-            ) : (
-              <ChevronDown className="h-5 w-5 text-gray-500" />
-            )}
-          </button>
-          
-          {expandedSections.fundraiser && (
-            <div className="px-4 pb-4 border-t border-gray-200 space-y-3 mt-4">
-              <div className="flex items-center">
-                <Users className="h-4 w-4 text-gray-500 mr-3" />
-                <div>
-                  <span className="font-medium text-gray-900">{orderDetails.fundraiser.name}</span>
-                </div>
-              </div>
-              <div className="flex items-center">
-                <User className="h-4 w-4 text-gray-500 mr-3" />
-                <div>
-                  <span className="text-gray-900">Supporting: {orderDetails.participant?.name || 'Participant'}</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Fundraiser Information removed (redundant with alert above) */}
 
         {/* Location Information */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">

@@ -1,11 +1,12 @@
 // src/wholesale/components/FundraiserDetail.tsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { wholesaleApi, WholesaleFundraiserDetail } from '../services/wholesaleApi';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import { useCartConflict } from '../hooks/useCartConflict';
 import VariantSelector from './VariantSelector';
 import CartConflictModal from './CartConflictModal';
+import MobileStickyBar from './MobileStickyBar';
 
 export default function FundraiserDetail() {
   const { fundraiserSlug } = useParams<{ fundraiserSlug: string }>();
@@ -258,17 +259,7 @@ export default function FundraiserDetail() {
             </div>
           </div>
           
-          {getItemCount() > 0 && (
-            <Link 
-              to="/wholesale/cart"
-              className="inline-flex items-center bg-[#c1902f] text-white px-4 py-2 rounded-md hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] transition-colors shadow-sm"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m2.6 8L6 8.5M7 13l-2 8h13" />
-              </svg>
-              View Cart ({getItemCount()})
-            </Link>
-          )}
+          {/* Top-level View Cart button removed for cleaner layout; floating bar remains on mobile */}
         </div>
 
         {fundraiser.description && (
@@ -311,32 +302,7 @@ export default function FundraiserDetail() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-gray-50 rounded-lg p-4">
-          <div>
-            <span className="text-gray-600">Items Available:</span>
-            <div className="font-semibold text-gray-900">
-              {fundraiser.itemCount || fundraiser.items?.length || 0}
-            </div>
-          </div>
-          <div>
-            <span className="text-gray-600">Participants:</span>
-            <div className="font-semibold text-gray-900">
-              {fundraiser.participantCount || fundraiser.participants?.length || 0}
-            </div>
-          </div>
-          <div>
-            <span className="text-gray-600">Total Orders:</span>
-            <div className="font-semibold text-gray-900">
-              {fundraiser.totalOrders || 0}
-            </div>
-          </div>
-          <div>
-            <span className="text-gray-600">Total Raised:</span>
-            <div className="font-semibold text-[#c1902f]">
-              {formatCurrency(fundraiser.totalRevenue || 0)}
-            </div>
-          </div>
-        </div>
+        {/* Stats block removed (Items Available, Participants, Total Orders, Total Raised) */}
       </div>
 
       {/* Items Section */}
@@ -357,7 +323,7 @@ export default function FundraiserDetail() {
                 {/* Item Image */}
                 <div className="aspect-square bg-gray-100 relative overflow-hidden flex-shrink-0">
                   <img 
-                    src={item.primaryImageUrl || item.primary_image_url || '/placeholder-food.png'} 
+                    src={item.primaryImageUrl || '/placeholder-food.png'} 
                     alt={item.name}
                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                     style={{
@@ -368,10 +334,10 @@ export default function FundraiserDetail() {
                   />
                   
                   {/* Stock status badge */}
-                  {!(item.inStock || item.in_stock) && (
+                  {!item.inStock && (
                     <div className="absolute top-2 right-2">
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-                        {item.stockStatus || item.stock_status || 'Out of Stock'}
+                        {item.stockStatus || 'Out of Stock'}
                       </span>
                     </div>
                   )}
@@ -428,16 +394,16 @@ export default function FundraiserDetail() {
                     
                     <button
                       onClick={() => handleItemClick(item)}
-                      disabled={!(item.inStock || item.in_stock)}
+                      disabled={!item.inStock}
                       className={`w-full flex items-center justify-center px-3 py-2 border border-transparent text-xs font-medium rounded-md shadow-sm transition-all duration-200 ${
-                        !(item.inStock || item.in_stock)
+                        !item.inStock
                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                           : isFromDifferentFundraiser()
                             ? 'bg-orange-100 text-orange-600 border-orange-200 cursor-pointer hover:bg-orange-200'
                             : 'text-white bg-[#c1902f] hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] transform hover:-translate-y-0.5'
                       }`}
                     >
-                      {!(item.inStock || item.in_stock)
+                      {!item.inStock
                         ? 'Out of Stock'
                         : isFromDifferentFundraiser()
                           ? 'Switch Fundraiser'
@@ -525,22 +491,12 @@ export default function FundraiserDetail() {
 
       {/* Mobile sticky cart bar */}
       {getItemCount() > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 sm:hidden z-40 bg-white/95 border-t shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div>
-              <div className="text-xs text-gray-600">Cart</div>
-              <div className="text-sm font-semibold text-gray-900">
-                {getItemCount()} item{getItemCount() !== 1 ? 's' : ''} • {formatCurrency(getCartTotal())}
-              </div>
-            </div>
-            <Link
-              to="/wholesale/cart"
-              className="inline-flex items-center bg-[#c1902f] text-white px-4 py-2 rounded-md hover:bg-[#d4a43f] transition-colors font-medium shadow-sm"
-            >
-              View Cart
-            </Link>
-          </div>
-        </div>
+        <MobileStickyBar
+          leftTopText="Cart"
+          leftBottomText={`${getItemCount()} item${getItemCount() !== 1 ? 's' : ''} • ${formatCurrency(getCartTotal())}`}
+          buttonLabel="View Cart"
+          buttonTo="/wholesale/cart"
+        />
       )}
     </div>
   );

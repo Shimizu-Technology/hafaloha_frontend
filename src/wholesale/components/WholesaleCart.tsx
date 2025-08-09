@@ -3,6 +3,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
+import MobileStickyBar from './MobileStickyBar';
 
 export default function WholesaleCart() {
   const navigate = useNavigate();
@@ -49,19 +50,19 @@ export default function WholesaleCart() {
   return (
     <div className="wholesale-cart max-w-4xl mx-auto pb-24 md:pb-0">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Cart</h1>
+      <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 mb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-snug">Your Cart</h1>
             {fundraiser && (
-              <p className="text-gray-600">
+              <p className="text-gray-600 text-sm sm:text-base truncate">
                 Supporting: <span className="font-medium">{fundraiser.name}</span>
               </p>
             )}
           </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-600">Total Items: {getTotalQuantity()}</div>
-            <div className="text-2xl font-bold text-gray-900">{formatCurrency(getCartTotal())}</div>
+          <div className="text-right flex-shrink-0">
+            <div className="text-xs sm:text-sm text-gray-600">Items: {getTotalQuantity()}</div>
+            <div className="text-lg sm:text-2xl font-bold text-gray-900">{formatCurrency(getCartTotal())}</div>
           </div>
         </div>
       </div>
@@ -189,28 +190,14 @@ export default function WholesaleCart() {
         </div>
       </div>
       {/* Sticky mobile checkout bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t shadow-lg">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs text-gray-600">Total</div>
-            <div className="text-sm font-semibold text-gray-900">{formatCurrency(getCartTotal())}</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              to={continueHref}
-              className="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-            >
-              Shop More
-            </Link>
-            <Link
-              to="/wholesale/checkout"
-              className="inline-flex items-center px-4 py-2 rounded-md bg-[#c1902f] text-white hover:bg-[#d4a43f] transition-colors"
-            >
-              Checkout
-            </Link>
-          </div>
-        </div>
-      </div>
+      <MobileStickyBar
+        leftTopText="Total"
+        leftBottomText={formatCurrency(getCartTotal())}
+        buttonLabel="Checkout"
+        buttonTo="/wholesale/checkout"
+        secondaryLabel="Shop More"
+        secondaryTo={continueHref}
+      />
     </div>
   );
 }

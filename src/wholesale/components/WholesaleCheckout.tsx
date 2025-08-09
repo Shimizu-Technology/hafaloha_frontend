@@ -8,6 +8,7 @@ import { useAuthStore } from '../../shared/auth/authStore';
 import ParticipantSelector from './ParticipantSelector';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 import { StripeCheckout, StripeCheckoutRef } from '../../ordering/components/payment/StripeCheckout';
+import MobileStickyBar from './MobileStickyBar';
 
 interface OrderFormData {
   customerName: string;
@@ -612,25 +613,13 @@ export default function WholesaleCheckout() {
         </div>
       </div>
       {/* Sticky mobile place order bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t shadow-lg">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <div className="text-xs text-gray-600">Total</div>
-            <div className="text-sm font-semibold text-gray-900">{formatCurrency(getCartTotal())}</div>
-          </div>
-          <button
-            onClick={handlePlaceOrder}
-            disabled={loading || isProcessingPayment || !formData.customerName.trim() || !formData.customerEmail.trim() || !formData.customerPhone.trim() || (formData.participantId === undefined)}
-            className={`inline-flex items-center px-4 py-2 rounded-md font-medium transition-colors ${
-              loading || isProcessingPayment || !formData.customerName.trim() || !formData.customerEmail.trim() || !formData.customerPhone.trim() || (formData.participantId === undefined)
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-[#c1902f] text-white hover:bg-[#d4a43f]'
-            }`}
-          >
-            {isProcessingPayment ? 'Processing…' : `Place Order • ${formatCurrency(getCartTotal())}`}
-          </button>
-        </div>
-      </div>
+      <MobileStickyBar
+        leftTopText="Total"
+        leftBottomText={formatCurrency(getCartTotal())}
+        buttonLabel={isProcessingPayment ? 'Processing…' : `Place Order • ${formatCurrency(getCartTotal())}`}
+        onButtonClick={handlePlaceOrder}
+        disabled={loading || isProcessingPayment || !formData.customerName.trim() || !formData.customerEmail.trim() || !formData.customerPhone.trim() || (formData.participantId === undefined)}
+      />
     </div>
   );
 }

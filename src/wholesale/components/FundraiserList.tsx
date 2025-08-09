@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { wholesaleApi, WholesaleFundraiser } from '../services/wholesaleApi';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import { useCartConflict } from '../hooks/useCartConflict';
+import MobileStickyBar from './MobileStickyBar';
 import CartConflictModal from './CartConflictModal';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 
@@ -106,35 +107,7 @@ export default function FundraiserList() {
         Support your favorite teams and organizations by purchasing their fundraising merchandise.
       </p>
 
-      {/* Cart indicator */}
-      {getItemCount() > 0 && currentFundraiser && (
-        <div className="bg-white/80 backdrop-blur-sm border-l-2 border-[#c1902f]/70 rounded-lg p-4 shadow-sm mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-[#c1902f]/10 rounded-full flex items-center justify-center">
-                  <svg className="w-4 h-4 text-[#c1902f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m2.6 8L6 8.5M7 13l-2 8h13" />
-                  </svg>
-                </div>
-              </div>
-              <div className="text-gray-900">
-                <div className="font-semibold">{getItemCount()} {getItemCount() === 1 ? 'item' : 'items'} in cart</div>
-                <div className="text-gray-600 text-sm">for {currentFundraiser.name}</div>
-              </div>
-            </div>
-            <Link 
-              to="/wholesale/cart"
-              className="inline-flex items-center bg-[#c1902f] text-white px-4 py-2 rounded-md hover:bg-[#d4a43f] transition-colors font-medium shadow-sm"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-              View Cart
-            </Link>
-          </div>
-        </div>
-      )}
+      {/* Cart indicator removed (top area) to reduce redundancy on mobile */}
 
       {/* Search */}
       <div className="mb-6">
@@ -312,20 +285,12 @@ export default function FundraiserList() {
 
       {/* Mobile sticky mini-cart bar */}
       {getItemCount() > 0 && currentFundraiser && (
-        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div>
-              <div className="text-xs text-gray-600">In cart for {currentFundraiser.name}</div>
-              <div className="text-sm font-semibold text-gray-900">{getItemCount()} item{getItemCount() !== 1 ? 's' : ''}</div>
-            </div>
-            <Link 
-              to="/wholesale/cart"
-              className="inline-flex items-center bg-[#c1902f] text-white px-4 py-2 rounded-md hover:bg-[#d4a43f] transition-colors font-medium shadow-sm"
-            >
-              View Cart
-            </Link>
-          </div>
-        </div>
+        <MobileStickyBar
+          leftTopText={`In cart for ${currentFundraiser.name}`}
+          leftBottomText={`${getItemCount()} item${getItemCount() !== 1 ? 's' : ''}`}
+          buttonLabel="View Cart"
+          buttonTo="/wholesale/cart"
+        />
       )}
     </div>
   );
