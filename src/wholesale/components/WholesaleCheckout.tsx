@@ -7,7 +7,7 @@ import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { useAuthStore } from '../../shared/auth/authStore';
 import ParticipantSelector from './ParticipantSelector';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
-import WholesaleStripeCheckout, { WholesaleStripeCheckoutRef } from './WholesaleStripeCheckout';
+import { StripeCheckout, StripeCheckoutRef } from '../../ordering/components/payment/StripeCheckout';
 
 interface OrderFormData {
   customerName: string;
@@ -20,7 +20,7 @@ interface OrderFormData {
 
 export default function WholesaleCheckout() {
   const navigate = useNavigate();
-  const { items, fundraiser, getCartTotal, getCartTotalCents, clearCart, validateCart, setFundraiser } = useWholesaleCart();
+  const { items, fundraiser, getCartTotal, clearCart, validateCart, setFundraiser } = useWholesaleCart();
   const { restaurant } = useRestaurantStore();
   const { user } = useAuthStore();
   
@@ -30,7 +30,7 @@ export default function WholesaleCheckout() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   
-  const stripeCheckoutRef = useRef<WholesaleStripeCheckoutRef>(null);
+  const stripeCheckoutRef = useRef<StripeCheckoutRef>(null);
 
   const [formData, setFormData] = useState<OrderFormData>({
     customerName: user?.name || (user?.first_name && user?.last_name ? `${user.first_name} ${user.last_name}` : ''),
@@ -208,13 +208,23 @@ export default function WholesaleCheckout() {
         return;
       }
 
-      // Create order
+      // Process payment FIRST (match CheckoutPage behavior)
+      setIsProcessingPayment(true);
+      if (!stripeCheckoutRef.current) throw new Error('Payment system not initialized');
+      const paymentOk = await stripeCheckoutRef.current.processPayment();
+      if (!paymentOk) {
+        setError('Payment failed. Please try again.');
+        setIsProcessingPayment(false);
+        return;
+      }
+
+      // After successful payment, create the wholesale order so it is linked in our system
       const orderData: CreateOrderRequest = {
         order: {
           customerName: formData.customerName,
           customerEmail: formData.customerEmail,
           customerPhone: formData.customerPhone,
-          shippingAddress: getPickupLocationText(), // Map pickup to shipping field for backend compatibility
+          shippingAddress: getPickupLocationText(),
           notes: formData.notes,
           participantId: formData.participantId ?? undefined
         },
@@ -231,48 +241,14 @@ export default function WholesaleCheckout() {
       };
 
       const orderResponse = await wholesaleApi.createOrder(orderData);
-      
       if (!orderResponse.success || !orderResponse.data) {
         throw new Error(orderResponse.message || 'Failed to create order');
       }
-
       const order = orderResponse.data.order;
 
-      // Check if test mode - if so, order is already complete
-      if (orderResponse.data.test_mode) {
-        // In test mode, order is automatically paid - clear cart and redirect
-        navigate(`/wholesale/orders/${order.id}/confirmation`);
-        
-        // Clear cart after a short delay to ensure navigation completes
-        setTimeout(() => {
-          clearCart();
-        }, 100);
-        
-        return;
-      }
-
-      // Process payment via Stripe for live mode
-      setIsProcessingPayment(true);
-      
-      if (stripeCheckoutRef.current) {
-        const paymentSuccess = await stripeCheckoutRef.current.processPayment(order.id);
-        
-        if (paymentSuccess) {
-          // Payment successful - clear cart and redirect
-          navigate(`/wholesale/orders/${order.id}/confirmation`);
-          
-          // Clear cart after a short delay to ensure navigation completes
-          setTimeout(() => {
-            clearCart();
-          }, 100);
-        } else {
-          // Payment failed - order will remain pending
-          setError('Payment failed. Please try again.');
-          setIsProcessingPayment(false);
-        }
-      } else {
-        throw new Error('Payment system not initialized');
-      }
+      // Redirect and clear cart
+      navigate(`/wholesale/orders/${order.id}/confirmation`);
+      setTimeout(() => clearCart(), 100);
 
     } catch (err) {
       console.error('Error placing order:', err);
@@ -512,14 +488,16 @@ export default function WholesaleCheckout() {
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment</h2>
 
-            {/* Stripe Checkout */}
-            <WholesaleStripeCheckout
+            {/* Stripe Checkout - identical UI/flow to regular ordering */}
+            <StripeCheckout
               ref={stripeCheckoutRef}
-              amount={getCartTotalCents()}
+              amount={(getCartTotal() || 0).toFixed(2)}
               publishableKey={paymentSettings.publishableKey}
               testMode={paymentSettings.testMode}
               onPaymentSuccess={(details) => {
-                console.log('Payment successful:', details);
+                // We still create the wholesale order first, then confirm payment via our backend;
+                // this success handler only signals that client confirmation succeeded in test/small flows
+                console.log('Payment prepared:', details);
               }}
               onPaymentError={(error) => {
                 console.error('Payment error:', error);
