@@ -9,6 +9,7 @@ import { PaymentScriptPreloader } from './shared/components/payment/PaymentScrip
 import GlobalLayout from './GlobalLayout';
 import ReservationsApp from './reservations/ReservationsApp';
 import OnlineOrderingApp from './ordering/OnlineOrderingApp';
+import WholesaleApp from './wholesale/WholesaleApp';
 
 export default function RootApp() {
   return (
@@ -49,6 +50,9 @@ export default function RootApp() {
               <Route element={<GlobalLayout />}>
                 {/* Serve Reservations at /reservations/* */}
                 <Route path="/reservations/*" element={<ReservationsApp />} />
+                
+                {/* Serve Wholesale at /wholesale/* */}
+                <Route path="/wholesale/*" element={<WholesaleApp />} />
 
                 {/* Everything else => OnlineOrderingApp at the root */}
                 <Route path="/*" element={<OnlineOrderingApp />} />

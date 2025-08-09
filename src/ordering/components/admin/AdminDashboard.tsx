@@ -8,6 +8,7 @@ const PromoManager = lazy(() => import('./PromoManager').then(module => ({ defau
 const AnalyticsManager = lazy(() => import('./AnalyticsManager').then(module => ({ default: module.AnalyticsManager })));
 const SettingsManager = lazy(() => import('./SettingsManager').then(module => ({ default: module.SettingsManager })));
 const MerchandiseManager = lazy(() => import('./MerchandiseManager'));
+const WholesaleManager = lazy(() => import('./WholesaleManager').then(module => ({ default: module.WholesaleManager })));
 const StaffManagement = lazy(() => import('./StaffManagement').then(module => ({ default: module.StaffManagement })));
 const ReservationsManager = lazy(() => import('./reservations/ReservationsManager').then(module => ({ default: module.ReservationsManager })));
 // RestaurantSelector removed - super admins now only see data for the current restaurant
@@ -74,7 +75,7 @@ function TabLoadingPlaceholder() {
   );
 }
 
-type Tab = 'analytics' | 'orders' | 'menu' | 'promos' | 'settings' | 'merchandise' | 'staff' | 'reservations';
+type Tab = 'analytics' | 'orders' | 'menu' | 'wholesale' | 'promos' | 'settings' | 'merchandise' | 'staff' | 'reservations';
 
 export function AdminDashboard() {
   const { user } = useAuthStore();
@@ -104,6 +105,8 @@ export function AdminDashboard() {
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     // Menu - visible to admin and super_admin only
     ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'menu', label: 'Menu', icon: LayoutGrid }] : []),
+    // Wholesale - visible to admin and super_admin only
+    ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'wholesale', label: 'Wholesale', icon: Package }] : []),
     // Merchandise - visible to admin and super_admin only
     ...(authStore.isSuperAdmin() || authStore.isAdmin() ? [{ id: 'merchandise', label: 'Merchandise', icon: ShoppingCart }] : []),
     // Promos - visible to admin and super_admin only
@@ -124,12 +127,13 @@ export function AdminDashboard() {
     
     // For admin/super_admin, check stored preference
     const stored = localStorage.getItem('adminTab');
-    if (stored && ['analytics','orders','menu','merchandise','promos','reservations','staff','settings'].includes(stored)) {
+    if (stored && ['analytics','orders','menu','wholesale','merchandise','promos','reservations','staff','settings'].includes(stored)) {
       // Check if the user has access to the stored tab
       if (
         (stored === 'analytics' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'orders') ||
         (stored === 'menu' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
+        (stored === 'wholesale' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'merchandise' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'promos' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
         (stored === 'reservations' && (authStore.isSuperAdmin() || authStore.isAdmin())) ||
@@ -1380,6 +1384,12 @@ useEffect(() => {
                   />
                 </Suspense>
               )}
+            </div>
+            
+            <div className={`transition-opacity duration-300 ${activeTab === 'wholesale' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+              {activeTab === 'wholesale' && <Suspense fallback={<TabLoadingPlaceholder />}>
+                <WholesaleManager restaurantId={currentRestaurantId} />
+              </Suspense>}
             </div>
             
             <div className={`transition-opacity duration-300 ${activeTab === 'reservations' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>

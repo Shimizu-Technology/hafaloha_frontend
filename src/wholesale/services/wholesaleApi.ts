@@ -1,0 +1,304 @@
+// src/wholesale/services/wholesaleApi.ts
+import { apiClient } from '../../shared/api/apiClient';
+
+// Types for Wholesale API responses
+export interface WholesaleFundraiser {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  termsAndConditions?: string;
+  status: string;
+  participantCount: number;
+  itemCount: number;
+  totalOrders: number;
+  totalRevenue: number;
+  
+  // Pickup information
+  pickup_display_name?: string;
+  pickup_display_address?: string;
+  pickup_instructions?: string;
+  pickup_contact_name?: string;
+  pickup_contact_phone?: string;
+  pickup_hours?: string;
+  
+  // Image URLs
+  card_image_url?: string;
+  banner_url?: string;
+  has_card_image?: boolean;
+  has_banner_image?: boolean;
+  
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleItem {
+  id: number;
+  name: string;
+  description?: string;
+  sku?: string;
+  price: number;
+  priceCents: number;
+  position: number;
+  sortOrder: number;
+  options: Record<string, any>;
+  active: boolean;
+  trackInventory: boolean;
+  inStock: boolean;
+  stockStatus: string;
+  availableQuantity?: number;
+  images: WholesaleItemImage[];
+  primaryImageUrl?: string;
+  totalOrdered: number;
+  totalRevenue: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleItemImage {
+  id: number;
+  imageUrl: string;
+  altText?: string;
+  position: number;
+  primary: boolean;
+}
+
+export interface WholesaleParticipant {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  photoUrl?: string;
+  hasGoal: boolean;
+  goalAmount?: number;
+  currentAmount: number;
+  goalProgressPercentage?: number;
+  goalRemaining?: number;
+  goalStatus: string;
+  totalOrders: number;
+  totalRaised: number;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleFundraiserDetail extends WholesaleFundraiser {
+  items: WholesaleItem[];
+  participants: WholesaleParticipant[];
+}
+
+export interface WholesaleCartItem {
+  itemId: number;
+  name: string;
+  description?: string;
+  sku?: string;
+  price: number;
+  priceCents: number;
+  quantity: number;
+  lineTotal: number;
+  lineTotalCents: number;
+  imageUrl?: string;
+  addedAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleCartSummary {
+  items: WholesaleCartItem[];
+  fundraiser?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  totals: {
+    itemCount: number;
+    totalQuantity: number;
+    subtotal: number;
+    subtotalCents: number;
+  };
+  cartUrl: string;
+  checkoutUrl: string;
+}
+
+export interface WholesaleOrder {
+  id: number;
+  orderNumber: string;
+  status: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  shippingAddress?: string;
+  total: number;
+  totalCents: number;
+  itemCount: number;
+  uniqueItemCount: number;
+  fundraiser: {
+    id: number;
+    name: string;
+    slug: string;
+    pickup_display_name?: string;
+    pickup_display_address?: string;
+    pickup_instructions?: string;
+    pickup_contact_name?: string;
+    pickup_contact_phone?: string;
+    pickup_hours?: string;
+  };
+  participant?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  paymentStatus: string;
+  totalPaid: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOrderRequest {
+  order: {
+    customerName: string;
+    customerEmail: string;
+    customerPhone?: string;
+    shippingAddress?: string;
+    notes?: string;
+    participantId?: number;
+  };
+  cart_items: Array<{
+    item_id: number;
+    fundraiser_id: number;
+    name: string;
+    description?: string;
+    quantity: number;
+    price_cents: number;
+    line_total_cents: number;
+    selected_options?: Record<string, string>;
+  }>;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  data?: T;
+}
+
+class WholesaleApiService {
+  private readonly baseUrl = '/wholesale';
+
+  // Fundraisers
+  async getFundraisers(): Promise<ApiResponse<{ fundraisers: WholesaleFundraiser[] }>> {
+    const response = await apiClient.get(`${this.baseUrl}/fundraisers`);
+    return response.data;
+  }
+
+  async getFundraiser(slug: string): Promise<ApiResponse<{ fundraiser: WholesaleFundraiserDetail }>> {
+    const response = await apiClient.get(`${this.baseUrl}/fundraisers/${slug}`);
+    return response.data;
+  }
+
+  // Items
+  async getFundraiserItems(fundraiserSlug: string): Promise<ApiResponse<{ items: WholesaleItem[] }>> {
+    const response = await apiClient.get(`${this.baseUrl}/fundraisers/${fundraiserSlug}/items`);
+    return response.data;
+  }
+
+  async getItem(itemId: number): Promise<ApiResponse<{ item: WholesaleItem }>> {
+    const response = await apiClient.get(`${this.baseUrl}/items/${itemId}`);
+    return response.data;
+  }
+
+  async checkItemAvailability(itemId: number, quantity: number): Promise<ApiResponse<{ available: boolean; availableQuantity: string | number; stockStatus: string }>> {
+    const response = await apiClient.post(`${this.baseUrl}/items/${itemId}/check_availability`, {
+      quantity
+    });
+    return response.data;
+  }
+
+  // Cart
+  async getCart(): Promise<ApiResponse<{ cart: WholesaleCartSummary }>> {
+    const response = await apiClient.get(`${this.baseUrl}/cart`);
+    return response.data;
+  }
+
+  async addToCart(itemId: number, quantity: number): Promise<ApiResponse<{ cart: WholesaleCartSummary }>> {
+    const response = await apiClient.post(`${this.baseUrl}/cart/add`, {
+      item_id: itemId,
+      quantity
+    });
+    return response.data;
+  }
+
+  async updateCartItem(itemId: number, quantity: number): Promise<ApiResponse<{ cart: WholesaleCartSummary }>> {
+    const response = await apiClient.put(`${this.baseUrl}/cart/update`, {
+      item_id: itemId,
+      quantity
+    });
+    return response.data;
+  }
+
+  async removeFromCart(itemId: number): Promise<ApiResponse<{ cart: WholesaleCartSummary }>> {
+    const response = await apiClient.delete(`${this.baseUrl}/cart/remove`, {
+      params: { item_id: itemId }
+    });
+    return response.data;
+  }
+
+  async clearCart(): Promise<ApiResponse<{ cart: WholesaleCartSummary }>> {
+    const response = await apiClient.delete(`${this.baseUrl}/cart/clear`);
+    return response.data;
+  }
+
+  async validateCart(): Promise<ApiResponse<{ cart: WholesaleCartSummary; valid: boolean; issues?: any[] }>> {
+    const response = await apiClient.get(`${this.baseUrl}/cart/validate`);
+    return response.data;
+  }
+
+  // Orders
+  async getOrders(): Promise<ApiResponse<{ orders: WholesaleOrder[] }>> {
+    const response = await apiClient.get(`${this.baseUrl}/orders`);
+    return response.data;
+  }
+
+  async getOrder(orderId: number): Promise<ApiResponse<{ order: WholesaleOrder }>> {
+    const response = await apiClient.get(`${this.baseUrl}/orders/${orderId}`);
+    return response.data;
+  }
+
+  async createOrder(orderData: CreateOrderRequest): Promise<ApiResponse<{ order: WholesaleOrder; test_mode?: boolean }>> {
+    const response = await apiClient.post(`${this.baseUrl}/orders`, orderData);
+    return response.data;
+  }
+
+  async cancelOrder(orderId: number): Promise<ApiResponse<{ order: WholesaleOrder }>> {
+    const response = await apiClient.delete(`${this.baseUrl}/orders/${orderId}/cancel`);
+    return response.data;
+  }
+
+  // Payments
+  async createPayment(orderId: number): Promise<ApiResponse<{ payment: any; stripe: { clientSecret: string; publishableKey: string } }>> {
+    const response = await apiClient.post(`${this.baseUrl}/orders/${orderId}/payments`);
+    return response.data;
+  }
+
+  async confirmPayment(orderId: number, paymentId: number): Promise<ApiResponse<{ payment: any; order: any }>> {
+    const response = await apiClient.post(`${this.baseUrl}/orders/${orderId}/payments/${paymentId}/confirm`);
+    return response.data;
+  }
+
+  // Health check
+  async healthCheck(): Promise<ApiResponse<{ status: string; service: string; timestamp: string; version: string }>> {
+    const response = await apiClient.get(`${this.baseUrl}/health`);
+    return response.data;
+  }
+
+  async apiInfo(): Promise<ApiResponse<{ service: string; version: string; description: string; endpoints: Record<string, string> }>> {
+    const response = await apiClient.get(`${this.baseUrl}/api/info`);
+    return response.data;
+  }
+}
+
+// Export a singleton instance
+export const wholesaleApi = new WholesaleApiService();
