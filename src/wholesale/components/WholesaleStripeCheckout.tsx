@@ -318,12 +318,25 @@ export const WholesaleStripeCheckout = React.forwardRef<WholesaleStripeCheckoutR
         </p>
       </div>
 
-      {/* Payment Element Container */}
-      <div className="border border-gray-300 rounded-lg p-4 bg-white">
-        <div ref={paymentElementRef} className="min-h-[120px]">
-          {/* Stripe Payment Element will be mounted here */}
+      {/* If client secret isn't ready yet (order not created), show a friendly placeholder */}
+      {!clientSecret ? (
+        <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-gray-500 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="text-sm text-gray-700">
+              We’ll display the secure card form after you click <span className="font-medium">Place Order</span>. We first create your order and then open a Stripe payment session tied to that order.
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="border border-gray-300 rounded-lg p-4 bg-white">
+          <div ref={paymentElementRef} className="min-h-[120px]">
+            {/* Stripe Payment Element will be mounted here */}
+          </div>
+        </div>
+      )}
 
       {/* Error Display */}
       {error && (
