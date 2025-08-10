@@ -7,6 +7,7 @@ import { useCartConflict } from '../hooks/useCartConflict';
 import VariantSelector from './VariantSelector';
 import CartConflictModal from './CartConflictModal';
 import MobileStickyBar from './MobileStickyBar';
+import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 
 export default function FundraiserDetail() {
   const { fundraiserSlug } = useParams<{ fundraiserSlug: string }>();
@@ -226,10 +227,13 @@ export default function FundraiserDetail() {
       {fundraiser.banner_url && (
         <div className="mb-6 rounded-lg overflow-hidden shadow-sm">
           <div className="w-full aspect-[16/9]">
-            <img 
+            <OptimizedImage 
               src={fundraiser.banner_url} 
               alt={`${fundraiser.name} banner`}
+              context="hero"
               className="w-full h-full object-cover object-center"
+              isLCP={true}
+              priority={true}
             />
           </div>
         </div>
@@ -322,15 +326,14 @@ export default function FundraiserDetail() {
               <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full">
                 {/* Item Image */}
                 <div className="aspect-square bg-gray-100 relative overflow-hidden flex-shrink-0">
-                  <img 
+                  <OptimizedImage 
                     src={item.primary_image_url || '/placeholder-food.png'} 
                     alt={item.name}
+                    context="menuItem"
                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                     style={{
-                      objectPosition: 'center',
-                      imageRendering: 'auto' as const
+                      objectPosition: 'center'
                     }}
-                    loading="lazy"
                   />
                   
                   {/* Stock status badge */}
@@ -435,9 +438,10 @@ export default function FundraiserDetail() {
               <div key={participant.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center space-x-3">
                   {participant.photoUrl ? (
-                    <img 
+                    <OptimizedImage 
                       src={participant.photoUrl} 
                       alt={participant.name || 'Participant'}
+                      context="cart"
                       className="w-12 h-12 rounded-full object-cover"
                     />
                   ) : (

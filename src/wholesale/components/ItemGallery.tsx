@@ -1,6 +1,7 @@
 // src/wholesale/components/ItemGallery.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { WholesaleItemImage } from '../services/wholesaleApi';
+import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 
 interface ItemGalleryProps {
   images: WholesaleItemImage[];
@@ -112,11 +113,11 @@ export default function ItemGallery({ images, itemName, className = '' }: ItemGa
           </div>
         )}
 
-        {/* Main Image */}
+        {/* Main Image - Using regular img tag for ref support needed for zoom functionality */}
         <img
           ref={imageRef}
-          src={currentImage.imageUrl}
-          alt={currentImage.altText || `${itemName} - Image ${currentImageIndex + 1}`}
+          src={currentImage.image_url}
+          alt={currentImage.alt_text || `${itemName} - Image ${currentImageIndex + 1}`}
           className={`w-full h-full object-cover transition-all duration-300 ${
             isZoomed 
               ? 'scale-150 cursor-zoom-out' 
@@ -195,11 +196,11 @@ export default function ItemGallery({ images, itemName, className = '' }: ItemGa
               }`}
               aria-label={`View image ${index + 1}`}
             >
-              <img
-                src={image.imageUrl}
-                alt={image.altText || `${itemName} thumbnail ${index + 1}`}
+              <OptimizedImage
+                src={image.image_url}
+                alt={image.alt_text || `${itemName} thumbnail ${index + 1}`}
+                context="cart"
                 className="w-full h-full object-cover"
-                loading="lazy"
               />
               
               {/* Primary indicator */}

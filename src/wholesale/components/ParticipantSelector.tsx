@@ -1,6 +1,7 @@
 // src/wholesale/components/ParticipantSelector.tsx
 import { useState } from 'react';
 import { WholesaleParticipant } from '../services/wholesaleApi';
+import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 
 interface ParticipantSelectorProps {
   participants: WholesaleParticipant[];
@@ -51,9 +52,10 @@ export default function ParticipantSelector({
               {selectedParticipant ? (
                 <>
                   {selectedParticipant.photoUrl ? (
-                    <img 
+                    <OptimizedImage 
                       src={selectedParticipant.photoUrl} 
                       alt={selectedParticipant.name}
+                      context="cart"
                       className="w-8 h-8 rounded-full object-cover"
                     />
                   ) : (
@@ -131,9 +133,10 @@ export default function ParticipantSelector({
               >
                 <div className="flex items-center space-x-3">
                   {participant.photoUrl ? (
-                    <img 
+                    <OptimizedImage 
                       src={participant.photoUrl} 
                       alt={participant.name}
+                      context="cart"
                       className="w-10 h-10 rounded-full object-cover"
                     />
                   ) : (
@@ -159,7 +162,7 @@ export default function ParticipantSelector({
         <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
           <div className="flex items-start space-x-3">
             {selectedParticipant.photoUrl ? (
-              <img src={selectedParticipant.photoUrl} alt={selectedParticipant.name} className="w-12 h-12 rounded-full object-cover" />
+              <OptimizedImage src={selectedParticipant.photoUrl} alt={selectedParticipant.name} context="cart" className="w-12 h-12 rounded-full object-cover" />
             ) : (
               <div className="w-12 h-12 bg-blue-200 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
