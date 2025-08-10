@@ -43,27 +43,27 @@ export interface WholesaleItem {
   description?: string;
   sku?: string;
   price: number;
-  priceCents: number;
+  price_cents: number;
   position: number;
-  sortOrder: number;
+  sort_order: number;
   options: Record<string, any>;
   active: boolean;
-  trackInventory: boolean;
-  inStock: boolean;
-  stockStatus: string;
-  availableQuantity?: number;
+  track_inventory: boolean;
+  in_stock: boolean;
+  stock_status: string;
+  available_quantity?: number;
   images: WholesaleItemImage[];
-  primaryImageUrl?: string;
-  totalOrdered: number;
-  totalRevenue: number;
-  createdAt: string;
-  updatedAt: string;
+  primary_image_url?: string;
+  total_ordered: number;
+  total_revenue: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WholesaleItemImage {
   id: number;
-  imageUrl: string;
-  altText?: string;
+  image_url: string;
+  alt_text?: string;
   position: number;
   primary: boolean;
 }

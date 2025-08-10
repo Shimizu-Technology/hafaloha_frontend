@@ -323,7 +323,7 @@ export default function FundraiserDetail() {
                 {/* Item Image */}
                 <div className="aspect-square bg-gray-100 relative overflow-hidden flex-shrink-0">
                   <img 
-                    src={item.primaryImageUrl || '/placeholder-food.png'} 
+                    src={item.primary_image_url || '/placeholder-food.png'} 
                     alt={item.name}
                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                     style={{
@@ -334,10 +334,10 @@ export default function FundraiserDetail() {
                   />
                   
                   {/* Stock status badge */}
-                  {!item.inStock && (
+                  {!item.in_stock && (
                     <div className="absolute top-2 right-2">
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-                        {item.stockStatus || 'Out of Stock'}
+                        {item.stock_status || 'Out of Stock'}
                       </span>
                     </div>
                   )}
@@ -394,16 +394,16 @@ export default function FundraiserDetail() {
                     
                     <button
                       onClick={() => handleItemClick(item)}
-                      disabled={!item.inStock}
+                      disabled={!item.in_stock}
                       className={`w-full flex items-center justify-center px-3 py-2 border border-transparent text-xs font-medium rounded-md shadow-sm transition-all duration-200 ${
-                        !item.inStock
+                        !item.in_stock
                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                           : isFromDifferentFundraiser()
                             ? 'bg-orange-100 text-orange-600 border-orange-200 cursor-pointer hover:bg-orange-200'
                             : 'text-white bg-[#c1902f] hover:bg-[#d4a43f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c1902f] transform hover:-translate-y-0.5'
                       }`}
                     >
-                      {!item.inStock
+                      {!item.in_stock
                         ? 'Out of Stock'
                         : isFromDifferentFundraiser()
                           ? 'Switch Fundraiser'

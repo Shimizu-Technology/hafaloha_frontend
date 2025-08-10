@@ -33,8 +33,8 @@ export default function ItemCard({
       description: item.description,
       sku: item.sku,
       price: item.price,
-      priceCents: item.priceCents,
-      imageUrl: item.primaryImageUrl,
+      priceCents: item.price_cents,
+      imageUrl: item.primary_image_url,
       options: item.options
     }, 1);
 
@@ -55,11 +55,11 @@ export default function ItemCard({
   };
 
   const getStockStatusInfo = () => {
-    if (!item.trackInventory) {
+    if (!item.track_inventory) {
       return { status: 'Available', className: 'bg-green-100 text-green-800' };
     }
     
-    switch (item.stockStatus) {
+    switch (item.stock_status) {
       case 'in_stock':
         return { status: 'In Stock', className: 'bg-green-100 text-green-800' };
       case 'low_stock':
@@ -80,7 +80,7 @@ export default function ItemCard({
     <div className={cardClasses}>
       {/* Item Image */}
       <div className={`relative ${compact ? 'aspect-square mb-3' : 'aspect-square mb-4'}`}>
-        {item.primaryImageUrl && !imageError ? (
+        {item.primary_image_url && !imageError ? (
           <>
             {imageLoading && (
               <div className="absolute inset-0 bg-gray-200 rounded-lg animate-pulse flex items-center justify-center">
@@ -90,7 +90,7 @@ export default function ItemCard({
               </div>
             )}
             <OptimizedImage
-              src={item.primaryImageUrl}
+              src={item.primary_image_url}
               alt={item.name}
               context="menuItem"
               className={`w-full h-full object-cover rounded-lg ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
@@ -159,18 +159,18 @@ export default function ItemCard({
             <span className={`font-bold text-gray-900 ${compact ? 'text-base' : 'text-lg'}`}>
               {formatCurrency(item.price)}
             </span>
-            {!compact && item.totalOrdered > 0 && (
+            {!compact && item.total_ordered > 0 && (
               <div className="text-xs text-gray-500 mt-1">
-                {item.totalOrdered} sold
+                {item.total_ordered} sold
               </div>
             )}
           </div>
           
           {/* Stock quantity indicator */}
-          {item.trackInventory && item.availableQuantity !== undefined && (
+          {item.track_inventory && item.available_quantity !== undefined && (
             <div className="text-xs text-gray-500 text-right">
-              {item.availableQuantity > 0 ? (
-                <span>{item.availableQuantity} left</span>
+              {item.available_quantity > 0 ? (
+                <span>{item.available_quantity} left</span>
               ) : (
                 <span className="text-red-600">Sold out</span>
               )}
@@ -186,14 +186,14 @@ export default function ItemCard({
         {/* Add to Cart Button */}
         <button
           onClick={handleAddToCart}
-          disabled={!item.inStock}
+          disabled={!item.in_stock}
           className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${compact ? 'text-sm' : 'text-base'} ${
-            item.inStock
+            item.in_stock
               ? 'bg-[#c1902f] text-white hover:bg-[#d4a43f]'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
-          {item.inStock ? 'Add to Cart' : 'Out of Stock'}
+          {item.in_stock ? 'Add to Cart' : 'Out of Stock'}
         </button>
 
         {/* Detail Link */}
