@@ -3,14 +3,16 @@
 import { useState, useEffect } from 'react';
 import {
   BarChart3,
-  TrendingUp,
-  TrendingDown,
   DollarSign,
   Users,
   ShoppingBag,
-  Target,
   Download,
-  RefreshCw
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Award,
+  Eye,
+  Package
 } from 'lucide-react';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { apiClient } from '../../../../shared/api/apiClient';
@@ -38,6 +40,9 @@ interface AnalyticsData {
     raised: number;
     goal: number;
     progress: number;
+    orders_count?: number;
+    average_order_value?: number;
+    goal_percentage?: number;
   }>;
   generalSupport: {
     orders_count: number;
@@ -49,6 +54,34 @@ interface AnalyticsData {
     name: string;
     quantity: number;
     revenue: number;
+    orders_count?: number;
+    average_quantity_per_order?: number;
+    variant_count?: number;
+    top_variants?: Array<{
+      options: Record<string, string>;
+      quantity: number;
+      revenue: number;
+      percentage_of_item: number;
+    }>;
+  }>;
+  itemVariantBreakdown?: Array<{
+    item_name: string;
+    sizes: Array<{
+      size: string;
+      quantity: number;
+      revenue: number;
+      colors: Array<{
+        color: string;
+        quantity: number;
+        revenue: number;
+      }>;
+    }>;
+  }>;
+  dailyTrends?: Array<{
+    date: string;
+    orders: number;
+    revenue: number;
+    statuses: Record<string, number>;
   }>;
   revenueByMonth: Array<{
     month: string;
@@ -95,6 +128,20 @@ export function AnalyticsManager({ restaurantId, fundraiserId }: AnalyticsManage
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<string>('30d');
+  
+  // Collapsible sections state
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    variantDetails: false,
+    dailyTrends: false,
+    advancedMetrics: false
+  });
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
 
   // Load analytics on component mount
   useEffect(() => {
@@ -177,9 +224,7 @@ export function AnalyticsManager({ restaurantId, fundraiserId }: AnalyticsManage
     }).format(amount);
   };
 
-  const formatPercentage = (value: number) => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
-  };
+
 
   if (loading) {
     return (
@@ -206,26 +251,19 @@ export function AnalyticsManager({ restaurantId, fundraiserId }: AnalyticsManage
   }
 
   return (
-    <div className="analytics-manager">
-      {/* Header with controls */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* Simple Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            {fundraiserId ? 'Fundraiser Analytics' : 'Wholesale Analytics'}
-          </h2>
-          <p className="text-gray-600">
-            {fundraiserId 
-              ? 'Performance metrics and insights for this fundraiser'
-              : 'Track fundraiser performance and revenue metrics'
-            }
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Fundraiser Analytics</h1>
+          <p className="text-gray-600">Key insights and performance metrics</p>
         </div>
         
         <div className="flex items-center space-x-3">
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
           >
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
@@ -235,350 +273,396 @@ export function AnalyticsManager({ restaurantId, fundraiserId }: AnalyticsManage
           
           <button
             onClick={loadAnalytics}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
           
           <button
             onClick={exportReport}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-colors text-sm"
           >
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
+            <Download className="w-4 h-4" />
+            <span>Export</span>
           </button>
         </div>
       </div>
 
-      {/* Key Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <DollarSign className="w-8 h-8 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(analytics.totalRevenue)}</p>
-              <p className={`text-sm ${analytics.revenueGrowth >= 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
-                {analytics.revenueGrowth >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                {formatPercentage(analytics.revenueGrowth)} vs previous period
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <ShoppingBag className="w-8 h-8 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Orders</p>
-              <p className="text-2xl font-semibold text-gray-900">{analytics.totalOrders}</p>
-              <p className={`text-sm ${analytics.ordersGrowth >= 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
-                {analytics.ordersGrowth >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                {formatPercentage(analytics.ordersGrowth)} vs previous period
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Users className="w-8 h-8 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active Participants</p>
-              <p className="text-2xl font-semibold text-gray-900">{analytics.totalParticipants}</p>
-              <p className="text-sm text-gray-600">
-                {fundraiserId 
-                  ? 'In this fundraiser'
-                  : `Across ${analytics.activeFundraisers} fundraisers`
-                }
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Target className="w-8 h-8 text-orange-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Avg Order Value</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(analytics.averageOrderValue)}</p>
-              <p className="text-sm text-gray-600">
-                {analytics.conversionRate}% conversion rate
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts and Tables Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Revenue Comparison Chart */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Revenue Comparison</h3>
-          <div className="space-y-4">
-            {analytics.revenueByMonth.map((month) => (
-              <div key={month.month} className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">{month.month}</span>
-                  <span className="text-gray-600">
-                    Wholesale: {formatCurrency(month.wholesale)} | Retail: {formatCurrency(month.retail)}
-                  </span>
-                </div>
-                <div className="flex space-x-1 h-6">
-                  <div 
-                    className="bg-blue-500 rounded-l"
-                    style={{ width: `${(month.wholesale / (month.wholesale + month.retail)) * 100}%` }}
-                  />
-                  <div 
-                    className="bg-gray-300 rounded-r"
-                    style={{ width: `${(month.retail / (month.wholesale + month.retail)) * 100}%` }}
-                  />
+      {/* Section 1: Key Performance Overview */}
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          {/* Total Revenue - Most Important */}
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                <p className="text-3xl font-bold text-gray-900">{formatCurrency(analytics.totalRevenue)}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {analytics.totalOrders} orders • {formatCurrency(analytics.averageOrderValue)} avg
+                </p>
+              </div>
+              <div className="text-right">
+                <DollarSign className="w-12 h-12 text-green-600 mb-2" />
+                <div className="text-xs text-gray-500">
+                  Recent activity
                 </div>
               </div>
-            ))}
+            </div>
           </div>
-          <div className="mt-4 flex items-center space-x-4 text-sm">
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-blue-500 rounded mr-2"></div>
-              <span>Wholesale</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-gray-300 rounded mr-2"></div>
-              <span>Retail</span>
-            </div>
+
+          {/* Participants Count */}
+          <div className="text-center">
+            <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-gray-900">{analytics.totalParticipants}</p>
+            <p className="text-sm text-gray-600">Active Participants</p>
+          </div>
+
+          {/* Order Status Visual */}
+          <div className="text-center">
+            <Package className="w-8 h-8 text-purple-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-gray-900">{analytics.totalOrders}</p>
+            <p className="text-sm text-gray-600">Total Orders</p>
           </div>
         </div>
 
-        {/* Order Status Distribution */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Order Status Distribution</h3>
-          <div className="space-y-4">
-            {analytics.ordersByStatus.map((status) => (
-              <div key={status.status} className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium">{status.status}</span>
-                  <span className="text-sm text-gray-600">{status.count} orders ({status.percentage}%)</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="h-2 rounded-full bg-blue-500"
-                    style={{ width: `${status.percentage}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+        {/* Order Status Bar */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="font-medium text-gray-600">Order Status Distribution</span>
+            <span className="text-gray-500">{analytics.totalOrders} total orders</span>
           </div>
-        </div>
-      </div>
-
-      {/* Performance Tables Row */}
-      <div className={`grid grid-cols-1 gap-8 ${fundraiserId ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
-        {/* Top Fundraisers - Hidden in scoped mode */}
-        {!fundraiserId && (
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Top Fundraisers</h3>
-            <div className="space-y-4">
-              {analytics.topFundraisers.map((fundraiser) => (
-                <div key={fundraiser.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{fundraiser.name}</p>
-                    <p className="text-xs text-gray-600">{fundraiser.participants} participants • {fundraiser.orders} orders</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-gray-900">{formatCurrency(fundraiser.revenue)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Top Participants */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            {fundraiserId ? 'Participants' : 'Top Participants'}
-          </h3>
-          <div className="space-y-4">
-            {analytics.topParticipants.map((participant) => (
-              <div key={participant.id} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{participant.name}</p>
-                    <p className="text-xs text-gray-600">{participant.fundraiser}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-gray-900">{formatCurrency(participant.raised)}</p>
-                    <p className="text-xs text-gray-600">{participant.progress}% of goal</p>
-                  </div>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div 
-                    className="h-1.5 rounded-full bg-green-500"
-                    style={{ width: `${Math.min(participant.progress, 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* General Support Analytics */}
-        {analytics.generalSupport.orders_count > 0 && (
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">General Support</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Organization Support Orders</p>
-                  <p className="text-xs text-gray-600">
-                    {analytics.generalSupport.percentage_of_total}% of total orders
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">
-                    {formatCurrency(analytics.generalSupport.total_revenue)}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    {analytics.generalSupport.orders_count} orders
-                  </p>
-                </div>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div 
-                  className="h-1.5 rounded-full bg-blue-500"
-                  style={{ width: `${Math.min(analytics.generalSupport.percentage_of_total, 100)}%` }}
+          <div className="flex h-2 rounded-full overflow-hidden bg-gray-200">
+            {analytics.ordersByStatus.map((status, index) => {
+              const colors = ['bg-green-500', 'bg-blue-500', 'bg-yellow-500', 'bg-gray-400'];
+              return (
+                <div
+                  key={status.status}
+                  className={colors[index] || 'bg-gray-300'}
+                  style={{ width: `${status.percentage}%` }}
+                  title={`${status.status}: ${status.count} orders (${status.percentage}%)`}
                 />
-              </div>
-            </div>
+              );
+            })}
           </div>
-        )}
-
-        {/* Top Items */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            {fundraiserId ? 'Items Performance' : 'Top Selling Items'}
-          </h3>
-          <div className="space-y-4">
-            {analytics.topItems.map((item) => (
-              <div key={item.id} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                  <p className="text-xs text-gray-600">{item.quantity} sold</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.revenue)}</p>
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-4 text-xs">
+            {analytics.ordersByStatus.map((status, index) => {
+              const colors = ['text-green-600', 'text-blue-600', 'text-yellow-600', 'text-gray-600'];
+              return (
+                <span key={status.status} className={colors[index] || 'text-gray-600'}>
+                  {status.status}: {status.count}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* Variant Analytics Section */}
-      {analytics.variantAnalytics && (analytics.variantAnalytics.sizes.length > 0 || analytics.variantAnalytics.colors.length > 0) && (
-        <>
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Product Variant Analytics</h2>
-            <p className="text-gray-600 mb-6">
-              Track which sizes, colors, and combinations are most popular with customers
-            </p>
+      {/* Section 2: Top Performers */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Participants */}
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Top Performers</h3>
+            <Award className="w-5 h-5 text-yellow-600" />
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Top Sizes */}
-            {analytics.variantAnalytics.sizes.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Most Popular Sizes</h3>
-                <div className="space-y-3">
-                  {analytics.variantAnalytics.sizes.slice(0, 8).map((size, index) => (
-                    <div key={size.name} className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium mr-3 ${
-                          index === 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {index + 1}
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{size.name}</p>
-                          <p className="text-xs text-gray-600">{size.orders_count} orders</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900">{size.quantity_sold} sold</p>
-                        <p className="text-xs text-gray-600">{formatCurrency(size.revenue)}</p>
-                      </div>
-                    </div>
-                  ))}
+          <div className="space-y-4">
+            {/* General Support First - Most Important */}
+            {analytics.generalSupport.orders_count > 0 && (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-blue-900">General Organization Support</p>
+                    <p className="text-sm text-blue-700">
+                      {analytics.generalSupport.orders_count} orders • {analytics.generalSupport.percentage_of_total}% of total
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-blue-900">
+                      {formatCurrency(analytics.generalSupport.total_revenue)}
+                    </p>
+                    <p className="text-xs text-blue-600">Best performer</p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Top Colors */}
-            {analytics.variantAnalytics.colors.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Most Popular Colors</h3>
-                <div className="space-y-3">
-                  {analytics.variantAnalytics.colors.slice(0, 8).map((color, index) => (
-                    <div key={color.name} className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium mr-3 ${
-                          index === 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {index + 1}
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{color.name}</p>
-                          <p className="text-xs text-gray-600">{color.orders_count} orders</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900">{color.quantity_sold} sold</p>
-                        <p className="text-xs text-gray-600">{formatCurrency(color.revenue)}</p>
-                      </div>
-                    </div>
-                  ))}
+            {/* Individual Participants */}
+            {analytics.topParticipants.slice(0, 3).map((participant, index) => (
+              <div key={participant.id} className="flex items-center justify-between py-2">
+                <div className="flex items-center">
+                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium mr-3 ${
+                    index === 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {index + 1}
+                  </span>
+                  <div>
+                    <p className="font-medium text-gray-900">{participant.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {participant.orders_count || 0} orders
+                      {participant.average_order_value && ` • ${formatCurrency(participant.average_order_value)} avg`}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-gray-900">{formatCurrency(participant.raised)}</p>
+                  {participant.goal > 0 && (
+                    <p className="text-xs text-gray-500">{participant.progress}% of goal</p>
+                  )}
                 </div>
               </div>
-            )}
+            ))}
+          </div>
+        </div>
 
-            {/* Top Combinations */}
-            {analytics.variantAnalytics.combinations.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Top Size/Color Combinations</h3>
-                <div className="space-y-3">
-                  {analytics.variantAnalytics.combinations.slice(0, 8).map((combo, index) => (
-                    <div key={combo.combination} className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium mr-3 ${
-                          index === 0 ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {index + 1}
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{combo.size} / {combo.color}</p>
-                          <p className="text-xs text-gray-600">{combo.orders_count} orders</p>
+        {/* Top Items */}
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Best Selling Items</h3>
+            <ShoppingBag className="w-5 h-5 text-green-600" />
+          </div>
+          
+          <div className="space-y-4">
+            {analytics.topItems.slice(0, 4).map((item, index) => (
+              <div key={item.id} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium mr-3 ${
+                      index === 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="font-medium text-gray-900">{item.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {item.quantity} sold
+                        {item.orders_count && ` • ${item.orders_count} orders`}
+                        {item.variant_count && item.variant_count > 0 && ` • ${item.variant_count} variants`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-gray-900">{formatCurrency(item.revenue)}</p>
+                  </div>
+                </div>
+                
+                {/* Show most popular variant */}
+                {item.top_variants && item.top_variants.length > 0 && (
+                  <div className="ml-9 text-xs text-gray-600">
+                    Most popular: {Object.entries(item.top_variants[0].options).map(([, value]) => `${value}`).join(', ')} 
+                    ({item.top_variants[0].percentage_of_item}%)
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3: Additional Insights (Collapsible) */}
+      <div className="space-y-4">
+        {/* Product Variants - Collapsible */}
+        {analytics.variantAnalytics && (analytics.variantAnalytics.sizes.length > 0 || analytics.variantAnalytics.colors.length > 0) && (
+          <div className="bg-white rounded-lg shadow-sm border">
+            <button
+              onClick={() => toggleSection('variantDetails')}
+              className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center">
+                <Eye className="w-5 h-5 text-gray-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">Product Variant Insights</h3>
+                <span className="ml-2 text-sm text-gray-500">
+                  {analytics.itemVariantBreakdown && analytics.itemVariantBreakdown.length > 0 ? (
+                    `(${analytics.itemVariantBreakdown.length} items with variants)`
+                  ) : (
+                    `(${analytics.variantAnalytics.sizes.length} sizes, ${analytics.variantAnalytics.colors.length} colors)`
+                  )}
+                </span>
+              </div>
+              {expandedSections.variantDetails ? (
+                <ChevronUp className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              )}
+            </button>
+            
+            {expandedSections.variantDetails && (
+              <div className="px-6 pb-6 border-t">
+                {/* Show Item-Specific Variant Breakdown */}
+                {analytics.itemVariantBreakdown && analytics.itemVariantBreakdown.length > 0 ? (
+                  <div className="space-y-6 mt-4">
+                    {analytics.itemVariantBreakdown.slice(0, 3).map((itemBreakdown) => (
+                      <div key={itemBreakdown.item_name} className="border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-900 mb-4 text-lg">
+                          {itemBreakdown.item_name} Variants
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {/* Sizes for this item */}
+                          {itemBreakdown.sizes.length > 0 && (
+                            <div>
+                              <h5 className="font-medium text-gray-700 mb-2">Popular Sizes</h5>
+                              <div className="space-y-2">
+                                {itemBreakdown.sizes.slice(0, 4).map((size) => (
+                                  <div key={size.size} className="flex justify-between text-sm">
+                                    <span className="font-medium">{size.size}</span>
+                                    <span className="text-gray-600">{size.quantity} sold</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Colors for this item */}
+                          {itemBreakdown.sizes.some(size => size.colors.length > 0) && (
+                            <div>
+                              <h5 className="font-medium text-gray-700 mb-2">Popular Colors</h5>
+                              <div className="space-y-2">
+                                {itemBreakdown.sizes
+                                  .flatMap(size => size.colors)
+                                  .reduce((acc, color) => {
+                                    const existing = acc.find(c => c.color === color.color);
+                                    if (existing) {
+                                      existing.quantity += color.quantity;
+                                    } else {
+                                      acc.push({ ...color });
+                                    }
+                                    return acc;
+                                  }, [] as any[])
+                                  .sort((a, b) => b.quantity - a.quantity)
+                                  .slice(0, 4)
+                                  .map((color) => (
+                                    <div key={color.color} className="flex justify-between text-sm">
+                                      <span className="font-medium capitalize">{color.color}</span>
+                                      <span className="text-gray-600">{color.quantity} sold</span>
+                                    </div>
+                                  ))
+                                }
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Top size/color combinations for this item */}
+                          <div>
+                            <h5 className="font-medium text-gray-700 mb-2">Top Combinations</h5>
+                            <div className="space-y-2">
+                              {itemBreakdown.sizes
+                                .flatMap(size => 
+                                  size.colors.map(color => ({
+                                    combination: `${size.size} / ${color.color}`,
+                                    quantity: color.quantity,
+                                    revenue: color.revenue
+                                  }))
+                                )
+                                .sort((a, b) => b.quantity - a.quantity)
+                                .slice(0, 4)
+                                .map((combo) => (
+                                  <div key={combo.combination} className="text-sm">
+                                    <div className="font-medium">{combo.combination}</div>
+                                    <div className="text-gray-600">{combo.quantity} sold</div>
+                                  </div>
+                                ))
+                              }
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900">{combo.quantity_sold} sold</p>
-                        <p className="text-xs text-gray-600">{formatCurrency(combo.revenue)}</p>
+                    ))}
+                  </div>
+                ) : (
+                  /* Fallback to overall variant analytics if item breakdown not available */
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                    {/* Most Popular Sizes */}
+                    {analytics.variantAnalytics.sizes.length > 0 && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-3">Most Popular Sizes (All Items)</h4>
+                        <div className="space-y-2">
+                          {analytics.variantAnalytics.sizes.slice(0, 5).map((size) => (
+                            <div key={size.name} className="flex justify-between text-sm">
+                              <span className="font-medium">{size.name}</span>
+                              <span className="text-gray-600">{size.quantity_sold} sold</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    )}
+
+                    {/* Most Popular Colors */}
+                    {analytics.variantAnalytics.colors.length > 0 && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-3">Most Popular Colors (All Items)</h4>
+                        <div className="space-y-2">
+                          {analytics.variantAnalytics.colors.slice(0, 5).map((color) => (
+                            <div key={color.name} className="flex justify-between text-sm">
+                              <span className="font-medium capitalize">{color.name}</span>
+                              <span className="text-gray-600">{color.quantity_sold} sold</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Top Combinations */}
+                    {analytics.variantAnalytics.combinations.length > 0 && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-3">Top Combinations (All Items)</h4>
+                        <div className="space-y-2">
+                          {analytics.variantAnalytics.combinations.slice(0, 5).map((combo) => (
+                            <div key={combo.combination} className="text-sm">
+                              <div className="font-medium">{combo.size} / {combo.color}</div>
+                              <div className="text-gray-600">{combo.quantity_sold} sold</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Daily Trends - Collapsible */}
+        {analytics.dailyTrends && analytics.dailyTrends.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border">
+            <button
+              onClick={() => toggleSection('dailyTrends')}
+              className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center">
+                <BarChart3 className="w-5 h-5 text-gray-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">Recent Daily Trends</h3>
+                <span className="ml-2 text-sm text-gray-500">
+                  (Last {analytics.dailyTrends.length} days)
+                </span>
+              </div>
+              {expandedSections.dailyTrends ? (
+                <ChevronUp className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              )}
+            </button>
+            
+            {expandedSections.dailyTrends && (
+              <div className="px-6 pb-6 border-t">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 mt-4">
+                  {analytics.dailyTrends.slice(-7).map((day) => (
+                    <div key={day.date} className="text-center p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs font-medium text-gray-600 mb-1">
+                        {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </p>
+                      <p className="text-lg font-semibold text-gray-900">{day.orders}</p>
+                      <p className="text-xs text-gray-600">orders</p>
+                      <p className="text-sm font-medium text-green-600 mt-1">{formatCurrency(day.revenue)}</p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
