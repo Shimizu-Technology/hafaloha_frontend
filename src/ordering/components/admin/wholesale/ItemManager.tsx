@@ -588,9 +588,10 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Price
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {/* Stock column commented out since stock tracking is not currently being used */}
+                  {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Stock
-                  </th>
+                  </th> */}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Performance
                   </th>
@@ -648,7 +649,8 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {formatCurrency(item.price)}
                     </td>
-                    <td className="px-6 py-4">
+                    {/* Stock data cell commented out since stock tracking is not currently being used */}
+                    {/* <td className="px-6 py-4">
                       {item.track_inventory ? (
                         <div>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStockStatusColor(item.stock_status)}`}>
@@ -661,7 +663,7 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                       ) : (
                         <span className="text-xs text-gray-500">Not tracked</span>
                       )}
-                    </td>
+                    </td> */}
                     <td className="px-6 py-4 text-sm text-gray-900">
                       <div className="space-y-1">
                         <div className="flex items-center">

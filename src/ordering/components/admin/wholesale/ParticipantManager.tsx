@@ -26,7 +26,7 @@ import toastUtils from '../../../../shared/utils/toastUtils';
 import { apiClient } from '../../../../shared/api/apiClient';
 
 interface WholesaleParticipant {
-  id: number;
+  id: number | string; // Allow string for special entries like 'general_support'
   fundraiser_id: number;
   fundraiser_name: string;
   name: string;
@@ -38,11 +38,11 @@ interface WholesaleParticipant {
   goal_progress_percentage?: number | null;
   total_orders_count?: number | null;
   total_raised?: number | null;
-  position: number;
-  sort_order: number;
+  position?: number;
+  sort_order?: number;
   active: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface ParticipantFormData {
@@ -234,6 +234,11 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
       return matchesSearch && matchesProgress;
     })
     .sort((a, b) => {
+      // Handle General Organization Support entry (always sort it to top)
+      if (a.id === 'general_support' && b.id !== 'general_support') return -1;
+      if (b.id === 'general_support' && a.id !== 'general_support') return 1;
+      if (a.id === 'general_support' && b.id === 'general_support') return 0;
+      
       let aValue: any, bValue: any;
       
       switch (sortBy) {
@@ -250,8 +255,8 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
           bValue = b.total_raised || 0;
           break;
         default:
-          aValue = new Date(a.created_at);
-          bValue = new Date(b.created_at);
+          aValue = new Date(a.created_at || '');
+          bValue = new Date(b.created_at || '');
       }
       
       if (sortOrder === 'asc') {
@@ -435,8 +440,16 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                            <Users className="w-5 h-5 text-gray-400" />
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                            participant.id === 'general_support' 
+                              ? 'bg-blue-100' 
+                              : 'bg-gray-200'
+                          }`}>
+                            {participant.id === 'general_support' ? (
+                              <Award className="w-5 h-5 text-blue-600" />
+                            ) : (
+                              <Users className="w-5 h-5 text-gray-400" />
+                            )}
                           </div>
                         </div>
                         <div className="ml-4">
@@ -473,27 +486,38 @@ export function ParticipantManager({ restaurantId, fundraiserId }: ParticipantMa
                     </td>
                     <td className="px-6 py-4 text-sm font-medium">
                       <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => toggleActive(participant.id, participant.active)}
-                          className="text-gray-400 hover:text-gray-600"
-                          title={participant.active ? 'Deactivate' : 'Activate'}
-                        >
-                          {participant.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                        <button
-                          onClick={() => handleEdit(participant)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(participant.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {participant.id === 'general_support' ? (
+                          // General Organization Support entry - show only informational indicator
+                          <div className="flex items-center text-xs text-gray-500 italic">
+                            <BarChart3 className="w-4 h-4 mr-1" />
+                            System Generated
+                          </div>
+                        ) : (
+                          // Regular participant - show all action buttons
+                          <>
+                            <button
+                              onClick={() => toggleActive(participant.id as number, participant.active)}
+                              className="text-gray-400 hover:text-gray-600"
+                              title={participant.active ? 'Deactivate' : 'Activate'}
+                            >
+                              {participant.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => handleEdit(participant)}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(participant.id as number)}
+                              className="text-red-600 hover:text-red-900"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
