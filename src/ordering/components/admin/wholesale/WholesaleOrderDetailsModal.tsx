@@ -191,7 +191,7 @@ export function WholesaleOrderDetailsModal({
               </h2>
               <div className="flex items-center space-x-2">
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                  {order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'Unknown'}
+                  {order.status === 'fulfilled' ? 'Ready for Pickup' : order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'Unknown'}
                 </span>
               </div>
             </div>
@@ -206,7 +206,7 @@ export function WholesaleOrderDetailsModal({
                   className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="pending">Pending</option>
-                  <option value="fulfilled">Fulfilled</option>
+                  <option value="fulfilled">Ready for Pickup</option>
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>

@@ -225,9 +225,9 @@ export function OrderManager({ restaurantId, fundraiserId }: OrderManagerProps) 
               onClick={() => updateOrderStatus(order.id, 'fulfilled')}
               disabled={updatingOrderId === order.id}
               className="px-3 py-1 text-sm text-green-600 hover:text-green-900 border border-green-300 rounded-md hover:bg-green-50 disabled:opacity-50"
-              title="Mark as Fulfilled"
+              title="Mark as Ready for Pickup"
             >
-              {updatingOrderId === order.id ? 'Updating...' : 'Mark Fulfilled'}
+              {updatingOrderId === order.id ? 'Updating...' : 'Ready for Pickup'}
             </button>
           );
         case 'fulfilled':
@@ -444,7 +444,7 @@ export function OrderManager({ restaurantId, fundraiserId }: OrderManagerProps) 
           >
             <option value="all">All Statuses</option>
             <option value="pending">Pending</option>
-            <option value="fulfilled">Fulfilled</option>
+            <option value="fulfilled">Ready for Pickup</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>

@@ -153,7 +153,7 @@ export function WholesaleCollapsibleOrderCard({
           {/* Status Badge */}
           <div>
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-              {order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'Unknown'}
+              {order.status === 'fulfilled' ? 'Ready for Pickup' : order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'Unknown'}
             </span>
           </div>
 

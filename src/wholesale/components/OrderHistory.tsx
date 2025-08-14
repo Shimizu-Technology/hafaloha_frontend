@@ -110,6 +110,8 @@ export default function OrderHistory() {
         return 'text-yellow-600 bg-yellow-100';
       case 'processing':
         return 'text-blue-600 bg-blue-100';
+      case 'fulfilled':
+        return 'text-blue-600 bg-blue-100';
       case 'shipped':
         return 'text-purple-600 bg-purple-100';
       case 'delivered':
@@ -187,6 +189,7 @@ export default function OrderHistory() {
               <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
               <option value="processing">Processing</option>
+              <option value="fulfilled">Ready for Pickup</option>
               <option value="shipped">Shipped</option>
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
@@ -287,7 +290,7 @@ export default function OrderHistory() {
                 
                 <div className="text-right">
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                    {order.status === 'fulfilled' ? 'Ready for Pickup' : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                   </span>
                   <div className="text-lg font-semibold text-gray-900 mt-1">
                     {formatCurrency(order.total)}

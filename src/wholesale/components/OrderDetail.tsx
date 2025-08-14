@@ -87,6 +87,8 @@ export default function OrderDetail() {
         return 'text-yellow-600 bg-yellow-100';
       case 'processing':
         return 'text-blue-600 bg-blue-100';
+      case 'fulfilled':
+        return 'text-blue-600 bg-blue-100';
       case 'shipped':
         return 'text-purple-600 bg-purple-100';
       case 'delivered':
@@ -107,6 +109,8 @@ export default function OrderDetail() {
         return 'Your order is pending and will be processed soon.';
       case 'processing':
         return 'Your order is being prepared for shipment.';
+      case 'fulfilled':
+        return 'Your order is ready for pickup!';
       case 'shipped':
         return 'Your order has been shipped and is on its way.';
       case 'delivered':
@@ -200,7 +204,7 @@ export default function OrderDetail() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+              {order.status === 'fulfilled' ? 'Ready for Pickup' : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
             </span>
             <div>
               <div className="font-medium text-gray-900">
