@@ -1532,3 +1532,6 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
 
 // Legacy Option Groups Management Component - REMOVED
 // This section has been replaced by the inline option groups system above
+
+// Default export for backward compatibility
+export default ItemManager;
