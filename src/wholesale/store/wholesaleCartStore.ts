@@ -15,8 +15,8 @@ export interface WholesaleCartItem {
   priceCents: number;
   quantity: number;
   imageUrl?: string;
-  options?: Record<string, any>;
-  selectedOptions?: Record<string, string>; // Customer's variant selections (size, color, etc.)
+  options?: Record<string, any>; // Backend format: group ID -> option IDs array
+  selectedOptions?: Record<string, string>; // Display format: group name -> option names
   addedAt: string;
   updatedAt: string;
 }
@@ -65,6 +65,7 @@ export interface WholesaleCartState {
   // State management
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  migrateCartFormat: () => void;
   
   // WebSocket methods
   startWebSocketConnection: () => boolean;
@@ -164,12 +165,28 @@ export const useWholesaleCartStore = create<WholesaleCartState>()(
         });
       },
 
-      clearCart: () => {
+            clearCart: () => {
         set({ 
-          items: [],
-          fundraiser: null,
+          items: [], 
+          fundraiser: null, 
           error: null 
         });
+      },
+
+      // Migration helper: Clear cart if items have old format
+      migrateCartFormat: () => {
+        const state = get();
+        const hasOldFormatItems = state.items.some(item => {
+          // Check if selectedOptions contains array values (old format)
+          return item.selectedOptions && Object.values(item.selectedOptions).some(value => 
+            Array.isArray(value) || (typeof value === 'string' && value.includes(','))
+          );
+        });
+        
+        if (hasOldFormatItems) {
+          console.warn('Detected old cart format, clearing cart for compatibility');
+          get().clearCart();
+        }
       },
 
       getCartTotal: () => {

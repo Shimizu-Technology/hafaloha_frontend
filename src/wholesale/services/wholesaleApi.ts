@@ -37,6 +37,28 @@ export interface WholesaleFundraiser {
   updatedAt: string;
 }
 
+export interface WholesaleOptionGroup {
+  id: number;
+  name: string;
+  min_select: number;
+  max_select: number;
+  required: boolean;
+  position: number;
+  enable_inventory_tracking?: boolean;
+  options: WholesaleOption[];
+}
+
+export interface WholesaleOption {
+  id: number;
+  name: string;
+  additional_price: number;
+  available: boolean;
+  position: number;
+  stock_quantity?: number;
+  damaged_quantity?: number;
+  low_stock_threshold?: number;
+}
+
 export interface WholesaleItem {
   id: number;
   name: string;
@@ -47,6 +69,7 @@ export interface WholesaleItem {
   position: number;
   sort_order: number;
   options: Record<string, any>;
+  option_groups?: WholesaleOptionGroup[];
   active: boolean;
   track_inventory: boolean;
   in_stock: boolean;
@@ -175,7 +198,7 @@ export interface CreateOrderRequest {
     quantity: number;
     price_cents: number;
     line_total_cents: number;
-    selected_options?: Record<string, string>;
+    selected_options?: Record<string, any>; // Backend format: group ID -> option IDs array
   }>;
 }
 

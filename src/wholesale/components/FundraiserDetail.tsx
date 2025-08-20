@@ -5,6 +5,7 @@ import { wholesaleApi, WholesaleFundraiserDetail } from '../services/wholesaleAp
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import { useCartConflict } from '../hooks/useCartConflict';
 import VariantSelector from './VariantSelector';
+import WholesaleCustomizationModal from './WholesaleCustomizationModal';
 import CartConflictModal from './CartConflictModal';
 import MobileStickyBar from './MobileStickyBar';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
@@ -90,10 +91,19 @@ export default function FundraiserDetail() {
     return item.options?.size_options?.length > 0 || item.options?.color_options?.length > 0;
   };
 
+  const hasOptionGroups = (item: any) => {
+    return item.option_groups && item.option_groups.length > 0;
+  };
+
   const handleItemClick = (item: any) => {
-    if (hasVariants(item)) {
+    if (hasOptionGroups(item)) {
+      // Use new option groups system
+      setSelectedItem(item);
+    } else if (hasVariants(item)) {
+      // Use legacy variant system
       setSelectedItem(item);
     } else {
+      // Simple add to cart
       handleAddToCart(item, {});
     }
   };
@@ -110,6 +120,10 @@ export default function FundraiserDetail() {
       },
       () => {
         // Success callback - actually add to cart
+        // For simple items (no customization), use empty backend options and display options
+        const backendOptions = {}; // No option groups for simple items
+        const displayOptions = selectedOptions; // Keep original for display
+        
         const success = addToCart({
           id: `${item.id}-${Date.now()}-${JSON.stringify(selectedOptions)}`,
           itemId: item.id,
@@ -120,8 +134,8 @@ export default function FundraiserDetail() {
           price: item.price,
           priceCents: item.price_cents,
           imageUrl: item.primary_image_url,
-          options: item.options,
-          selectedOptions: selectedOptions
+          options: backendOptions, // Backend format (empty for simple items)
+          selectedOptions: displayOptions // Display format for UI
         }, 1);
 
         if (!success) {
@@ -138,8 +152,32 @@ export default function FundraiserDetail() {
 
   const handleVariantSelection = (selectedOptions: { [key: string]: string }) => {
     if (selectedItem) {
-      handleAddToCart(selectedItem, selectedOptions);
-      setSelectedItem(null);
+      // For legacy variants, we need to convert to the new backend format
+      // Since legacy variants don't have option group IDs, we'll create a synthetic format
+      // that the backend can understand, but this should be rare since we're using option groups now
+      
+      // Create both backend format (empty since no real option groups) and display format
+      const backendOptions = {}; // Legacy variants don't map to option groups
+      const displayOptions = selectedOptions; // Keep original for display
+      
+      // Add to cart with both formats
+      const success = addToCart({
+        id: `${selectedItem.id}-${Date.now()}-${JSON.stringify(selectedOptions)}`,
+        itemId: selectedItem.id,
+        fundraiserId: fundraiser!.id,
+        name: selectedItem.name,
+        description: selectedItem.description,
+        sku: selectedItem.sku,
+        price: selectedItem.price,
+        priceCents: selectedItem.price_cents,
+        imageUrl: selectedItem.primary_image_url,
+        options: backendOptions, // Empty for legacy variants
+        selectedOptions: displayOptions // Display format for UI
+      }, 1);
+
+      if (success) {
+        setSelectedItem(null);
+      }
     }
   };
 
@@ -362,16 +400,21 @@ export default function FundraiserDetail() {
                     </div>
                   )}
 
-                  {/* Variant indicators - Only show if exists */}
-                  {hasVariants(item) && (
+                  {/* Option indicators - Show option groups or legacy variants */}
+                  {(hasOptionGroups(item) || hasVariants(item)) && (
                     <div className="mb-2">
                       <div className="flex flex-wrap gap-1">
-                        {item.options?.size_options?.length > 0 && (
+                        {hasOptionGroups(item) && item.option_groups?.map((group: any) => (
+                          <span key={group.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[#c1902f]/10 text-[#c1902f]">
+                            {group.name} ({group.options?.length || 0} options)
+                          </span>
+                        ))}
+                        {!hasOptionGroups(item) && item.options?.size_options?.length > 0 && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[#c1902f]/10 text-[#c1902f]">
                             {item.options.size_options.length} sizes
                           </span>
                         )}
-                        {item.options?.color_options?.length > 0 && (
+                        {!hasOptionGroups(item) && item.options?.color_options?.length > 0 && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[#c1902f]/10 text-[#c1902f]">
                             {item.options.color_options.length} colors
                           </span>
@@ -408,9 +451,11 @@ export default function FundraiserDetail() {
                         ? 'Out of Stock'
                         : isFromDifferentFundraiser()
                           ? 'Switch Fundraiser'
-                          : hasVariants(item) 
-                            ? 'Select Options' 
-                            : 'Add to Cart'
+                          : hasOptionGroups(item)
+                            ? 'Customize'
+                            : hasVariants(item) 
+                              ? 'Select Options' 
+                              : 'Add to Cart'
                       }
                     </button>
                   </div>
@@ -470,13 +515,24 @@ export default function FundraiserDetail() {
         </div>
       )}
 
-      {/* Variant Selector Modal */}
-      <VariantSelector
-        item={selectedItem}
-        isOpen={selectedItem !== null}
-        onClose={() => setSelectedItem(null)}
-        onAddToCart={handleVariantSelection}
-      />
+      {/* Customization Modals */}
+      {selectedItem && hasOptionGroups(selectedItem) && fundraiser && (
+        <WholesaleCustomizationModal
+          item={selectedItem}
+          fundraiserId={fundraiser.id}
+          onClose={() => setSelectedItem(null)}
+        />
+      )}
+      
+      {/* Legacy Variant Selector Modal */}
+      {selectedItem && !hasOptionGroups(selectedItem) && hasVariants(selectedItem) && (
+        <VariantSelector
+          item={selectedItem}
+          isOpen={selectedItem !== null}
+          onClose={() => setSelectedItem(null)}
+          onAddToCart={handleVariantSelection}
+        />
+      )}
 
       {/* Cart Conflict Modal */}
       {conflictData && (

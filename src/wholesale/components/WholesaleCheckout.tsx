@@ -237,7 +237,7 @@ export default function WholesaleCheckout() {
           quantity: item.quantity,
           price_cents: item.priceCents,
           line_total_cents: item.priceCents * item.quantity,
-          selected_options: item.selectedOptions || {}
+          selected_options: item.options || {} // Use backend format (group ID -> option IDs)
         }))
       };
 

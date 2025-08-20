@@ -38,6 +38,68 @@ interface WholesaleItemVariant {
   can_purchase: boolean;
 }
 
+// New Option Group System Interfaces
+interface WholesaleOption {
+  id: number;
+  name: string;
+  additional_price: number;
+  available: boolean;
+  position: number;
+  total_ordered: number;
+  total_revenue: number;
+  stock_quantity?: number | null;
+  damaged_quantity: number;
+  low_stock_threshold?: number | null;
+  inventory_tracking_enabled: boolean;
+  available_stock?: number | null;
+  in_stock: boolean;
+  out_of_stock: boolean;
+  low_stock: boolean;
+  final_price: number;
+  display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface WholesaleOptionGroup {
+  id: number;
+  name: string;
+  min_select: number;
+  max_select: number;
+  required: boolean;
+  position: number;
+  enable_inventory_tracking: boolean;
+  has_available_options: boolean;
+  required_but_unavailable: boolean;
+  inventory_tracking_enabled: boolean;
+  total_option_stock: number;
+  available_option_stock: number;
+  has_option_stock: boolean;
+  options_count: number;
+  options: WholesaleOption[];
+  created_at: string;
+  updated_at: string;
+}
+
+interface OptionGroupFormData {
+  name: string;
+  min_select: number;
+  max_select: number;
+  required: boolean;
+  position: number;
+  enable_inventory_tracking: boolean;
+  options: OptionFormData[];
+}
+
+interface OptionFormData {
+  name: string;
+  additional_price: number;
+  available: boolean;
+  position: number;
+}
+
+// Removed SelectedOptions interface - not currently used
+
 interface WholesaleItem {
   id: number;
   fundraiser_id: number;
@@ -64,6 +126,12 @@ interface WholesaleItem {
   variants?: WholesaleItemVariant[];
   has_variants: boolean;
   variant_count: number;
+  
+  // Option Groups (new system)
+  option_groups?: WholesaleOptionGroup[];
+  has_options: boolean;
+  option_groups_count: number;
+  
   created_at: string;
   updated_at: string;
 }
@@ -80,20 +148,10 @@ interface ItemFormData {
   allow_sale_with_no_stock: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
-  options: {
-    size_options: string[];
-    color_options: string[];
-    custom_fields: { [key: string]: any };
-  };
-  custom_variant_skus?: { [key: number]: string };
+  option_groups: OptionGroupFormData[];
 }
 
-interface PreviewVariant {
-  size?: string;
-  color?: string;
-  sku: string;
-  isCustom: boolean;
-}
+// Removed PreviewVariant interface - using option groups instead
 
 interface ImageFile {
   file: File;
@@ -142,11 +200,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
     allow_sale_with_no_stock: false,
     stock_quantity: 0,
     low_stock_threshold: 5,
-    options: {
-      size_options: [],
-      color_options: [],
-      custom_fields: {}
-    }
+    option_groups: []
   });
   
   // Search and filter state
@@ -162,7 +216,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
   const [imageUploading, setImageUploading] = useState(false);
 
   // SKU preview state
-  const [previewVariants, setPreviewVariants] = useState<PreviewVariant[]>([]);
+  // Removed previewVariants - using option groups instead
 
   // Load data on component mount
   useEffect(() => {
@@ -206,7 +260,6 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
   const handleCreate = () => {
     setIsCreating(true);
     setEditingId(null);
-    setPreviewVariants([]);
     setFormData({
       fundraiser_id: fundraiserId || 0,
       name: '',
@@ -219,11 +272,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       allow_sale_with_no_stock: false,
       stock_quantity: 0,
       low_stock_threshold: 5,
-      options: {
-        size_options: [],
-        color_options: [],
-        custom_fields: {}
-      }
+      option_groups: []
     });
   };
 
@@ -234,12 +283,21 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       setIsCreating(false);
       setEditingId(item.id);
       
-      // Ensure options object exists with proper structure
-      const safeOptions = {
-        size_options: item.options?.size_options || [],
-        color_options: item.options?.color_options || [],
-        custom_fields: item.options?.custom_fields || {}
-      };
+      // Convert existing option groups to form data format
+      const optionGroupsData: OptionGroupFormData[] = (item.option_groups || []).map(group => ({
+        name: group.name,
+        min_select: group.min_select,
+        max_select: group.max_select,
+        required: group.required,
+        position: group.position,
+        enable_inventory_tracking: group.enable_inventory_tracking,
+        options: (group.options || []).map(option => ({
+          name: option.name,
+          additional_price: option.additional_price,
+          available: option.available,
+          position: option.position
+        }))
+      }));
       
       setFormData({
         fundraiser_id: item.fundraiser_id || fundraiserId || 0,
@@ -253,7 +311,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         allow_sale_with_no_stock: (item as any).allow_sale_with_no_stock || false,
         stock_quantity: item.stock_quantity || 0,
         low_stock_threshold: item.low_stock_threshold || 5,
-        options: safeOptions
+        option_groups: optionGroupsData
       });
       
       // Load existing images if available
@@ -272,6 +330,58 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       console.error('Error in handleEdit:', error);
       toastUtils.error('Failed to load item for editing. Please try again.');
     }
+  };
+
+  // Helper function to create option groups for a new item
+  const createOptionGroups = async (itemId: number, optionGroups: OptionGroupFormData[]) => {
+    const fundraiserId = formData.fundraiser_id;
+    
+    for (const groupData of optionGroups) {
+      const groupResponse = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups`, {
+        option_group: {
+          name: groupData.name,
+          min_select: groupData.min_select,
+          max_select: groupData.max_select,
+          required: groupData.required,
+          position: groupData.position,
+          enable_inventory_tracking: groupData.enable_inventory_tracking
+        }
+      });
+      
+      const groupId = groupResponse.data.data.option_group.id;
+      
+      // Create options for this group
+      for (const optionData of groupData.options) {
+        await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options`, {
+          option: {
+            name: optionData.name,
+            additional_price: optionData.additional_price,
+            available: optionData.available,
+            position: optionData.position
+          }
+        });
+      }
+    }
+  };
+
+  // Helper function to update option groups for an existing item
+  const updateOptionGroups = async (itemId: number, optionGroups: OptionGroupFormData[]) => {
+    const fundraiserId = formData.fundraiser_id;
+    
+    // For simplicity, we'll delete all existing option groups and recreate them
+    // In a production app, you might want to do a more sophisticated diff/merge
+    
+    // Get existing option groups
+    const existingResponse = await apiClient.get(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}`);
+    const existingGroups = existingResponse.data.data.item.option_groups || [];
+    
+    // Delete existing groups
+    for (const group of existingGroups) {
+      await apiClient.delete(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${group.id}`);
+    }
+    
+    // Create new groups
+    await createOptionGroups(itemId, optionGroups);
   };
 
   const handleSave = async () => {
@@ -298,17 +408,9 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       let requestData: any;
       let requestConfig: any = {};
 
-      // Prepare item data with custom SKUs if creating
+      // Prepare item data (excluding option_groups for separate API calls)
       const itemData = { ...formData };
-      if (isCreating && previewVariants.length > 0) {
-        // Add custom SKUs for variants
-        itemData.custom_variant_skus = previewVariants.reduce((acc, variant, index) => {
-          if (variant.isCustom) {
-            acc[index] = variant.sku;
-          }
-          return acc;
-        }, {} as { [key: number]: string });
-      }
+      delete (itemData as any).option_groups; // Remove option_groups from item data - we'll create them separately
 
       if (selectedImages.length > 0 || imagesToDelete.length > 0) {
         // Use FormData for image uploads/deletions (both new items and existing items with image changes)
@@ -317,11 +419,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         // Add all form fields
         Object.keys(itemData).forEach(key => {
           const value = itemData[key as keyof typeof itemData];
-          if (key === 'options' || key === 'custom_variant_skus') {
-            formDataToSend.append(`item[${key}]`, JSON.stringify(value));
-          } else {
-            formDataToSend.append(`item[${key}]`, String(value));
-          }
+          formDataToSend.append(`item[${key}]`, String(value));
         });
         
         // Add new images
@@ -344,11 +442,27 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       }
 
       // Make actual API calls using apiClient
+      let itemId: number;
+      
       if (isCreating) {
-        await apiClient.post('/wholesale/admin/items', requestData, requestConfig);
+        const fundraiserId = formData.fundraiser_id;
+        const response = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items`, requestData, requestConfig);
+        itemId = response.data.data.item.id;
+        
+        // Create option groups for new item
+        if (formData.option_groups.length > 0) {
+          await createOptionGroups(itemId, formData.option_groups);
+        }
+        
         toastUtils.success('Item created successfully!');
       } else {
-        await apiClient.patch(`/wholesale/admin/items/${editingId}`, requestData, requestConfig);
+        const fundraiserId = formData.fundraiser_id;
+        await apiClient.patch(`/wholesale/admin/fundraisers/${fundraiserId}/items/${editingId}`, requestData, requestConfig);
+        itemId = editingId!;
+        
+        // Update option groups for existing item
+        await updateOptionGroups(itemId, formData.option_groups);
+        
         toastUtils.success('Item updated successfully!');
       }
       
@@ -397,7 +511,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       setSelectedImages([]);
       setExistingImages([]);
       setImagesToDelete([]);
-      setPreviewVariants([]);
+      // Removed previewVariants cleanup - using option groups instead
       
       console.log('Cancel completed successfully');
     } catch (error) {
@@ -537,87 +651,15 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
     }).format(amount);
   };
 
-  // Generate preview variants based on current form data
-  const generatePreviewVariants = (): PreviewVariant[] => {
-    const variants: PreviewVariant[] = [];
-    const baseSku = formData.sku.toUpperCase();
-    const sizes = formData.options.size_options;
-    const colors = formData.options.color_options;
-    
-    if (sizes.length > 0 && colors.length > 0) {
-      // Both sizes and colors
-      for (const color of colors) {
-        for (const size of sizes) {
-          const colorCode = color.substring(0, 3).toUpperCase();
-          const sizeCode = size.replace(/\s+/g, '').toUpperCase();
-          variants.push({
-            size,
-            color,
-            sku: `${baseSku}-${colorCode}-${sizeCode}`,
-            isCustom: false
-          });
-        }
-      }
-    } else if (sizes.length > 0) {
-      // Only sizes
-      for (const size of sizes) {
-        const sizeCode = size.replace(/\s+/g, '').toUpperCase();
-        variants.push({
-          size,
-          sku: `${baseSku}-${sizeCode}`,
-          isCustom: false
-        });
-      }
-    } else if (colors.length > 0) {
-      // Only colors
-      for (const color of colors) {
-        const colorCode = color.substring(0, 3).toUpperCase();
-        variants.push({
-          color,
-          sku: `${baseSku}-${colorCode}`,
-          isCustom: false
-        });
-      }
-    }
-    
-    return variants;
-  };
+  // Removed generatePreviewVariants - using option groups instead
 
-  // Update preview variants when form data changes
-  const updatePreviewVariants = () => {
-    const newVariants = generatePreviewVariants();
-    
-    // Preserve custom SKUs where possible
-    const updatedVariants = newVariants.map(newVariant => {
-      const existingVariant = previewVariants.find(existing => 
-        existing.size === newVariant.size && existing.color === newVariant.color
-      );
-      
-      if (existingVariant && existingVariant.isCustom) {
-        return existingVariant; // Keep custom SKU
-      }
-      
-      return newVariant; // Use auto-generated SKU
-    });
-    
-    setPreviewVariants(updatedVariants);
-  };
+  // Removed generateSkuForOptionSelection - not currently used
 
-  // Update preview variants when relevant form data changes
-  useEffect(() => {
-    if (isCreating && (formData.sku || formData.options.size_options.length > 0 || formData.options.color_options.length > 0)) {
-      updatePreviewVariants();
-    }
-  }, [formData.sku, formData.options.size_options, formData.options.color_options, isCreating]);
+  // Removed abbreviateOptionName - not currently used
 
-  // Update a specific variant's SKU
-  const updateVariantSku = (index: number, newSku: string) => {
-    setPreviewVariants(prev => prev.map((variant, i) => 
-      i === index 
-        ? { ...variant, sku: newSku.toUpperCase(), isCustom: true }
-        : variant
-    ));
-  };
+  // Removed generateOptionSkuPreviews - not currently used
+
+  // Removed variant preview functions - using option groups instead
 
   if (loading) {
     return (
@@ -1001,334 +1043,249 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                 </div>
               </div>
 
-              {/* Product Options */}
+              {/* Option Groups Management */}
               <div>
                 <h4 className="text-md font-medium text-gray-900 mb-4">Product Options</h4>
                 <div className="space-y-4">
-                  {/* Size Options */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Available Sizes
-                    </label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {formData.options.size_options.map((size, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center px-2 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                        >
-                          {size}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newSizes = formData.options.size_options.filter((_, i) => i !== index);
-                              setFormData(prev => ({
-                                ...prev,
-                                options: { ...prev.options, size_options: newSizes }
-                              }));
-                            }}
-                            className="ml-1 text-blue-600 hover:text-blue-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Enter size (e.g., S, M, L, XL)"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const value = e.currentTarget.value.trim();
-                            if (value && !formData.options.size_options.includes(value)) {
-                              setFormData(prev => ({
-                                ...prev,
-                                options: { 
-                                  ...prev.options, 
-                                  size_options: [...prev.options.size_options, value] 
-                                }
-                              }));
-                              e.currentTarget.value = '';
-                            }
-                          }
-                        }}
-                      />
+                  {formData.option_groups.length === 0 ? (
+                    <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+                      <p className="text-gray-500 mb-2">Create option groups to let customers choose variations</p>
+                      <p className="text-sm text-gray-400 mb-4">Examples: Size (S, M, L), Color (Red, Blue), Style (Classic, Premium)</p>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          const input = e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement;
-                          const value = input?.value.trim();
-                          if (value && !formData.options.size_options.includes(value)) {
-                            setFormData(prev => ({
-                              ...prev,
-                              options: { 
-                                ...prev.options, 
-                                size_options: [...prev.options.size_options, value] 
-                              }
-                            }));
-                            input.value = '';
-                          }
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            option_groups: [...prev.option_groups, {
+                              name: '',
+                              min_select: 1,
+                              max_select: 1,
+                              required: true,
+                              position: 0,
+                              enable_inventory_tracking: false,
+                              options: []
+                            }]
+                          }));
                         }}
-                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                       >
-                        Add
+                        Add Your First Option Group
                       </button>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Add sizes like S, M, L, XL or dimensions like 12", 14", 16"
-                    </p>
-                  </div>
+                  ) : (
+                    <>
+                      {formData.option_groups.map((group, groupIndex) => (
+                        <div key={groupIndex} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex-1 mr-3">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Option Group Name *
+                              </label>
+                              <input
+                                type="text"
+                                value={group.name}
+                                onChange={(e) => {
+                                  const newGroups = [...formData.option_groups];
+                                  newGroups[groupIndex] = { ...group, name: e.target.value };
+                                  setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                }}
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-lg font-medium transition-colors ${
+                                  group.name.trim() 
+                                    ? 'border-gray-300 focus:border-blue-500 bg-white' 
+                                    : 'border-orange-300 focus:border-orange-500 bg-orange-50'
+                                }`}
+                                placeholder="Enter group name (e.g., Size, Color, Style, Material)"
+                                required
+                              />
+                              {!group.name.trim() && (
+                                <p className="text-xs text-orange-600 mt-1">
+                                  Please enter a name for this option group
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newGroups = formData.option_groups.filter((_, i) => i !== groupIndex);
+                                setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                              }}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Min Select</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={group.min_select}
+                                onChange={(e) => {
+                                  const newGroups = [...formData.option_groups];
+                                  newGroups[groupIndex] = { ...group, min_select: parseInt(e.target.value) || 0 };
+                                  setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                }}
+                                className="w-full px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Max Select</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={group.max_select}
+                                onChange={(e) => {
+                                  const newGroups = [...formData.option_groups];
+                                  newGroups[groupIndex] = { ...group, max_select: parseInt(e.target.value) || 1 };
+                                  setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                }}
+                                className="w-full px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
 
-                  {/* Color Options */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Available Colors
-                    </label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {formData.options.color_options.map((color, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center px-2 py-1 rounded-full text-sm bg-green-100 text-green-800"
-                        >
-                          {color}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newColors = formData.options.color_options.filter((_, i) => i !== index);
-                              setFormData(prev => ({
-                                ...prev,
-                                options: { ...prev.options, color_options: newColors }
-                              }));
-                            }}
-                            className="ml-1 text-green-600 hover:text-green-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Enter color (e.g., Red, Blue, Navy)"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const value = e.currentTarget.value.trim();
-                            if (value && !formData.options.color_options.includes(value)) {
-                              setFormData(prev => ({
-                                ...prev,
-                                options: { 
-                                  ...prev.options, 
-                                  color_options: [...prev.options.color_options, value] 
-                                }
-                              }));
-                              e.currentTarget.value = '';
-                            }
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          const input = e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement;
-                          const value = input?.value.trim();
-                          if (value && !formData.options.color_options.includes(value)) {
-                            setFormData(prev => ({
-                              ...prev,
-                              options: { 
-                                ...prev.options, 
-                                color_options: [...prev.options.color_options, value] 
-                              }
-                            }));
-                            input.value = '';
-                          }
-                        }}
-                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                      >
-                        Add
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Add color options for this item
-                    </p>
-                    
-                    {/* Quick Color Presets */}
-                    <div className="mt-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Quick Color Presets
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              options: { 
-                                ...prev.options, 
-                                color_options: ['Red', 'Black', 'White'] 
-                              }
-                            }));
-                          }}
-                          className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                        >
-                          Basic Colors
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              options: { 
-                                ...prev.options, 
-                                color_options: ['Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Purple', 'Black', 'White'] 
-                              }
-                            }));
-                          }}
-                          className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                        >
-                          Rainbow Colors
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const customColors = prompt('Enter custom colors separated by commas (e.g., Navy, Maroon, Gold):');
-                            if (customColors) {
-                              const colorsArray = customColors.split(',').map(c => c.trim()).filter(c => c.length > 0);
-                              if (colorsArray.length > 0) {
-                                setFormData(prev => ({
-                                  ...prev,
-                                  options: { 
-                                    ...prev.options, 
-                                    color_options: colorsArray 
-                                  }
-                                }));
-                              }
-                            }
-                          }}
-                          className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                        >
-                          Custom Preset
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              options: { 
-                                ...prev.options, 
-                                color_options: [] 
-                              }
-                            }));
-                          }}
-                          className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-                        >
-                          Clear Colors
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                          <div className="mb-4">
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={group.required}
+                                onChange={(e) => {
+                                  const newGroups = [...formData.option_groups];
+                                  newGroups[groupIndex] = { ...group, required: e.target.checked };
+                                  setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                }}
+                                className="mr-2"
+                              />
+                              <span className="text-sm text-gray-700">Required</span>
+                            </label>
+                          </div>
 
-                  {/* Quick Size Presets */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Quick Size Presets
-                    </label>
-                    <div className="flex flex-wrap gap-2">
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Options</label>
+                            {group.options.map((option, optionIndex) => (
+                              <div key={optionIndex} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                                <input
+                                  type="text"
+                                  value={option.name}
+                                  onChange={(e) => {
+                                    const newGroups = [...formData.option_groups];
+                                    const newOptions = [...group.options];
+                                    newOptions[optionIndex] = { ...option, name: e.target.value };
+                                    newGroups[groupIndex] = { ...group, options: newOptions };
+                                    setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                  }}
+                                  placeholder="Option name (e.g., Small, Red, Cotton)"
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                />
+                                
+                                <div className="flex items-center gap-1">
+                                  <span className="text-sm text-gray-600">$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={option.additional_price}
+                                    onChange={(e) => {
+                                      const newGroups = [...formData.option_groups];
+                                      const newOptions = [...group.options];
+                                      newOptions[optionIndex] = { ...option, additional_price: parseFloat(e.target.value) || 0 };
+                                      newGroups[groupIndex] = { ...group, options: newOptions };
+                                      setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                    }}
+                                    placeholder="0.00"
+                                    className="w-20 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center">
+                                  <label className="inline-flex items-center cursor-pointer">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={option.available}
+                                      onChange={(e) => {
+                                        const newGroups = [...formData.option_groups];
+                                        const newOptions = [...group.options];
+                                        newOptions[optionIndex] = { ...option, available: e.target.checked };
+                                        newGroups[groupIndex] = { ...group, options: newOptions };
+                                        setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                      }}
+                                      className="sr-only peer"
+                                    />
+                                    <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                    <span className="ms-2 text-sm font-medium text-gray-700 min-w-[80px]">
+                                      {option.available ? "Available" : "Unavailable"}
+                                    </span>
+                                  </label>
+                                </div>
+                                
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newGroups = [...formData.option_groups];
+                                    const newOptions = group.options.filter((_, i) => i !== optionIndex);
+                                    newGroups[groupIndex] = { ...group, options: newOptions };
+                                    setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                  }}
+                                  className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Remove option"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newGroups = [...formData.option_groups];
+                                const newOptions = [...group.options, {
+                                  name: '',
+                                  additional_price: 0,
+                                  available: true,
+                                  position: group.options.length
+                                }];
+                                newGroups[groupIndex] = { ...group, options: newOptions };
+                                setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                              }}
+                              className="mt-2 px-3 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
+                            >
+                              + Add Option
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      
                       <button
                         type="button"
                         onClick={() => {
                           setFormData(prev => ({
                             ...prev,
-                            options: { 
-                              ...prev.options, 
-                              size_options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] 
-                            }
+                            option_groups: [...prev.option_groups, {
+                              name: '',
+                              min_select: 1,
+                              max_select: 1,
+                              required: true,
+                              position: prev.option_groups.length,
+                              enable_inventory_tracking: false,
+                              options: []
+                            }]
                           }));
                         }}
-                        className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                        className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
                       >
-                        T-Shirt Sizes
+                        + Add Another Option Group
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            options: { 
-                              ...prev.options, 
-                              size_options: ['Youth S', 'Youth M', 'Youth L', 'Adult S', 'Adult M', 'Adult L', 'Adult XL'] 
-                            }
-                          }));
-                        }}
-                        className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                      >
-                        Youth + Adult
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            options: { 
-                              ...prev.options, 
-                              size_options: ['XYS', 'YS', 'YM', 'YL', 'YXL', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'] 
-                            }
-                          }));
-                        }}
-                        className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                      >
-                        All Sizes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const customSizes = prompt('Enter custom sizes separated by commas (e.g., XS, S, M, L, XL):');
-                          if (customSizes) {
-                            const sizesArray = customSizes.split(',').map(s => s.trim()).filter(s => s.length > 0);
-                            if (sizesArray.length > 0) {
-                              setFormData(prev => ({
-                                ...prev,
-                                options: { 
-                                  ...prev.options, 
-                                  size_options: sizesArray 
-                                }
-                              }));
-                            }
-                          }
-                        }}
-                        className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                      >
-                        Custom Preset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            options: { 
-                              ...prev.options, 
-                              size_options: [] 
-                            }
-                          }));
-                        }}
-                        className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-                      >
-                        Clear Sizes
-                      </button>
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Variants Management */}
+              {/* Option Groups Management (for existing items) */}
               {!isCreating && editingId !== null && (
-                <VariantsSection 
+                <OptionGroupsSection 
                   item={items.find(item => item.id === editingId)} 
-                  onVariantUpdate={() => {
+                  onDataChange={() => {
               try {
                 loadData();
                 onDataChange?.();
@@ -1339,49 +1296,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                 />
               )}
               
-              {/* Editable SKU Preview for New Items */}
-              {isCreating && previewVariants.length > 0 && (
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Variant SKUs Preview</h4>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-800 mb-3">
-                      <strong>Preview:</strong> The following SKUs will be generated. Click any SKU to customize it:
-                    </p>
-                    <div className="space-y-3 max-h-60 overflow-y-auto">
-                      {previewVariants.map((variant, index) => (
-                        <div key={index} className="flex items-center space-x-3 bg-white rounded-lg p-3 border border-blue-200">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 text-sm text-gray-600 mb-1">
-                              {variant.size && <span className="bg-gray-100 px-2 py-1 rounded text-xs">Size: {variant.size}</span>}
-                              {variant.color && <span className="bg-gray-100 px-2 py-1 rounded text-xs">Color: {variant.color}</span>}
-                              {variant.isCustom && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">Custom</span>}
-                            </div>
-                            <input
-                              type="text"
-                              value={variant.sku}
-                              onChange={(e) => updateVariantSku(index, e.target.value)}
-                              className="w-full font-mono text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Enter custom SKU"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200">
-                      <p className="text-xs text-blue-600">
-                        Total variants to create: {previewVariants.length}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={updatePreviewVariants}
-                        className="text-xs text-blue-600 hover:text-blue-800 underline"
-                      >
-                        Reset to auto-generated SKUs
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Removed SKU Preview section - using option groups instead */}
 
               {/* Inventory Management - Temporarily disabled until full inventory system is ready */}
               {/* 
@@ -1626,260 +1541,822 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
   );
 }
 
-// Variants Management Component
-interface VariantsSectionProps {
+// Removed VariantsSection - using option groups instead
+
+// Cleaned up - removed duplicate OptionGroupsSection
+
+// NEW: Option Groups Management Component
+interface OptionGroupsSectionProps {
   item?: WholesaleItem;
-  onVariantUpdate: () => void;
+  onDataChange: () => void;
 }
 
-function VariantsSection({ item, onVariantUpdate }: VariantsSectionProps) {
-  const [editingVariant, setEditingVariant] = useState<WholesaleItemVariant | null>(null);
-  const [variantFormData, setVariantFormData] = useState({
-    sku: '',
-    price_adjustment: 0,
-    stock_quantity: 0,
-    low_stock_threshold: 5,
-    active: true
+// Removed old variant system code - using option groups instead
+
+function OptionGroupsSection({ item, onDataChange }: OptionGroupsSectionProps) {
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [editingOptionId, setEditingOptionId] = useState<number | null>(null);
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [isCreatingOption, setIsCreatingOption] = useState<number | null>(null); // groupId
+  
+  const [groupFormData, setGroupFormData] = useState<OptionGroupFormData>({
+    name: '',
+    min_select: 0,
+    max_select: 1,
+    required: false,
+    position: 0,
+    enable_inventory_tracking: false,
+    options: []
+  });
+  
+  const [optionFormData, setOptionFormData] = useState<OptionFormData>({
+    name: '',
+    additional_price: 0,
+    available: true,
+    position: 0
   });
 
-  if (!item || !item.has_variants || !item.variants || item.variants.length === 0) {
+  if (!item) {
+    return null;
+  }
+
+  const hasOptionGroups = item.has_options && item.option_groups && item.option_groups.length > 0;
+
+  // Reset forms
+  const resetGroupForm = () => {
+    setGroupFormData({
+      name: '',
+      min_select: 0,
+      max_select: 1,
+      required: false,
+      position: (item.option_groups?.length || 0) + 1,
+      enable_inventory_tracking: false,
+      options: []
+    });
+  };
+
+  const resetOptionForm = () => {
+    setOptionFormData({
+      name: '',
+      additional_price: 0,
+      available: true,
+      position: 0
+    });
+  };
+
+  // Option Group CRUD operations
+  const handleCreateGroup = () => {
+    setIsCreatingGroup(true);
+    resetGroupForm();
+  };
+
+  const handleSaveGroup = async () => {
+    if (!item) return;
+    
+    try {
+      await apiClient.post(`/wholesale/admin/items/${item.id}/option_groups`, {
+        option_group: groupFormData
+      });
+      
+      toastUtils.success('Option group created successfully!');
+      setIsCreatingGroup(false);
+      resetGroupForm();
+      onDataChange();
+    } catch (error) {
+      console.error('Error creating option group:', error);
+      toastUtils.error('Failed to create option group');
+    }
+  };
+
+  const handleEditGroup = (group: WholesaleOptionGroup) => {
+    setEditingGroupId(group.id);
+    setGroupFormData({
+      name: group.name,
+      min_select: group.min_select,
+      max_select: group.max_select,
+      required: group.required,
+      position: group.position,
+      enable_inventory_tracking: group.enable_inventory_tracking,
+      options: group.options?.map(option => ({
+        name: option.name,
+        additional_price: option.additional_price,
+        available: option.available,
+        position: option.position,
+        stock_quantity: option.stock_quantity,
+        damaged_quantity: option.damaged_quantity,
+        low_stock_threshold: option.low_stock_threshold
+      })) || []
+    });
+  };
+
+  const handleUpdateGroup = async () => {
+    if (!item || !editingGroupId) return;
+    
+    try {
+      await apiClient.patch(`/wholesale/admin/items/${item.id}/option_groups/${editingGroupId}`, {
+        option_group: groupFormData
+      });
+      
+      toastUtils.success('Option group updated successfully!');
+      setEditingGroupId(null);
+      resetGroupForm();
+      onDataChange();
+    } catch (error) {
+      console.error('Error updating option group:', error);
+      toastUtils.error('Failed to update option group');
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: number) => {
+    if (!item || !confirm('Are you sure you want to delete this option group? This will also delete all its options.')) return;
+    
+    try {
+      await apiClient.delete(`/wholesale/admin/items/${item.id}/option_groups/${groupId}`);
+      
+      toastUtils.success('Option group deleted successfully!');
+      onDataChange();
+    } catch (error) {
+      console.error('Error deleting option group:', error);
+      toastUtils.error('Failed to delete option group');
+    }
+  };
+
+  // Option CRUD operations
+  const handleCreateOption = (groupId: number) => {
+    const group = item.option_groups?.find(g => g.id === groupId);
+    setIsCreatingOption(groupId);
+    setOptionFormData({
+      ...optionFormData,
+      position: (group?.options?.length || 0) + 1
+    });
+  };
+
+  const handleSaveOption = async () => {
+    if (!item || !isCreatingOption) return;
+    
+    try {
+      await apiClient.post(`/wholesale/admin/items/${item.id}/option_groups/${isCreatingOption}/options`, {
+        option: optionFormData
+      });
+      
+      toastUtils.success('Option created successfully!');
+      setIsCreatingOption(null);
+      resetOptionForm();
+      onDataChange();
+    } catch (error) {
+      console.error('Error creating option:', error);
+      toastUtils.error('Failed to create option');
+    }
+  };
+
+  const handleEditOption = (option: WholesaleOption) => {
+    setEditingOptionId(option.id);
+    setOptionFormData({
+      name: option.name,
+      additional_price: option.additional_price,
+      available: option.available,
+      position: option.position
+    });
+  };
+
+  const handleUpdateOption = async (groupId: number) => {
+    if (!item || !editingOptionId) return;
+    
+    try {
+      await apiClient.patch(`/wholesale/admin/items/${item.id}/option_groups/${groupId}/options/${editingOptionId}`, {
+        option: optionFormData
+      });
+      
+      toastUtils.success('Option updated successfully!');
+      setEditingOptionId(null);
+      resetOptionForm();
+      onDataChange();
+    } catch (error) {
+      console.error('Error updating option:', error);
+      toastUtils.error('Failed to update option');
+    }
+  };
+
+  const handleDeleteOption = async (groupId: number, optionId: number) => {
+    if (!item || !confirm('Are you sure you want to delete this option?')) return;
+    
+    try {
+      await apiClient.delete(`/wholesale/admin/items/${item.id}/option_groups/${groupId}/options/${optionId}`);
+      
+      toastUtils.success('Option deleted successfully!');
+      onDataChange();
+    } catch (error) {
+      console.error('Error deleting option:', error);
+      toastUtils.error('Failed to delete option');
+    }
+  };
+
+  const handleCancel = () => {
+    setIsCreatingGroup(false);
+    setIsCreatingOption(null);
+    setEditingGroupId(null);
+    setEditingOptionId(null);
+    resetGroupForm();
+    resetOptionForm();
+  };
+
+  if (!hasOptionGroups && !isCreatingGroup) {
     return (
       <div>
-        <h4 className="text-md font-medium text-gray-900 mb-4">Product Variants</h4>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-md font-medium text-gray-900">Option Groups</h4>
+          <button
+            onClick={handleCreateGroup}
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add Option Group
+          </button>
+        </div>
         <div className="bg-gray-50 rounded-lg p-4">
           <p className="text-sm text-gray-600">
-            No variants found. Variants are automatically created when you add size or color options to an item.
+            No option groups found. Create option groups to allow customers to select different variations of this item (e.g., Size, Color, Style).
           </p>
         </div>
       </div>
     );
   }
 
-  const handleEditVariant = (variant: WholesaleItemVariant) => {
-    setEditingVariant(variant);
-    setVariantFormData({
-      sku: variant.sku,
-      price_adjustment: variant.price_adjustment,
-      stock_quantity: variant.stock_quantity,
-      low_stock_threshold: variant.low_stock_threshold,
-      active: variant.active
-    });
-  };
-
-  const handleSaveVariant = async () => {
-    if (!editingVariant) return;
-
-    try {
-      await apiClient.patch(`/wholesale/admin/items/${item.id}/variants/${editingVariant.id}`, {
-        variant: variantFormData
-      });
-      
-      toastUtils.success('Variant updated successfully!');
-      setEditingVariant(null);
-      onVariantUpdate();
-    } catch (error) {
-      console.error('Error updating variant:', error);
-      toastUtils.error('Failed to update variant');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingVariant(null);
-  };
-
   return (
     <div>
-      <h4 className="text-md font-medium text-gray-900 mb-4">Product Variants</h4>
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-          <p className="text-sm text-gray-600">
-            Manage individual variants for this item. Each variant has its own SKU and can have different pricing and stock levels.
-          </p>
-        </div>
-        
-        <div className="divide-y divide-gray-200">
-          {item.variants.map((variant) => (
-            <div key={variant.id} className="p-4">
-              {editingVariant?.id === variant.id ? (
-                // Edit Mode
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h5 className="font-medium text-gray-900">{variant.sku}</h5>
-                      <p className="text-sm text-gray-500">{variant.display_name}</p>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={handleSaveVariant}
-                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={handleCancelEdit}
-                        className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* SKU Field */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      SKU
-                    </label>
-                    <input
-                      type="text"
-                      value={variantFormData.sku}
-                      onChange={(e) => setVariantFormData(prev => ({ 
-                        ...prev, 
-                        sku: e.target.value.toUpperCase() 
-                      }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-                      placeholder="Enter custom SKU"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      SKU must be unique across all variants
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Price Adjustment ($)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={variantFormData.price_adjustment}
-                        onChange={(e) => setVariantFormData(prev => ({ 
-                          ...prev, 
-                          price_adjustment: parseFloat(e.target.value) || 0 
-                        }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    
-                    {item.track_inventory && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Stock Quantity
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={variantFormData.stock_quantity}
-                            onChange={(e) => setVariantFormData(prev => ({ 
-                              ...prev, 
-                              stock_quantity: parseInt(e.target.value) || 0 
-                            }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Low Stock Threshold
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={variantFormData.low_stock_threshold}
-                            onChange={(e) => setVariantFormData(prev => ({ 
-                              ...prev, 
-                              low_stock_threshold: parseInt(e.target.value) || 5 
-                            }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={`variant-active-${variant.id}`}
-                      checked={variantFormData.active}
-                      onChange={(e) => setVariantFormData(prev => ({ 
-                        ...prev, 
-                        active: e.target.checked 
-                      }))}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <label htmlFor={`variant-active-${variant.id}`} className="ml-2 text-sm text-gray-700">
-                      Active (available for purchase)
-                    </label>
-                  </div>
-                </div>
-              ) : (
-                // View Mode
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-4">
-                      <div>
-                        <h5 className="font-medium text-gray-900">{variant.sku}</h5>
-                        <p className="text-sm text-gray-500">{variant.display_name}</p>
-                      </div>
-                      
-                      <div className="flex items-center space-x-4 text-sm">
-                        <span className="text-gray-600">
-                          Price: <span className="font-medium">${Number(variant.final_price).toFixed(2)}</span>
-                          {variant.price_adjustment !== 0 && (
-                            <span className="text-blue-600 ml-1">
-                              ({variant.price_adjustment > 0 ? '+' : ''}${Number(variant.price_adjustment).toFixed(2)})
-                            </span>
-                          )}
-                        </span>
-                        
-                        {item.track_inventory && (
-                          <span className="text-gray-600">
-                            Stock: <span className="font-medium">{variant.stock_quantity}</span>
-                          </span>
-                        )}
-                        
-                        <span className="text-gray-600">
-                          Sold: <span className="font-medium">{variant.total_ordered}</span>
-                        </span>
-                        
-                        <span className="text-gray-600">
-                          Revenue: <span className="font-medium">${Number(variant.total_revenue).toFixed(2)}</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      variant.active 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {variant.active ? 'Active' : 'Inactive'}
-                    </span>
-                    
-                    <button
-                      onClick={() => handleEditVariant(variant)}
-                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              )}
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-md font-medium text-gray-900">Option Groups</h4>
+        {!isCreatingGroup && (
+          <button
+            onClick={handleCreateGroup}
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add Option Group
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {/* Create New Group Form */}
+        {isCreatingGroup && (
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h5 className="font-medium text-gray-900">Create New Option Group</h5>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleSaveGroup}
+                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={handleCancel}
+                  className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          ))}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  value={groupFormData.name}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., Size, Color, Style"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Position
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={groupFormData.position}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, position: parseInt(e.target.value) || 1 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Min Select
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={groupFormData.min_select}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, min_select: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Select
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={groupFormData.max_select}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, max_select: parseInt(e.target.value) || 1 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            
+            <div className="mt-4 space-y-3">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={groupFormData.required}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, required: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Required (customers must select from this group)</span>
+              </label>
+              
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={groupFormData.enable_inventory_tracking}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, enable_inventory_tracking: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Enable inventory tracking (future feature)</span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Existing Option Groups */}
+        {item.option_groups?.map((group) => (
+          <OptionGroupCard
+            key={group.id}
+            group={group}
+            isEditing={editingGroupId === group.id}
+            isCreatingOption={isCreatingOption === group.id}
+            editingOptionId={editingOptionId}
+            groupFormData={groupFormData}
+            optionFormData={optionFormData}
+            onEditGroup={handleEditGroup}
+            onUpdateGroup={handleUpdateGroup}
+            onDeleteGroup={handleDeleteGroup}
+            onCreateOption={handleCreateOption}
+            onSaveOption={handleSaveOption}
+            onEditOption={handleEditOption}
+            onUpdateOption={handleUpdateOption}
+            onDeleteOption={handleDeleteOption}
+            onCancel={handleCancel}
+            setGroupFormData={setGroupFormData}
+            setOptionFormData={setOptionFormData}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Option Group Card Component
+interface OptionGroupCardProps {
+  group: WholesaleOptionGroup;
+  isEditing: boolean;
+  isCreatingOption: boolean;
+  editingOptionId: number | null;
+  groupFormData: OptionGroupFormData;
+  optionFormData: OptionFormData;
+  onEditGroup: (group: WholesaleOptionGroup) => void;
+  onUpdateGroup: () => void;
+  onDeleteGroup: (groupId: number) => void;
+  onCreateOption: (groupId: number) => void;
+  onSaveOption: () => void;
+  onEditOption: (option: WholesaleOption) => void;
+  onUpdateOption: (groupId: number) => void;
+  onDeleteOption: (groupId: number, optionId: number) => void;
+  onCancel: () => void;
+  setGroupFormData: (data: OptionGroupFormData | ((prev: OptionGroupFormData) => OptionGroupFormData)) => void;
+  setOptionFormData: (data: OptionFormData | ((prev: OptionFormData) => OptionFormData)) => void;
+}
+
+function OptionGroupCard({
+  group,
+  isEditing,
+  isCreatingOption,
+  editingOptionId,
+  groupFormData,
+  optionFormData,
+  onEditGroup,
+  onUpdateGroup,
+  onDeleteGroup,
+  onCreateOption,
+  onSaveOption,
+  onEditOption,
+  onUpdateOption,
+  onDeleteOption,
+  onCancel,
+  setGroupFormData,
+  setOptionFormData
+}: OptionGroupCardProps) {
+  const availableOptions = group.options?.filter(opt => opt.available) || [];
+  const unavailableOptions = group.options?.filter(opt => !opt.available) || [];
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      {/* Group Header */}
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+        {isEditing ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h5 className="font-medium text-gray-900">Edit Option Group</h5>
+              <div className="flex space-x-2">
+                <button
+                  onClick={onUpdateGroup}
+                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={onCancel}
+                  className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  value={groupFormData.name}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={groupFormData.position}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, position: parseInt(e.target.value) || 1 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min Select</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={groupFormData.min_select}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, min_select: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max Select</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={groupFormData.max_select}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, max_select: parseInt(e.target.value) || 1 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={groupFormData.required}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, required: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Required</span>
+              </label>
+              
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={groupFormData.enable_inventory_tracking}
+                  onChange={(e) => setGroupFormData(prev => ({ ...prev, enable_inventory_tracking: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Enable inventory tracking</span>
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center space-x-3">
+                <h5 className="font-medium text-gray-900">{group.name}</h5>
+                {group.required && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    Required
+                  </span>
+                )}
+                {group.enable_inventory_tracking && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Inventory Tracking
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Select {group.min_select}-{group.max_select} • Position {group.position} • {group.options.length} options
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => onCreateOption(group.id)}
+                className="text-green-600 hover:text-green-900 text-sm font-medium"
+              >
+                Add Option
+              </button>
+              <button
+                onClick={() => onEditGroup(group)}
+                className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => onDeleteGroup(group.id)}
+                className="text-red-600 hover:text-red-900 text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Options List */}
+      <div className="divide-y divide-gray-200">
+        {/* Create New Option Form */}
+        {isCreatingOption && (
+          <div className="p-4 bg-blue-50">
+            <div className="flex items-center justify-between mb-4">
+              <h6 className="font-medium text-gray-900">Add New Option</h6>
+              <div className="flex space-x-2">
+                <button
+                  onClick={onSaveOption}
+                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={onCancel}
+                  className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  value={optionFormData.name}
+                  onChange={(e) => setOptionFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., Small, Red, Cotton"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Price ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={optionFormData.additional_price}
+                  onChange={(e) => setOptionFormData(prev => ({ ...prev, additional_price: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              {/* Position field removed - options are ordered by creation order */}
+            </div>
+            
+            <div className="mt-4">
+              <label className="inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={optionFormData.available}
+                  onChange={(e) => setOptionFormData(prev => ({ ...prev, available: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                <span className="ms-3 text-sm font-medium text-gray-700">
+                  {optionFormData.available ? "Available" : "Unavailable"}
+                </span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Existing Options */}
+        {group.options?.map((option) => (
+          <OptionCard
+            key={option.id}
+            option={option}
+            isEditing={editingOptionId === option.id}
+            optionFormData={optionFormData}
+            onEdit={() => onEditOption(option)}
+            onUpdate={() => onUpdateOption(group.id)}
+            onDelete={() => onDeleteOption(group.id, option.id)}
+            onCancel={onCancel}
+            setOptionFormData={setOptionFormData}
+          />
+        ))}
+        
+        {(group.options?.length || 0) === 0 && !isCreatingOption && (
+          <div className="p-4 text-center">
+            <p className="text-sm text-gray-500">No options yet.</p>
+            <button
+              onClick={() => onCreateOption(group.id)}
+              className="mt-2 text-blue-600 hover:text-blue-900 text-sm font-medium"
+            >
+              Add the first option
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Group Footer with Stats */}
+      {(group.options?.length || 0) > 0 && (
+        <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>
+              Total options: {group.options?.length || 0} | 
+              Available: {availableOptions.length} | 
+              Unavailable: {unavailableOptions.length}
+            </span>
+            <span>
+              Total sold: {group.options?.reduce((sum, opt) => sum + (Number(opt.total_ordered) || 0), 0) || 0} | 
+              Revenue: ${(group.options?.reduce((sum, opt) => sum + (Number(opt.total_revenue) || 0), 0) || 0).toFixed(2)}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Individual Option Card Component
+interface OptionCardProps {
+  option: WholesaleOption;
+  isEditing: boolean;
+  optionFormData: OptionFormData;
+  onEdit: () => void;
+  onUpdate: () => void;
+  onDelete: () => void;
+  onCancel: () => void;
+  setOptionFormData: (data: OptionFormData | ((prev: OptionFormData) => OptionFormData)) => void;
+}
+
+function OptionCard({
+  option,
+  isEditing,
+  optionFormData,
+  onEdit,
+  onUpdate,
+  onDelete,
+  onCancel,
+  setOptionFormData
+}: OptionCardProps) {
+  if (isEditing) {
+    return (
+      <div className="p-4 bg-yellow-50">
+        <div className="flex items-center justify-between mb-4">
+          <h6 className="font-medium text-gray-900">Edit Option: {option.name}</h6>
+          <div className="flex space-x-2">
+            <button
+              onClick={onUpdate}
+              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            >
+              Save
+            </button>
+            <button
+              onClick={onCancel}
+              className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
         
-        <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
-          <p className="text-xs text-gray-500">
-            Total variants: {item.variants.length} | 
-            Active: {item.variants.filter(v => v.active).length} | 
-            Total sold: {item.variants.reduce((sum, v) => sum + v.total_ordered, 0)} | 
-            Total revenue: ${item.variants.reduce((sum, v) => sum + Number(v.total_revenue), 0).toFixed(2)}
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <input
+              type="text"
+              value={optionFormData.name}
+              onChange={(e) => setOptionFormData(prev => ({ ...prev, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Additional Price ($)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={optionFormData.additional_price}
+              onChange={(e) => setOptionFormData(prev => ({ ...prev, additional_price: parseFloat(e.target.value) || 0 }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          
+          {/* Position field removed - options are ordered by creation order */}
+        </div>
+        
+        <div className="mt-4">
+          <label className="inline-flex items-center cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={optionFormData.available}
+              onChange={(e) => setOptionFormData(prev => ({ ...prev, available: e.target.checked }))}
+              className="sr-only peer"
+            />
+            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+            <span className="ms-3 text-sm font-medium text-gray-700">
+              {optionFormData.available ? "Available" : "Unavailable"}
+            </span>
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`p-4 ${!option.available ? 'bg-gray-50 opacity-75' : ''}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="flex items-center space-x-4">
+            <div>
+              <h6 className="font-medium text-gray-900">{option.name}</h6>
+            </div>
+            
+            <div className="flex items-center space-x-4 text-sm">
+              <span className="text-gray-600">
+                Price: <span className="font-medium">${option.final_price.toFixed(2)}</span>
+                {option.additional_price !== 0 && (
+                  <span className="text-blue-600 ml-1">
+                    ({option.additional_price > 0 ? '+' : ''}${option.additional_price.toFixed(2)})
+                  </span>
+                )}
+              </span>
+              
+              <span className="text-gray-600">
+                Sold: <span className="font-medium">{option.total_ordered}</span>
+              </span>
+              
+              <span className="text-gray-600">
+                Revenue: <span className="font-medium">${option.total_revenue.toFixed(2)}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            option.available 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-red-100 text-red-800'
+          }`}>
+            {option.available ? 'Available' : 'Unavailable'}
+          </span>
+          
+          <button
+            onClick={onEdit}
+            className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+          >
+            Edit
+          </button>
+          
+          <button
+            onClick={onDelete}
+            className="text-red-600 hover:text-red-900 text-sm font-medium"
+          >
+            Delete
+          </button>
         </div>
       </div>
     </div>
