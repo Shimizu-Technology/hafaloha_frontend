@@ -197,6 +197,11 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
     setEditingFundraiser(fundraiser);
   };
 
+  const handleFundraiserDataChange = () => {
+    // Simple callback to maintain navigation state
+    // The main goal is to keep the user on the current page after item changes
+  };
+
   // Tab content renderer
   const renderTabContent = () => {
     switch (activeTab) {
@@ -430,6 +435,7 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
                   restaurantId={currentRestaurantId}
                   onBack={handleBackToFundraisers}
                   onEdit={handleEditFundraiser}
+                  onDataChange={handleFundraiserDataChange}
                 />
               ) : (
                 <FundraiserManager 

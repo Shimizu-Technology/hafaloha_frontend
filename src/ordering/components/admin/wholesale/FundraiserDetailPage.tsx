@@ -58,6 +58,7 @@ interface FundraiserDetailPageProps {
   restaurantId: string;
   onBack: () => void;
   onEdit?: (fundraiser: Fundraiser) => void;
+  onDataChange?: () => void; // Callback to notify parent of data changes
 }
 
 type DetailTab = 'overview' | 'items' | 'participants' | 'orders' | 'analytics';
@@ -100,7 +101,7 @@ const tabs: Array<{
   }
 ];
 
-export function FundraiserDetailPage({ fundraiser, restaurantId, onBack, onEdit }: FundraiserDetailPageProps) {
+export function FundraiserDetailPage({ fundraiser, restaurantId, onBack, onEdit, onDataChange }: FundraiserDetailPageProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
 
   const formatCurrency = (amount: number) => {
@@ -373,7 +374,7 @@ export function FundraiserDetailPage({ fundraiser, restaurantId, onBack, onEdit 
         );
 
       case 'items':
-        return <ItemManager restaurantId={restaurantId} fundraiserId={fundraiser.id} />;
+        return <ItemManager restaurantId={restaurantId} fundraiserId={fundraiser.id} onDataChange={onDataChange} />;
 
       case 'participants':
         return <ParticipantManager restaurantId={restaurantId} fundraiserId={fundraiser.id} />;

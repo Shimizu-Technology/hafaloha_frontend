@@ -1,9 +1,8 @@
 // src/wholesale/components/ItemCard.tsx
-import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { WholesaleItem } from '../services/wholesaleApi';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
-import OptimizedImage from '../../shared/components/ui/OptimizedImage';
+import ImageCarousel from './ImageCarousel';
 
 interface ItemCardProps {
   item: WholesaleItem;
@@ -20,8 +19,6 @@ export default function ItemCard({
   showDetailLink = false, 
   compact = false 
 }: ItemCardProps) {
-  const [imageLoading, setImageLoading] = useState(true);
-  const [imageError, setImageError] = useState(false);
   const { addToCart, setError } = useWholesaleCart();
 
   const handleAddToCart = () => {
@@ -78,52 +75,21 @@ export default function ItemCard({
 
   return (
     <div className={cardClasses}>
-      {/* Item Image */}
+      {/* Item Image Carousel */}
       <div className={`relative ${compact ? 'aspect-square mb-3' : 'aspect-square mb-4'}`}>
-        {item.primary_image_url && !imageError ? (
-          <>
-            {imageLoading && (
-              <div className="absolute inset-0 bg-gray-200 rounded-lg animate-pulse flex items-center justify-center">
-                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            )}
-            <OptimizedImage
-              src={item.primary_image_url}
-              alt={item.name}
-              context="menuItem"
-              className={`w-full h-full object-cover rounded-lg ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
-              onLoad={() => setImageLoading(false)}
-              onError={() => {
-                setImageError(true);
-                setImageLoading(false);
-              }}
-            />
-          </>
-        ) : (
-          <div className="w-full h-full bg-gray-200 rounded-lg flex items-center justify-center">
-            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          </div>
-        )}
+        <ImageCarousel
+          images={item.images}
+          primaryImageUrl={item.primary_image_url}
+          itemName={item.name}
+          className="w-full h-full"
+        />
         
         {/* Stock Status Badge */}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 z-10">
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${stockInfo.className}`}>
             {stockInfo.status}
           </span>
         </div>
-
-        {/* Multiple Images Indicator */}
-        {item.images.length > 1 && (
-          <div className="absolute bottom-2 left-2">
-            <span className="bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-full">
-              {item.images.length} photos
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Item Details */}

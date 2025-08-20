@@ -8,6 +8,7 @@ import VariantSelector from './VariantSelector';
 import CartConflictModal from './CartConflictModal';
 import MobileStickyBar from './MobileStickyBar';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
+import ImageCarousel from './ImageCarousel';
 
 export default function FundraiserDetail() {
   const { fundraiserSlug } = useParams<{ fundraiserSlug: string }>();
@@ -324,21 +325,18 @@ export default function FundraiserDetail() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {fundraiser.items.map((item) => (
               <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full">
-                {/* Item Image */}
+                {/* Item Image Carousel */}
                 <div className="aspect-square bg-gray-100 relative overflow-hidden flex-shrink-0">
-                  <OptimizedImage 
-                    src={item.primary_image_url || '/placeholder-food.png'} 
-                    alt={item.name}
-                    context="menuItem"
-                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                    style={{
-                      objectPosition: 'center'
-                    }}
+                  <ImageCarousel
+                    images={item.images}
+                    primaryImageUrl={item.primary_image_url}
+                    itemName={item.name}
+                    className="w-full h-full"
                   />
                   
                   {/* Stock status badge */}
                   {!item.in_stock && (
-                    <div className="absolute top-2 right-2">
+                    <div className="absolute top-2 right-2 z-10">
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
                         {item.stock_status || 'Out of Stock'}
                       </span>

@@ -15,14 +15,28 @@ import {
   Save,
   X,
   AlertCircle,
-  CheckCircle,
   Archive,
-  BarChart3,
   TrendingUp,
   Boxes
 } from 'lucide-react';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { apiClient } from '../../../../shared/api/apiClient';
+
+interface WholesaleItemVariant {
+  id: number;
+  sku: string;
+  size: string | null;
+  color: string | null;
+  display_name: string;
+  price_adjustment: number;
+  final_price: number;
+  stock_quantity: number;
+  low_stock_threshold: number;
+  total_ordered: number;
+  total_revenue: number;
+  active: boolean;
+  can_purchase: boolean;
+}
 
 interface WholesaleItem {
   id: number;
@@ -37,6 +51,7 @@ interface WholesaleItem {
   sort_order: number;
   options: any;
   track_inventory: boolean;
+  allow_sale_with_no_stock: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
   in_stock: boolean;
@@ -46,6 +61,9 @@ interface WholesaleItem {
   active: boolean;
   images_count: number;
   item_images?: ExistingImage[];
+  variants?: WholesaleItemVariant[];
+  has_variants: boolean;
+  variant_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -59,6 +77,7 @@ interface ItemFormData {
   position: number;
   sort_order: number;
   track_inventory: boolean;
+  allow_sale_with_no_stock: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
   options: {
@@ -66,6 +85,14 @@ interface ItemFormData {
     color_options: string[];
     custom_fields: { [key: string]: any };
   };
+  custom_variant_skus?: { [key: number]: string };
+}
+
+interface PreviewVariant {
+  size?: string;
+  color?: string;
+  sku: string;
+  isCustom: boolean;
 }
 
 interface ImageFile {
@@ -82,14 +109,21 @@ interface ExistingImage {
   primary: boolean;
 }
 
+interface Fundraiser {
+  id: number;
+  name: string;
+}
+
 interface ItemManagerProps {
   restaurantId: string;
   fundraiserId?: number; // Optional for backwards compatibility
+  onDataChange?: () => void; // Callback to notify parent of data changes
 }
 
-export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
+export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemManagerProps) {
   // State management
   const [items, setItems] = useState<WholesaleItem[]>([]);
+  const [fundraisers, setFundraisers] = useState<Fundraiser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -105,6 +139,7 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
     position: 0,
     sort_order: 0,
     track_inventory: false,
+    allow_sale_with_no_stock: false,
     stock_quantity: 0,
     low_stock_threshold: 5,
     options: {
@@ -123,7 +158,11 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
   // Image upload state
   const [selectedImages, setSelectedImages] = useState<ImageFile[]>([]);
   const [existingImages, setExistingImages] = useState<ExistingImage[]>([]);
+  const [imagesToDelete, setImagesToDelete] = useState<number[]>([]);
   const [imageUploading, setImageUploading] = useState(false);
+
+  // SKU preview state
+  const [previewVariants, setPreviewVariants] = useState<PreviewVariant[]>([]);
 
   // Load data on component mount
   useEffect(() => {
@@ -142,10 +181,17 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
         const items = itemsResponse.data.success ? (itemsResponse.data.data?.items || []) : [];
         setItems(items);
       } else {
-        // Legacy mode: Load all items (for backwards compatibility)
-        const itemsResponse = await apiClient.get('/wholesale/admin/items');
+        // Legacy mode: Load all items and fundraisers (for backwards compatibility)
+        const [itemsResponse, fundraisersResponse] = await Promise.all([
+          apiClient.get('/wholesale/admin/items'),
+          apiClient.get('/wholesale/admin/fundraisers')
+        ]);
+        
         const items = itemsResponse.data.success ? (itemsResponse.data.data?.items || []) : [];
+        const fundraisers = fundraisersResponse.data.success ? (fundraisersResponse.data.data?.fundraisers || []) : [];
+        
         setItems(items);
+        setFundraisers(fundraisers);
       }
       
     } catch (err) {
@@ -160,6 +206,7 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
   const handleCreate = () => {
     setIsCreating(true);
     setEditingId(null);
+    setPreviewVariants([]);
     setFormData({
       fundraiser_id: fundraiserId || 0,
       name: '',
@@ -169,6 +216,7 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
       position: items.length + 1,
       sort_order: items.length + 1,
       track_inventory: false,
+      allow_sale_with_no_stock: false,
       stock_quantity: 0,
       low_stock_threshold: 5,
       options: {
@@ -180,31 +228,50 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
   };
 
   const handleEdit = (item: WholesaleItem) => {
-    setIsCreating(false);
-    setEditingId(item.id);
-    setFormData({
-      fundraiser_id: item.fundraiser_id,
-      name: item.name,
-      description: item.description,
-      sku: item.sku,
-      price: item.price.toString(),
-      position: item.position,
-      sort_order: item.sort_order,
-      track_inventory: item.track_inventory,
-      stock_quantity: item.stock_quantity,
-      low_stock_threshold: item.low_stock_threshold,
-      options: item.options
-    });
-    
-    // Load existing images if available
-    if (item.item_images && Array.isArray(item.item_images)) {
-      setExistingImages(item.item_images);
-    } else {
-      setExistingImages([]);
+    try {
+      console.log('handleEdit called with item:', item);
+      
+      setIsCreating(false);
+      setEditingId(item.id);
+      
+      // Ensure options object exists with proper structure
+      const safeOptions = {
+        size_options: item.options?.size_options || [],
+        color_options: item.options?.color_options || [],
+        custom_fields: item.options?.custom_fields || {}
+      };
+      
+      setFormData({
+        fundraiser_id: item.fundraiser_id || fundraiserId || 0,
+        name: item.name || '',
+        description: item.description || '',
+        sku: item.sku || '',
+        price: item.price?.toString() || '0',
+        position: item.position || 0,
+        sort_order: item.sort_order || 0,
+        track_inventory: item.track_inventory || false,
+        allow_sale_with_no_stock: (item as any).allow_sale_with_no_stock || false,
+        stock_quantity: item.stock_quantity || 0,
+        low_stock_threshold: item.low_stock_threshold || 5,
+        options: safeOptions
+      });
+      
+      // Load existing images if available
+      if (item.item_images && Array.isArray(item.item_images)) {
+        setExistingImages(item.item_images);
+      } else {
+        setExistingImages([]);
+      }
+      
+      // Clear any selected new images and deletion list
+      setSelectedImages([]);
+      setImagesToDelete([]);
+      
+      console.log('Edit form data set successfully');
+    } catch (error) {
+      console.error('Error in handleEdit:', error);
+      toastUtils.error('Failed to load item for editing. Please try again.');
     }
-    
-    // Clear any selected new images
-    setSelectedImages([]);
   };
 
   const handleSave = async () => {
@@ -231,23 +298,40 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
       let requestData: any;
       let requestConfig: any = {};
 
-      if (selectedImages.length > 0) {
-        // Use FormData for image uploads
+      // Prepare item data with custom SKUs if creating
+      const itemData = { ...formData };
+      if (isCreating && previewVariants.length > 0) {
+        // Add custom SKUs for variants
+        itemData.custom_variant_skus = previewVariants.reduce((acc, variant, index) => {
+          if (variant.isCustom) {
+            acc[index] = variant.sku;
+          }
+          return acc;
+        }, {} as { [key: number]: string });
+      }
+
+      if (selectedImages.length > 0 || imagesToDelete.length > 0) {
+        // Use FormData for image uploads/deletions (both new items and existing items with image changes)
         const formDataToSend = new FormData();
         
         // Add all form fields
-        Object.keys(formData).forEach(key => {
-          const value = formData[key as keyof typeof formData];
-          if (key === 'options') {
+        Object.keys(itemData).forEach(key => {
+          const value = itemData[key as keyof typeof itemData];
+          if (key === 'options' || key === 'custom_variant_skus') {
             formDataToSend.append(`item[${key}]`, JSON.stringify(value));
           } else {
             formDataToSend.append(`item[${key}]`, String(value));
           }
         });
         
-        // Add images
-        selectedImages.forEach((imageFile, index) => {
+        // Add new images
+        selectedImages.forEach((imageFile) => {
           formDataToSend.append('item[images][]', imageFile.file);
+        });
+        
+        // Add images to delete
+        imagesToDelete.forEach((imageId) => {
+          formDataToSend.append('item[delete_image_ids][]', String(imageId));
         });
         
         requestData = formDataToSend;
@@ -256,7 +340,7 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
         };
       } else {
         // Use JSON for non-image requests
-        requestData = { item: formData };
+        requestData = { item: itemData };
       }
 
       // Make actual API calls using apiClient
@@ -273,6 +357,7 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
       setEditingId(null);
       setSelectedImages([]);
       setExistingImages([]);
+      setImagesToDelete([]);
       
       // Clean up image previews
       selectedImages.forEach(image => {
@@ -280,6 +365,13 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
       });
       
       loadData();
+      
+      // Notify parent component of data changes
+      try {
+        onDataChange?.();
+      } catch (err) {
+        console.warn('Error in onDataChange callback:', err);
+      }
       
     } catch (err) {
       console.error('Error saving item:', err);
@@ -290,15 +382,33 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
   };
 
   const handleCancel = () => {
-    setIsCreating(false);
-    setEditingId(null);
-    setSelectedImages([]);
-    setExistingImages([]);
-    
-    // Clean up any image previews
-    selectedImages.forEach(image => {
-      URL.revokeObjectURL(image.preview);
-    });
+    try {
+      console.log('handleCancel called');
+      
+      // Clean up any image previews before clearing state
+      selectedImages.forEach(image => {
+        if (image.preview) {
+          URL.revokeObjectURL(image.preview);
+        }
+      });
+      
+      setIsCreating(false);
+      setEditingId(null);
+      setSelectedImages([]);
+      setExistingImages([]);
+      setImagesToDelete([]);
+      setPreviewVariants([]);
+      
+      console.log('Cancel completed successfully');
+    } catch (error) {
+      console.error('Error in handleCancel:', error);
+      // Still try to reset state even if cleanup fails
+      setIsCreating(false);
+      setEditingId(null);
+      setSelectedImages([]);
+      setExistingImages([]);
+      setImagesToDelete([]);
+    }
   };
 
   // Image handling functions
@@ -339,13 +449,11 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
     });
   };
 
-  const reorderImages = (fromIndex: number, toIndex: number) => {
-    setSelectedImages(prev => {
-      const newImages = [...prev];
-      const [moved] = newImages.splice(fromIndex, 1);
-      newImages.splice(toIndex, 0, moved);
-      return newImages;
-    });
+  const removeExistingImage = (imageId: number) => {
+    // Add to deletion list
+    setImagesToDelete(prev => [...prev, imageId]);
+    // Remove from existing images display
+    setExistingImages(prev => prev.filter(img => img.id !== imageId));
   };
 
   const handleDelete = async (id: number) => {
@@ -429,17 +537,86 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
     }).format(amount);
   };
 
-  const getStockStatusColor = (status: string) => {
-    switch (status) {
-      case 'in_stock':
-        return 'bg-green-100 text-green-800';
-      case 'low_stock':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'out_of_stock':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  // Generate preview variants based on current form data
+  const generatePreviewVariants = (): PreviewVariant[] => {
+    const variants: PreviewVariant[] = [];
+    const baseSku = formData.sku.toUpperCase();
+    const sizes = formData.options.size_options;
+    const colors = formData.options.color_options;
+    
+    if (sizes.length > 0 && colors.length > 0) {
+      // Both sizes and colors
+      for (const color of colors) {
+        for (const size of sizes) {
+          const colorCode = color.substring(0, 3).toUpperCase();
+          const sizeCode = size.replace(/\s+/g, '').toUpperCase();
+          variants.push({
+            size,
+            color,
+            sku: `${baseSku}-${colorCode}-${sizeCode}`,
+            isCustom: false
+          });
+        }
+      }
+    } else if (sizes.length > 0) {
+      // Only sizes
+      for (const size of sizes) {
+        const sizeCode = size.replace(/\s+/g, '').toUpperCase();
+        variants.push({
+          size,
+          sku: `${baseSku}-${sizeCode}`,
+          isCustom: false
+        });
+      }
+    } else if (colors.length > 0) {
+      // Only colors
+      for (const color of colors) {
+        const colorCode = color.substring(0, 3).toUpperCase();
+        variants.push({
+          color,
+          sku: `${baseSku}-${colorCode}`,
+          isCustom: false
+        });
+      }
     }
+    
+    return variants;
+  };
+
+  // Update preview variants when form data changes
+  const updatePreviewVariants = () => {
+    const newVariants = generatePreviewVariants();
+    
+    // Preserve custom SKUs where possible
+    const updatedVariants = newVariants.map(newVariant => {
+      const existingVariant = previewVariants.find(existing => 
+        existing.size === newVariant.size && existing.color === newVariant.color
+      );
+      
+      if (existingVariant && existingVariant.isCustom) {
+        return existingVariant; // Keep custom SKU
+      }
+      
+      return newVariant; // Use auto-generated SKU
+    });
+    
+    setPreviewVariants(updatedVariants);
+  };
+
+  // Update preview variants when relevant form data changes
+  useEffect(() => {
+    if (isCreating && (formData.sku || formData.options.size_options.length > 0 || formData.options.color_options.length > 0)) {
+      updatePreviewVariants();
+    }
+  }, [formData.sku, formData.options.size_options, formData.options.color_options, isCreating]);
+
+  // Update a specific variant's SKU
+  const updateVariantSku = (index: number, newSku: string) => {
+    setPreviewVariants(prev => prev.map((variant, i) => 
+      i === index 
+        ? { ...variant, sku: newSku.toUpperCase(), isCustom: true }
+        : variant
+    ));
   };
 
   if (loading) {
@@ -622,11 +799,16 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                           <div className="text-sm font-medium text-gray-900 flex items-center">
                             {item.name}
                             {!item.active && (
-                              <Archive className="w-4 h-4 ml-2 text-gray-400" title="Inactive" />
+                              <Archive className="w-4 h-4 ml-2 text-gray-400" />
                             )}
                             {/* Variant indicators */}
+                            {item.has_variants && item.variant_count > 0 && (
+                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800" title={`${item.variant_count} variants available`}>
+                                {item.variant_count} variant{item.variant_count !== 1 ? 's' : ''}
+                              </span>
+                            )}
                             {item.options?.size_options?.length > 0 && (
-                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800" title={`Sizes: ${item.options.size_options.join(', ')}`}>
+                              <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800" title={`Sizes: ${item.options.size_options.join(', ')}`}>
                                 {item.options.size_options.length} size{item.options.size_options.length !== 1 ? 's' : ''}
                               </span>
                             )}
@@ -725,7 +907,13 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
               </button>
             </div>
 
-            <form className="space-y-6">
+            <form 
+              className="space-y-6"
+              onSubmit={(e) => {
+                e.preventDefault(); // Prevent form submission and page refresh
+                handleSave(); // Call our save handler instead
+              }}
+            >
               {/* Basic Information */}
               <div>
                 <h4 className="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
@@ -768,15 +956,18 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      SKU
+                      Base SKU
                     </label>
                     <input
                       type="text"
                       value={formData.sku}
                       onChange={(e) => setFormData(prev => ({ ...prev, sku: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter SKU"
+                      placeholder="Enter base SKU (e.g., TSHIRT-DESIGN1)"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Individual variant SKUs will be generated automatically (e.g., TSHIRT-DESIGN1-BLK-L)
+                    </p>
                   </div>
 
                   <div>
@@ -964,6 +1155,81 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                     <p className="text-xs text-gray-500 mt-1">
                       Add color options for this item
                     </p>
+                    
+                    {/* Quick Color Presets */}
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Quick Color Presets
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              options: { 
+                                ...prev.options, 
+                                color_options: ['Red', 'Black', 'White'] 
+                              }
+                            }));
+                          }}
+                          className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                        >
+                          Basic Colors
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              options: { 
+                                ...prev.options, 
+                                color_options: ['Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Purple', 'Black', 'White'] 
+                              }
+                            }));
+                          }}
+                          className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                        >
+                          Rainbow Colors
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const customColors = prompt('Enter custom colors separated by commas (e.g., Navy, Maroon, Gold):');
+                            if (customColors) {
+                              const colorsArray = customColors.split(',').map(c => c.trim()).filter(c => c.length > 0);
+                              if (colorsArray.length > 0) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  options: { 
+                                    ...prev.options, 
+                                    color_options: colorsArray 
+                                  }
+                                }));
+                              }
+                            }
+                          }}
+                          className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                        >
+                          Custom Preset
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              options: { 
+                                ...prev.options, 
+                                color_options: [] 
+                              }
+                            }));
+                          }}
+                          className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                        >
+                          Clear Colors
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Quick Size Presets */}
@@ -1009,6 +1275,42 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                             ...prev,
                             options: { 
                               ...prev.options, 
+                              size_options: ['XYS', 'YS', 'YM', 'YL', 'YXL', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'] 
+                            }
+                          }));
+                        }}
+                        className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                      >
+                        All Sizes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const customSizes = prompt('Enter custom sizes separated by commas (e.g., XS, S, M, L, XL):');
+                          if (customSizes) {
+                            const sizesArray = customSizes.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                            if (sizesArray.length > 0) {
+                              setFormData(prev => ({
+                                ...prev,
+                                options: { 
+                                  ...prev.options, 
+                                  size_options: sizesArray 
+                                }
+                              }));
+                            }
+                          }
+                        }}
+                        className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                      >
+                        Custom Preset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            options: { 
+                              ...prev.options, 
                               size_options: [] 
                             }
                           }));
@@ -1022,10 +1324,151 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                 </div>
               </div>
 
-              {/* Inventory Management temporarily disabled */}
-              <div className="hidden">
+              {/* Variants Management */}
+              {!isCreating && editingId !== null && (
+                <VariantsSection 
+                  item={items.find(item => item.id === editingId)} 
+                  onVariantUpdate={() => {
+              try {
+                loadData();
+                onDataChange?.();
+              } catch (err) {
+                console.warn('Error in onDataChange callback:', err);
+              }
+            }}
+                />
+              )}
+              
+              {/* Editable SKU Preview for New Items */}
+              {isCreating && previewVariants.length > 0 && (
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 mb-4">Variant SKUs Preview</h4>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 mb-3">
+                      <strong>Preview:</strong> The following SKUs will be generated. Click any SKU to customize it:
+                    </p>
+                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                      {previewVariants.map((variant, index) => (
+                        <div key={index} className="flex items-center space-x-3 bg-white rounded-lg p-3 border border-blue-200">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 mb-1">
+                              {variant.size && <span className="bg-gray-100 px-2 py-1 rounded text-xs">Size: {variant.size}</span>}
+                              {variant.color && <span className="bg-gray-100 px-2 py-1 rounded text-xs">Color: {variant.color}</span>}
+                              {variant.isCustom && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">Custom</span>}
+                            </div>
+                            <input
+                              type="text"
+                              value={variant.sku}
+                              onChange={(e) => updateVariantSku(index, e.target.value)}
+                              className="w-full font-mono text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Enter custom SKU"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200">
+                      <p className="text-xs text-blue-600">
+                        Total variants to create: {previewVariants.length}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={updatePreviewVariants}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Reset to auto-generated SKUs
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Inventory Management - Temporarily disabled until full inventory system is ready */}
+              {/* 
+              <div>
                 <h4 className="text-md font-medium text-gray-900 mb-4">Inventory Management</h4>
+                <div className="space-y-4">
+                  {/* Track Inventory Toggle */}
+                  {/*
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="track_inventory"
+                      checked={formData.track_inventory}
+                      onChange={(e) => setFormData(prev => ({ ...prev, track_inventory: e.target.checked }))}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                    <label htmlFor="track_inventory" className="text-sm font-medium text-gray-700">
+                      Enable Stock Tracking
+                    </label>
+                  </div>
+
+                  {/* Allow Sale with No Stock Toggle - only show when track_inventory is enabled */}
+                  {/*
+                  {formData.track_inventory && (
+                    <div className="flex items-center space-x-3 ml-6">
+                      <input
+                        type="checkbox"
+                        id="allow_sale_with_no_stock"
+                        checked={formData.allow_sale_with_no_stock}
+                        onChange={(e) => setFormData(prev => ({ ...prev, allow_sale_with_no_stock: e.target.checked }))}
+                        className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
+                      />
+                      <label htmlFor="allow_sale_with_no_stock" className="text-sm font-medium text-gray-700">
+                        Allow Sale with No Stock (Pre-orders)
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Stock Quantity and Threshold - only show when track_inventory is enabled */}
+                  {/*
+                  {formData.track_inventory && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Stock Quantity
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.stock_quantity}
+                          onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Low Stock Threshold
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.low_stock_threshold}
+                          onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: parseInt(e.target.value) || 5 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="5"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Explanation text */}
+                  {/*
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Stock Tracking:</strong> When enabled, you can track inventory levels for this item.
+                    </p>
+                    {formData.track_inventory && (
+                      <p className="text-sm text-blue-800 mt-2">
+                        <strong>Allow Sale with No Stock:</strong> When enabled, customers can purchase this item even when stock is 0 (useful for pre-orders and fundraisers).
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
+              */}
 
               {/* Image Upload */}
               <div>
@@ -1056,14 +1499,14 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                           multiple
                           accept="image/jpeg,image/jpg,image/png,image/webp"
                           onChange={handleImageSelect}
-                          disabled={selectedImages.length >= 4}
+                          disabled={existingImages.length + selectedImages.length >= 4}
                         />
                       </div>
                       <div className="mt-3">
                         <button
                           type="button"
                           onClick={() => document.getElementById('image-upload')?.click()}
-                          disabled={selectedImages.length >= 4}
+                          disabled={existingImages.length + selectedImages.length >= 4}
                           className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Image className="w-4 h-4 mr-1" />
@@ -1085,6 +1528,15 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
                               alt={image.alt_text}
                               className="w-full h-full object-cover"
                             />
+                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => removeExistingImage(image.id)}
+                                className="opacity-0 group-hover:opacity-100 text-white hover:text-red-300 transition-opacity"
+                              >
+                                <X className="w-6 h-6" />
+                              </button>
+                            </div>
                             <div className="absolute top-2 left-2">
                               <span className="inline-block px-2 py-1 text-xs font-medium text-white bg-green-600 rounded">
                                 Saved
@@ -1170,6 +1622,266 @@ export function ItemManager({ restaurantId, fundraiserId }: ItemManagerProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Variants Management Component
+interface VariantsSectionProps {
+  item?: WholesaleItem;
+  onVariantUpdate: () => void;
+}
+
+function VariantsSection({ item, onVariantUpdate }: VariantsSectionProps) {
+  const [editingVariant, setEditingVariant] = useState<WholesaleItemVariant | null>(null);
+  const [variantFormData, setVariantFormData] = useState({
+    sku: '',
+    price_adjustment: 0,
+    stock_quantity: 0,
+    low_stock_threshold: 5,
+    active: true
+  });
+
+  if (!item || !item.has_variants || !item.variants || item.variants.length === 0) {
+    return (
+      <div>
+        <h4 className="text-md font-medium text-gray-900 mb-4">Product Variants</h4>
+        <div className="bg-gray-50 rounded-lg p-4">
+          <p className="text-sm text-gray-600">
+            No variants found. Variants are automatically created when you add size or color options to an item.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleEditVariant = (variant: WholesaleItemVariant) => {
+    setEditingVariant(variant);
+    setVariantFormData({
+      sku: variant.sku,
+      price_adjustment: variant.price_adjustment,
+      stock_quantity: variant.stock_quantity,
+      low_stock_threshold: variant.low_stock_threshold,
+      active: variant.active
+    });
+  };
+
+  const handleSaveVariant = async () => {
+    if (!editingVariant) return;
+
+    try {
+      await apiClient.patch(`/wholesale/admin/items/${item.id}/variants/${editingVariant.id}`, {
+        variant: variantFormData
+      });
+      
+      toastUtils.success('Variant updated successfully!');
+      setEditingVariant(null);
+      onVariantUpdate();
+    } catch (error) {
+      console.error('Error updating variant:', error);
+      toastUtils.error('Failed to update variant');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingVariant(null);
+  };
+
+  return (
+    <div>
+      <h4 className="text-md font-medium text-gray-900 mb-4">Product Variants</h4>
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <p className="text-sm text-gray-600">
+            Manage individual variants for this item. Each variant has its own SKU and can have different pricing and stock levels.
+          </p>
+        </div>
+        
+        <div className="divide-y divide-gray-200">
+          {item.variants.map((variant) => (
+            <div key={variant.id} className="p-4">
+              {editingVariant?.id === variant.id ? (
+                // Edit Mode
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="font-medium text-gray-900">{variant.sku}</h5>
+                      <p className="text-sm text-gray-500">{variant.display_name}</p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleSaveVariant}
+                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* SKU Field */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SKU
+                    </label>
+                    <input
+                      type="text"
+                      value={variantFormData.sku}
+                      onChange={(e) => setVariantFormData(prev => ({ 
+                        ...prev, 
+                        sku: e.target.value.toUpperCase() 
+                      }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                      placeholder="Enter custom SKU"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      SKU must be unique across all variants
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Price Adjustment ($)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={variantFormData.price_adjustment}
+                        onChange={(e) => setVariantFormData(prev => ({ 
+                          ...prev, 
+                          price_adjustment: parseFloat(e.target.value) || 0 
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    
+                    {item.track_inventory && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Stock Quantity
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={variantFormData.stock_quantity}
+                            onChange={(e) => setVariantFormData(prev => ({ 
+                              ...prev, 
+                              stock_quantity: parseInt(e.target.value) || 0 
+                            }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Low Stock Threshold
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={variantFormData.low_stock_threshold}
+                            onChange={(e) => setVariantFormData(prev => ({ 
+                              ...prev, 
+                              low_stock_threshold: parseInt(e.target.value) || 5 
+                            }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id={`variant-active-${variant.id}`}
+                      checked={variantFormData.active}
+                      onChange={(e) => setVariantFormData(prev => ({ 
+                        ...prev, 
+                        active: e.target.checked 
+                      }))}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor={`variant-active-${variant.id}`} className="ml-2 text-sm text-gray-700">
+                      Active (available for purchase)
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                // View Mode
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-4">
+                      <div>
+                        <h5 className="font-medium text-gray-900">{variant.sku}</h5>
+                        <p className="text-sm text-gray-500">{variant.display_name}</p>
+                      </div>
+                      
+                      <div className="flex items-center space-x-4 text-sm">
+                        <span className="text-gray-600">
+                          Price: <span className="font-medium">${Number(variant.final_price).toFixed(2)}</span>
+                          {variant.price_adjustment !== 0 && (
+                            <span className="text-blue-600 ml-1">
+                              ({variant.price_adjustment > 0 ? '+' : ''}${Number(variant.price_adjustment).toFixed(2)})
+                            </span>
+                          )}
+                        </span>
+                        
+                        {item.track_inventory && (
+                          <span className="text-gray-600">
+                            Stock: <span className="font-medium">{variant.stock_quantity}</span>
+                          </span>
+                        )}
+                        
+                        <span className="text-gray-600">
+                          Sold: <span className="font-medium">{variant.total_ordered}</span>
+                        </span>
+                        
+                        <span className="text-gray-600">
+                          Revenue: <span className="font-medium">${Number(variant.total_revenue).toFixed(2)}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      variant.active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {variant.active ? 'Active' : 'Inactive'}
+                    </span>
+                    
+                    <button
+                      onClick={() => handleEditVariant(variant)}
+                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        
+        <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+          <p className="text-xs text-gray-500">
+            Total variants: {item.variants.length} | 
+            Active: {item.variants.filter(v => v.active).length} | 
+            Total sold: {item.variants.reduce((sum, v) => sum + v.total_ordered, 0)} | 
+            Total revenue: ${item.variants.reduce((sum, v) => sum + Number(v.total_revenue), 0).toFixed(2)}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
