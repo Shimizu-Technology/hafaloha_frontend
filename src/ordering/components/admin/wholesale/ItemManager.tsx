@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import toastUtils from '../../../../shared/utils/toastUtils';
 import { apiClient } from '../../../../shared/api/apiClient';
+import PresetManager from './PresetManager';
 
 interface WholesaleItemVariant {
   id: number;
@@ -97,6 +98,39 @@ interface OptionFormData {
   available: boolean;
   position: number;
 }
+
+// Option Group Preset Interfaces
+interface WholesaleOptionPreset {
+  id: number;
+  name: string;
+  additional_price: number;
+  available: boolean;
+  position: number;
+  display_name: string;
+  full_display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface WholesaleOptionGroupPreset {
+  id: number;
+  name: string;
+  description: string;
+  min_select: number;
+  max_select: number;
+  required: boolean;
+  position: number;
+  enable_inventory_tracking: boolean;
+  has_available_options: boolean;
+  required_but_unavailable: boolean;
+  inventory_tracking_enabled: boolean;
+  option_presets_count: number;
+  option_presets: WholesaleOptionPreset[];
+  created_at: string;
+  updated_at: string;
+}
+
+// Removed unused preset form interfaces
 
 // Removed SelectedOptions interface - not currently used
 
@@ -185,6 +219,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Preset management state
+  const [presets, setPresets] = useState<WholesaleOptionGroupPreset[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(false);
+  const [showPresetSelector, setShowPresetSelector] = useState(false);
+  const [showPresetManager, setShowPresetManager] = useState(false);
+  
   // Form and editing state
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -221,6 +261,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
   // Load data on component mount
   useEffect(() => {
     loadData();
+    loadPresets();
   }, [restaurantId, fundraiserId]);
 
   const loadData = async () => {
@@ -255,6 +296,49 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadPresets = async () => {
+    try {
+      setPresetsLoading(true);
+      const response = await apiClient.get('/wholesale/admin/option_group_presets');
+      
+      if (response.data.success) {
+        setPresets(response.data.data?.option_group_presets || []);
+      }
+    } catch (err) {
+      console.error('Error loading presets:', err);
+      // Don't show error toast for presets - it's not critical
+    } finally {
+      setPresetsLoading(false);
+    }
+  };
+
+  const applyPreset = (preset: WholesaleOptionGroupPreset) => {
+    // Convert preset to form data format
+    const presetAsFormData: OptionGroupFormData = {
+      name: preset.name,
+      min_select: preset.min_select,
+      max_select: preset.max_select,
+      required: preset.required,
+      position: formData.option_groups.length,
+      enable_inventory_tracking: preset.enable_inventory_tracking,
+      options: preset.option_presets.map(optionPreset => ({
+        name: optionPreset.name,
+        additional_price: optionPreset.additional_price,
+        available: optionPreset.available,
+        position: optionPreset.position
+      }))
+    };
+
+    // Add to current form data
+    setFormData(prev => ({
+      ...prev,
+      option_groups: [...prev.option_groups, presetAsFormData]
+    }));
+
+    setShowPresetSelector(false);
+    toastUtils.success(`Applied preset: ${preset.name}`);
   };
 
   const handleCreate = () => {
@@ -1066,32 +1150,72 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
 
               {/* Option Groups Management */}
               <div>
-                <h4 className="text-md font-medium text-gray-900 mb-4">Product Options</h4>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-md font-medium text-gray-900">Product Options</h4>
+                  {presets.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPresetSelector(true)}
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Use Preset
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-4">
                   {formData.option_groups.length === 0 ? (
                     <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
                       <p className="text-gray-500 mb-2">Create option groups to let customers choose variations</p>
                       <p className="text-sm text-gray-400 mb-4">Examples: Size (S, M, L), Color (Red, Blue), Style (Classic, Premium)</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            option_groups: [...prev.option_groups, {
-                              name: '',
-                              min_select: 1,
-                              max_select: 1,
-                              required: true,
-                              position: 0,
-                              enable_inventory_tracking: false,
-                              options: []
-                            }]
-                          }));
-                        }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Add Your First Option Group
-                      </button>
+                      <div className="space-y-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              option_groups: [...prev.option_groups, {
+                                name: '',
+                                min_select: 1,
+                                max_select: 1,
+                                required: true,
+                                position: 0,
+                                enable_inventory_tracking: false,
+                                options: []
+                              }]
+                            }));
+                          }}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          Add Your First Option Group
+                        </button>
+                        <div className="text-sm text-gray-500 space-y-1">
+                          {presets.length > 0 ? (
+                            <div>
+                              or{' '}
+                              <button
+                                type="button"
+                                onClick={() => setShowPresetSelector(true)}
+                                className="text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                choose from a preset
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="text-gray-400">
+                              No presets available yet
+                            </div>
+                          )}
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => setShowPresetManager(true)}
+                              className="text-teal-600 hover:text-teal-800 font-medium text-xs"
+                            >
+                              ⚙️ Manage Presets
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -1277,26 +1401,47 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                         </div>
                       ))}
                       
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            option_groups: [...prev.option_groups, {
-                              name: '',
-                              min_select: 1,
-                              max_select: 1,
-                              required: true,
-                              position: prev.option_groups.length,
-                              enable_inventory_tracking: false,
-                              options: []
-                            }]
-                          }));
-                        }}
-                        className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
-                      >
-                        + Add Another Option Group
-                      </button>
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              option_groups: [...prev.option_groups, {
+                                name: '',
+                                min_select: 1,
+                                max_select: 1,
+                                required: true,
+                                position: prev.option_groups.length,
+                                enable_inventory_tracking: false,
+                                options: []
+                              }]
+                            }));
+                          }}
+                          className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                        >
+                          + Add Another Option Group
+                        </button>
+                        
+                        <div className="flex justify-between items-center">
+                          {presets.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowPresetSelector(true)}
+                              className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                            >
+                              📋 Use Preset
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowPresetManager(true)}
+                            className="text-teal-600 hover:text-teal-800 font-medium text-sm ml-auto"
+                          >
+                            ⚙️ Manage Presets
+                          </button>
+                        </div>
+                      </div>
                     </>
                   )}
                 </div>
@@ -1562,6 +1707,130 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Preset Selector Modal */}
+      {showPresetSelector && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-6 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-medium text-gray-900">
+                Choose Option Group Preset
+              </h3>
+              <button
+                onClick={() => setShowPresetSelector(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {presetsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : presets.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-4">No presets available yet.</p>
+                <p className="text-sm text-gray-400">Create presets in the admin panel to reuse option groups across items.</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {presets.map((preset) => (
+                  <div
+                    key={preset.id}
+                    className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-colors"
+                    onClick={() => applyPreset(preset)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900">{preset.name}</h4>
+                        {preset.description && (
+                          <p className="text-sm text-gray-600 mt-1">{preset.description}</p>
+                        )}
+                        <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                          <span>{preset.option_presets_count} options</span>
+                          <span>Min: {preset.min_select}, Max: {preset.max_select}</span>
+                          {preset.required && <span className="text-orange-600">Required</span>}
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <div className="flex flex-wrap gap-1">
+                          {preset.option_presets.slice(0, 3).map((option, index) => (
+                            <span
+                              key={index}
+                              className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded"
+                            >
+                              {option.name}
+                            </span>
+                          ))}
+                          {preset.option_presets.length > 3 && (
+                            <span className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                              +{preset.option_presets.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {presets.length === 0 && (
+              <div className="text-center py-4 text-gray-500 text-sm">
+                No presets available yet. Create your first preset to get started!
+              </div>
+            )}
+
+            <div className="flex justify-between items-center mt-6">
+              <button
+                onClick={() => {
+                  setShowPresetSelector(false);
+                  setShowPresetManager(true);
+                }}
+                className="px-4 py-2 bg-teal-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-teal-700 transition-colors"
+              >
+                ⚙️ Manage Presets
+              </button>
+              <button
+                onClick={() => setShowPresetSelector(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preset Manager Modal */}
+      {showPresetManager && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-4 mx-auto p-6 border w-full max-w-6xl shadow-lg rounded-md bg-white min-h-[90vh]">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-medium text-gray-900">
+                Manage Option Group Presets
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPresetManager(false);
+                  loadPresets(); // Reload presets when closing to reflect any changes
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <PresetManager 
+              restaurantId={restaurantId} 
+              onDataChange={() => {
+                loadPresets(); // Reload presets when data changes
+              }}
+            />
           </div>
         </div>
       )}

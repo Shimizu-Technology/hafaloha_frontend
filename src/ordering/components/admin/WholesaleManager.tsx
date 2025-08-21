@@ -17,6 +17,7 @@ import ParticipantManager from './wholesale/ParticipantManager';
 import OrderManager from './wholesale/OrderManager';
 import AnalyticsManager from './wholesale/AnalyticsManager';
 import FundraiserDetailPage from './wholesale/FundraiserDetailPage';
+import PresetManager from './wholesale/PresetManager';
 
 // Tab definitions for wholesale management
 type WholesaleTab = 'fundraisers' | 'items' | 'participants' | 'orders' | 'analytics' | 'settings';
@@ -29,13 +30,31 @@ interface Fundraiser {
   start_date: string;
   end_date: string;
   contact_email: string;
-  status: string;
+  contact_phone?: string;
+  status: 'draft' | 'active' | 'completed' | 'cancelled';
   active: boolean;
+  settings: any;
   participant_count: number;
   item_count: number;
   total_orders: number;
   total_revenue: number;
+  // Pickup information
+  pickup_location_name?: string;
+  pickup_address?: string;
+  pickup_instructions?: string;
+  pickup_contact_name?: string;
+  pickup_contact_phone?: string;
+  pickup_hours?: string;
+  has_custom_pickup_location?: boolean;
+  pickup_display_name?: string;
+  pickup_display_address?: string;
+  // Image fields
+  card_image_url?: string;
+  banner_url?: string;
+  has_card_image?: boolean;
+  has_banner_image?: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 interface WholesaleManagerProps {
@@ -81,9 +100,9 @@ const tabs: Array<{
   },
   {
     id: 'settings',
-    label: 'Settings',
+    label: 'Presets',
     icon: Settings,
-    description: 'Configure wholesale system settings'
+    description: 'Manage reusable option group presets'
   }
 ];
 
@@ -221,20 +240,7 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
         return <AnalyticsManager restaurantId={currentRestaurantId} />;
         
       case 'settings':
-        return (
-          <div className="text-center py-12">
-            <Settings className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Wholesale Settings</h3>
-            <p className="text-gray-600 mb-6">
-              Configure wholesale system preferences, payment settings, and notifications.
-            </p>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md mx-auto">
-              <p className="text-sm text-yellow-800">
-                <strong>Coming Soon:</strong> System configuration and preference management
-              </p>
-            </div>
-          </div>
-        );
+        return <PresetManager restaurantId={currentRestaurantId} />;
         
       default:
         return (
@@ -449,7 +455,31 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
           </div>
           
           {/* Quick access panels for global management */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <Settings className="w-8 h-8 text-teal-600 mr-3" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Option Presets</h3>
+                    <p className="text-sm text-gray-600">Reusable option templates</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowLegacyTabs(true);
+                    setActiveTab('settings');
+                  }}
+                  className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors text-sm"
+                >
+                  ⚙️ Manage
+                </button>
+              </div>
+              <div className="text-sm text-gray-600">
+                Create and manage reusable option groups like sizes, colors, and materials.
+              </div>
+            </div>
+            
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center">

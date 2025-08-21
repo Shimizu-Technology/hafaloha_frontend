@@ -34,13 +34,15 @@ interface Fundraiser {
   end_date: string;
   contact_email: string;
   contact_phone?: string;
-  status: string;
+  status: 'draft' | 'active' | 'completed' | 'cancelled';
   active: boolean;
+  settings: any;
   participant_count: number;
   item_count: number;
   total_orders: number;
   total_revenue: number;
   created_at: string;
+  updated_at: string;
   // Pickup information
   pickup_location_name?: string;
   pickup_address?: string;
@@ -51,6 +53,11 @@ interface Fundraiser {
   has_custom_pickup_location?: boolean;
   pickup_display_name?: string;
   pickup_display_address?: string;
+  // Image fields
+  card_image_url?: string;
+  banner_url?: string;
+  has_card_image?: boolean;
+  has_banner_image?: boolean;
 }
 
 interface FundraiserDetailPageProps {
