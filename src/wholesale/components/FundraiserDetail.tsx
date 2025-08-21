@@ -4,7 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { wholesaleApi, WholesaleFundraiserDetail } from '../services/wholesaleApi';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import { useCartConflict } from '../hooks/useCartConflict';
-import VariantSelector from './VariantSelector';
+// Removed VariantSelector - using only option groups system now
 import WholesaleCustomizationModal from './WholesaleCustomizationModal';
 import CartConflictModal from './CartConflictModal';
 import MobileStickyBar from './MobileStickyBar';
@@ -87,9 +87,7 @@ export default function FundraiserDetail() {
     }
   };
 
-  const hasVariants = (item: any) => {
-    return item.options?.size_options?.length > 0 || item.options?.color_options?.length > 0;
-  };
+  // Removed hasVariants function - using only option groups system now
 
   const hasOptionGroups = (item: any) => {
     return item.option_groups && item.option_groups.length > 0;
@@ -97,13 +95,10 @@ export default function FundraiserDetail() {
 
   const handleItemClick = (item: any) => {
     if (hasOptionGroups(item)) {
-      // Use new option groups system
-      setSelectedItem(item);
-    } else if (hasVariants(item)) {
-      // Use legacy variant system
+      // Use option groups customization modal
       setSelectedItem(item);
     } else {
-      // Simple add to cart
+      // Simple add to cart (no customization needed)
       handleAddToCart(item, {});
     }
   };
@@ -150,36 +145,7 @@ export default function FundraiserDetail() {
     }
   };
 
-  const handleVariantSelection = (selectedOptions: { [key: string]: string }) => {
-    if (selectedItem) {
-      // For legacy variants, we need to convert to the new backend format
-      // Since legacy variants don't have option group IDs, we'll create a synthetic format
-      // that the backend can understand, but this should be rare since we're using option groups now
-      
-      // Create both backend format (empty since no real option groups) and display format
-      const backendOptions = {}; // Legacy variants don't map to option groups
-      const displayOptions = selectedOptions; // Keep original for display
-      
-      // Add to cart with both formats
-      const success = addToCart({
-        id: `${selectedItem.id}-${Date.now()}-${JSON.stringify(selectedOptions)}`,
-        itemId: selectedItem.id,
-        fundraiserId: fundraiser!.id,
-        name: selectedItem.name,
-        description: selectedItem.description,
-        sku: selectedItem.sku,
-        price: selectedItem.price,
-        priceCents: selectedItem.price_cents,
-        imageUrl: selectedItem.primary_image_url,
-        options: backendOptions, // Empty for legacy variants
-        selectedOptions: displayOptions // Display format for UI
-      }, 1);
-
-      if (success) {
-        setSelectedItem(null);
-      }
-    }
-  };
+  // Removed handleVariantSelection - using only option groups system now
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -400,25 +366,15 @@ export default function FundraiserDetail() {
                     </div>
                   )}
 
-                  {/* Option indicators - Show option groups or legacy variants */}
-                  {(hasOptionGroups(item) || hasVariants(item)) && (
+                  {/* Option indicators - Show only option groups */}
+                  {hasOptionGroups(item) && (
                     <div className="mb-2">
                       <div className="flex flex-wrap gap-1">
-                        {hasOptionGroups(item) && item.option_groups?.map((group: any) => (
+                        {item.option_groups?.map((group: any) => (
                           <span key={group.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[#c1902f]/10 text-[#c1902f]">
                             {group.name} ({group.options?.length || 0} options)
                           </span>
                         ))}
-                        {!hasOptionGroups(item) && item.options?.size_options?.length > 0 && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[#c1902f]/10 text-[#c1902f]">
-                            {item.options.size_options.length} sizes
-                          </span>
-                        )}
-                        {!hasOptionGroups(item) && item.options?.color_options?.length > 0 && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[#c1902f]/10 text-[#c1902f]">
-                            {item.options.color_options.length} colors
-                          </span>
-                        )}
                       </div>
                     </div>
                   )}
@@ -453,9 +409,7 @@ export default function FundraiserDetail() {
                           ? 'Switch Fundraiser'
                           : hasOptionGroups(item)
                             ? 'Customize'
-                            : hasVariants(item) 
-                              ? 'Select Options' 
-                              : 'Add to Cart'
+                            : 'Add to Cart'
                       }
                     </button>
                   </div>
@@ -524,15 +478,8 @@ export default function FundraiserDetail() {
         />
       )}
       
-      {/* Legacy Variant Selector Modal */}
-      {selectedItem && !hasOptionGroups(selectedItem) && hasVariants(selectedItem) && (
-        <VariantSelector
-          item={selectedItem}
-          isOpen={selectedItem !== null}
-          onClose={() => setSelectedItem(null)}
-          onAddToCart={handleVariantSelection}
-        />
-      )}
+      {/* Legacy Variant Selector Modal - REMOVED
+          Now using only option groups system or simple add-to-cart */}
 
       {/* Cart Conflict Modal */}
       {conflictData && (
