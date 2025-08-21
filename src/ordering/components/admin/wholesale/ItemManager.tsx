@@ -570,6 +570,29 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
     setExistingImages(prev => prev.filter(img => img.id !== imageId));
   };
 
+  const setPrimaryImage = async (imageId: number) => {
+    if (!editingId) return;
+    
+    try {
+      const response = await apiClient.patch(`/wholesale/admin/fundraisers/${fundraiserId}/items/${editingId}/set_primary_image`, {
+        image_id: imageId
+      });
+      
+      if (response.data.success) {
+        // Update existing images to reflect the new primary
+        setExistingImages(prev => prev.map(img => ({
+          ...img,
+          primary: img.id === imageId
+        })));
+        
+        toastUtils.success('Primary image updated successfully!');
+      }
+    } catch (error: any) {
+      console.error('Error setting primary image:', error);
+      toastUtils.error(error.response?.data?.message || 'Failed to set primary image');
+    }
+  };
+
   const handleDelete = async (id: number) => {
     if (!window.confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
       return;
@@ -1422,7 +1445,15 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                       {/* Existing Images */}
                       {existingImages.map((image, index) => (
                         <div key={`existing-${image.id}`} className="relative group">
-                          <div className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden">
+                          <div 
+                            className={`relative aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-pointer transition-all ${
+                              image.primary 
+                                ? 'ring-2 ring-blue-500 ring-offset-2' 
+                                : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-1'
+                            }`}
+                            onClick={() => !image.primary && setPrimaryImage(image.id)}
+                            title={image.primary ? 'Primary image' : 'Click to make primary'}
+                          >
                             <img
                               src={image.image_url}
                               alt={image.alt_text}
@@ -1431,20 +1462,32 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
                               <button
                                 type="button"
-                                onClick={() => removeExistingImage(image.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeExistingImage(image.id);
+                                }}
                                 className="opacity-0 group-hover:opacity-100 text-white hover:text-red-300 transition-opacity"
                               >
                                 <X className="w-6 h-6" />
                               </button>
                             </div>
                             <div className="absolute top-2 left-2">
-                              <span className="inline-block px-2 py-1 text-xs font-medium text-white bg-green-600 rounded">
-                                Saved
+                              <span className={`inline-block px-2 py-1 text-xs font-medium text-white rounded ${
+                                image.primary ? 'bg-blue-600' : 'bg-green-600'
+                              }`}>
+                                {image.primary ? 'Primary' : 'Saved'}
                               </span>
                             </div>
+                            {!image.primary && (
+                              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
+                                  Click to make primary
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="mt-1 text-center">
-                            <span className="text-xs text-gray-500">
+                            <span className={`text-xs ${image.primary ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
                               {image.primary ? 'Primary' : `Image ${index + 1}`}
                             </span>
                           </div>

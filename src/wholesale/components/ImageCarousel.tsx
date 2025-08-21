@@ -44,23 +44,14 @@ export default function ImageCarousel({
 
   return (
     <div className={`relative group ${className}`}>
-      {currentImage?.image_url ? (
-        <OptimizedImage
-          key={`${currentImageIndex}-${currentImage.image_url}`}
-          src={currentImage.image_url}
-          alt={currentImage.alt_text || itemName}
-          context="menuItem"
-          className="w-full h-full object-cover rounded-lg"
-          loading="lazy"
-          fetchPriority="low"
-        />
-      ) : (
-        <div className="w-full h-full bg-gray-200 rounded-lg flex items-center justify-center">
-          <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-        </div>
-      )}
+      <OptimizedImage
+        src={currentImage?.image_url || "/placeholder-food.png"}
+        alt={currentImage?.alt_text || `${itemName} placeholder`}
+        context="menuItem"
+        className="w-full h-full object-cover rounded-lg"
+        loading="lazy"
+        fetchPriority="low"
+      />
       
       {/* Navigation Arrows - Only show on hover and when multiple images */}
       {hasMultipleImages && showArrows && (
