@@ -13,7 +13,8 @@ interface WholesaleOrderItem {
   price_cents: number;
   quantity: number;
   line_total_cents: number;
-  selected_options?: Record<string, string>;
+  selected_options?: Record<string, any>;
+  variant_description?: string;
 }
 
 // Extend the existing WholesaleOrder type with additional fields we need
@@ -287,12 +288,16 @@ export default function OrderConfirmation() {
                           </div>
                         </div>
                         
-                        {/* Selected Options */}
-                        {item.selected_options && Object.keys(item.selected_options).length > 0 && (
+                        {/* Selected Options - Use variant_description if available, fallback to selected_options */}
+                        {item.variant_description && item.variant_description !== item.name ? (
+                          <div className="text-sm text-gray-600 mt-2">
+                            <span className="font-medium">Options:</span> {item.variant_description.replace(item.name, '').replace(/^\s*\(|\)\s*$/g, '')}
+                          </div>
+                        ) : item.selected_options && Object.keys(item.selected_options).length > 0 && (
                           <div className="text-sm text-gray-600 mt-2">
                             {Object.entries(item.selected_options).map(([key, value]) => (
                               <div key={key}>
-                                <span className="font-medium capitalize">{key}:</span> {value}
+                                <span className="font-medium capitalize">{key}:</span> {Array.isArray(value) ? value.join(', ') : value}
                               </div>
                             ))}
                           </div>
