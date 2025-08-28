@@ -796,6 +796,9 @@ export function FundraiserManager({ restaurantId, onManage, editingFundraiser, o
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="contact@organization.com"
                     />
+                    <p className="mt-1 text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
+                      <span className="font-medium">📧 Order Notifications:</span> If provided, this email will receive notifications whenever an order is placed for this fundraiser. If left empty, only customers will receive order confirmations.
+                    </p>
                   </div>
 
                   <div>
