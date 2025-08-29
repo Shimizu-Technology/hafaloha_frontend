@@ -66,6 +66,8 @@ interface FundraiserDetailPageProps {
   onBack: () => void;
   onEdit?: (fundraiser: Fundraiser) => void;
   onDataChange?: () => void; // Callback to notify parent of data changes
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
 type DetailTab = 'overview' | 'items' | 'participants' | 'orders' | 'analytics';
@@ -108,8 +110,18 @@ const tabs: Array<{
   }
 ];
 
-export function FundraiserDetailPage({ fundraiser, restaurantId, onBack, onEdit, onDataChange }: FundraiserDetailPageProps) {
-  const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+export function FundraiserDetailPage({ fundraiser, restaurantId, onBack, onEdit, onDataChange, activeTab: propActiveTab, onTabChange }: FundraiserDetailPageProps) {
+  // Use prop activeTab if provided, otherwise fall back to local state
+  const [localActiveTab, setLocalActiveTab] = useState<DetailTab>('overview');
+  const activeTab = (propActiveTab as DetailTab) || localActiveTab;
+  
+  const handleTabChange = (tab: DetailTab) => {
+    if (onTabChange) {
+      onTabChange(tab);
+    } else {
+      setLocalActiveTab(tab);
+    }
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -194,28 +206,28 @@ export function FundraiserDetailPage({ fundraiser, restaurantId, onBack, onEdit,
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <button
-                  onClick={() => setActiveTab('items')}
+                  onClick={() => handleTabChange('items')}
                   className="flex items-center justify-center px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
                 >
                   <Package className="w-5 h-5 mr-2" />
                   Manage Items
                 </button>
                 <button
-                  onClick={() => setActiveTab('participants')}
+                  onClick={() => handleTabChange('participants')}
                   className="flex items-center justify-center px-4 py-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
                 >
                   <Users className="w-5 h-5 mr-2" />
                   Manage Participants
                 </button>
                 <button
-                  onClick={() => setActiveTab('orders')}
+                  onClick={() => handleTabChange('orders')}
                   className="flex items-center justify-center px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
                 >
                   <ShoppingBag className="w-5 h-5 mr-2" />
                   View Orders
                 </button>
                 <button
-                  onClick={() => setActiveTab('analytics')}
+                  onClick={() => handleTabChange('analytics')}
                   className="flex items-center justify-center px-4 py-3 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors"
                 >
                   <BarChart3 className="w-5 h-5 mr-2" />
@@ -450,7 +462,7 @@ export function FundraiserDetailPage({ fundraiser, restaurantId, onBack, onEdit,
             {tabs.map(({ id, label, icon: Icon, description }) => (
               <button
                 key={id}
-                onClick={() => setActiveTab(id)}
+                onClick={() => handleTabChange(id)}
                 className={`
                   flex-shrink-0 px-6 py-4 border-b-2 font-medium text-sm transition-colors
                   ${

@@ -10,6 +10,7 @@ import CartConflictModal from './CartConflictModal';
 import MobileStickyBar from './MobileStickyBar';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 import ImageCarousel from './ImageCarousel';
+import { validateCartItemInventory } from '../utils/inventoryUtils';
 
 export default function FundraiserDetail() {
   const { fundraiserSlug } = useParams<{ fundraiserSlug: string }>();
@@ -19,7 +20,7 @@ export default function FundraiserDetail() {
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   
-  const { addToCart, getItemCount, getCartTotal } = useWholesaleCart();
+  const { addToCart, getItemCount, getCartTotal, items } = useWholesaleCart();
   const { 
     isModalOpen, 
     conflictData, 
@@ -105,6 +106,19 @@ export default function FundraiserDetail() {
 
   const handleAddToCart = (item: any, selectedOptions: { [key: string]: string } = {}) => {
     if (!fundraiser) return;
+
+    // Get existing quantity of this item in cart
+    const existingQuantity = items
+      .filter(cartItem => cartItem.itemId === item.id)
+      .reduce((total, cartItem) => total + cartItem.quantity, 0);
+    
+    // Validate inventory including existing cart quantity
+    const inventoryValidation = validateCartItemInventory(item, {}, 1, existingQuantity);
+    
+    if (!inventoryValidation.isValid) {
+      setError(inventoryValidation.errors.join('\n'));
+      return;
+    }
 
     // Check for cart conflict first
     const canAdd = checkCartConflict(
@@ -474,6 +488,7 @@ export default function FundraiserDetail() {
         <WholesaleCustomizationModal
           item={selectedItem}
           fundraiserId={fundraiser.id}
+          fundraiserSlug={fundraiser.slug}
           onClose={() => setSelectedItem(null)}
         />
       )}

@@ -5,6 +5,7 @@ import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import { wholesaleApi, CreateOrderRequest, WholesaleParticipant } from '../services/wholesaleApi';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { useAuthStore } from '../../shared/auth/authStore';
+import { handleApiError } from '../../shared/utils/errorHandler';
 import ParticipantSelector from './ParticipantSelector';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 import { StripeCheckout, StripeCheckoutRef } from '../../ordering/components/payment/StripeCheckout';
@@ -21,7 +22,7 @@ interface OrderFormData {
 
 export default function WholesaleCheckout() {
   const navigate = useNavigate();
-  const { items, fundraiser, getCartTotal, clearCart, validateCart, setFundraiser } = useWholesaleCart();
+  const { items, fundraiser, getCartTotal, clearCart, validateCart, setFundraiser, error: cartError, removeUnavailableItems } = useWholesaleCart();
   const { restaurant } = useRestaurantStore();
   const { user } = useAuthStore();
   
@@ -204,7 +205,8 @@ export default function WholesaleCheckout() {
       // Validate cart
       const cartValid = await validateCart();
       if (!cartValid) {
-        setError('Please review your cart and try again');
+        // The validateCart function already sets detailed error messages in the cart store
+        // We don't need to set a generic error here - the cart error will be displayed
         setLoading(false);
         return;
       }
@@ -253,7 +255,9 @@ export default function WholesaleCheckout() {
 
     } catch (err) {
       console.error('Error placing order:', err);
-      setError(err instanceof Error ? err.message : 'Failed to place order');
+      // Use the proper error handler to extract user-friendly messages
+      const errorMessage = handleApiError(err, 'Failed to place order');
+      setError(errorMessage);
       setIsProcessingPayment(false);
     } finally {
       setLoading(false);
@@ -594,9 +598,30 @@ export default function WholesaleCheckout() {
             </button>
 
             {/* Error Display */}
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 text-sm">{error}</p>
+            {(error || cartError) && (
+              <div className={`mt-4 p-3 rounded-lg ${
+                (error || cartError)?.startsWith('✅') 
+                  ? 'bg-green-50 border border-green-200' 
+                  : 'bg-red-50 border border-red-200'
+              }`}>
+                <p className={`text-sm whitespace-pre-line ${
+                  (error || cartError)?.startsWith('✅') 
+                    ? 'text-green-700' 
+                    : 'text-red-700'
+                }`}>{error || cartError}</p>
+                {cartError && (cartError.includes('Some items in your cart need attention') || cartError.includes('Cart validation failed')) && (
+                  <button
+                    onClick={async () => {
+                      setLoading(true);
+                      await removeUnavailableItems();
+                      setLoading(false);
+                    }}
+                    disabled={loading}
+                    className="mt-3 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loading ? 'Fixing Cart...' : 'Fix Cart Automatically'}
+                  </button>
+                )}
               </div>
             )}
 

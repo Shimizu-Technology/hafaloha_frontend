@@ -75,6 +75,8 @@ export interface WholesaleItem {
   in_stock: boolean;
   stock_status: string;
   available_quantity?: number;
+  uses_option_level_inventory?: boolean;
+  effective_available_quantity?: number;
   images: WholesaleItemImage[];
   primary_image_url?: string;
   total_ordered: number;
@@ -274,9 +276,16 @@ class WholesaleApiService {
     return response.data;
   }
 
-  async validateCart(): Promise<ApiResponse<{ cart: WholesaleCartSummary; valid: boolean; issues?: any[] }>> {
-    const response = await apiClient.get(`${this.baseUrl}/cart/validate`);
-    return response.data;
+  async validateCart(cartItems?: any[]): Promise<ApiResponse<{ cart: WholesaleCartSummary; valid: boolean; issues?: any[] }>> {
+    if (cartItems && cartItems.length > 0) {
+      // Send cart items as POST data for validation
+      const response = await apiClient.post(`${this.baseUrl}/cart/validate`, { cart_items: cartItems });
+      return response.data;
+    } else {
+      // Empty cart validation
+      const response = await apiClient.get(`${this.baseUrl}/cart/validate`);
+      return response.data;
+    }
   }
 
   // Orders

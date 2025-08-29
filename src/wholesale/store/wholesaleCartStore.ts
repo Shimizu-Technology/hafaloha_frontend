@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useAuthStore } from '../../shared/auth/authStore';
 import wholesaleWebSocket, { WholesaleItemStockUpdate } from '../services/wholesaleWebSocket';
+import { wholesaleApi } from '../services/wholesaleApi';
+import { validateCartItemInventory } from '../utils/inventoryUtils';
 
 export interface WholesaleCartItem {
   id: string;
@@ -66,6 +68,9 @@ export interface WholesaleCartState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   migrateCartFormat: () => void;
+  
+  // Cart cleanup
+  removeUnavailableItems: () => Promise<void>;
   
   // WebSocket methods
   startWebSocketConnection: () => boolean;
@@ -229,14 +234,241 @@ export const useWholesaleCartStore = create<WholesaleCartState>()(
           return false;
         }
         
-        // TODO: Add API call to validate items are still available/prices haven't changed
-        // For now, assume cart is valid
-        set({ error: null });
-        return true;
+        try {
+          // Convert cart items to the format expected by the backend
+          const cartItemsForValidation = state.items.map(item => ({
+            item_id: item.itemId,
+            fundraiser_id: item.fundraiserId,
+            name: item.name,
+            description: item.description,
+            quantity: item.quantity,
+            price_cents: item.priceCents,
+            selected_options: item.options || {}
+          }));
+          
+          // Call the backend to validate cart items against current inventory
+          const response = await wholesaleApi.validateCart(cartItemsForValidation);
+          
+          if (response.success && response.data?.valid) {
+            set({ error: null });
+            return true;
+          } else {
+            // Handle specific validation issues
+            const issues = response.data?.issues || [];
+            if (issues.length > 0) {
+              // Create user-friendly error messages
+              const errorMessages = issues.map((issue: any) => {
+                if (issue.type === 'out_of_stock') {
+                  if (issue.option_name) {
+                    // Option-level out of stock - emphasize the option, include item for context
+                    return `❌ "${issue.option_name}" is out of stock (from ${issue.item_name})`;
+                  } else {
+                    // Item-level out of stock
+                    return `❌ "${issue.item_name}" is out of stock`;
+                  }
+                } else if (issue.type === 'insufficient_stock') {
+                  if (issue.option_name) {
+                    // Option-level insufficient stock - emphasize the option and quantity
+                    return `⚠️ Only ${issue.available} "${issue.option_name}" left (from ${issue.item_name}) - you have ${issue.requested} in your cart`;
+                  } else {
+                    // Item-level insufficient stock
+                    return `⚠️ Only ${issue.available} left of "${issue.item_name}" - you have ${issue.requested} in your cart`;
+                  }
+                } else if (issue.type === 'option_unavailable') {
+                  // Option marked as unavailable by admin
+                  return `❌ "${issue.option_name}" is no longer available${issue.group_name ? ` for ${issue.group_name}` : ''} (from ${issue.item_name})`;
+                } else if (issue.type === 'item_inactive' || issue.type === 'item_not_found') {
+                  return `❌ "${issue.item_name}" is no longer available`;
+                } else if (issue.type === 'fundraiser_inactive') {
+                  return `❌ This fundraiser is no longer accepting orders`;
+                } else if (issue.type === 'price_changed') {
+                  return `💰 Price changed for "${issue.item_name}" - please review`;
+                } else {
+                  return issue.message || 'Unknown issue with cart item';
+                }
+              });
+              
+              const errorMessage = `Some items in your cart need attention:\n\n${errorMessages.join('\n')}\n\nYou can fix these issues automatically using the button below, or update your cart manually.`;
+              set({ error: errorMessage });
+            } else {
+              set({ error: response.message || 'Cart validation failed' });
+            }
+            return false;
+          }
+        } catch (error) {
+          console.error('Cart validation error:', error);
+          set({ error: 'Unable to validate cart. Please try again.' });
+          return false;
+        }
       },
 
       setLoading: (loading) => {
         set({ loading });
+      },
+
+      removeUnavailableItems: async () => {
+        const state = get();
+        
+        if (state.items.length === 0) {
+          return;
+        }
+        
+        try {
+          // Convert cart items to the format expected by the backend
+          const cartItemsForValidation = state.items.map(item => ({
+            item_id: item.itemId,
+            fundraiser_id: item.fundraiserId,
+            name: item.name,
+            description: item.description,
+            quantity: item.quantity,
+            price_cents: item.priceCents,
+            selected_options: item.options || {}
+          }));
+          
+          // Get validation issues
+          const response = await wholesaleApi.validateCart(cartItemsForValidation);
+          
+          if (response.success && response.data?.issues) {
+            const issues = response.data.issues;
+            const itemsToRemove: string[] = [];
+            const itemsToUpdate: { id: string; newQuantity: number }[] = [];
+            const itemsWithPriceUpdates: string[] = [];
+            
+            // Process each issue
+            issues.forEach((issue: any) => {
+              if (issue.type === 'out_of_stock' || issue.type === 'option_unavailable') {
+                // Find and mark items for removal
+                const cartItemsToRemove = state.items.filter(item => {
+                  if (item.itemId === issue.item_id) {
+                    // Check if this specific option combination matches
+                    if (issue.option_id) {
+                      // Option-level out of stock - remove items with this specific option
+                      const itemOptions = item.options || {};
+                      return Object.values(itemOptions).some((optionIds: any) => 
+                        Array.isArray(optionIds) && optionIds.includes(issue.option_id)
+                      );
+                    } else {
+                      // Item-level out of stock - remove all instances of this item
+                      return true;
+                    }
+                  }
+                  return false;
+                });
+                
+                cartItemsToRemove.forEach(item => {
+                  if (!itemsToRemove.includes(item.id)) {
+                    itemsToRemove.push(item.id);
+                  }
+                });
+              } else if (issue.type === 'insufficient_stock') {
+                // Find items to update quantity
+                const cartItemsToUpdate = state.items.filter(item => {
+                  if (item.itemId === issue.item_id) {
+                    if (issue.option_id) {
+                      // Option-level insufficient stock
+                      const itemOptions = item.options || {};
+                      return Object.values(itemOptions).some((optionIds: any) => 
+                        Array.isArray(optionIds) && optionIds.includes(issue.option_id)
+                      );
+                    } else {
+                      // Item-level insufficient stock
+                      return true;
+                    }
+                  }
+                  return false;
+                });
+                
+                cartItemsToUpdate.forEach(item => {
+                  if (!itemsToRemove.includes(item.id)) {
+                    itemsToUpdate.push({
+                      id: item.id,
+                      newQuantity: Math.min(item.quantity, issue.available)
+                    });
+                  }
+                });
+              } else if (issue.type === 'price_changed') {
+                // Find items to update price
+                const cartItemsToUpdatePrice = state.items.filter(item => {
+                  return item.itemId === issue.item_id;
+                });
+                
+                cartItemsToUpdatePrice.forEach(item => {
+                  if (!itemsToRemove.includes(item.id)) {
+                    // Update the price for this item
+                    const itemIndex = state.items.findIndex(stateItem => stateItem.id === item.id);
+                    if (itemIndex !== -1) {
+                      state.items[itemIndex] = {
+                        ...state.items[itemIndex],
+                        price: issue.new_price,
+                        totalPrice: issue.new_price * item.quantity
+                      };
+                      
+                      // Track that this item had a price update
+                      if (!itemsWithPriceUpdates.includes(item.id)) {
+                        itemsWithPriceUpdates.push(item.id);
+                      }
+                    }
+                  }
+                });
+              }
+            });
+            
+            // Apply changes
+            let updatedItems = state.items.filter(item => !itemsToRemove.includes(item.id));
+            
+            // Update quantities for insufficient stock items
+            itemsToUpdate.forEach(update => {
+              const itemIndex = updatedItems.findIndex(item => item.id === update.id);
+              if (itemIndex !== -1 && update.newQuantity > 0) {
+                updatedItems[itemIndex] = {
+                  ...updatedItems[itemIndex],
+                  quantity: update.newQuantity
+                };
+              }
+            });
+            
+            // Update the cart
+            set({ 
+              items: updatedItems,
+              error: null // Clear the error since we've fixed the issues
+            });
+            
+            // Show a success message about what was cleaned up
+            const removedCount = itemsToRemove.length;
+            const updatedCount = itemsToUpdate.length;
+            const priceUpdatedCount = itemsWithPriceUpdates.length;
+            let message = '';
+            
+            const actions = [];
+            if (removedCount > 0) {
+              actions.push(`removed ${removedCount} out-of-stock item${removedCount === 1 ? '' : 's'}`);
+            }
+            if (updatedCount > 0) {
+              actions.push(`adjusted quantities for ${updatedCount} item${updatedCount === 1 ? '' : 's'}`);
+            }
+            if (priceUpdatedCount > 0) {
+              actions.push(`updated prices for ${priceUpdatedCount} item${priceUpdatedCount === 1 ? '' : 's'}`);
+            }
+            
+            if (actions.length > 0) {
+              message = `✅ Cart fixed! ${actions.join(', ').replace(/,([^,]*)$/, ' and$1')}.`;
+            } else {
+              message = '✅ Your cart is already up to date!';
+            }
+            
+            // Temporarily show success message
+            set({ error: message });
+            setTimeout(() => {
+              const currentState = get();
+              if (currentState.error === message) {
+                set({ error: null });
+              }
+            }, 3000);
+          }
+        } catch (error) {
+          console.error('Error removing unavailable items:', error);
+          set({ error: 'Failed to update cart. Please try again.' });
+        }
       },
 
       setError: (error) => {

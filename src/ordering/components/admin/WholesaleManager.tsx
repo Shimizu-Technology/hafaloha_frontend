@@ -16,11 +16,12 @@ import ItemManager from './wholesale/ItemManager';
 import ParticipantManager from './wholesale/ParticipantManager';
 import OrderManager from './wholesale/OrderManager';
 import AnalyticsManager from './wholesale/AnalyticsManager';
+import InventoryManager from './wholesale/InventoryManager';
 import FundraiserDetailPage from './wholesale/FundraiserDetailPage';
 import PresetManager from './wholesale/PresetManager';
 
 // Tab definitions for wholesale management
-type WholesaleTab = 'fundraisers' | 'items' | 'participants' | 'orders' | 'analytics' | 'settings';
+type WholesaleTab = 'fundraisers' | 'items' | 'participants' | 'orders' | 'analytics' | 'inventory' | 'settings';
 
 interface Fundraiser {
   id: number;
@@ -99,6 +100,12 @@ const tabs: Array<{
     description: 'View fundraiser performance and metrics'
   },
   {
+    id: 'inventory',
+    label: 'Inventory',
+    icon: Package,
+    description: 'Manage stock levels and inventory tracking'
+  },
+  {
     id: 'settings',
     label: 'Presets',
     icon: Settings,
@@ -112,7 +119,7 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
   // Use the provided restaurantId or fall back to the current restaurant
   const currentRestaurantId = restaurantId || restaurant?.id?.toString() || '1';
   
-  // Tab state management - keeping for temporary compatibility
+  // Enhanced state management with persistence
   const [activeTab, setActiveTab] = useState<WholesaleTab>(() => {
     // Try to restore from localStorage
     const saved = localStorage.getItem('wholesaleTab');
@@ -122,19 +129,50 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
     return 'fundraisers'; // Default to fundraisers tab
   });
 
-  // Save tab preference
-  useEffect(() => {
-    localStorage.setItem('wholesaleTab', activeTab);
-  }, [activeTab]);
+  // State for fundraiser detail view with persistence
+  const [selectedFundraiser, setSelectedFundraiser] = useState<Fundraiser | null>(() => {
+    // Try to restore selected fundraiser from localStorage
+    const saved = localStorage.getItem('selectedFundraiser');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.warn('Failed to parse saved fundraiser:', e);
+        localStorage.removeItem('selectedFundraiser');
+      }
+    }
+    return null;
+  });
+
+  // State for detail tab with persistence
+  const [selectedDetailTab, setSelectedDetailTab] = useState<string>(() => {
+    // Try to restore detail tab from localStorage
+    const saved = localStorage.getItem('fundraiserDetailTab');
+    return saved || 'overview';
+  });
+  
+  // State to track if we need to trigger editing when we return to list view
+  const [editingFundraiser, setEditingFundraiser] = useState<Fundraiser | null>(null);
 
   // New state for dashboard mode vs legacy tab mode
   const [showLegacyTabs, setShowLegacyTabs] = useState(false);
 
-  // State for fundraiser detail view
-  const [selectedFundraiser, setSelectedFundraiser] = useState<Fundraiser | null>(null);
-  
-  // State to track if we need to trigger editing when we return to list view
-  const [editingFundraiser, setEditingFundraiser] = useState<Fundraiser | null>(null);
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('wholesaleTab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (selectedFundraiser) {
+      localStorage.setItem('selectedFundraiser', JSON.stringify(selectedFundraiser));
+    } else {
+      localStorage.removeItem('selectedFundraiser');
+    }
+  }, [selectedFundraiser]);
+
+  useEffect(() => {
+    localStorage.setItem('fundraiserDetailTab', selectedDetailTab);
+  }, [selectedDetailTab]);
 
   // Quick stats state (placeholder for now)
   const [stats, setStats] = useState({
@@ -189,6 +227,30 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
     loadStats();
   }, [currentRestaurantId]);
 
+  // Validate selected fundraiser on mount to ensure it still exists
+  useEffect(() => {
+    const validateSelectedFundraiser = async () => {
+      if (selectedFundraiser) {
+        try {
+          // Try to fetch the fundraiser to make sure it still exists
+          const response = await apiClient.get(`/wholesale/admin/fundraisers/${selectedFundraiser.id}`);
+          if (!response.data) {
+            // Fundraiser no longer exists, clear it
+            console.warn('Selected fundraiser no longer exists, clearing selection');
+            setSelectedFundraiser(null);
+            setSelectedDetailTab('overview');
+          }
+        } catch (error) {
+          console.warn('Selected fundraiser no longer accessible, clearing selection:', error);
+          setSelectedFundraiser(null);
+          setSelectedDetailTab('overview');
+        }
+      }
+    };
+
+    validateSelectedFundraiser();
+  }, [currentRestaurantId]); // Only run when restaurant changes
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -202,10 +264,13 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
 
   const handleManageFundraiser = (fundraiser: Fundraiser) => {
     setSelectedFundraiser(fundraiser);
+    // Keep the current detail tab or default to overview
   };
 
   const handleBackToFundraisers = () => {
     setSelectedFundraiser(null);
+    // Reset detail tab to overview when going back
+    setSelectedDetailTab('overview');
   };
 
   const handleEditFundraiser = (fundraiser: Fundraiser) => {
@@ -214,6 +279,12 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
     // We need to pass this edit request to the FundraiserManager
     // We'll do this by setting a state that FundraiserManager can pick up
     setEditingFundraiser(fundraiser);
+    // Reset detail tab when editing
+    setSelectedDetailTab('overview');
+  };
+
+  const handleDetailTabChange = (tab: string) => {
+    setSelectedDetailTab(tab);
   };
 
   const handleFundraiserDataChange = () => {
@@ -238,6 +309,9 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
         
       case 'analytics':
         return <AnalyticsManager restaurantId={currentRestaurantId} />;
+        
+      case 'inventory':
+        return <InventoryManager />;
         
       case 'settings':
         return <PresetManager restaurantId={currentRestaurantId} />;
@@ -442,6 +516,8 @@ export function WholesaleManager({ restaurantId }: WholesaleManagerProps) {
                   onBack={handleBackToFundraisers}
                   onEdit={handleEditFundraiser}
                   onDataChange={handleFundraiserDataChange}
+                  activeTab={selectedDetailTab}
+                  onTabChange={handleDetailTabChange}
                 />
               ) : (
                 <FundraiserManager 

@@ -15,6 +15,8 @@ import {
   Save,
   X,
   AlertCircle,
+  AlertTriangle,
+  CheckCircle,
   Archive,
   TrendingUp,
   Boxes
@@ -97,6 +99,8 @@ interface OptionFormData {
   additional_price: number;
   available: boolean;
   position: number;
+  stock_quantity?: number;
+  low_stock_threshold?: number;
 }
 
 // Option Group Preset Interfaces
@@ -150,8 +154,12 @@ interface WholesaleItem {
   allow_sale_with_no_stock: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
+  available_quantity?: number;
+  damaged_quantity?: number;
+  effective_available_quantity?: number;
+  uses_option_level_inventory?: boolean;
   in_stock: boolean;
-  stock_status: 'in_stock' | 'low_stock' | 'out_of_stock';
+  stock_status: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unlimited';
   total_ordered: number;
   total_revenue: number;
   active: boolean;
@@ -249,6 +257,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
   const [sortBy, setSortBy] = useState<'name' | 'created_at' | 'price' | 'total_ordered'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Audit trail modal state
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditTrailData, setAuditTrailData] = useState<any[]>([]);
+  const [auditItemName, setAuditItemName] = useState('');
+  const [loadingAudit, setLoadingAudit] = useState(false);
+
   // Image upload state
   const [selectedImages, setSelectedImages] = useState<ImageFile[]>([]);
   const [existingImages, setExistingImages] = useState<ExistingImage[]>([]);
@@ -327,7 +341,9 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         name: optionPreset.name,
         additional_price: optionPreset.additional_price,
         available: optionPreset.available,
-        position: optionPreset.position
+        position: optionPreset.position,
+        stock_quantity: 0,
+        low_stock_threshold: 5
       }))
     };
 
@@ -379,7 +395,9 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
           name: option.name,
           additional_price: option.additional_price,
           available: option.available,
-          position: option.position
+          position: option.position,
+          stock_quantity: option.stock_quantity || 0,
+          low_stock_threshold: option.low_stock_threshold || 5
         }))
       }));
       
@@ -436,13 +454,21 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       
       // Create options for this group
       for (const optionData of groupData.options) {
+        const optionPayload: any = {
+          name: optionData.name,
+          additional_price: optionData.additional_price,
+          available: optionData.available,
+          position: optionData.position
+        };
+        
+        // Include stock fields if inventory tracking is enabled
+        if (groupData.enable_inventory_tracking) {
+          optionPayload.stock_quantity = optionData.stock_quantity || 0;
+          optionPayload.low_stock_threshold = optionData.low_stock_threshold || 5;
+        }
+        
         await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options`, {
-          option: {
-            name: optionData.name,
-            additional_price: optionData.additional_price,
-            available: optionData.available,
-            position: optionData.position
-          }
+          option: optionPayload
         });
       }
     }
@@ -452,20 +478,139 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
   const updateOptionGroups = async (itemId: number, optionGroups: OptionGroupFormData[]) => {
     const fundraiserId = formData.fundraiser_id;
     
-    // For simplicity, we'll delete all existing option groups and recreate them
-    // In a production app, you might want to do a more sophisticated diff/merge
-    
-    // Get existing option groups
+    // Get existing option groups with full details
     const existingResponse = await apiClient.get(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}`);
     const existingGroups = existingResponse.data.data.item.option_groups || [];
     
-    // Delete existing groups
-    for (const group of existingGroups) {
-      await apiClient.delete(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${group.id}`);
+    // Smart diff/merge approach to preserve audit history
+    for (const newGroup of optionGroups) {
+      const existingGroup = existingGroups.find((g: any) => g.name === newGroup.name);
+      
+      if (existingGroup) {
+        // Update existing group
+        await apiClient.patch(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${existingGroup.id}`, {
+          option_group: {
+            name: newGroup.name,
+            min_select: newGroup.min_select,
+            max_select: newGroup.max_select,
+            required: newGroup.required,
+            position: newGroup.position,
+            enable_inventory_tracking: newGroup.enable_inventory_tracking
+          }
+        });
+        
+        // Handle options within this group
+        await updateOptionsInGroup(fundraiserId, itemId, existingGroup.id, existingGroup.options || [], newGroup.options);
+      } else {
+        // Create new group
+        const groupResponse = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups`, {
+          option_group: {
+            name: newGroup.name,
+            min_select: newGroup.min_select,
+            max_select: newGroup.max_select,
+            required: newGroup.required,
+            position: newGroup.position,
+            enable_inventory_tracking: newGroup.enable_inventory_tracking
+          }
+        });
+        
+        const createdGroupId = groupResponse.data.data.option_group.id;
+        
+        // Create all options for new group
+        for (const option of newGroup.options) {
+          await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${createdGroupId}/options`, {
+            option: {
+              name: option.name,
+              additional_price: option.additional_price,
+              available: option.available,
+              position: option.position,
+              stock_quantity: option.stock_quantity,
+              low_stock_threshold: option.low_stock_threshold
+            }
+          });
+        }
+      }
     }
     
-    // Create new groups
-    await createOptionGroups(itemId, optionGroups);
+    // Remove groups that are no longer in the new data
+    for (const existingGroup of existingGroups) {
+      const stillExists = optionGroups.find((g: any) => g.name === existingGroup.name);
+      if (!stillExists) {
+        await apiClient.delete(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${existingGroup.id}`);
+      }
+    }
+  };
+
+  const updateOptionsInGroup = async (fundraiserId: number, itemId: number, groupId: number, existingOptions: any[], newOptions: OptionFormData[]) => {
+    // Handle each new option
+    for (const newOption of newOptions) {
+      const existingOption = existingOptions.find((o: any) => o.name === newOption.name);
+      
+      if (existingOption) {
+        // Check if stock quantity changed and handle with audit trail
+        const stockChanged = existingOption.stock_quantity !== newOption.stock_quantity;
+        
+        if (stockChanged && existingOption.inventory_tracking_enabled) {
+          // Update option without stock_quantity first
+          await apiClient.patch(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options/${existingOption.id}`, {
+            option: {
+              name: newOption.name,
+              additional_price: newOption.additional_price,
+              available: newOption.available,
+              position: newOption.position,
+              low_stock_threshold: newOption.low_stock_threshold
+              // Exclude stock_quantity to handle separately with audit trail
+            }
+          });
+          
+          // Update stock with proper audit trail
+          try {
+            await apiClient.post(`/wholesale/admin/inventory/options/${existingOption.id}/update_stock`, {
+              quantity: newOption.stock_quantity,
+              notes: `Stock updated via item edit: ${existingOption.stock_quantity} → ${newOption.stock_quantity}`
+            });
+          } catch (inventoryError) {
+            console.error('Failed to update option inventory with audit trail:', inventoryError);
+            // Fallback to direct update if audit endpoint fails
+            await apiClient.patch(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options/${existingOption.id}`, {
+              option: { stock_quantity: newOption.stock_quantity }
+            });
+          }
+        } else {
+          // Update option normally (no stock change or no inventory tracking)
+          await apiClient.patch(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options/${existingOption.id}`, {
+            option: {
+              name: newOption.name,
+              additional_price: newOption.additional_price,
+              available: newOption.available,
+              position: newOption.position,
+              stock_quantity: newOption.stock_quantity,
+              low_stock_threshold: newOption.low_stock_threshold
+            }
+          });
+        }
+      } else {
+        // Create new option
+        await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options`, {
+          option: {
+            name: newOption.name,
+            additional_price: newOption.additional_price,
+            available: newOption.available,
+            position: newOption.position,
+            stock_quantity: newOption.stock_quantity,
+            low_stock_threshold: newOption.low_stock_threshold
+          }
+        });
+      }
+    }
+    
+    // Remove options that are no longer in the new data
+    for (const existingOption of existingOptions) {
+      const stillExists = newOptions.find((o: any) => o.name === existingOption.name);
+      if (!stillExists) {
+        await apiClient.delete(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options/${existingOption.id}`);
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -539,29 +684,93 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         }
         
         toastUtils.success('Item created successfully!');
+        
+        // Reset form and close modal for new items
+        setIsCreating(false);
+        setEditingId(null);
+        setSelectedImages([]);
+        setExistingImages([]);
+        setImagesToDelete([]);
+        
+        // Clean up image previews
+        selectedImages.forEach(image => {
+          URL.revokeObjectURL(image.preview);
+        });
       } else {
+        // Check if stock quantity changed for existing items with inventory tracking
+        let stockQuantityChanged = false;
+        let originalStockQuantity = 0;
+        
+        const originalItem = items.find(item => item.id === editingId);
+        if (originalItem && originalItem.track_inventory) {
+          originalStockQuantity = originalItem.stock_quantity || 0;
+          stockQuantityChanged = originalStockQuantity !== formData.stock_quantity;
+        }
+
+        // If stock quantity changed and item has inventory tracking, exclude it from the main update
+        if (stockQuantityChanged && formData.track_inventory) {
+          // Remove stock_quantity from the request data to handle it separately with audit trail
+          if (requestData instanceof FormData) {
+            // For FormData, we need to rebuild without stock_quantity
+            const newFormData = new FormData();
+            const itemDataWithoutStock = { ...formData };
+            delete (itemDataWithoutStock as any).option_groups;
+            delete (itemDataWithoutStock as any).stock_quantity;
+            
+            Object.keys(itemDataWithoutStock).forEach(key => {
+              const value = itemDataWithoutStock[key as keyof typeof itemDataWithoutStock];
+              newFormData.append(`item[${key}]`, String(value));
+            });
+            
+            selectedImages.forEach((imageFile) => {
+              newFormData.append('item[images][]', imageFile.file);
+            });
+            
+            imagesToDelete.forEach((imageId) => {
+              newFormData.append('item[delete_image_ids][]', String(imageId));
+            });
+            
+            requestData = newFormData;
+          } else {
+            // For JSON data, remove stock_quantity
+            delete requestData.item.stock_quantity;
+          }
+        }
+
         const fundraiserId = formData.fundraiser_id;
         await apiClient.patch(`/wholesale/admin/fundraisers/${fundraiserId}/items/${editingId}`, requestData, requestConfig);
         itemId = editingId!;
         
+        // Handle stock quantity change with proper audit trail
+        if (stockQuantityChanged && formData.track_inventory) {
+          try {
+            await apiClient.post(`/wholesale/admin/inventory/items/${itemId}/update_stock`, {
+              quantity: formData.stock_quantity,
+              notes: `Stock updated via item edit: ${originalStockQuantity} → ${formData.stock_quantity}`
+            });
+            toastUtils.success('Item and inventory updated successfully with audit trail! Modal kept open for additional edits.');
+          } catch (inventoryError) {
+            console.error('Failed to update inventory with audit trail:', inventoryError);
+            toastUtils.error('Item updated but inventory audit failed. Please check inventory history.');
+          }
+        } else {
+          toastUtils.success('Item updated successfully! Modal kept open for additional edits.');
+        }
+        
         // Update option groups for existing item
         await updateOptionGroups(itemId, formData.option_groups);
         
-        toastUtils.success('Item updated successfully!');
+        // For existing items, keep the modal open but clear temporary states
+        setSelectedImages([]);
+        setImagesToDelete([]);
+        
+        // Clean up image previews but keep the modal open
+        selectedImages.forEach(image => {
+          URL.revokeObjectURL(image.preview);
+        });
       }
       
-      // Reset form and refresh data
-      setIsCreating(false);
-      setEditingId(null);
-      setSelectedImages([]);
-      setExistingImages([]);
-      setImagesToDelete([]);
-      
-      // Clean up image previews
-      selectedImages.forEach(image => {
-        URL.revokeObjectURL(image.preview);
-      });
-      
+      // Refresh data to show updated information
       loadData();
       
       // Notify parent component of data changes
@@ -692,6 +901,23 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
     }
   };
 
+  const handleViewAuditTrail = async (itemId: number, itemName: string) => {
+    try {
+      setLoadingAudit(true);
+      setAuditItemName(itemName);
+      setShowAuditModal(true);
+      
+      const response = await apiClient.get(`/wholesale/admin/inventory/items/${itemId}`);
+      setAuditTrailData(response.data.data.audit_trail || []);
+    } catch (error) {
+      console.error('Failed to load audit trail:', error);
+      toastUtils.error('Failed to load inventory history');
+      setShowAuditModal(false);
+    } finally {
+      setLoadingAudit(false);
+    }
+  };
+
   const toggleActive = async (id: number, currentActive: boolean) => {
     try {
       await apiClient.patch(`/wholesale/admin/items/${id}/toggle_active`);
@@ -756,6 +982,24 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       style: 'currency',
       currency: 'USD'
     }).format(amount);
+  };
+
+  const getStockStatusColor = (status: string) => {
+    switch (status) {
+      case 'out_of_stock': return 'bg-red-100 text-red-800';
+      case 'low_stock': return 'bg-yellow-100 text-yellow-800';
+      case 'in_stock': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'out_of_stock': return <AlertTriangle className="w-3 h-3" />;
+      case 'low_stock': return <AlertCircle className="w-3 h-3" />;
+      case 'in_stock': return <CheckCircle className="w-3 h-3" />;
+      default: return <Package className="w-3 h-3" />;
+    }
   };
 
   // Removed generatePreviewVariants - using option groups instead
@@ -914,7 +1158,9 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Price
                   </th>
-                  {/* Stock column commented out since stock tracking is not currently being used */}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Inventory
+                  </th>
                   {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Stock
                   </th> */}
@@ -956,16 +1202,6 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                                 {item.variant_count} variant{item.variant_count !== 1 ? 's' : ''}
                               </span>
                             )}
-                            {item.options?.size_options?.length > 0 && (
-                              <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800" title={`Sizes: ${item.options.size_options.join(', ')}`}>
-                                {item.options.size_options.length} size{item.options.size_options.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
-                            {item.options?.color_options?.length > 0 && (
-                              <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800" title={`Colors: ${item.options.color_options.join(', ')}`}>
-                                {item.options.color_options.length} color{item.options.color_options.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
                           </div>
                           <div className="text-sm text-gray-500 truncate max-w-xs">{item.description}</div>
                           <div className="text-xs text-gray-400">SKU: {item.sku}</div>
@@ -980,21 +1216,33 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {formatCurrency(item.price)}
                     </td>
-                    {/* Stock data cell commented out since stock tracking is not currently being used */}
-                    {/* <td className="px-6 py-4">
-                      {item.track_inventory ? (
+                    <td className="px-6 py-4">
+                      {item.track_inventory || item.uses_option_level_inventory ? (
                         <div>
+                          {/* Stock Status Badge */}
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStockStatusColor(item.stock_status)}`}>
-                            {item.stock_status.replace('_', ' ')}
+                            {getStatusIcon(item.stock_status)}
+                            <span className="ml-1">{item.stock_status.replace('_', ' ')}</span>
                           </span>
+                          
+                          {/* Quantity Information */}
                           <div className="text-xs text-gray-500 mt-1">
-                            {item.stock_quantity} in stock
+                            {item.track_inventory ? (
+                              <>
+                                {item.available_quantity !== undefined ? `${item.available_quantity} available` : `${item.stock_quantity} in stock`}
+                                {(item.damaged_quantity ?? 0) > 0 && (
+                                  <span className="text-red-500 ml-2">• {item.damaged_quantity} damaged</span>
+                                )}
+                              </>
+                            ) : (
+                              `${item.effective_available_quantity} available`
+                            )}
                           </div>
                         </div>
                       ) : (
                         <span className="text-xs text-gray-500">Not tracked</span>
                       )}
-                    </td> */}
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
                       <div className="space-y-1">
                         <div className="flex items-center">
@@ -1023,6 +1271,15 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
+                        {(item.track_inventory || item.uses_option_level_inventory) && (
+                          <button
+                            onClick={() => handleViewAuditTrail(item.id, item.name)}
+                            className="text-purple-600 hover:text-purple-900"
+                            title="View Inventory History"
+                          >
+                            <Archive className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(item.id)}
                           className="text-red-600 hover:text-red-900"
@@ -1145,6 +1402,177 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Describe the item"
                   />
+                </div>
+              </div>
+
+              {/* Inventory Management */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-md font-medium text-gray-900">Inventory Management</h4>
+                  {/* Audit History Button - only show when editing items with inventory tracking */}
+                  {!isCreating && editingId !== null && (formData.track_inventory || formData.option_groups.some(g => g.enable_inventory_tracking)) && (
+                    <button
+                      type="button"
+                      onClick={() => handleViewAuditTrail(editingId, formData.name || 'Item')}
+                      className="flex items-center px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors"
+                      title="View Inventory History"
+                    >
+                      <Archive className="w-3 h-3 mr-1.5" />
+                      View History
+                    </button>
+                  )}
+                </div>
+                
+                {/* Current Inventory Status - only show when editing items with inventory tracking */}
+                {!isCreating && editingId !== null && (formData.track_inventory || formData.option_groups.some(g => g.enable_inventory_tracking)) && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                    <h5 className="text-sm font-medium text-gray-900 mb-2">Current Inventory Status</h5>
+                    {(() => {
+                      const currentItem = items.find(item => item.id === editingId);
+                      if (!currentItem) return <span className="text-xs text-gray-500">Loading...</span>;
+                      
+                      if (currentItem.track_inventory || currentItem.uses_option_level_inventory) {
+                        return (
+                          <div className="space-y-2">
+                            {/* Stock Status and Tracking Type */}
+                            <div className="flex items-center space-x-3">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStockStatusColor(currentItem.stock_status)}`}>
+                                {getStatusIcon(currentItem.stock_status)}
+                                <span className="ml-1">{currentItem.stock_status.replace('_', ' ')}</span>
+                              </span>
+                              
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                currentItem.track_inventory 
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : 'bg-purple-100 text-purple-700'
+                              }`}>
+                                <Package className="w-3 h-3 mr-1" />
+                                {currentItem.track_inventory ? 'Item Level' : 'Option Level'}
+                              </span>
+                            </div>
+                            
+                            {/* Quantity Information */}
+                            <div className="text-sm text-gray-600">
+                              {currentItem.track_inventory ? (
+                                <>
+                                  {currentItem.available_quantity !== undefined ? `${currentItem.available_quantity} available` : `${currentItem.stock_quantity} in stock`}
+                                  {(currentItem.damaged_quantity ?? 0) > 0 && (
+                                    <span className="text-red-600 ml-2">• {currentItem.damaged_quantity} damaged</span>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <div className="mb-2">{currentItem.effective_available_quantity} total available</div>
+                                  {/* Show individual option quantities */}
+                                  <div className="space-y-1">
+                                    {(() => {
+                                      // Find the option group with inventory tracking
+                                      const trackingGroup = currentItem.option_groups?.find(g => g.enable_inventory_tracking);
+                                      if (trackingGroup?.options) {
+                                        return trackingGroup.options.map(option => (
+                                          <div key={option.id} className="text-xs text-gray-500 flex justify-between">
+                                            <span>{option.name}:</span>
+                                            <span className={(option.available_stock ?? 0) <= 0 ? 'text-red-600' : (option.available_stock ?? 0) <= (option.low_stock_threshold || 5) ? 'text-yellow-600' : 'text-green-600'}>
+                                              {option.available_stock ?? 0} available
+                                              {(option.damaged_quantity ?? 0) > 0 && (
+                                                <span className="text-red-600 ml-1">({option.damaged_quantity} damaged)</span>
+                                              )}
+                                            </span>
+                                          </div>
+                                        ));
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return <span className="text-sm text-gray-500">Not tracked</span>;
+                    })()}
+                  </div>
+                )}
+                
+                <div className="space-y-4">
+                  {/* Track Inventory Toggle */}
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="track_inventory"
+                      checked={formData.track_inventory}
+                      disabled={formData.option_groups.some(g => g.enable_inventory_tracking)}
+                      onChange={(e) => {
+                        if (!formData.option_groups.some(g => g.enable_inventory_tracking)) {
+                          setFormData(prev => ({ ...prev, track_inventory: e.target.checked }));
+                        }
+                      }}
+                      className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 ${
+                        formData.option_groups.some(g => g.enable_inventory_tracking) ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    />
+                    <label htmlFor="track_inventory" className={`text-sm font-medium ${
+                      formData.option_groups.some(g => g.enable_inventory_tracking) ? 'text-gray-400' : 'text-gray-700'
+                    }`}>
+                      Enable Item-Level Stock Tracking
+                    </label>
+                  </div>
+                  
+                  {/* Helper text when disabled */}
+                  {formData.option_groups.some(g => g.enable_inventory_tracking) && (
+                    <div className="ml-7 text-xs text-gray-500">
+                      Item-level tracking is disabled because option-level tracking is enabled below.
+                    </div>
+                  )}
+
+                  {/* Stock Quantity and Threshold - only show when track_inventory is enabled */}
+                  {formData.track_inventory && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Initial Stock Quantity
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.stock_quantity}
+                          onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Low Stock Threshold
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.low_stock_threshold}
+                          onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: parseInt(e.target.value) || 5 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="5"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Explanation text */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Item-Level Tracking:</strong> Track inventory at the item level. Cannot be used with option-level tracking.
+                    </p>
+                    {formData.track_inventory && (
+                      <p className="text-sm text-blue-800 mt-2">
+                        <strong>Note:</strong> You can manage stock levels after creation using the Inventory tab.
+                      </p>
+                    )}
+                    <p className="text-sm text-blue-800 mt-2">
+                      <strong>Option-Level Tracking:</strong> Alternatively, enable inventory tracking on individual option groups below for more granular control.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -1291,93 +1719,178 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                             </div>
                           </div>
 
-                          <div className="mb-4">
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={group.required}
-                                onChange={(e) => {
-                                  const newGroups = [...formData.option_groups];
-                                  newGroups[groupIndex] = { ...group, required: e.target.checked };
-                                  setFormData(prev => ({ ...prev, option_groups: newGroups }));
-                                }}
-                                className="mr-2"
-                              />
-                              <span className="text-sm text-gray-700">Required</span>
-                            </label>
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <label className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={group.required}
+                                  onChange={(e) => {
+                                    const newGroups = [...formData.option_groups];
+                                    newGroups[groupIndex] = { ...group, required: e.target.checked };
+                                    setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                  }}
+                                  className="mr-2"
+                                />
+                                <span className="text-sm text-gray-700">Required</span>
+                              </label>
+                            </div>
+                            <div>
+                              <label className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={group.enable_inventory_tracking}
+                                  onChange={(e) => {
+                                    const newGroups = [...formData.option_groups];
+                                    newGroups[groupIndex] = { ...group, enable_inventory_tracking: e.target.checked };
+                                    setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                  }}
+                                  disabled={formData.track_inventory}
+                                  className="mr-2"
+                                />
+                                <span className={`text-sm ${formData.track_inventory ? 'text-gray-400' : 'text-gray-700'}`}>
+                                  Track Option Inventory
+                                </span>
+                              </label>
+                              {formData.track_inventory && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Disabled when item-level tracking is enabled
+                                </p>
+                              )}
+                            </div>
                           </div>
 
                           <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700 mb-2">Options</label>
                             {group.options.map((option, optionIndex) => (
-                              <div key={optionIndex} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                                <input
-                                  type="text"
-                                  value={option.name}
-                                  onChange={(e) => {
-                                    const newGroups = [...formData.option_groups];
-                                    const newOptions = [...group.options];
-                                    newOptions[optionIndex] = { ...option, name: e.target.value };
-                                    newGroups[groupIndex] = { ...group, options: newOptions };
-                                    setFormData(prev => ({ ...prev, option_groups: newGroups }));
-                                  }}
-                                  placeholder="Option name (e.g., Small, Red, Cotton)"
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                />
-                                
-                                <div className="flex items-center gap-1">
-                                  <span className="text-sm text-gray-600">$</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={option.additional_price}
-                                    onChange={(e) => {
-                                      const newGroups = [...formData.option_groups];
-                                      const newOptions = [...group.options];
-                                      newOptions[optionIndex] = { ...option, additional_price: parseFloat(e.target.value) || 0 };
-                                      newGroups[groupIndex] = { ...group, options: newOptions };
-                                      setFormData(prev => ({ ...prev, option_groups: newGroups }));
-                                    }}
-                                    placeholder="0.00"
-                                    className="w-20 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                  />
-                                </div>
-                                
-                                <div className="flex items-center">
-                                  <label className="inline-flex items-center cursor-pointer">
-                                    <input 
-                                      type="checkbox" 
-                                      checked={option.available}
+                              <div key={optionIndex} className="p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-3">
+                                {/* Main option fields - always in a clean layout */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                                  <div className="md:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                      Option Name
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={option.name}
                                       onChange={(e) => {
                                         const newGroups = [...formData.option_groups];
                                         const newOptions = [...group.options];
-                                        newOptions[optionIndex] = { ...option, available: e.target.checked };
+                                        newOptions[optionIndex] = { ...option, name: e.target.value };
                                         newGroups[groupIndex] = { ...group, options: newOptions };
                                         setFormData(prev => ({ ...prev, option_groups: newGroups }));
                                       }}
-                                      className="sr-only peer"
+                                      placeholder="Option name (e.g., Small, Red, Cotton)"
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                                     />
-                                    <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                                    <span className="ms-2 text-sm font-medium text-gray-700 min-w-[80px]">
-                                      {option.available ? "Available" : "Unavailable"}
-                                    </span>
-                                  </label>
+                                  </div>
+                                  
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                      Additional Price
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-sm text-gray-600">$</span>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={option.additional_price}
+                                        onChange={(e) => {
+                                          const newGroups = [...formData.option_groups];
+                                          const newOptions = [...group.options];
+                                          newOptions[optionIndex] = { ...option, additional_price: parseFloat(e.target.value) || 0 };
+                                          newGroups[groupIndex] = { ...group, options: newOptions };
+                                          setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                        }}
+                                        placeholder="0.00"
+                                        className="flex-1 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
                                 
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newGroups = [...formData.option_groups];
-                                    const newOptions = group.options.filter((_, i) => i !== optionIndex);
-                                    newGroups[groupIndex] = { ...group, options: newOptions };
-                                    setFormData(prev => ({ ...prev, option_groups: newGroups }));
-                                  }}
-                                  className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Remove option"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
+                                {/* Stock fields when inventory tracking is enabled */}
+                                {group.enable_inventory_tracking && (
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        Initial Stock
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={option.stock_quantity || 0}
+                                        onChange={(e) => {
+                                          const newGroups = [...formData.option_groups];
+                                          const newOptions = [...group.options];
+                                          newOptions[optionIndex] = { ...option, stock_quantity: parseInt(e.target.value) || 0 };
+                                          newGroups[groupIndex] = { ...group, options: newOptions };
+                                          setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                        }}
+                                        placeholder="0"
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        Low Stock Alert
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={option.low_stock_threshold || 5}
+                                        onChange={(e) => {
+                                          const newGroups = [...formData.option_groups];
+                                          const newOptions = [...group.options];
+                                          newOptions[optionIndex] = { ...option, low_stock_threshold: parseInt(e.target.value) || 5 };
+                                          newGroups[groupIndex] = { ...group, options: newOptions };
+                                          setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                        }}
+                                        placeholder="5"
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Bottom row with availability toggle and delete button */}
+                                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                                  <div className="flex items-center">
+                                    <label className="inline-flex items-center cursor-pointer">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={option.available}
+                                        onChange={(e) => {
+                                          const newGroups = [...formData.option_groups];
+                                          const newOptions = [...group.options];
+                                          newOptions[optionIndex] = { ...option, available: e.target.checked };
+                                          newGroups[groupIndex] = { ...group, options: newOptions };
+                                          setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                        }}
+                                        className="sr-only peer"
+                                      />
+                                      <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                      <span className="ms-2 text-sm font-medium text-gray-700 min-w-[80px]">
+                                        {option.available ? "Available" : "Unavailable"}
+                                      </span>
+                                    </label>
+                                  </div>
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newGroups = [...formData.option_groups];
+                                      const newOptions = group.options.filter((_, i) => i !== optionIndex);
+                                      newGroups[groupIndex] = { ...group, options: newOptions };
+                                      setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                    }}
+                                    className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Remove option"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </div>
                             ))}
                             <button
@@ -1388,7 +1901,9 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                                   name: '',
                                   additional_price: 0,
                                   available: true,
-                                  position: group.options.length
+                                  position: group.options.length,
+                                  stock_quantity: 0,
+                                  low_stock_threshold: 5
                                 }];
                                 newGroups[groupIndex] = { ...group, options: newOptions };
                                 setFormData(prev => ({ ...prev, option_groups: newGroups }));
@@ -1450,93 +1965,6 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
               {/* Legacy Option Groups section removed - now using inline option groups above */}
               
               {/* Removed SKU Preview section - using option groups instead */}
-
-              {/* Inventory Management - Temporarily disabled until full inventory system is ready */}
-              {/* 
-              <div>
-                <h4 className="text-md font-medium text-gray-900 mb-4">Inventory Management</h4>
-                <div className="space-y-4">
-                  {/* Track Inventory Toggle */}
-                  {/*
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      id="track_inventory"
-                      checked={formData.track_inventory}
-                      onChange={(e) => setFormData(prev => ({ ...prev, track_inventory: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                    />
-                    <label htmlFor="track_inventory" className="text-sm font-medium text-gray-700">
-                      Enable Stock Tracking
-                    </label>
-                  </div>
-
-                  {/* Allow Sale with No Stock Toggle - only show when track_inventory is enabled */}
-                  {/*
-                  {formData.track_inventory && (
-                    <div className="flex items-center space-x-3 ml-6">
-                      <input
-                        type="checkbox"
-                        id="allow_sale_with_no_stock"
-                        checked={formData.allow_sale_with_no_stock}
-                        onChange={(e) => setFormData(prev => ({ ...prev, allow_sale_with_no_stock: e.target.checked }))}
-                        className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
-                      />
-                      <label htmlFor="allow_sale_with_no_stock" className="text-sm font-medium text-gray-700">
-                        Allow Sale with No Stock (Pre-orders)
-                      </label>
-                    </div>
-                  )}
-
-                  {/* Stock Quantity and Threshold - only show when track_inventory is enabled */}
-                  {/*
-                  {formData.track_inventory && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Stock Quantity
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={formData.stock_quantity}
-                          onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="0"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Low Stock Threshold
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={formData.low_stock_threshold}
-                          onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: parseInt(e.target.value) || 5 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="5"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Explanation text */}
-                  {/*
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-800">
-                      <strong>Stock Tracking:</strong> When enabled, you can track inventory levels for this item.
-                    </p>
-                    {formData.track_inventory && (
-                      <p className="text-sm text-blue-800 mt-2">
-                        <strong>Allow Sale with No Stock:</strong> When enabled, customers can purchase this item even when stock is 0 (useful for pre-orders and fundraisers).
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              */}
 
               {/* Image Upload */}
               <div>
@@ -1831,6 +2259,153 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                 loadPresets(); // Reload presets when data changes
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Audit Trail Modal */}
+      {showAuditModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-4 mx-auto p-6 border w-full max-w-6xl shadow-lg rounded-lg bg-white min-h-[85vh]">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-medium text-gray-900">
+                Inventory History: {auditItemName}
+              </h3>
+              <button
+                onClick={() => setShowAuditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {loadingAudit ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-2 text-gray-600">Loading inventory history...</span>
+              </div>
+            ) : auditTrailData.length === 0 ? (
+              <div className="text-center py-12">
+                <Package className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No inventory history</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  No inventory changes have been recorded for this item yet.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Action
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Option
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Change
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Reason
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        User
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {auditTrailData.map((audit, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="font-medium">
+                            {new Date(audit.created_at).toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(audit.created_at).toLocaleTimeString('en-US', { 
+                              hour: '2-digit', 
+                              minute: '2-digit',
+                              hour12: true 
+                            })}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {audit.audit_type?.replace('_', ' ') || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {audit.type === 'option' ? (
+                            <div>
+                              <div className="font-medium text-purple-600">{audit.option?.name}</div>
+                              <div className="text-xs text-gray-500">Option-level</div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="text-blue-600">Item-level</div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <span className={audit.quantity_change > 0 ? 'text-green-600' : 'text-red-600'}>
+                            {audit.quantity_change > 0 ? '+' : ''}{audit.quantity_change}
+                          </span>
+                          <span className="text-gray-500 ml-2">
+                            ({audit.previous_quantity} → {audit.new_quantity})
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          <div className="max-w-xs">
+                            {audit.reason || 'No reason provided'}
+                          </div>
+                          {audit.order && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              Order: {audit.order.order_number}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0">
+                              {audit.user?.type === 'customer' ? (
+                                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                  <span className="text-green-600 text-xs font-medium">C</span>
+                                </div>
+                              ) : audit.user?.type === 'admin' ? (
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <span className="text-blue-600 text-xs font-medium">A</span>
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                  <span className="text-gray-600 text-xs font-medium">S</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="ml-3">
+                              <div className="text-sm font-medium text-gray-900">
+                                {audit.user?.name || 'System'}
+                              </div>
+                              {audit.user?.email && (
+                                <div className="text-xs text-gray-500">
+                                  {audit.user.email}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

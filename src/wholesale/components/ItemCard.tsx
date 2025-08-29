@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { WholesaleItem } from '../services/wholesaleApi';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import ImageCarousel from './ImageCarousel';
+import { getItemAvailableQuantity, hasAvailableOptions, validateCartItemInventory } from '../utils/inventoryUtils';
 
 interface ItemCardProps {
   item: WholesaleItem;
@@ -19,9 +20,40 @@ export default function ItemCard({
   showDetailLink = false, 
   compact = false 
 }: ItemCardProps) {
-  const { addToCart, setError } = useWholesaleCart();
+  const { addToCart, setError, items } = useWholesaleCart();
 
   const handleAddToCart = () => {
+    // Get existing quantity of this item in cart
+    const existingQuantity = items
+      .filter(cartItem => cartItem.itemId === item.id)
+      .reduce((total, cartItem) => total + cartItem.quantity, 0);
+    
+    // Validate inventory including existing cart quantity
+    const inventoryValidation = validateCartItemInventory(item, {}, 1, existingQuantity);
+    
+    if (!inventoryValidation.isValid) {
+      setError(inventoryValidation.errors.join('\n'));
+      return;
+    }
+
+    // Check if item has required option groups with no available options
+    if (item.option_groups?.length) {
+      const requiredGroupsWithoutAvailableOptions = item.option_groups.filter(group => 
+        group.min_select > 0 && !hasAvailableOptions(group)
+      );
+      
+      if (requiredGroupsWithoutAvailableOptions.length > 0) {
+        const groupNames = requiredGroupsWithoutAvailableOptions.map(g => g.name).join(', ');
+        setError(`${item.name} cannot be ordered. Required options are out of stock: ${groupNames}`);
+        return;
+      }
+      
+      // Item has options, so we can't add directly - this should open customization modal
+      // For now, show an error to indicate customization is needed
+      setError(`${item.name} requires customization. Please use the "Customize" button.`);
+      return;
+    }
+
     const success = addToCart({
       id: `${item.id}-${Date.now()}`,
       itemId: item.id,
@@ -52,20 +84,17 @@ export default function ItemCard({
   };
 
   const getStockStatusInfo = () => {
-    if (!item.track_inventory) {
-      return { status: 'Available', className: 'bg-green-100 text-green-800' };
+    const availableQuantity = getItemAvailableQuantity(item);
+    
+    if (availableQuantity === 0) {
+      return { status: 'Out of Stock', className: 'bg-red-100 text-red-800' };
     }
     
-    switch (item.stock_status) {
-      case 'in_stock':
-        return { status: 'In Stock', className: 'bg-green-100 text-green-800' };
-      case 'low_stock':
-        return { status: 'Low Stock', className: 'bg-yellow-100 text-yellow-800' };
-      case 'out_of_stock':
-        return { status: 'Out of Stock', className: 'bg-red-100 text-red-800' };
-      default:
-        return { status: 'Available', className: 'bg-green-100 text-green-800' };
+    if (availableQuantity <= 5 && availableQuantity < 999) {
+      return { status: 'Low Stock', className: 'bg-yellow-100 text-yellow-800' };
     }
+    
+    return { status: 'In Stock', className: 'bg-green-100 text-green-800' };
   };
 
   const stockInfo = getStockStatusInfo();
@@ -133,15 +162,21 @@ export default function ItemCard({
           </div>
           
           {/* Stock quantity indicator */}
-          {item.track_inventory && item.available_quantity !== undefined && (
-            <div className="text-xs text-gray-500 text-right">
-              {item.available_quantity > 0 ? (
-                <span>{item.available_quantity} left</span>
-              ) : (
-                <span className="text-red-600">Sold out</span>
-              )}
-            </div>
-          )}
+          {(() => {
+            const availableQuantity = getItemAvailableQuantity(item);
+            if (availableQuantity < 999) {
+              return (
+                <div className="text-xs text-gray-500 text-right">
+                  {availableQuantity > 0 ? (
+                    <span>{availableQuantity} left</span>
+                  ) : (
+                    <span className="text-red-600">Sold out</span>
+                  )}
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
 
         {/* SKU */}
@@ -150,17 +185,30 @@ export default function ItemCard({
         )}
 
         {/* Add to Cart Button */}
-        <button
-          onClick={handleAddToCart}
-          disabled={!item.in_stock}
-          className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${compact ? 'text-sm' : 'text-base'} ${
-            item.in_stock
-              ? 'bg-[#c1902f] text-white hover:bg-[#d4a43f]'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}
-        >
-          {item.in_stock ? 'Add to Cart' : 'Out of Stock'}
-        </button>
+        {(() => {
+          const availableQuantity = getItemAvailableQuantity(item);
+          const isAvailable = availableQuantity > 0;
+          const hasOptions = item.option_groups && item.option_groups.length > 0;
+          
+          return (
+            <button
+              onClick={handleAddToCart}
+              disabled={!isAvailable}
+              className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${compact ? 'text-sm' : 'text-base'} ${
+                isAvailable
+                  ? 'bg-[#c1902f] text-white hover:bg-[#d4a43f]'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {!isAvailable 
+                ? 'Out of Stock' 
+                : hasOptions 
+                  ? 'Customize' 
+                  : 'Add to Cart'
+              }
+            </button>
+          );
+        })()}
 
         {/* Detail Link */}
         {showDetailLink && (

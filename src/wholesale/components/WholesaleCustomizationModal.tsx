@@ -1,17 +1,29 @@
 // src/wholesale/components/WholesaleCustomizationModal.tsx
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
+import { wholesaleApi } from '../services/wholesaleApi';
 import type { WholesaleItem, WholesaleOptionGroup, WholesaleOption } from '../services/wholesaleApi';
+import { 
+  isOptionAvailable, 
+  getOptionAvailableQuantity, 
+  validateCartItemInventory, 
+  getMaxQuantityForItem,
+  getStockStatusDisplay 
+} from '../utils/inventoryUtils';
 
 interface WholesaleCustomizationModalProps {
   item: WholesaleItem;
   fundraiserId: number;
+  fundraiserSlug: string;
   onClose: () => void;
 }
 
-export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: WholesaleCustomizationModalProps) {
-  const { addToCart } = useWholesaleCart();
+export function WholesaleCustomizationModal({ item, fundraiserId, fundraiserSlug, onClose }: WholesaleCustomizationModalProps) {
+  // State for detailed item data with inventory info
+  const [detailedItem, setDetailedItem] = useState<WholesaleItem | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(true);
+  const { addToCart, items: cartItems } = useWholesaleCart();
 
   // Track user selections: selections[groupId] = array of optionIds
   const [selections, setSelections] = useState<Record<number, number[]>>({});
@@ -26,8 +38,42 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
   // Force re-render when selections change to update price calculations
   const [, forceUpdate] = useState({});
 
+  // Fetch detailed item data with inventory information
+  useEffect(() => {
+    const fetchDetailedItem = async () => {
+      try {
+        setLoadingDetails(true);
+        const response = await wholesaleApi.getFundraiserItems(fundraiserSlug);
+        
+        if (response.success && response.data?.items) {
+          const foundItem = response.data.items.find(i => i.id === item.id);
+          if (foundItem) {
+            setDetailedItem(foundItem);
+            console.log('[WholesaleCustomizationModal] Loaded detailed item:', foundItem);
+          } else {
+            console.warn('[WholesaleCustomizationModal] Item not found in detailed response');
+            setDetailedItem(item); // Fallback to original item
+          }
+        } else {
+          console.warn('[WholesaleCustomizationModal] Failed to fetch detailed items');
+          setDetailedItem(item); // Fallback to original item
+        }
+      } catch (error) {
+        console.error('[WholesaleCustomizationModal] Error fetching detailed item:', error);
+        setDetailedItem(item); // Fallback to original item
+      } finally {
+        setLoadingDetails(false);
+      }
+    };
+
+    fetchDetailedItem();
+  }, [item.id, fundraiserSlug, item]);
+
+  // Use detailed item data if available, otherwise fallback to original item
+  const currentItem = detailedItem || item;
+  
   // Safely handle no option_groups
-  const optionGroups = item.option_groups || [];
+  const optionGroups = currentItem.option_groups || [];
 
   // Initialize selections with pre-selected options and set first group as expanded
   useEffect(() => {
@@ -149,9 +195,22 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
     return sum;
   }
 
-  // Check if an option is available
-  const isOptionAvailable = (option: WholesaleOption): boolean => {
-    return option.available;
+  // Get existing cart quantity for this item with same options
+  const getExistingCartQuantity = (): number => {
+    const backendSelectedOptions: Record<string, number[]> = {};
+    optionGroups.forEach(group => {
+      const chosenIds = selections[group.id] || [];
+      if (chosenIds.length > 0) {
+        backendSelectedOptions[group.id.toString()] = chosenIds;
+      }
+    });
+
+    const existingItem = cartItems.find(cartItem => 
+      cartItem.itemId === item.id && 
+      JSON.stringify(cartItem.options || {}) === JSON.stringify(backendSelectedOptions)
+    );
+    
+    return existingItem ? existingItem.quantity : 0;
   };
 
   // Check if all required groups have the minimum number of selections
@@ -169,10 +228,34 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
   }
 
   // Calculate prices
-  const basePrice = item.price;
+  const basePrice = currentItem.price;
   const addlPrice = getAdditionalPrice();
   const totalItemPrice = (basePrice + addlPrice) * quantity;
   const isValid = validateSelections();
+
+  // Helper function to get current stock status
+  const getCurrentStockStatus = () => {
+    const backendSelectedOptions: Record<string, number[]> = {};
+    optionGroups.forEach(group => {
+      const chosenIds = selections[group.id] || [];
+      if (chosenIds.length > 0) {
+        backendSelectedOptions[group.id.toString()] = chosenIds;
+      }
+    });
+    
+    if (Object.keys(backendSelectedOptions).length === 0) {
+      return { canAddMore: true, maxQuantity: 999, availableToAdd: 999, hasSelections: false };
+    }
+    
+    const existingCartQuantity = getExistingCartQuantity();
+    const maxQuantity = getMaxQuantityForItem(currentItem, backendSelectedOptions, existingCartQuantity);
+    const availableToAdd = maxQuantity - existingCartQuantity;
+    const canAddMore = quantity < maxQuantity;
+    
+    return { canAddMore, maxQuantity, availableToAdd, hasSelections: true };
+  };
+
+  const stockStatus = getCurrentStockStatus();
 
   // Handle add to cart
   function handleAddToCart() {
@@ -197,16 +280,32 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
       }
     });
 
+    // Validate inventory before adding to cart
+    const existingCartQuantity = getExistingCartQuantity();
+    const inventoryValidation = validateCartItemInventory(
+      currentItem, 
+      backendSelectedOptions, 
+      quantity, 
+      existingCartQuantity
+    );
+
+    if (!inventoryValidation.isValid) {
+      alert(`Cannot add to cart:\n\n${inventoryValidation.errors.join('\n')}`);
+      return;
+    }
+
+    // Note: Low stock warnings removed - we show this info inline instead
+
     const success = addToCart({
-      id: `${item.id}-${Date.now()}`,
-      itemId: item.id,
+      id: `${currentItem.id}-${Date.now()}`,
+      itemId: currentItem.id,
       fundraiserId: fundraiserId,
-      name: item.name,
-      description: item.description,
-      sku: item.sku,
+      name: currentItem.name,
+      description: currentItem.description,
+      sku: currentItem.sku,
       price: totalItemPrice / quantity, // Price per item including customizations
       priceCents: Math.round((totalItemPrice / quantity) * 100),
-      imageUrl: item.primary_image_url,
+      imageUrl: currentItem.primary_image_url,
       options: backendSelectedOptions, // For backend processing
       selectedOptions: displaySelectedOptions // For display in cart/checkout
     }, quantity);
@@ -234,6 +333,20 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
     return null;
   }
 
+  // Show loading state while fetching detailed item data
+  if (loadingDetails) {
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="relative top-4 mx-auto border w-full max-w-lg shadow-lg rounded-lg bg-white my-8 p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#c1902f]"></div>
+            <span className="ml-3 text-gray-600">Loading item details...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-4 mx-auto border w-full max-w-lg shadow-lg rounded-lg bg-white my-8 max-h-[90vh] flex flex-col">
@@ -241,9 +354,9 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h3 className="text-xl font-semibold text-gray-900">Customize: {item.name}</h3>
-            {item.description && (
-              <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+            <h3 className="text-xl font-semibold text-gray-900">Customize: {currentItem.name}</h3>
+            {currentItem.description && (
+              <p className="text-sm text-gray-600 mt-1">{currentItem.description}</p>
             )}
           </div>
           <button
@@ -299,7 +412,9 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
                     <div className="space-y-2">
                       {group.options.map((option) => {
                         const isSelected = (selections[group.id] || []).includes(option.id);
-                        const isAvailable = isOptionAvailable(option);
+                        const isAvailable = isOptionAvailable(option, 1, group);
+                        const availableQuantity = getOptionAvailableQuantity(option, group);
+                        const stockDisplay = getStockStatusDisplay(availableQuantity);
                         
                         return (
                           <button
@@ -323,10 +438,31 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
                                   <span className={`font-medium ${isAvailable ? 'text-gray-900' : 'text-gray-400'}`}>
                                     {option.name}
                                   </span>
+                                  {/* Show stock status badges for tracked options */}
+                                  {group.enable_inventory_tracking && availableQuantity < 999 && (
+                                    <>
+                                      {availableQuantity === 0 && (
+                                        <span className="ml-2 text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">
+                                          Out of Stock
+                                        </span>
+                                      )}
+                                      {availableQuantity > 0 && availableQuantity <= 5 && (
+                                        <span className="ml-2 text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full flex items-center">
+                                          <AlertTriangle className="w-3 h-3 mr-1" />
+                                          Only {availableQuantity} left
+                                        </span>
+                                      )}
+                                      {availableQuantity > 5 && (
+                                        <span className="ml-2 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                                          {availableQuantity} available
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
                                 {!isAvailable && (
                                   <p className="text-xs text-red-600 mt-1">
-                                    This option is currently unavailable
+                                    {availableQuantity === 0 ? 'Out of stock' : 'This option is currently unavailable'}
                                   </p>
                                 )}
                               </div>
@@ -445,28 +581,51 @@ export function WholesaleCustomizationModal({ item, fundraiserId, onClose }: Who
             <button
               onClick={() => {
                 setQuantity((q) => Math.max(1, q - 1));
-                // Force update to recalculate prices
                 forceUpdate({});
               }}
-              className="px-3 py-1 border rounded"
+              disabled={quantity <= 1}
+              className={`px-3 py-2 border rounded-md transition-colors ${
+                quantity <= 1 
+                  ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed' 
+                  : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+              }`}
             >
               -
             </button>
-            <span>{quantity}</span>
+            <span className="font-medium text-lg min-w-[2rem] text-center">{quantity}</span>
             <button
               onClick={() => {
-                setQuantity((q) => q + 1);
-                // Force update to recalculate prices
-                forceUpdate({});
+                if (stockStatus.canAddMore) {
+                  setQuantity((q) => q + 1);
+                  forceUpdate({});
+                }
               }}
-              className="px-3 py-1 border rounded"
+              disabled={!stockStatus.canAddMore}
+              className={`px-3 py-2 border rounded-md transition-colors ${
+                stockStatus.canAddMore
+                  ? 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                  : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+              }`}
             >
               +
             </button>
           </div>
-          <p className="text-lg font-semibold">
-            Total: ${totalItemPrice.toFixed(2)}
-          </p>
+          <div className="text-right">
+            <p className="text-lg font-semibold">
+              Total: ${totalItemPrice.toFixed(2)}
+            </p>
+            {stockStatus.hasSelections && stockStatus.availableToAdd < 999 && (
+              <p className={`text-xs flex items-center justify-end mt-1 ${
+                stockStatus.availableToAdd === 0 ? 'text-red-600' :
+                stockStatus.availableToAdd <= 5 ? 'text-orange-600' : 'text-green-600'
+              }`}>
+                {stockStatus.availableToAdd <= 5 && <AlertTriangle className="w-3 h-3 mr-1" />}
+                {stockStatus.availableToAdd === 0 ? 'Out of stock' :
+                 stockStatus.availableToAdd <= 5 ? `Only ${stockStatus.availableToAdd} left` :
+                 `${stockStatus.availableToAdd} available`}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Bottom Buttons */}

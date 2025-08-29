@@ -1,9 +1,11 @@
 // src/wholesale/components/WholesaleCart.tsx
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 import MobileStickyBar from './MobileStickyBar';
+import { wholesaleApi, WholesaleItem } from '../services/wholesaleApi';
+import { getMaxQuantityForItem } from '../utils/inventoryUtils';
 
 export default function WholesaleCart() {
   const navigate = useNavigate();
@@ -16,6 +18,134 @@ export default function WholesaleCart() {
     removeFromCart, 
     clearCart 
   } = useWholesaleCart();
+
+  // State to track detailed item information for inventory validation
+  const [itemDetails, setItemDetails] = useState<Record<number, WholesaleItem>>({});
+  const [loadingItems, setLoadingItems] = useState<Set<number>>(new Set());
+  const [failedItems, setFailedItems] = useState<Set<number>>(new Set());
+
+  // Fetch detailed item information for inventory validation
+  useEffect(() => {
+    const fetchItemDetails = async () => {
+      const itemsToFetch = items
+        .map(item => item.itemId)
+        .filter(itemId => 
+          !itemDetails[itemId] && 
+          !loadingItems.has(itemId) && 
+          !failedItems.has(itemId) // Don't retry failed items
+        );
+
+      if (itemsToFetch.length === 0) {
+        return;
+      }
+
+      setLoadingItems(prev => new Set([...prev, ...itemsToFetch]));
+
+      try {
+        // If we have a fundraiser from context, use it
+        if (fundraiser) {
+          const response = await wholesaleApi.getFundraiserItems(fundraiser.slug);
+          
+          if (response.success && response.data && response.data.items) {
+            const newItemDetails: Record<number, WholesaleItem> = {};
+            // The API returns { items: WholesaleItem[] }
+            response.data.items.forEach(item => {
+              if (itemsToFetch.includes(item.id)) {
+                newItemDetails[item.id] = item;
+              }
+            });
+            
+            setItemDetails(prev => ({ ...prev, ...newItemDetails }));
+          }
+        } else if (items.length > 0) {
+          // If no fundraiser context, try to get fundraiser from first cart item
+          const firstItem = items[0];
+          
+          // First get the fundraiser details
+          const fundraiserResponse = await wholesaleApi.getFundraisers();
+          
+          if (fundraiserResponse.success && fundraiserResponse.data && fundraiserResponse.data.fundraisers) {
+            // The API returns { fundraisers: WholesaleFundraiser[] }
+            const fundraisers = fundraiserResponse.data.fundraisers;
+            
+            const itemFundraiser = fundraisers.find(f => f.id === firstItem.fundraiserId);
+            if (itemFundraiser) {
+              // Now get items from this fundraiser
+              const itemsResponse = await wholesaleApi.getFundraiserItems(itemFundraiser.slug);
+              
+              if (itemsResponse.success && itemsResponse.data && itemsResponse.data.items) {
+                const newItemDetails: Record<number, WholesaleItem> = {};
+                // The API returns { items: WholesaleItem[] }
+                itemsResponse.data.items.forEach(item => {
+                  if (itemsToFetch.includes(item.id)) {
+                    newItemDetails[item.id] = item;
+                  }
+                });
+                
+                setItemDetails(prev => ({ ...prev, ...newItemDetails }));
+              }
+            } else {
+              console.error(`Cart: Could not find fundraiser with ID ${firstItem.fundraiserId}`);
+              // Mark all items as failed
+              setFailedItems(prev => new Set([...prev, ...itemsToFetch]));
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Cart: Failed to fetch item details for inventory validation:', error);
+        // Mark all items as failed
+        setFailedItems(prev => new Set([...prev, ...itemsToFetch]));
+      } finally {
+        setLoadingItems(prev => {
+          const newSet = new Set(prev);
+          itemsToFetch.forEach(itemId => newSet.delete(itemId));
+          return newSet;
+        });
+      }
+    };
+
+    fetchItemDetails();
+  }, [items]); // Only depend on items, not itemDetails to prevent infinite loop
+
+  // Get maximum quantity for a cart item
+  const getMaxQuantityForCartItem = (cartItem: any): number => {
+    const itemDetail = itemDetails[cartItem.itemId];
+    const isLoading = loadingItems.has(cartItem.itemId);
+    const hasFailed = failedItems.has(cartItem.itemId);
+    
+    // If item details failed to load, use generous limits (API issue, not inventory issue)
+    if (hasFailed) {
+      return Math.max(cartItem.quantity + 10, 50); // Very generous for failed API calls
+    }
+    
+    // If item details are still loading, allow reasonable increases but not unlimited
+    if (!itemDetail && isLoading) {
+      return Math.max(cartItem.quantity + 5, 10);
+    }
+    
+    // If no item detail and not loading (shouldn't happen), be conservative
+    if (!itemDetail) {
+      return Math.max(cartItem.quantity + 2, 5);
+    }
+
+    // Calculate existing quantity for this item (across all option combinations)
+    const existingQuantity = items
+      .filter(item => item.itemId === cartItem.itemId)
+      .reduce((total, item) => total + item.quantity, 0) - cartItem.quantity; // Subtract current item's quantity
+
+    // Convert cart item options to the format expected by inventory utils
+    const selectedOptions = cartItem.options || {};
+
+    const maxQuantity = getMaxQuantityForItem(itemDetail, selectedOptions, existingQuantity);
+    
+    return maxQuantity;
+  };
+
+  // Check if quantity can be increased for a cart item
+  const canIncreaseQuantity = (cartItem: any): boolean => {
+    const maxQuantity = getMaxQuantityForCartItem(cartItem);
+    return cartItem.quantity < maxQuantity;
+  };
 
   const continueHref = fundraiser ? `/wholesale/${fundraiser.slug}` : '/wholesale';
 
@@ -132,8 +262,17 @@ export default function WholesaleCart() {
                 </button>
                 <span className="w-8 text-center font-medium">{item.quantity}</span>
                 <button
-                  onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                  className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 hover:border-[#c1902f] transition-colors"
+                  onClick={() => {
+                    if (canIncreaseQuantity(item)) {
+                      updateQuantity(item.id, item.quantity + 1);
+                    }
+                  }}
+                  disabled={!canIncreaseQuantity(item)}
+                  className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${
+                    canIncreaseQuantity(item)
+                      ? 'border-gray-300 hover:bg-gray-50 hover:border-[#c1902f] cursor-pointer'
+                      : 'border-gray-200 bg-gray-100 cursor-not-allowed opacity-50'
+                  }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -141,6 +280,52 @@ export default function WholesaleCart() {
                 </button>
                 </div>
                 <div className="mt-1 font-semibold text-gray-900">{formatCurrency(item.price * item.quantity)}</div>
+                {/* Show inventory status if at or near max */}
+                {(() => {
+                  const itemDetail = itemDetails[item.itemId];
+                  const isLoading = loadingItems.has(item.itemId);
+                  const hasFailed = failedItems.has(item.itemId);
+                  
+                  // Show different states based on loading status
+                  if (hasFailed) {
+                    return (
+                      <div className="text-xs mt-1 text-orange-600">
+                        Inventory check unavailable (generous limits applied)
+                      </div>
+                    );
+                  }
+                  
+                  if (!itemDetail && isLoading) {
+                    return (
+                      <div className="text-xs mt-1 text-blue-600">
+                        Checking inventory... (limited increases allowed)
+                      </div>
+                    );
+                  }
+                  
+                  if (!itemDetail) {
+                    return (
+                      <div className="text-xs mt-1 text-gray-500">
+                        Inventory status unknown (conservative limits)
+                      </div>
+                    );
+                  }
+                  
+                  const maxQuantity = getMaxQuantityForCartItem(item);
+                  const remainingQuantity = maxQuantity - item.quantity;
+                  
+                  if (maxQuantity < 999 && remainingQuantity <= 5) {
+                    return (
+                      <div className={`text-xs mt-1 ${
+                        remainingQuantity === 0 ? 'text-red-600' : 
+                        remainingQuantity <= 2 ? 'text-orange-600' : 'text-yellow-600'
+                      }`}>
+                        {remainingQuantity === 0 ? 'Max reached' : `${remainingQuantity} more available`}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 <button
                   onClick={() => removeFromCart(item.id)}
                   className="text-xs text-red-600 hover:text-red-700 mt-1 transition-colors"

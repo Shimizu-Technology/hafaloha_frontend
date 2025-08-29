@@ -28,10 +28,13 @@ interface WholesaleCartContextValue {
   // Validation
   validateCart: () => Promise<boolean>;
   
-  // State management
+    // State management
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  
+
+  // Cart cleanup
+  removeUnavailableItems: () => Promise<void>;
+
   // WebSocket methods
   startWebSocketConnection: () => boolean;
   stopWebSocketConnection: () => void;
@@ -58,6 +61,7 @@ export function WholesaleCartProvider({ children }: { children: ReactNode }) {
     validateCart,
     setLoading,
     setError,
+    removeUnavailableItems,
     startWebSocketConnection,
     stopWebSocketConnection
   } = useWholesaleCartStore();
@@ -92,6 +96,7 @@ export function WholesaleCartProvider({ children }: { children: ReactNode }) {
     validateCart,
     setLoading,
     setError,
+    removeUnavailableItems,
     startWebSocketConnection,
     stopWebSocketConnection
   };
