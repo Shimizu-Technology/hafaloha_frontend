@@ -41,8 +41,8 @@ const LazyMenuItemImage = memo(function LazyMenuItemImage({
   // Width and height are now handled by the context in OptimizedImage
 
   return (
-    <div 
-      ref={ref as React.RefObject<HTMLDivElement>} 
+    <div
+      ref={ref as React.RefObject<HTMLDivElement>}
       className="w-full h-48 bg-gray-100 overflow-hidden"
       style={{ contain: 'paint layout' }} // Add content-visibility optimization
     >
