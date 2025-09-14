@@ -5,7 +5,11 @@ import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import OptimizedImage from '../../shared/components/ui/OptimizedImage';
 import MobileStickyBar from './MobileStickyBar';
 import { wholesaleApi, WholesaleItem } from '../services/wholesaleApi';
-import { getMaxQuantityForItem } from '../utils/inventoryUtils';
+import { 
+  // Enhanced variant-aware utilities
+  getMaxQuantityForItemEnhanced,
+  getVariantStockDisplay
+} from '../utils/inventoryUtils';
 
 export default function WholesaleCart() {
   const navigate = useNavigate();
@@ -107,7 +111,7 @@ export default function WholesaleCart() {
     fetchItemDetails();
   }, [items]); // Only depend on items, not itemDetails to prevent infinite loop
 
-  // Get maximum quantity for a cart item
+  // Get maximum quantity for a cart item (enhanced for variant tracking)
   const getMaxQuantityForCartItem = (cartItem: any): number => {
     const itemDetail = itemDetails[cartItem.itemId];
     const isLoading = loadingItems.has(cartItem.itemId);
@@ -136,7 +140,8 @@ export default function WholesaleCart() {
     // Convert cart item options to the format expected by inventory utils
     const selectedOptions = cartItem.options || {};
 
-    const maxQuantity = getMaxQuantityForItem(itemDetail, selectedOptions, existingQuantity);
+    // Use enhanced utilities that handle variant tracking
+    const maxQuantity = getMaxQuantityForItemEnhanced(itemDetail, selectedOptions, existingQuantity);
     
     return maxQuantity;
   };
@@ -145,6 +150,61 @@ export default function WholesaleCart() {
   const canIncreaseQuantity = (cartItem: any): boolean => {
     const maxQuantity = getMaxQuantityForCartItem(cartItem);
     return cartItem.quantity < maxQuantity;
+  };
+
+  // Get variant-aware stock display for a cart item
+  const getCartItemStockDisplay = (cartItem: any) => {
+    const itemDetail = itemDetails[cartItem.itemId];
+    const isLoading = loadingItems.has(cartItem.itemId);
+    const hasFailed = failedItems.has(cartItem.itemId);
+    
+    if (hasFailed) {
+      return {
+        status: 'unknown' as const,
+        message: 'Inventory status unknown',
+        color: 'text-gray-500',
+        trackingMode: 'none' as const
+      };
+    }
+    
+    if (!itemDetail && isLoading) {
+      return {
+        status: 'loading' as const,
+        message: 'Loading inventory...',
+        color: 'text-gray-500',
+        trackingMode: 'none' as const
+      };
+    }
+    
+    if (!itemDetail) {
+      return {
+        status: 'unknown' as const,
+        message: 'Inventory status unknown',
+        color: 'text-gray-500',
+        trackingMode: 'none' as const
+      };
+    }
+
+    // Convert cart item options to the format expected by inventory utils
+    const selectedOptions = cartItem.options || {};
+
+    // Use variant-aware stock display
+    const stockDisplay = getVariantStockDisplay(itemDetail, selectedOptions);
+    
+    // Determine tracking mode
+    let trackingMode: 'item' | 'option' | 'variant' | 'none' = 'none';
+    if (itemDetail.track_variants) {
+      trackingMode = 'variant';
+    } else if (itemDetail.track_inventory) {
+      trackingMode = 'item';
+    } else if (itemDetail.uses_option_level_inventory) {
+      trackingMode = 'option';
+    }
+    
+    return {
+      ...stockDisplay,
+      trackingMode
+    };
   };
 
   const continueHref = fundraiser ? `/wholesale/${fundraiser.slug}` : '/wholesale';
@@ -280,50 +340,49 @@ export default function WholesaleCart() {
                 </button>
                 </div>
                 <div className="mt-1 font-semibold text-gray-900">{formatCurrency(item.price * item.quantity)}</div>
-                {/* Show inventory status if at or near max */}
+                {/* Enhanced inventory status with variant support */}
                 {(() => {
-                  const itemDetail = itemDetails[item.itemId];
-                  const isLoading = loadingItems.has(item.itemId);
-                  const hasFailed = failedItems.has(item.itemId);
+                  const stockDisplay = getCartItemStockDisplay(item);
                   
-                  // Show different states based on loading status
-                  if (hasFailed) {
+                  // Show loading or error states
+                  if (stockDisplay.status === 'loading' || stockDisplay.status === 'unknown') {
                     return (
-                      <div className="text-xs mt-1 text-orange-600">
-                        Inventory check unavailable (generous limits applied)
+                      <div className={`text-xs mt-1 ${stockDisplay.color}`}>
+                        {stockDisplay.message}
                       </div>
                     );
                   }
                   
-                  if (!itemDetail && isLoading) {
+                  // For variant tracking, always show the variant-specific status
+                  if (stockDisplay.trackingMode === 'variant') {
                     return (
-                      <div className="text-xs mt-1 text-blue-600">
-                        Checking inventory... (limited increases allowed)
+                      <div className={`text-xs mt-1 flex items-center ${stockDisplay.color}`}>
+                        {stockDisplay.message}
+                        <span className="ml-1 text-purple-600 font-medium text-[10px] uppercase tracking-wide">VARIANT</span>
                       </div>
                     );
                   }
                   
-                  if (!itemDetail) {
-                    return (
-                      <div className="text-xs mt-1 text-gray-500">
-                        Inventory status unknown (conservative limits)
-                      </div>
-                    );
-                  }
-                  
+                  // For other tracking modes, show status when at or near limits
                   const maxQuantity = getMaxQuantityForCartItem(item);
                   const remainingQuantity = maxQuantity - item.quantity;
                   
-                  if (maxQuantity < 999 && remainingQuantity <= 5) {
+                  if (maxQuantity < 999 && (remainingQuantity <= 5 || stockDisplay.status === 'out_of_stock' || stockDisplay.status === 'low_stock')) {
                     return (
-                      <div className={`text-xs mt-1 ${
-                        remainingQuantity === 0 ? 'text-red-600' : 
-                        remainingQuantity <= 2 ? 'text-orange-600' : 'text-yellow-600'
-                      }`}>
-                        {remainingQuantity === 0 ? 'Max reached' : `${remainingQuantity} more available`}
+                      <div className={`text-xs mt-1 ${stockDisplay.color}`}>
+                        {stockDisplay.status === 'out_of_stock' ? 'Max reached' :
+                         stockDisplay.status === 'low_stock' ? stockDisplay.message :
+                         remainingQuantity === 0 ? 'Max reached' : `${remainingQuantity} more available`}
+                        {stockDisplay.trackingMode === 'option' && (
+                          <span className="ml-1 text-blue-600 font-medium text-[10px] uppercase tracking-wide">OPTION</span>
+                        )}
+                        {stockDisplay.trackingMode === 'item' && (
+                          <span className="ml-1 text-green-600 font-medium text-[10px] uppercase tracking-wide">ITEM</span>
+                        )}
                       </div>
                     );
                   }
+                  
                   return null;
                 })()}
                 <button

@@ -9,7 +9,13 @@ import {
   getOptionAvailableQuantity, 
   validateCartItemInventory, 
   getMaxQuantityForItem,
-  getStockStatusDisplay 
+  getStockStatusDisplay,
+  // New variant utilities
+  generateVariantKey,
+  generateVariantName,
+  getVariantStockDisplay,
+  validateCartItemInventoryEnhanced,
+  getMaxQuantityForItemEnhanced
 } from '../utils/inventoryUtils';
 
 interface WholesaleCustomizationModalProps {
@@ -233,7 +239,7 @@ export function WholesaleCustomizationModal({ item, fundraiserId, fundraiserSlug
   const totalItemPrice = (basePrice + addlPrice) * quantity;
   const isValid = validateSelections();
 
-  // Helper function to get current stock status
+  // Helper function to get current stock status (enhanced for variant tracking)
   const getCurrentStockStatus = () => {
     const backendSelectedOptions: Record<string, number[]> = {};
     optionGroups.forEach(group => {
@@ -244,15 +250,46 @@ export function WholesaleCustomizationModal({ item, fundraiserId, fundraiserSlug
     });
     
     if (Object.keys(backendSelectedOptions).length === 0) {
-      return { canAddMore: true, maxQuantity: 999, availableToAdd: 999, hasSelections: false };
+      return { 
+        canAddMore: true, 
+        maxQuantity: 999, 
+        availableToAdd: 999, 
+        hasSelections: false,
+        stockDisplay: null,
+        trackingMode: 'none' as const
+      };
     }
     
     const existingCartQuantity = getExistingCartQuantity();
-    const maxQuantity = getMaxQuantityForItem(currentItem, backendSelectedOptions, existingCartQuantity);
-    const availableToAdd = maxQuantity - existingCartQuantity;
+    
+    // Use enhanced utilities that handle variant tracking
+    const maxQuantity = getMaxQuantityForItemEnhanced(currentItem, backendSelectedOptions, existingCartQuantity);
+    const availableToAdd = Math.max(0, maxQuantity - existingCartQuantity);
     const canAddMore = quantity < maxQuantity;
     
-    return { canAddMore, maxQuantity, availableToAdd, hasSelections: true };
+    // Variant validation is now working correctly
+    
+    // Get variant-aware stock display
+    const stockDisplay = getVariantStockDisplay(currentItem, backendSelectedOptions);
+    
+    // Determine tracking mode for display purposes
+    let trackingMode: 'item' | 'option' | 'variant' | 'none' = 'none';
+    if (currentItem.track_variants) {
+      trackingMode = 'variant';
+    } else if (currentItem.track_inventory) {
+      trackingMode = 'item';
+    } else if (currentItem.uses_option_level_inventory) {
+      trackingMode = 'option';
+    }
+    
+    return { 
+      canAddMore, 
+      maxQuantity, 
+      availableToAdd, 
+      hasSelections: true,
+      stockDisplay,
+      trackingMode
+    };
   };
 
   const stockStatus = getCurrentStockStatus();
@@ -280,9 +317,9 @@ export function WholesaleCustomizationModal({ item, fundraiserId, fundraiserSlug
       }
     });
 
-    // Validate inventory before adding to cart
+    // Validate inventory before adding to cart (enhanced for variant tracking)
     const existingCartQuantity = getExistingCartQuantity();
-    const inventoryValidation = validateCartItemInventory(
+    const inventoryValidation = validateCartItemInventoryEnhanced(
       currentItem, 
       backendSelectedOptions, 
       quantity, 
@@ -614,16 +651,34 @@ export function WholesaleCustomizationModal({ item, fundraiserId, fundraiserSlug
             <p className="text-lg font-semibold">
               Total: ${totalItemPrice.toFixed(2)}
             </p>
-            {stockStatus.hasSelections && stockStatus.availableToAdd < 999 && (
-              <p className={`text-xs flex items-center justify-end mt-1 ${
-                stockStatus.availableToAdd === 0 ? 'text-red-600' :
-                stockStatus.availableToAdd <= 5 ? 'text-orange-600' : 'text-green-600'
-              }`}>
-                {stockStatus.availableToAdd <= 5 && <AlertTriangle className="w-3 h-3 mr-1" />}
-                {stockStatus.availableToAdd === 0 ? 'Out of stock' :
-                 stockStatus.availableToAdd <= 5 ? `Only ${stockStatus.availableToAdd} left` :
-                 `${stockStatus.availableToAdd} available`}
-              </p>
+            {stockStatus.hasSelections && (
+              <div className="text-right">
+                {/* Enhanced stock display with variant support */}
+                {stockStatus.stockDisplay && (
+                  <p className={`text-xs flex items-center justify-end mt-1 ${stockStatus.stockDisplay.color}`}>
+                    {(stockStatus.stockDisplay.status === 'out_of_stock' || stockStatus.stockDisplay.status === 'low_stock' || stockStatus.stockDisplay.status === 'not_found') && 
+                      <AlertTriangle className="w-3 h-3 mr-1" />
+                    }
+                    {stockStatus.stockDisplay.message}
+                    {stockStatus.trackingMode === 'variant' && (
+                      <span className="ml-1 text-purple-600 font-medium text-[10px] uppercase tracking-wide">VARIANT</span>
+                    )}
+                  </p>
+                )}
+                
+                {/* Fallback for non-variant items */}
+                {!stockStatus.stockDisplay && stockStatus.availableToAdd < 999 && (
+                  <p className={`text-xs flex items-center justify-end mt-1 ${
+                    stockStatus.availableToAdd === 0 ? 'text-red-600' :
+                    stockStatus.availableToAdd <= 5 ? 'text-orange-600' : 'text-green-600'
+                  }`}>
+                    {stockStatus.availableToAdd <= 5 && <AlertTriangle className="w-3 h-3 mr-1" />}
+                    {stockStatus.availableToAdd === 0 ? 'Out of stock' :
+                     stockStatus.availableToAdd <= 5 ? `Only ${stockStatus.availableToAdd} left` :
+                     `${stockStatus.availableToAdd} available`}
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </div>

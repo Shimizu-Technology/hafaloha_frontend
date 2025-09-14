@@ -151,7 +151,8 @@ interface WholesaleItem {
   sort_order: number;
   options: any;
   track_inventory: boolean;
-  allow_sale_with_no_stock: boolean;
+  track_variants?: boolean;
+  allow_sale_with_no_stock?: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
   available_quantity?: number;
@@ -187,10 +188,23 @@ interface ItemFormData {
   position: number;
   sort_order: number;
   track_inventory: boolean;
+  track_variants: boolean;
   allow_sale_with_no_stock: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
   option_groups: OptionGroupFormData[];
+  variants: VariantFormData[];
+}
+
+// Variant form data interface
+interface VariantFormData {
+  id?: number;
+  variant_key: string;
+  variant_name: string;
+  stock_quantity: number;
+  damaged_quantity: number;
+  low_stock_threshold: number;
+  active: boolean;
 }
 
 // Removed PreviewVariant interface - using option groups instead
@@ -220,6 +234,184 @@ interface ItemManagerProps {
   onDataChange?: () => void; // Callback to notify parent of data changes
 }
 
+// Variant Management Grid Component
+interface VariantManagementGridProps {
+  optionGroups: OptionGroupFormData[];
+  variants: VariantFormData[];
+  onVariantsChange: (variants: VariantFormData[]) => void;
+}
+
+function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: VariantManagementGridProps) {
+  // Generate all possible variant combinations from option groups
+  const generateAllCombinations = (): VariantFormData[] => {
+    if (optionGroups.length === 0) return [];
+    
+    // Get active option groups with options
+    const activeGroups = optionGroups.filter(group => group.options.length > 0);
+    if (activeGroups.length === 0) return [];
+    
+    // Generate combinations recursively
+    const combinations: { key: string; name: string }[] = [];
+    
+    function generateRecursive(groupIndex: number, currentKey: string[], currentName: string[]) {
+      if (groupIndex >= activeGroups.length) {
+        combinations.push({
+          key: currentKey.sort().join(','),
+          name: currentName.join(', ')
+        });
+        return;
+      }
+      
+      const group = activeGroups[groupIndex];
+      for (const option of group.options) {
+        generateRecursive(
+          groupIndex + 1,
+          [...currentKey, `${groupIndex + 1}:${option.name.toLowerCase().replace(/\s+/g, '_')}`],
+          [...currentName, option.name]
+        );
+      }
+    }
+    
+    generateRecursive(0, [], []);
+    
+    // Convert to VariantFormData, preserving existing data
+    return combinations.map(combo => {
+      const existing = variants.find(v => v.variant_key === combo.key);
+      return existing || {
+        variant_key: combo.key,
+        variant_name: combo.name,
+        stock_quantity: 0,
+        damaged_quantity: 0,
+        low_stock_threshold: 5,
+        active: true
+      };
+    });
+  };
+  
+  // Update variants when option groups change
+  React.useEffect(() => {
+    const newVariants = generateAllCombinations();
+    if (newVariants.length !== variants.length || 
+        !newVariants.every(nv => variants.some(v => v.variant_key === nv.variant_key))) {
+      onVariantsChange(newVariants);
+    }
+  }, [optionGroups]);
+  
+  const currentVariants = variants.length > 0 ? variants : generateAllCombinations();
+  
+  if (currentVariants.length === 0) {
+    return (
+      <div className="ml-7 mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <p className="text-sm text-gray-600">
+          Add option groups with options below to see variant combinations here.
+        </p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="ml-7 mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+      <h4 className="text-sm font-semibold text-purple-800 mb-3 flex items-center">
+        <Boxes className="w-4 h-4 mr-2" />
+        Variant Stock Management ({currentVariants.length} variants)
+      </h4>
+      
+      <div className="space-y-2 max-h-64 overflow-y-auto">
+        {currentVariants.map((variant, index) => (
+          <div key={variant.variant_key} className="flex items-center space-x-3 p-2 bg-white border border-gray-200 rounded">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {variant.variant_name}
+              </p>
+              <p className="text-xs text-gray-500">
+                {variant.variant_key}
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-600">Stock</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={variant.stock_quantity}
+                  onChange={(e) => {
+                    const newVariants = [...currentVariants];
+                    newVariants[index] = {
+                      ...variant,
+                      stock_quantity: parseInt(e.target.value) || 0
+                    };
+                    onVariantsChange(newVariants);
+                  }}
+                  className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-600">Damaged</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={variant.damaged_quantity}
+                  onChange={(e) => {
+                    const newVariants = [...currentVariants];
+                    newVariants[index] = {
+                      ...variant,
+                      damaged_quantity: parseInt(e.target.value) || 0
+                    };
+                    onVariantsChange(newVariants);
+                  }}
+                  className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-600">Low Stock</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={variant.low_stock_threshold}
+                  onChange={(e) => {
+                    const newVariants = [...currentVariants];
+                    newVariants[index] = {
+                      ...variant,
+                      low_stock_threshold: parseInt(e.target.value) || 5
+                    };
+                    onVariantsChange(newVariants);
+                  }}
+                  className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              
+              <div className="flex flex-col items-center">
+                <label className="text-xs text-gray-600">Active</label>
+                <input
+                  type="checkbox"
+                  checked={variant.active}
+                  onChange={(e) => {
+                    const newVariants = [...currentVariants];
+                    newVariants[index] = {
+                      ...variant,
+                      active: e.target.checked
+                    };
+                    onVariantsChange(newVariants);
+                  }}
+                  className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      <div className="mt-3 text-xs text-purple-700">
+        <p><strong>Note:</strong> Variants are automatically generated from your option combinations.</p>
+        <p>Available stock = Stock - Damaged. Set stock quantities for each variant above.</p>
+      </div>
+    </div>
+  );
+}
+
 export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemManagerProps) {
   // State management
   const [items, setItems] = useState<WholesaleItem[]>([]);
@@ -245,10 +437,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
     position: 0,
     sort_order: 0,
     track_inventory: false,
+    track_variants: false,
     allow_sale_with_no_stock: false,
     stock_quantity: 0,
     low_stock_threshold: 5,
-    option_groups: []
+    option_groups: [],
+    variants: []
   });
   
   // Search and filter state
@@ -369,14 +563,16 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       position: items.length + 1,
       sort_order: items.length + 1,
       track_inventory: false,
+      track_variants: false,
       allow_sale_with_no_stock: false,
       stock_quantity: 0,
       low_stock_threshold: 5,
-      option_groups: []
+      option_groups: [],
+      variants: []
     });
   };
 
-  const handleEdit = (item: WholesaleItem) => {
+  const handleEdit = async (item: WholesaleItem) => {
     try {
       console.log('handleEdit called with item:', item);
       
@@ -410,10 +606,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         position: item.position || 0,
         sort_order: item.sort_order || 0,
         track_inventory: item.track_inventory || false,
-        allow_sale_with_no_stock: (item as any).allow_sale_with_no_stock || false,
+        track_variants: item.track_variants || false,
+        allow_sale_with_no_stock: item.allow_sale_with_no_stock || false,
         stock_quantity: item.stock_quantity || 0,
         low_stock_threshold: item.low_stock_threshold || 5,
-        option_groups: optionGroupsData
+        option_groups: optionGroupsData,
+        variants: [] // Will be loaded via API call below
       });
       
       // Load existing images if available
@@ -426,6 +624,38 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       // Clear any selected new images and deletion list
       setSelectedImages([]);
       setImagesToDelete([]);
+      
+      // Load existing variants if item uses variant tracking
+      if (item.track_variants) {
+        try {
+          const variantsResponse = await apiClient.get(`/wholesale/admin/items/${item.id}/variants`);
+          console.log('Variants API Response:', variantsResponse.data);
+          
+          if (variantsResponse.data.success && variantsResponse.data.data?.variants) {
+            console.log('Raw variants data:', variantsResponse.data.data.variants);
+            const existingVariants: VariantFormData[] = variantsResponse.data.data.variants.map((variant: any) => ({
+              id: variant.id,
+              variant_key: variant.variant_key,
+              variant_name: variant.variant_name,
+              stock_quantity: variant.stock_quantity || 0,
+              damaged_quantity: variant.damaged_quantity || 0,
+              low_stock_threshold: variant.low_stock_threshold || 5,
+              active: variant.active !== false
+            }));
+            
+            console.log('Mapped variants for form:', existingVariants);
+            
+            // Update form data with loaded variants
+            setFormData(prev => ({
+              ...prev,
+              variants: existingVariants
+            }));
+          }
+        } catch (variantError) {
+          console.error('Error loading variants:', variantError);
+          // Don't show error to user, just log it - variants will be generated from options
+        }
+      }
       
       console.log('Edit form data set successfully');
     } catch (error) {
@@ -471,6 +701,45 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
           option: optionPayload
         });
       }
+    }
+    
+    // Generate variants after all option groups and options are created
+    if (optionGroups.length > 0) {
+      try {
+        const variantsResponse = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/generate_variants`);
+        console.log('Variants generated successfully for item', itemId);
+        
+        // Update stock quantities if variants were provided in form data
+        if (formData.variants && formData.variants.length > 0) {
+          await updateVariantStockQuantities(variantsResponse.data.data.variants, formData.variants);
+        }
+      } catch (error) {
+        console.error('Failed to generate variants for item', itemId, error);
+        // Don't throw - let the item creation succeed even if variant generation fails
+      }
+    }
+  };
+
+  // Helper function to update variant stock quantities after generation
+  const updateVariantStockQuantities = async (generatedVariants: any[], originalVariants: any[]) => {
+    try {
+      // Match generated variants with original variant data by variant_name
+      for (const originalVariant of originalVariants) {
+        const matchingGenerated = generatedVariants.find((gv: any) => gv.variant_name === originalVariant.variant_name);
+        
+        if (matchingGenerated && originalVariant.stock_quantity !== undefined) {
+          // Update the stock quantity for this variant using the inventory endpoint
+          await apiClient.post(`/wholesale/admin/inventory/variants/${matchingGenerated.id}/update_stock`, {
+            quantity: originalVariant.stock_quantity,
+            reason: 'initial_stock',
+            notes: `Initial stock setup: ${originalVariant.stock_quantity} units`
+          });
+          console.log(`Updated stock for variant ${matchingGenerated.variant_name}: ${originalVariant.stock_quantity}`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update variant stock quantities:', error);
+      // Don't throw - variant generation succeeded, stock updates are secondary
     }
   };
 
@@ -648,7 +917,17 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         // Add all form fields
         Object.keys(itemData).forEach(key => {
           const value = itemData[key as keyof typeof itemData];
-          formDataToSend.append(`item[${key}]`, String(value));
+          
+          // Handle variants array specially
+          if (key === 'variants' && Array.isArray(value)) {
+            value.forEach((variant, index) => {
+              Object.keys(variant).forEach(variantKey => {
+                formDataToSend.append(`item[variants][${index}][${variantKey}]`, String(variant[variantKey as keyof typeof variant]));
+              });
+            });
+          } else {
+            formDataToSend.append(`item[${key}]`, String(value));
+          }
         });
         
         // Add new images
@@ -771,7 +1050,33 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       }
       
       // Refresh data to show updated information
-      loadData();
+      await loadData();
+      
+      // If modal is staying open (editing mode), reload variant data
+      if (!isCreating && editingId) {
+        try {
+          // Reload variant data for the form
+          const variantsResponse = await apiClient.get(`/wholesale/admin/items/${editingId}/variants`);
+          if (variantsResponse.data.success && variantsResponse.data.data?.variants) {
+            const reloadedVariants: VariantFormData[] = variantsResponse.data.data.variants.map((variant: any) => ({
+              id: variant.id,
+              variant_key: variant.variant_key,
+              variant_name: variant.variant_name,
+              stock_quantity: variant.stock_quantity || 0,
+              damaged_quantity: variant.damaged_quantity || 0,
+              low_stock_threshold: variant.low_stock_threshold || 5,
+              active: variant.active !== false
+            }));
+            
+            setFormData(prev => ({
+              ...prev,
+              variants: reloadedVariants
+            }));
+          }
+        } catch (variantError) {
+          console.error('Failed to reload variant data:', variantError);
+        }
+      }
       
       // Notify parent component of data changes
       try {
@@ -1217,7 +1522,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                       {formatCurrency(item.price)}
                     </td>
                     <td className="px-6 py-4">
-                      {item.track_inventory || item.uses_option_level_inventory ? (
+                      {item.track_inventory || item.uses_option_level_inventory || item.track_variants ? (
                         <div>
                           {/* Stock Status Badge */}
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStockStatusColor(item.stock_status)}`}>
@@ -1233,6 +1538,13 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                                 {(item.damaged_quantity ?? 0) > 0 && (
                                   <span className="text-red-500 ml-2">• {item.damaged_quantity} damaged</span>
                                 )}
+                              </>
+                            ) : item.track_variants ? (
+                              <>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-1">
+                                  VARIANT
+                                </span>
+                                {`${item.effective_available_quantity} total available`}
                               </>
                             ) : (
                               `${item.effective_available_quantity} available`
@@ -1271,7 +1583,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        {(item.track_inventory || item.uses_option_level_inventory) && (
+                        {(item.track_inventory || item.uses_option_level_inventory || item.track_variants) && (
                           <button
                             onClick={() => handleViewAuditTrail(item.id, item.name)}
                             className="text-purple-600 hover:text-purple-900"
@@ -1410,7 +1722,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-md font-medium text-gray-900">Inventory Management</h4>
                   {/* Audit History Button - only show when editing items with inventory tracking */}
-                  {!isCreating && editingId !== null && (formData.track_inventory || formData.option_groups.some(g => g.enable_inventory_tracking)) && (
+                  {!isCreating && editingId !== null && (formData.track_inventory || formData.track_variants || formData.option_groups.some(g => g.enable_inventory_tracking)) && (
                     <button
                       type="button"
                       onClick={() => handleViewAuditTrail(editingId, formData.name || 'Item')}
@@ -1502,18 +1814,18 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                       type="checkbox"
                       id="track_inventory"
                       checked={formData.track_inventory}
-                      disabled={formData.option_groups.some(g => g.enable_inventory_tracking)}
+                      disabled={formData.option_groups.some(g => g.enable_inventory_tracking) || formData.track_variants}
                       onChange={(e) => {
-                        if (!formData.option_groups.some(g => g.enable_inventory_tracking)) {
+                        if (!formData.option_groups.some(g => g.enable_inventory_tracking) && !formData.track_variants) {
                           setFormData(prev => ({ ...prev, track_inventory: e.target.checked }));
                         }
                       }}
                       className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 ${
-                        formData.option_groups.some(g => g.enable_inventory_tracking) ? 'opacity-50 cursor-not-allowed' : ''
+                        formData.option_groups.some(g => g.enable_inventory_tracking) || formData.track_variants ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     />
                     <label htmlFor="track_inventory" className={`text-sm font-medium ${
-                      formData.option_groups.some(g => g.enable_inventory_tracking) ? 'text-gray-400' : 'text-gray-700'
+                      formData.option_groups.some(g => g.enable_inventory_tracking) || formData.track_variants ? 'text-gray-400' : 'text-gray-700'
                     }`}>
                       Enable Item-Level Stock Tracking
                     </label>
@@ -1524,6 +1836,67 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                     <div className="ml-7 text-xs text-gray-500">
                       Item-level tracking is disabled because option-level tracking is enabled below.
                     </div>
+                  )}
+                  {formData.track_variants && (
+                    <div className="ml-7 text-xs text-gray-500">
+                      Item-level tracking is disabled because variant-level tracking is enabled below.
+                    </div>
+                  )}
+
+                  {/* Track Variants Toggle */}
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="track_variants"
+                      checked={formData.track_variants}
+                      disabled={formData.track_inventory || formData.option_groups.some(g => g.enable_inventory_tracking) || formData.option_groups.length < 1}
+                      onChange={(e) => {
+                        if (!formData.track_inventory && !formData.option_groups.some(g => g.enable_inventory_tracking) && formData.option_groups.length > 0) {
+                          setFormData(prev => ({ ...prev, track_variants: e.target.checked }));
+                        }
+                      }}
+                      className={`w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2 ${
+                        formData.track_inventory || formData.option_groups.some(g => g.enable_inventory_tracking) || formData.option_groups.length < 1 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    />
+                    <label htmlFor="track_variants" className={`text-sm font-medium ${
+                      formData.track_inventory || formData.option_groups.some(g => g.enable_inventory_tracking) || formData.option_groups.length < 1 ? 'text-gray-400' : 'text-gray-700'
+                    }`}>
+                      Enable Variant-Level Stock Tracking
+                      <span className="ml-1 text-xs text-purple-600 font-normal">(NEW)</span>
+                    </label>
+                  </div>
+                  
+                  {/* Helper text for variant tracking */}
+                  {formData.track_inventory && (
+                    <div className="ml-7 text-xs text-gray-500">
+                      Variant-level tracking is disabled because item-level tracking is enabled above.
+                    </div>
+                  )}
+                  {formData.option_groups.some(g => g.enable_inventory_tracking) && (
+                    <div className="ml-7 text-xs text-gray-500">
+                      Variant-level tracking is disabled because option-level tracking is enabled below.
+                    </div>
+                  )}
+                  {formData.option_groups.length < 1 && (
+                    <div className="ml-7 text-xs text-gray-500">
+                      Variant-level tracking requires option groups. Add option groups below to enable this feature.
+                    </div>
+                  )}
+                  {formData.track_variants && (
+                    <div className="ml-7 text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2 mt-2">
+                      <strong>Variant Tracking Enabled:</strong> Stock will be tracked for each unique combination of options (e.g., "Red Large", "Blue Small"). 
+                      Set stock quantities for each variant combination below.
+                    </div>
+                  )}
+
+                  {/* Variant Management Grid */}
+                  {formData.track_variants && formData.option_groups.length > 0 && (
+                    <VariantManagementGrid 
+                      optionGroups={formData.option_groups}
+                      variants={formData.variants || []}
+                      onVariantsChange={(variants) => setFormData(prev => ({ ...prev, variants }))}
+                    />
                   )}
 
                   {/* Stock Quantity and Threshold - only show when track_inventory is enabled */}
@@ -2346,6 +2719,11 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                             <div>
                               <div className="font-medium text-purple-600">{audit.option?.name}</div>
                               <div className="text-xs text-gray-500">Option-level</div>
+                            </div>
+                          ) : audit.type === 'variant' ? (
+                            <div>
+                              <div className="font-medium text-indigo-600">{(audit as any).variant?.variant_name}</div>
+                              <div className="text-xs text-gray-500">Variant-level</div>
                             </div>
                           ) : (
                             <div>

@@ -66,7 +66,7 @@ interface InventoryTotals {
 
 interface AuditRecord {
   id: number;
-  type: 'item' | 'option';
+  type: 'item' | 'option' | 'variant';
   audit_type: string;
   quantity_change: number;
   previous_quantity: number;
@@ -77,6 +77,7 @@ interface AuditRecord {
   order: { id: number; order_number: string } | null;
   item: { id: number; name: string };
   option?: { id: number; name: string };
+  variant?: { id: number; variant_key: string; variant_name: string };
 }
 
 interface InventoryData {
@@ -539,6 +540,9 @@ const InventoryManager: React.FC = () => {
                         <div className="text-sm font-medium text-gray-900">{audit.item.name}</div>
                         {audit.option && (
                           <div className="text-sm text-gray-500">{audit.option.name}</div>
+                        )}
+                        {audit.variant && (
+                          <div className="text-sm text-indigo-600">{audit.variant.variant_name}</div>
                         )}
                       </div>
                     </td>

@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom';
 import { WholesaleItem } from '../services/wholesaleApi';
 import { useWholesaleCart } from '../context/WholesaleCartProvider';
 import ImageCarousel from './ImageCarousel';
-import { getItemAvailableQuantity, hasAvailableOptions, validateCartItemInventory } from '../utils/inventoryUtils';
+import { 
+  getItemAvailableQuantity, 
+  hasAvailableOptions, 
+  validateCartItemInventoryEnhanced 
+} from '../utils/inventoryUtils';
 
 interface ItemCardProps {
   item: WholesaleItem;
@@ -28,8 +32,8 @@ export default function ItemCard({
       .filter(cartItem => cartItem.itemId === item.id)
       .reduce((total, cartItem) => total + cartItem.quantity, 0);
     
-    // Validate inventory including existing cart quantity
-    const inventoryValidation = validateCartItemInventory(item, {}, 1, existingQuantity);
+    // Validate inventory including existing cart quantity (enhanced for variant tracking)
+    const inventoryValidation = validateCartItemInventoryEnhanced(item, {}, 1, existingQuantity);
     
     if (!inventoryValidation.isValid) {
       setError(inventoryValidation.errors.join('\n'));

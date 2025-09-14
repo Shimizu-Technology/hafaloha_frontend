@@ -157,13 +157,17 @@ export function WholesaleCollapsibleOrderCard({
             </span>
           </div>
 
-          {/* Total */}
+          {/* Total and Date */}
           <div className="text-right">
             <div className="font-semibold text-gray-900">
               {formatCurrency(order.total)}
             </div>
             <div className="text-xs text-gray-500">
               {order.item_count} item{order.item_count !== 1 ? 's' : ''}
+            </div>
+            <div className="text-xs text-gray-400 flex items-center justify-end mt-1">
+              <Calendar className="w-3 h-3 mr-1" />
+              {formatDate(order.created_at)}
             </div>
           </div>
         </div>

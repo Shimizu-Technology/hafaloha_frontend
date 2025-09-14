@@ -72,17 +72,29 @@ export interface WholesaleItem {
   option_groups?: WholesaleOptionGroup[];
   active: boolean;
   track_inventory: boolean;
+  track_variants?: boolean;
   in_stock: boolean;
   stock_status: string;
   available_quantity?: number;
   uses_option_level_inventory?: boolean;
   effective_available_quantity?: number;
+  item_variants?: WholesaleItemVariant[];
   images: WholesaleItemImage[];
   primary_image_url?: string;
   total_ordered: number;
   total_revenue: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface WholesaleItemVariant {
+  id: number;
+  variant_key: string;
+  variant_name: string;
+  stock_quantity: number;
+  damaged_quantity: number;
+  low_stock_threshold?: number;
+  active: boolean;
 }
 
 export interface WholesaleItemImage {
@@ -317,6 +329,62 @@ class WholesaleApiService {
 
   async confirmPayment(orderId: number, paymentId: number): Promise<ApiResponse<{ payment: any; order: any }>> {
     const response = await apiClient.post(`${this.baseUrl}/orders/${orderId}/payments/${paymentId}/confirm`);
+    return response.data;
+  }
+
+  // NEW: Variant API methods
+  
+  // Get all variants for an item
+  async getItemVariants(itemId: number): Promise<ApiResponse<{ variants: WholesaleItemVariant[]; item: any }>> {
+    const response = await apiClient.get(`${this.baseUrl}/items/${itemId}/variants`);
+    return response.data;
+  }
+  
+  // Get specific variant details
+  async getItemVariant(itemId: number, variantId: number): Promise<ApiResponse<{ variant: WholesaleItemVariant }>> {
+    const response = await apiClient.get(`${this.baseUrl}/items/${itemId}/variants/${variantId}`);
+    return response.data;
+  }
+  
+  // Get variant stock status
+  async getVariantStockStatus(itemId: number, variantId: number): Promise<ApiResponse<{ stock_status: any }>> {
+    const response = await apiClient.get(`${this.baseUrl}/items/${itemId}/variants/${variantId}/stock_status`);
+    return response.data;
+  }
+  
+  // Check variant availability for specific quantity
+  async checkVariantAvailability(itemId: number, variantId: number, quantity: number): Promise<ApiResponse<{ availability: any }>> {
+    const response = await apiClient.post(`${this.baseUrl}/items/${itemId}/variants/${variantId}/check_availability`, { quantity });
+    return response.data;
+  }
+  
+  // Bulk stock check for multiple variants
+  async bulkVariantStockCheck(itemId: number, variants: Array<{ variant_key: string; quantity?: number }>): Promise<ApiResponse<{ results: any[]; item: any }>> {
+    const response = await apiClient.post(`${this.baseUrl}/items/${itemId}/variants/bulk_stock_check`, { variants });
+    return response.data;
+  }
+  
+  // Validate option combinations for variants
+  async validateVariantCombinations(itemId: number, combinations: Array<{ selected_options: Record<string, number[]> }>): Promise<ApiResponse<{ results: any[]; item: any }>> {
+    const response = await apiClient.post(`${this.baseUrl}/items/${itemId}/variants/validate_combinations`, { combinations });
+    return response.data;
+  }
+  
+  // Direct variant access (by variant ID)
+  async getVariant(variantId: number): Promise<ApiResponse<{ variant: WholesaleItemVariant }>> {
+    const response = await apiClient.get(`${this.baseUrl}/variants/${variantId}`);
+    return response.data;
+  }
+  
+  // Get direct variant stock status
+  async getDirectVariantStockStatus(variantId: number): Promise<ApiResponse<{ stock_status: any }>> {
+    const response = await apiClient.get(`${this.baseUrl}/variants/${variantId}/stock_status`);
+    return response.data;
+  }
+  
+  // Check direct variant availability
+  async checkDirectVariantAvailability(variantId: number, quantity: number): Promise<ApiResponse<{ availability: any }>> {
+    const response = await apiClient.post(`${this.baseUrl}/variants/${variantId}/check_availability`, { quantity });
     return response.data;
   }
 

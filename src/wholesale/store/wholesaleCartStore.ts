@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 import { useAuthStore } from '../../shared/auth/authStore';
 import wholesaleWebSocket, { WholesaleItemStockUpdate } from '../services/wholesaleWebSocket';
 import { wholesaleApi } from '../services/wholesaleApi';
-import { validateCartItemInventory } from '../utils/inventoryUtils';
+import { validateCartItemInventory, generateVariantKey } from '../utils/inventoryUtils';
 
 export interface WholesaleCartItem {
   id: string;
@@ -334,21 +334,35 @@ export const useWholesaleCartStore = create<WholesaleCartState>()(
             const itemsToUpdate: { id: string; newQuantity: number }[] = [];
             const itemsWithPriceUpdates: string[] = [];
             
-            // Process each issue
+            // Process each issue (enhanced for variant tracking)
             issues.forEach((issue: any) => {
-              if (issue.type === 'out_of_stock' || issue.type === 'option_unavailable') {
+              if (issue.type === 'out_of_stock' || issue.type === 'option_unavailable' || issue.type === 'variant_out_of_stock' || issue.type === 'variant_inactive' || issue.type === 'variant_not_found') {
                 // Find and mark items for removal
                 const cartItemsToRemove = state.items.filter(item => {
                   if (item.itemId === issue.item_id) {
-                    // Check if this specific option combination matches
-                    if (issue.option_id) {
-                      // Option-level out of stock - remove items with this specific option
+                    // NEW: Variant-level out of stock (highest priority)
+                    if ((issue.type === 'variant_out_of_stock' || issue.type === 'variant_inactive' || issue.type === 'variant_not_found') && issue.variant_id) {
+                      // For variant issues, we can match by variant_id or by generating variant key
+                      const itemOptions = item.options || {};
+                      const cartVariantKey = generateVariantKey(itemOptions);
+                      // Try to match by variant key if available, otherwise by variant_id
+                      if (issue.variant_key) {
+                        return cartVariantKey === issue.variant_key;
+                      } else if (issue.variant_name) {
+                        // Fallback: match by checking if this item's options would generate the same variant
+                        return true; // For now, assume match - could be enhanced with more specific logic
+                      }
+                      return false;
+                    }
+                    // Option-level out of stock
+                    else if (issue.option_id) {
                       const itemOptions = item.options || {};
                       return Object.values(itemOptions).some((optionIds: any) => 
                         Array.isArray(optionIds) && optionIds.includes(issue.option_id)
                       );
-                    } else {
-                      // Item-level out of stock - remove all instances of this item
+                    } 
+                    // Item-level out of stock
+                    else {
                       return true;
                     }
                   }
@@ -360,18 +374,33 @@ export const useWholesaleCartStore = create<WholesaleCartState>()(
                     itemsToRemove.push(item.id);
                   }
                 });
-              } else if (issue.type === 'insufficient_stock') {
+              } else if (issue.type === 'insufficient_stock' || issue.type === 'variant_insufficient_stock') {
                 // Find items to update quantity
                 const cartItemsToUpdate = state.items.filter(item => {
                   if (item.itemId === issue.item_id) {
-                    if (issue.option_id) {
-                      // Option-level insufficient stock
+                    // NEW: Variant-level insufficient stock (highest priority)
+                    if (issue.type === 'variant_insufficient_stock' && issue.variant_id) {
+                      // Check if this cart item matches the variant with insufficient stock
+                      const itemOptions = item.options || {};
+                      const cartVariantKey = generateVariantKey(itemOptions);
+                      // Try to match by variant key if available
+                      if (issue.variant_key) {
+                        return cartVariantKey === issue.variant_key;
+                      } else if (issue.variant_name) {
+                        // Fallback: match by checking if this item's options would generate the same variant
+                        return true; // For now, assume match - could be enhanced with more specific logic
+                      }
+                      return false;
+                    }
+                    // Option-level insufficient stock
+                    else if (issue.option_id) {
                       const itemOptions = item.options || {};
                       return Object.values(itemOptions).some((optionIds: any) => 
                         Array.isArray(optionIds) && optionIds.includes(issue.option_id)
                       );
-                    } else {
-                      // Item-level insufficient stock
+                    } 
+                    // Item-level insufficient stock
+                    else {
                       return true;
                     }
                   }
@@ -433,19 +462,49 @@ export const useWholesaleCartStore = create<WholesaleCartState>()(
               error: null // Clear the error since we've fixed the issues
             });
             
-            // Show a success message about what was cleaned up
+            // Show a success message about what was cleaned up (enhanced for variants)
             const removedCount = itemsToRemove.length;
             const updatedCount = itemsToUpdate.length;
             const priceUpdatedCount = itemsWithPriceUpdates.length;
-            let message = '';
             
+            // Count variant-specific issues for more detailed messaging
+            let variantIssuesCount = 0;
+            let optionIssuesCount = 0;
+            let itemIssuesCount = 0;
+            
+            issues.forEach((issue: any) => {
+              if (issue.type === 'variant_out_of_stock' || issue.type === 'variant_insufficient_stock' || issue.type === 'variant_inactive' || issue.type === 'variant_not_found') {
+                variantIssuesCount++;
+              } else if (issue.type === 'option_unavailable' || (issue.type === 'insufficient_stock' && issue.option_id)) {
+                optionIssuesCount++;
+              } else if (issue.type === 'out_of_stock' || issue.type === 'insufficient_stock') {
+                itemIssuesCount++;
+              }
+            });
+            
+            let message = '';
             const actions = [];
+            
             if (removedCount > 0) {
-              actions.push(`removed ${removedCount} out-of-stock item${removedCount === 1 ? '' : 's'}`);
+              if (variantIssuesCount > 0) {
+                actions.push(`removed ${removedCount} unavailable variant${removedCount === 1 ? '' : 's'}`);
+              } else if (optionIssuesCount > 0) {
+                actions.push(`removed ${removedCount} unavailable option${removedCount === 1 ? '' : 's'}`);
+              } else {
+                actions.push(`removed ${removedCount} out-of-stock item${removedCount === 1 ? '' : 's'}`);
+              }
             }
+            
             if (updatedCount > 0) {
-              actions.push(`adjusted quantities for ${updatedCount} item${updatedCount === 1 ? '' : 's'}`);
+              if (variantIssuesCount > 0) {
+                actions.push(`adjusted quantities for ${updatedCount} variant${updatedCount === 1 ? '' : 's'} with limited stock`);
+              } else if (optionIssuesCount > 0) {
+                actions.push(`adjusted quantities for ${updatedCount} option${updatedCount === 1 ? '' : 's'} with limited stock`);
+              } else {
+                actions.push(`adjusted quantities for ${updatedCount} item${updatedCount === 1 ? '' : 's'} with limited stock`);
+              }
             }
+            
             if (priceUpdatedCount > 0) {
               actions.push(`updated prices for ${priceUpdatedCount} item${priceUpdatedCount === 1 ? '' : 's'}`);
             }
