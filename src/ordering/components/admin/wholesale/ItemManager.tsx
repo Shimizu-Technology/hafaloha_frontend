@@ -347,7 +347,8 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
                 />
               </div>
               
-              <div className="flex flex-col">
+              {/* TODO: Re-enable damaged quantity field in the future */}
+              {/* <div className="flex flex-col">
                 <label className="text-xs text-gray-600">Damaged</label>
                 <input
                   type="number"
@@ -363,7 +364,7 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
                   }}
                   className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
                 />
-              </div>
+              </div> */}
               
               <div className="flex flex-col">
                 <label className="text-xs text-gray-600">Low Stock</label>
@@ -406,7 +407,7 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
       
       <div className="mt-3 text-xs text-purple-700">
         <p><strong>Note:</strong> Variants are automatically generated from your option combinations.</p>
-        <p>Available stock = Stock - Damaged. Set stock quantities for each variant above.</p>
+        <p>Set stock quantities for each variant above to track inventory at the variant level.</p>
       </div>
     </div>
   );
