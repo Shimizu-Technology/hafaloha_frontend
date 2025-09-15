@@ -85,6 +85,7 @@ interface WholesaleOptionGroup {
 }
 
 interface OptionGroupFormData {
+  id?: number; // Optional for new groups, present for existing groups
   name: string;
   min_select: number;
   max_select: number;
@@ -95,6 +96,7 @@ interface OptionGroupFormData {
 }
 
 interface OptionFormData {
+  id?: number; // Optional for new options, present for existing options
   name: string;
   additional_price: number;
   available: boolean;
@@ -261,11 +263,19 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
     // Generate combinations recursively
     const combinations: { key: string; name: string }[] = [];
     
-    function generateRecursive(groupIndex: number, currentKey: string[], currentName: string[]) {
+    function generateRecursive(groupIndex: number, currentSelection: Record<string, string[]>, currentName: string[]) {
       if (groupIndex >= activeGroups.length) {
+        // Generate variant key in the same format as backend: "groupId:optionId,groupId:optionId" (sorted)
+        const keyParts: string[] = [];
+        Object.entries(currentSelection).forEach(([groupId, optionIds]) => {
+          optionIds.forEach(optionId => {
+            keyParts.push(`${groupId}:${optionId}`);
+          });
+        });
+        keyParts.sort(); // Sort to match backend behavior
+        
         combinations.push({
-          // Don't sort the key components - keep them in group order for consistency
-          key: currentKey.join(','),
+          key: keyParts.join(','),
           name: currentName.join(', ')
         });
         return;
@@ -273,27 +283,43 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
       
       const group = activeGroups[groupIndex];
       for (const option of group.options) {
+        // Skip options that don't have IDs (new options not yet saved)
+        // This prevents generating invalid variant combinations
+        if (!group.id || !option.id) {
+          continue;
+        }
+        
+        const newSelection = { ...currentSelection };
+        newSelection[group.id.toString()] = [option.id.toString()];
+        
         generateRecursive(
           groupIndex + 1,
-          [...currentKey, `${groupIndex + 1}:${option.name.toLowerCase().replace(/\s+/g, '_')}`],
+          newSelection,
           [...currentName, option.name]
         );
       }
     }
     
-    generateRecursive(0, [], []);
+    generateRecursive(0, {}, []);
     
     // Convert to VariantFormData, preserving existing data
     const newVariants = combinations.map(combo => {
       const existing = variants.find(v => v.variant_key === combo.key);
-      return existing || {
-        variant_key: combo.key,
-        variant_name: combo.name,
-        stock_quantity: 0,
-        damaged_quantity: 0,
-        low_stock_threshold: 5,
-        active: true
-      };
+      
+      if (existing) {
+        // Preserve all existing data
+        return { ...existing };
+      } else {
+        // Create new variant with defaults
+        return {
+          variant_key: combo.key,
+          variant_name: combo.name,
+          stock_quantity: 0,
+          damaged_quantity: 0,
+          low_stock_threshold: 5,
+          active: true
+        };
+      }
     });
 
     // Always return sorted variants for consistent display
@@ -302,15 +328,35 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
   
   // Update variants when option groups change
   React.useEffect(() => {
+    // Check if any option groups have options without IDs (new options)
+    const hasNewOptions = optionGroups.some(group => 
+      group.options.some(option => !option.id)
+    );
+    
+    // If there are new options, don't regenerate variants - let backend handle it
+    if (hasNewOptions) {
+      return;
+    }
+    
+    // Only regenerate if all options have IDs (existing options only)
     const newVariants = generateAllCombinations();
-    if (newVariants.length !== variants.length || 
-        !newVariants.every(nv => variants.some(v => v.variant_key === nv.variant_key))) {
+    
+    // Only update if there are actually new combinations or removed combinations
+    const hasNewCombinations = newVariants.some(nv => !variants.some(v => v.variant_key === nv.variant_key));
+    const hasRemovedCombinations = variants.some(v => !newVariants.some(nv => nv.variant_key === v.variant_key));
+    
+    if (hasNewCombinations || hasRemovedCombinations) {
       onVariantsChange(newVariants);
     }
   }, [optionGroups]);
   
   // Always use sorted variants for consistent display
   const currentVariants = variants.length > 0 ? sortVariants(variants) : generateAllCombinations();
+  
+  // Check if there are new options that will generate variants on save
+  const hasNewOptions = optionGroups.some(group => 
+    group.options.some(option => !option.id)
+  );
   
   // Helper function to update a variant and maintain sorted order
   const updateVariant = (index: number, updates: Partial<VariantFormData>) => {
@@ -420,6 +466,12 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
       <div className="mt-3 text-xs text-purple-700">
         <p><strong>Note:</strong> Variants are automatically generated from your option combinations.</p>
         <p>Set stock quantities for each variant above to track inventory at the variant level.</p>
+        {hasNewOptions && (
+          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-amber-800">
+            <p><strong>⚠️ New Options Detected:</strong> Additional variants will be created when you save this item.</p>
+            <p>Existing variant data will be preserved.</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -594,6 +646,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
       
       // Convert existing option groups to form data format
       const optionGroupsData: OptionGroupFormData[] = (item.option_groups || []).map(group => ({
+        id: group.id, // Include the ID for existing option groups
         name: group.name,
         min_select: group.min_select,
         max_select: group.max_select,
@@ -601,6 +654,7 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         position: group.position,
         enable_inventory_tracking: group.enable_inventory_tracking,
         options: (group.options || []).map(option => ({
+          id: option.id, // Include the ID for existing options
           name: option.name,
           additional_price: option.additional_price,
           available: option.available,
