@@ -669,37 +669,56 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
     const fundraiserId = formData.fundraiser_id;
     
     for (const groupData of optionGroups) {
-      const groupResponse = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups`, {
-        option_group: {
-          name: groupData.name,
-          min_select: groupData.min_select,
-          max_select: groupData.max_select,
-          required: groupData.required,
-          position: groupData.position,
-          enable_inventory_tracking: groupData.enable_inventory_tracking
-        }
-      });
-      
-      const groupId = groupResponse.data.data.option_group.id;
-      
-      // Create options for this group
-      for (const optionData of groupData.options) {
-        const optionPayload: any = {
-          name: optionData.name,
-          additional_price: optionData.additional_price,
-          available: optionData.available,
-          position: optionData.position
-        };
-        
-        // Include stock fields if inventory tracking is enabled
-        if (groupData.enable_inventory_tracking) {
-          optionPayload.stock_quantity = optionData.stock_quantity || 0;
-          optionPayload.low_stock_threshold = optionData.low_stock_threshold || 5;
-        }
-        
-        await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options`, {
-          option: optionPayload
+      try {
+        const groupResponse = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups`, {
+          option_group: {
+            name: groupData.name,
+            min_select: groupData.min_select,
+            max_select: groupData.max_select,
+            required: groupData.required,
+            position: groupData.position,
+            enable_inventory_tracking: groupData.enable_inventory_tracking
+          }
         });
+        
+        const groupId = groupResponse.data.data.option_group.id;
+        
+        // Create options for this group
+        for (const optionData of groupData.options) {
+          const optionPayload: any = {
+            name: optionData.name,
+            additional_price: optionData.additional_price,
+            available: optionData.available,
+            position: optionData.position
+          };
+          
+          // Include stock fields if inventory tracking is enabled
+          if (groupData.enable_inventory_tracking) {
+            optionPayload.stock_quantity = optionData.stock_quantity || 0;
+            optionPayload.low_stock_threshold = optionData.low_stock_threshold || 5;
+          }
+          
+          await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${groupId}/options`, {
+            option: optionPayload
+          });
+        }
+      } catch (error: any) {
+        console.error('Failed to create option group:', error);
+        // Handle specific validation errors
+        if (error.response?.status === 422) {
+          const errorMessage = error.response?.data?.message || 'Failed to create option group';
+          const errors = error.response?.data?.errors || [];
+          
+          if (errors.some((err: string) => err.includes('inventory tracking'))) {
+            toastUtils.error(`Cannot create "${groupData.name}": Only one option group per item can have inventory tracking enabled. Please disable inventory tracking on existing groups first.`);
+          } else {
+            toastUtils.error(`Cannot create "${groupData.name}": ${errorMessage}`);
+          }
+        } else {
+          toastUtils.error(`Failed to create option group "${groupData.name}"`);
+        }
+        // Continue with other groups instead of failing completely
+        continue;
       }
     }
     
@@ -772,31 +791,50 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         await updateOptionsInGroup(fundraiserId, itemId, existingGroup.id, existingGroup.options || [], newGroup.options);
       } else {
         // Create new group
-        const groupResponse = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups`, {
-          option_group: {
-            name: newGroup.name,
-            min_select: newGroup.min_select,
-            max_select: newGroup.max_select,
-            required: newGroup.required,
-            position: newGroup.position,
-            enable_inventory_tracking: newGroup.enable_inventory_tracking
-          }
-        });
-        
-        const createdGroupId = groupResponse.data.data.option_group.id;
-        
-        // Create all options for new group
-        for (const option of newGroup.options) {
-          await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${createdGroupId}/options`, {
-            option: {
-              name: option.name,
-              additional_price: option.additional_price,
-              available: option.available,
-              position: option.position,
-              stock_quantity: option.stock_quantity,
-              low_stock_threshold: option.low_stock_threshold
+        try {
+          const groupResponse = await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups`, {
+            option_group: {
+              name: newGroup.name,
+              min_select: newGroup.min_select,
+              max_select: newGroup.max_select,
+              required: newGroup.required,
+              position: newGroup.position,
+              enable_inventory_tracking: newGroup.enable_inventory_tracking
             }
           });
+          
+          const createdGroupId = groupResponse.data.data.option_group.id;
+          
+          // Create all options for new group
+          for (const option of newGroup.options) {
+            await apiClient.post(`/wholesale/admin/fundraisers/${fundraiserId}/items/${itemId}/option_groups/${createdGroupId}/options`, {
+              option: {
+                name: option.name,
+                additional_price: option.additional_price,
+                available: option.available,
+                position: option.position,
+                stock_quantity: option.stock_quantity,
+                low_stock_threshold: option.low_stock_threshold
+              }
+            });
+          }
+        } catch (error: any) {
+          console.error('Failed to create option group:', error);
+          // Handle specific validation errors
+          if (error.response?.status === 422) {
+            const errorMessage = error.response?.data?.message || 'Failed to create option group';
+            const errors = error.response?.data?.errors || [];
+            
+            if (errors.some((err: string) => err.includes('inventory tracking'))) {
+              toastUtils.error(`Cannot create "${newGroup.name}": Only one option group per item can have inventory tracking enabled. Please disable inventory tracking on existing groups first.`);
+            } else {
+              toastUtils.error(`Cannot create "${newGroup.name}": ${errorMessage}`);
+            }
+          } else {
+            toastUtils.error(`Failed to create option group "${newGroup.name}"`);
+          }
+          // Continue with other groups instead of failing completely
+          continue;
         }
       }
     }
@@ -959,7 +997,13 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         
         // Create option groups for new item
         if (formData.option_groups.length > 0) {
-          await createOptionGroups(itemId, formData.option_groups);
+          try {
+            await createOptionGroups(itemId, formData.option_groups);
+          } catch (optionGroupError) {
+            console.error('Failed to create option groups:', optionGroupError);
+            // Option group errors are already handled within createOptionGroups
+            // Don't show additional error messages here
+          }
         }
         
         toastUtils.success('Item created successfully!');
@@ -1037,7 +1081,13 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         }
         
         // Update option groups for existing item
-        await updateOptionGroups(itemId, formData.option_groups);
+        try {
+          await updateOptionGroups(itemId, formData.option_groups);
+        } catch (optionGroupError) {
+          console.error('Failed to update option groups:', optionGroupError);
+          // Option group errors are already handled within updateOptionGroups
+          // Don't show additional error messages here
+        }
         
         // For existing items, keep the modal open but clear temporary states
         setSelectedImages([]);
@@ -1874,8 +1924,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                     </div>
                   )}
                   {formData.option_groups.some(g => g.enable_inventory_tracking) && (
-                    <div className="ml-7 text-xs text-gray-500">
-                      Variant-level tracking is disabled because option-level tracking is enabled below.
+                    <div className="ml-7 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
+                      <p className="font-medium">Variant-level tracking is disabled because option-level tracking is enabled below.</p>
+                      <p className="mt-1">
+                        <strong>Tip:</strong> For multiple option groups (e.g., Color + Size), disable option-level tracking on all groups 
+                        and use variant-level tracking instead. This will automatically create combinations like "Red-Small", "Blue-Large", etc.
+                      </p>
                     </div>
                   )}
                   {formData.option_groups.length < 1 && (
@@ -2109,27 +2163,48 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                               </label>
                             </div>
                             <div>
-                              <label className="flex items-center">
-                                <input
-                                  type="checkbox"
-                                  checked={group.enable_inventory_tracking}
-                                  onChange={(e) => {
-                                    const newGroups = [...formData.option_groups];
-                                    newGroups[groupIndex] = { ...group, enable_inventory_tracking: e.target.checked };
-                                    setFormData(prev => ({ ...prev, option_groups: newGroups }));
-                                  }}
-                                  disabled={formData.track_inventory}
-                                  className="mr-2"
-                                />
-                                <span className={`text-sm ${formData.track_inventory ? 'text-gray-400' : 'text-gray-700'}`}>
-                                  Track Option Inventory
-                                </span>
-                              </label>
-                              {formData.track_inventory && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Disabled when item-level tracking is enabled
-                                </p>
-                              )}
+                              {(() => {
+                                // Check if another option group already has inventory tracking enabled
+                                const otherGroupHasTracking = formData.option_groups.some((otherGroup, otherIndex) => 
+                                  otherIndex !== groupIndex && otherGroup.enable_inventory_tracking
+                                );
+                                const isDisabled = formData.track_inventory || (otherGroupHasTracking && !group.enable_inventory_tracking);
+                                
+                                return (
+                                  <>
+                                    <label className="flex items-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={group.enable_inventory_tracking}
+                                        onChange={(e) => {
+                                          const newGroups = [...formData.option_groups];
+                                          newGroups[groupIndex] = { ...group, enable_inventory_tracking: e.target.checked };
+                                          setFormData(prev => ({ ...prev, option_groups: newGroups }));
+                                        }}
+                                        disabled={isDisabled}
+                                        className="mr-2"
+                                      />
+                                      <span className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700'}`}>
+                                        Track Option Inventory
+                                      </span>
+                                    </label>
+                                    {formData.track_inventory && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Disabled when item-level tracking is enabled
+                                      </p>
+                                    )}
+                                    {otherGroupHasTracking && !group.enable_inventory_tracking && !formData.track_inventory && (
+                                      <div className="text-xs text-amber-600 mt-1 p-2 bg-amber-50 rounded border border-amber-200">
+                                        <p className="font-medium">Only one option group can have inventory tracking enabled.</p>
+                                        <p className="mt-1">
+                                          For multiple option groups with inventory tracking, disable option-level tracking on all groups and enable 
+                                          <strong> Variant-Level Stock Tracking</strong> above instead.
+                                        </p>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -2168,11 +2243,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                                         type="number"
                                         step="0.01"
                                         min="0"
-                                        value={option.additional_price}
+                                        value={option.additional_price === undefined || option.additional_price === null ? '' : option.additional_price}
                                         onChange={(e) => {
                                           const newGroups = [...formData.option_groups];
                                           const newOptions = [...group.options];
-                                          newOptions[optionIndex] = { ...option, additional_price: parseFloat(e.target.value) || 0 };
+                                          const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                          newOptions[optionIndex] = { ...option, additional_price: isNaN(value) ? 0 : value };
                                           newGroups[groupIndex] = { ...group, options: newOptions };
                                           setFormData(prev => ({ ...prev, option_groups: newGroups }));
                                         }}
@@ -2193,11 +2269,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                                       <input
                                         type="number"
                                         min="0"
-                                        value={option.stock_quantity || 0}
+                                        value={option.stock_quantity === undefined || option.stock_quantity === null ? '' : option.stock_quantity}
                                         onChange={(e) => {
                                           const newGroups = [...formData.option_groups];
                                           const newOptions = [...group.options];
-                                          newOptions[optionIndex] = { ...option, stock_quantity: parseInt(e.target.value) || 0 };
+                                          const value = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                          newOptions[optionIndex] = { ...option, stock_quantity: isNaN(value) ? 0 : value };
                                           newGroups[groupIndex] = { ...group, options: newOptions };
                                           setFormData(prev => ({ ...prev, option_groups: newGroups }));
                                         }}
@@ -2212,11 +2289,12 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
                                       <input
                                         type="number"
                                         min="0"
-                                        value={option.low_stock_threshold || 5}
+                                        value={option.low_stock_threshold === undefined || option.low_stock_threshold === null ? '' : option.low_stock_threshold}
                                         onChange={(e) => {
                                           const newGroups = [...formData.option_groups];
                                           const newOptions = [...group.options];
-                                          newOptions[optionIndex] = { ...option, low_stock_threshold: parseInt(e.target.value) || 5 };
+                                          const value = e.target.value === '' ? 5 : parseInt(e.target.value);
+                                          newOptions[optionIndex] = { ...option, low_stock_threshold: isNaN(value) ? 5 : value };
                                           newGroups[groupIndex] = { ...group, options: newOptions };
                                           setFormData(prev => ({ ...prev, option_groups: newGroups }));
                                         }}
