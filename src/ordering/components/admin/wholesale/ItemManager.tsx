@@ -242,6 +242,14 @@ interface VariantManagementGridProps {
 }
 
 function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: VariantManagementGridProps) {
+  // Sort variants consistently by name for predictable ordering
+  const sortVariants = (variantsToSort: VariantFormData[]): VariantFormData[] => {
+    return [...variantsToSort].sort((a, b) => {
+      // Sort by variant name alphabetically for consistent ordering
+      return a.variant_name.localeCompare(b.variant_name);
+    });
+  };
+
   // Generate all possible variant combinations from option groups
   const generateAllCombinations = (): VariantFormData[] => {
     if (optionGroups.length === 0) return [];
@@ -256,7 +264,8 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
     function generateRecursive(groupIndex: number, currentKey: string[], currentName: string[]) {
       if (groupIndex >= activeGroups.length) {
         combinations.push({
-          key: currentKey.sort().join(','),
+          // Don't sort the key components - keep them in group order for consistency
+          key: currentKey.join(','),
           name: currentName.join(', ')
         });
         return;
@@ -275,7 +284,7 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
     generateRecursive(0, [], []);
     
     // Convert to VariantFormData, preserving existing data
-    return combinations.map(combo => {
+    const newVariants = combinations.map(combo => {
       const existing = variants.find(v => v.variant_key === combo.key);
       return existing || {
         variant_key: combo.key,
@@ -286,6 +295,9 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
         active: true
       };
     });
+
+    // Always return sorted variants for consistent display
+    return sortVariants(newVariants);
   };
   
   // Update variants when option groups change
@@ -297,7 +309,16 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
     }
   }, [optionGroups]);
   
-  const currentVariants = variants.length > 0 ? variants : generateAllCombinations();
+  // Always use sorted variants for consistent display
+  const currentVariants = variants.length > 0 ? sortVariants(variants) : generateAllCombinations();
+  
+  // Helper function to update a variant and maintain sorted order
+  const updateVariant = (index: number, updates: Partial<VariantFormData>) => {
+    const newVariants = [...currentVariants];
+    newVariants[index] = { ...newVariants[index], ...updates };
+    // Sort the updated variants before passing them back
+    onVariantsChange(sortVariants(newVariants));
+  };
   
   if (currentVariants.length === 0) {
     return (
@@ -336,12 +357,9 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
                   min="0"
                   value={variant.stock_quantity}
                   onChange={(e) => {
-                    const newVariants = [...currentVariants];
-                    newVariants[index] = {
-                      ...variant,
+                    updateVariant(index, {
                       stock_quantity: parseInt(e.target.value) || 0
-                    };
-                    onVariantsChange(newVariants);
+                    });
                   }}
                   className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
                 />
@@ -373,12 +391,9 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
                   min="0"
                   value={variant.low_stock_threshold}
                   onChange={(e) => {
-                    const newVariants = [...currentVariants];
-                    newVariants[index] = {
-                      ...variant,
+                    updateVariant(index, {
                       low_stock_threshold: parseInt(e.target.value) || 5
-                    };
-                    onVariantsChange(newVariants);
+                    });
                   }}
                   className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
                 />
@@ -390,12 +405,9 @@ function VariantManagementGrid({ optionGroups, variants, onVariantsChange }: Var
                   type="checkbox"
                   checked={variant.active}
                   onChange={(e) => {
-                    const newVariants = [...currentVariants];
-                    newVariants[index] = {
-                      ...variant,
+                    updateVariant(index, {
                       active: e.target.checked
-                    };
-                    onVariantsChange(newVariants);
+                    });
                   }}
                   className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
                 />
@@ -748,13 +760,20 @@ export function ItemManager({ restaurantId, fundraiserId, onDataChange }: ItemMa
         const matchingGenerated = generatedVariants.find((gv: any) => gv.variant_name === originalVariant.variant_name);
         
         if (matchingGenerated && originalVariant.stock_quantity !== undefined) {
-          // Update the stock quantity for this variant using the inventory endpoint
-          await apiClient.post(`/wholesale/admin/inventory/variants/${matchingGenerated.id}/update_stock`, {
+          // Update the stock quantity and low stock threshold for this variant using the inventory endpoint
+          const updateData: any = {
             quantity: originalVariant.stock_quantity,
             reason: 'initial_stock',
             notes: `Initial stock setup: ${originalVariant.stock_quantity} units`
-          });
-          console.log(`Updated stock for variant ${matchingGenerated.variant_name}: ${originalVariant.stock_quantity}`);
+          };
+          
+          // Include low stock threshold if it's defined
+          if (originalVariant.low_stock_threshold !== undefined) {
+            updateData.low_stock_threshold = originalVariant.low_stock_threshold;
+          }
+          
+          await apiClient.post(`/wholesale/admin/inventory/variants/${matchingGenerated.id}/update_stock`, updateData);
+          console.log(`Updated stock for variant ${matchingGenerated.variant_name}: ${originalVariant.stock_quantity} (threshold: ${originalVariant.low_stock_threshold})`);
         }
       }
     } catch (error) {
