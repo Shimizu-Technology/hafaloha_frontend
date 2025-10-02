@@ -14,7 +14,12 @@ export function CartPage() {
   const { menuItems, fetchMenuItems } = useMenuStore();
   
   // State for customization modal
-  const [itemToCustomize, setItemToCustomize] = useState<any>(null);
+  const [itemToCustomize, setItemToCustomize] = useState<{
+    menuItem: any;
+    editMode?: boolean;
+    existingCartItem?: CartItem;
+    cartItemKey?: string;
+  } | null>(null);
 
   // FE-018: Option availability helper functions
   const getOptionAvailableQuantity = useCallback((option: any): number => {
@@ -320,7 +325,12 @@ export function CartPage() {
                               // Find the original menu item to get its option groups
                               const originalItem = menuItems.find(mi => mi.id === item.id);
                               if (originalItem) {
-                                setItemToCustomize(originalItem);
+                                setItemToCustomize({
+                                  menuItem: originalItem,
+                                  editMode: true,
+                                  existingCartItem: item,
+                                  cartItemKey: itemKey
+                                });
                               }
                             }}
                           >
@@ -427,7 +437,10 @@ export function CartPage() {
       {/* Customization Modal */}
       {itemToCustomize && (
         <CustomizationModal
-          item={itemToCustomize}
+          item={itemToCustomize.menuItem}
+          editMode={itemToCustomize.editMode}
+          existingCartItem={itemToCustomize.existingCartItem}
+          existingCartItemKey={itemToCustomize.cartItemKey}
           onClose={() => setItemToCustomize(null)}
         />
       )}

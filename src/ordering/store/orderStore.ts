@@ -102,6 +102,7 @@ interface OrderStore {
   /** Utility function to generate a unique key for an item based on id and customizations */
   _getItemKey: (item: any) => string;
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
+  updateCartItem: (itemKey: string, updates: Partial<CartItem>) => void;
   removeFromCart: (itemId: string) => void;
   setCartQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -978,6 +979,24 @@ export const useOrderStore = create<OrderStore>()(
             };
           }
           return { cartItems: [...state.cartItems, { ...item, quantity }] };
+        });
+      },
+
+      updateCartItem: (itemKey, updates) => {
+        set((state) => {
+          const itemToUpdate = state.cartItems.find(ci => 
+            get()._getItemKey(ci) === itemKey
+          );
+          
+          if (!itemToUpdate) return state;
+          
+          return {
+            cartItems: state.cartItems.map(ci =>
+              get()._getItemKey(ci) === itemKey
+                ? { ...ci, ...updates }
+                : ci
+            )
+          };
         });
       },
 

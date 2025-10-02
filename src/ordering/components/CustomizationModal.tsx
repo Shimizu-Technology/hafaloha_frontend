@@ -1,16 +1,26 @@
 // src/ordering/components/CustomizationModal.tsx
 import React, { useState, useEffect } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
-import { useOrderStore } from '../store/orderStore';
+import { useOrderStore, CartItem } from '../store/orderStore';
 import type { MenuItem, OptionGroup, MenuOption } from '../types/menu';
 
 interface CustomizationModalProps {
   item: MenuItem;
   onClose: () => void;
+  editMode?: boolean;
+  existingCartItem?: CartItem;
+  existingCartItemKey?: string;
 }
 
-export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
+export function CustomizationModal({ 
+  item, 
+  onClose,
+  editMode = false,
+  existingCartItem,
+  existingCartItemKey
+}: CustomizationModalProps) {
   const addToCart = useOrderStore((state) => state.addToCart);
+  const updateCartItem = useOrderStore((state) => state.updateCartItem);
 
   // 1) Track user selections: selections[groupId] = array of optionIds
   const [selections, setSelections] = useState<Record<number, number[]>>({});
@@ -37,18 +47,59 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
   useEffect(() => {
     const initialSelections: Record<number, number[]> = {};
     
-    optionGroups.forEach(group => {
-      const preselectedOptions = group.options
-        .filter(opt => opt.is_preselected && isOptionAvailable(opt, 1, group)) // Only include available options
-        .map(opt => opt.id);
+    // If in edit mode, pre-populate from existing cart item
+    if (editMode && existingCartItem?.customizations) {
+      const customizations = existingCartItem.customizations;
       
-      if (preselectedOptions.length > 0) {
-        // Only add preselected options up to max_select
-        initialSelections[group.id] = preselectedOptions.slice(0, group.max_select);
+      // Validate customizations structure
+      if (typeof customizations === 'object' && customizations !== null) {
+        optionGroups.forEach(group => {
+          const groupSelections = (customizations as Record<string, any>)[group.name];
+          if (Array.isArray(groupSelections)) {
+            // Map option names back to option IDs
+            const selectedOptionIds = group.options
+              .filter(opt => groupSelections.includes(opt.name))
+              .map(opt => opt.id);
+            initialSelections[group.id] = selectedOptionIds;
+            
+            // Warn if some options were dropped
+            if (selectedOptionIds.length !== groupSelections.length) {
+              console.warn(`Some options in ${group.name} are no longer available`);
+            }
+          } else {
+            initialSelections[group.id] = [];
+          }
+        });
       } else {
-        initialSelections[group.id] = [];
+        console.error('Invalid customizations structure in existing cart item');
+        // Fall back to default pre-selected options
+        optionGroups.forEach(group => {
+          const preselectedOptions = group.options
+            .filter(opt => opt.is_preselected && isOptionAvailable(opt, 1, group))
+            .map(opt => opt.id);
+          initialSelections[group.id] = preselectedOptions.slice(0, group.max_select);
+        });
       }
-    });
+      
+      // Set quantity from existing item
+      if (existingCartItem.quantity) {
+        setQuantity(existingCartItem.quantity);
+      }
+    } else {
+      // Normal mode: use pre-selected options
+      optionGroups.forEach(group => {
+        const preselectedOptions = group.options
+          .filter(opt => opt.is_preselected && isOptionAvailable(opt, 1, group)) // Only include available options
+          .map(opt => opt.id);
+        
+        if (preselectedOptions.length > 0) {
+          // Only add preselected options up to max_select
+          initialSelections[group.id] = preselectedOptions.slice(0, group.max_select);
+        } else {
+          initialSelections[group.id] = [];
+        }
+      });
+    }
     
     setSelections(initialSelections);
     
@@ -57,7 +108,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
       const requiredGroup = optionGroups.find(group => group.min_select > 0);
       setExpandedGroupId(requiredGroup?.id || optionGroups[0]?.id || null);
     }
-  }, [optionGroups]);
+  }, [optionGroups, editMode, existingCartItem]);
 
   // Toggle an option in a group, respecting max_select
   function handleOptionToggle(group: OptionGroup, opt: MenuOption) {
@@ -495,10 +546,10 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
     paidOptions: { id: number; name: string; price: number }[];
   }[];
 
-  // On "Add to Cart": build a customizations object => groupName => [optionName, ...]
-  function handleAddToCart() {
+  // On "Add to Cart" or "Update Item": build a customizations object => groupName => [optionName, ...]
+  function handleSubmit() {
     if (!isValid) {
-      alert("Please make all required selections before adding to cart.");
+      alert("Please make all required selections before proceeding.");
       return;
     }
 
@@ -516,16 +567,33 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
     }
 
     // Use the final price = base + addl
-    addToCart(
-      {
-        id: item.id,
-        name: item.name,
+    if (editMode) {
+      // Validate that we have the cart item key in edit mode
+      if (!existingCartItemKey) {
+        console.error('Edit mode requires existingCartItemKey');
+        alert('Unable to update item. Please try again.');
+        return;
+      }
+      
+      // Update existing cart item
+      updateCartItem(existingCartItemKey, {
         price: basePrice + addlPrice,
         customizations: finalCustomizations as any,
-        image: item.image, // Include the image property
-      } as any,
-      quantity
-    );
+        quantity: quantity
+      });
+    } else {
+      // Add new cart item
+      addToCart(
+        {
+          id: item.id,
+          name: item.name,
+          price: basePrice + addlPrice,
+          customizations: finalCustomizations as any,
+          image: item.image, // Include the image property
+        } as any,
+        quantity
+      );
+    }
 
     onClose();
   }
@@ -827,7 +895,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
               Cancel
             </button>
             <button
-              onClick={handleAddToCart}
+              onClick={handleSubmit}
               className={`px-4 py-2 text-white rounded-md ${
                 isValid 
                   ? 'bg-[#c1902f] hover:bg-[#d4a43f]' 
@@ -835,7 +903,7 @@ export function CustomizationModal({ item, onClose }: CustomizationModalProps) {
               }`}
               disabled={!isValid}
             >
-              Add to Cart
+              {editMode ? 'Update Item' : 'Add to Cart'}
             </button>
           </div>
         </div>
