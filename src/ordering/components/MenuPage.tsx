@@ -474,7 +474,7 @@ export function MenuPage() {
           <div className="animate-fadeIn transition-opacity duration-300">
             {menuItems.length > 0 ? (
               layoutType === 'gallery' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4 lg:gap-6">
                   {menuItems.map((item, index) => (
                     <MenuItemCard key={item.id} item={item} index={index} />
                   ))}
