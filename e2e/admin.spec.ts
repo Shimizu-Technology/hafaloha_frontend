@@ -3,57 +3,53 @@ import { test, expect, Page } from '@playwright/test';
 const TEST_EMAIL = 'jerry.shimizutechnology@gmail.com';
 const TEST_PASSWORD = 'Clawdbot123!';
 
-/**
- * Helper: log in via the UI and wait for redirect.
- */
+/** Log in via the login form and wait until we leave /login. */
 async function loginAsAdmin(page: Page) {
   await page.goto('/login');
-
-  const emailInput = page.locator('input[type="email"], input[name="email"], input[placeholder*="email" i]').first();
-  const passwordInput = page.locator('input[type="password"]').first();
-
-  await emailInput.fill(TEST_EMAIL);
-  await passwordInput.fill(TEST_PASSWORD);
-
-  const submitBtn = page.locator('button[type="submit"], button:has-text("Log In"), button:has-text("Sign In")').first();
-  await submitBtn.click();
-
-  // Wait for navigation away from login
+  await page.getByPlaceholder(/you@example/i).fill(TEST_EMAIL);
+  await page.getByPlaceholder('••••••••').fill(TEST_PASSWORD);
+  await page.getByRole('button', { name: /Sign In/i }).click();
   await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15_000 });
+}
+
+/** Navigate to admin after login and wait for heading. */
+async function gotoAdmin(page: Page) {
+  await loginAsAdmin(page);
+  await page.goto('/admin');
+  await expect(
+    page.getByRole('heading', { name: /Admin Dashboard/i })
+  ).toBeVisible({ timeout: 20_000 });
 }
 
 test.describe('Admin Dashboard', () => {
   test('admin can access /admin after login', async ({ page }) => {
-    await loginAsAdmin(page);
-
-    // Navigate to admin dashboard
-    await page.goto('/admin');
-
-    // The admin dashboard lazy-loads — wait for one of the tab labels to appear.
-    // Tabs: Analytics, Orders, Menu, Wholesale, Merchandise, Promos, Reservations, Staff, Settings
-    // Use getByRole to target visible button/link text and avoid hidden mobile-nav elements.
-    const ordersTab = page.getByRole('button', { name: /Orders/i }).or(
-      page.getByRole('tab', { name: /Orders/i })
-    ).or(
-      page.locator('button:visible:has-text("Orders"), [role="tab"]:visible:has-text("Orders")')
-    ).first();
-    await expect(ordersTab).toBeVisible({ timeout: 20_000 });
+    await gotoAdmin(page);
+    // Heading is verified in gotoAdmin — just ensure we're on the right page
+    expect(page.url()).toContain('/admin');
   });
 
-  test('admin dashboard shows order management', async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.goto('/admin');
+  test('admin dashboard shows navigation tabs', async ({ page }) => {
+    await gotoAdmin(page);
 
-    // Look for the Orders tab or any visible admin content
-    const ordersContent = page.locator(':visible:has-text("Orders")').first();
-    await expect(ordersContent).toBeVisible({ timeout: 15_000 });
+    // Check that the key tab buttons appear
+    for (const tab of ['Analytics', 'Orders', 'Menu', 'Staff', 'Settings']) {
+      await expect(page.getByRole('button', { name: new RegExp(`^${tab}$`, 'i') })).toBeVisible();
+    }
+  });
+
+  test('can click Orders tab', async ({ page }) => {
+    await gotoAdmin(page);
+
+    // Click the Orders tab
+    await page.getByRole('button', { name: /^Orders$/i }).click();
+
+    // Should see orders-related content (even if empty — the tab panel renders)
+    // Use .first() because there are nested <main> elements in the layout
+    await expect(page.locator('main').first()).toContainText(/order/i, { timeout: 10_000 });
   });
 
   test('unauthenticated users are redirected from /admin', async ({ page }) => {
-    // Try to access admin without logging in
     await page.goto('/admin');
-
-    // Should redirect to login page
     await page.waitForURL((url) => url.pathname.includes('/login'), { timeout: 10_000 });
     expect(page.url()).toContain('/login');
   });

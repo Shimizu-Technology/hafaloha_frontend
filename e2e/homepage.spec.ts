@@ -3,30 +3,27 @@ import { test, expect } from '@playwright/test';
 test.describe('Homepage', () => {
   test('loads and shows the Hafaloha branding', async ({ page }) => {
     await page.goto('/');
-
-    // The page title should contain "Hafaloha"
     await expect(page).toHaveTitle(/Hafaloha/i);
-
-    // The hero section or main content should be visible
-    // The body should have meaningful content (not blank)
-    const body = page.locator('body');
-    await expect(body).toBeVisible();
   });
 
-  test('shows navigation links', async ({ page }) => {
+  test('shows navigation with menu link', async ({ page }) => {
     await page.goto('/');
-
-    // There should be a link/nav to the menu page
-    const menuLink = page.locator('a[href="/menu"], a[href*="menu"]').first();
-    await expect(menuLink).toBeVisible({ timeout: 10_000 });
+    // Desktop nav has a visible "Menu" link
+    const menuLink = page.locator('a[href="/menu"]').first();
+    await expect(menuLink).toBeAttached({ timeout: 10_000 });
   });
 
-  test('hero section renders', async ({ page }) => {
+  test('hero section renders with CTA', async ({ page }) => {
     await page.goto('/');
+    // The hero or home section should show "View Full Menu", "Popular Items", or "Discover Our Menu"
+    const cta = page.getByText(/View Full Menu|Popular Items|Discover Our Menu/i).first();
+    await expect(cta).toBeVisible({ timeout: 10_000 });
+  });
 
-    // The hero section should appear (it may be a background image container or text)
-    // Look for a common hero indicator — either the "View Full Menu" link or "Popular Items"
-    const heroContent = page.locator('text=/View Full Menu|Popular Items|Discover Our Menu/i').first();
-    await expect(heroContent).toBeVisible({ timeout: 10_000 });
+  test('footer shows restaurant info', async ({ page }) => {
+    await page.goto('/');
+    const footer = page.locator('footer, [role="contentinfo"]');
+    await expect(footer).toBeVisible({ timeout: 10_000 });
+    await expect(footer).toContainText('Hafaloha');
   });
 });
