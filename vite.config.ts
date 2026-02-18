@@ -25,6 +25,11 @@ export default defineConfig(({ mode }) => {
             'chart-vendor': ['recharts'],
             'payment-vendor': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
             'util-vendor': ['axios', 'date-fns', 'zustand'],
+            'xlsx-vendor': ['xlsx'],
+            'posthog-vendor': ['posthog-js', 'posthog-js/react'],
+            'datepicker-vendor': ['react-datepicker'],
+            'dnd-vendor': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+            'select-vendor': ['react-select'],
             
             // Admin chunks - split by functionality
             'admin-dashboard': [
