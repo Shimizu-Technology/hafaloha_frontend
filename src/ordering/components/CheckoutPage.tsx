@@ -272,7 +272,20 @@ export function CheckoutPage() {
       });
     } catch (err: any) {
       console.error('Failed to create order:', err);
-      toastUtils.error('Failed to place order. Please try again.');
+
+      // Parse backend error details (e.g., stock insufficient, items not found)
+      const backendError = err?.response?.data?.error;
+      const backendDetails = err?.response?.data?.details;
+
+      if (backendDetails && Array.isArray(backendDetails)) {
+        // Show each detail as a separate toast (e.g., "T-Shirt: only 2 available")
+        backendDetails.forEach((detail: string) => toastUtils.error(detail));
+      } else if (backendError) {
+        toastUtils.error(backendError);
+      } else {
+        toastUtils.error(err.message || 'Failed to place order. Please try again.');
+      }
+
       setIsSubmitting(false);
     }
   }
