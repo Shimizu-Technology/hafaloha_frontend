@@ -787,22 +787,27 @@ export const useOrderStore = create<OrderStore>()(
 
           set({
             orders: [...get().orders, optimisticOrder],
-            cartItems: [] // Clear the cart right away for fast UI
+            // Don't clear cart yet — wait for API confirmation
           });
 
           // Real API call
           const newOrder = await api.post<Order>('/orders', payload);
 
-          // Replace the optimistic order with the real one
+          // Replace the optimistic order with the real one AND clear cart on success
           set({
             orders: get().orders.map(order => 
               order.id === tempId ? newOrder : order
-            )
+            ),
+            cartItems: [] // Only clear cart after confirmed order
           });
 
           return newOrder;
         } catch (err: any) {
-          set({ error: err.message });
+          // Remove the optimistic order on failure — cart is still intact
+          set({
+            error: err.message,
+            orders: get().orders.filter(order => order.id !== tempId)
+          });
           console.error('Failed to create order:', err);
           return {
             id: `error-${Date.now()}`,
