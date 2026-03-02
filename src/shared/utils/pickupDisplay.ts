@@ -101,17 +101,10 @@ export const resolvePickupDisplay = ({
     )}`;
 
   const hoursText = normalizeText(
-    usingOverride
-      ? pickupOverride.hours_text ||
-          (!hasPickupDisplayConfig
-            ? adminSettings.custom_pickup_hours
-            : "") ||
-          restaurant?.hours ||
-          DEFAULT_HOURS
-      : pickupOverride.hours_text ||
-          (!hasPickupDisplayConfig ? adminSettings.custom_pickup_hours : "") ||
-          restaurant?.hours ||
-          DEFAULT_HOURS
+    pickupOverride.hours_text ||
+      (!hasPickupDisplayConfig ? adminSettings.custom_pickup_hours : "") ||
+      restaurant?.hours ||
+      DEFAULT_HOURS
   );
 
   const instructions = normalizeText(
