@@ -118,6 +118,34 @@ export function OrderConfirmation() {
 
   const formatPrice = (price: number) => `$${price.toFixed(2)}`;
 
+  const getGoogleMapsUrl = () => {
+    const customMapsUrl = restaurant?.admin_settings?.custom_pickup_google_maps_url;
+    if (customMapsUrl && String(customMapsUrl).trim().length > 0) {
+      return customMapsUrl;
+    }
+
+    const addressForSearch =
+      restaurant?.custom_pickup_location ||
+      orderDetails.location_address ||
+      restaurant?.address ||
+      "Barrigada, Guam";
+
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressForSearch)}`;
+  };
+
+  const getPickupHoursText = () => {
+    const customPickupHours = restaurant?.admin_settings?.custom_pickup_hours;
+    if (customPickupHours && String(customPickupHours).trim().length > 0) {
+      return customPickupHours;
+    }
+
+    if (restaurant?.hours && restaurant.hours.trim().length > 0) {
+      return restaurant.hours;
+    }
+
+    return "Open Daily: 11AM - 9PM";
+  };
+
   const formatDateTime = (dateString?: string) => {
     if (!dateString) return null;
     
@@ -179,7 +207,6 @@ export function OrderConfirmation() {
   // Calculate totals
   const foodItemsTotal = orderDetails.items.reduce((sum, item) => sum + calculateItemSubtotal(item.price, item.quantity), 0);
   const merchandiseTotal = (orderDetails.merchandise_items || []).reduce((sum, item) => sum + calculateItemSubtotal(item.price, item.quantity), 0);
-  const allItemsTotal = foodItemsTotal + merchandiseTotal;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -265,7 +292,7 @@ export function OrderConfirmation() {
                   </p>
                 )}
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant?.custom_pickup_location || orderDetails.location_address || restaurant?.address || "Barrigada, Guam")}`}
+                  href={getGoogleMapsUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[#c1902f] hover:text-[#d4a43f] text-sm mt-1 inline-block"
@@ -280,7 +307,7 @@ export function OrderConfirmation() {
               <Clock className="h-5 w-5 text-[#c1902f] mt-1 mr-3 flex-shrink-0" />
               <div>
                 <h4 className="font-medium text-gray-900 mb-1">Hours</h4>
-                <p className="text-gray-600 text-sm">Open Daily: 11AM - 9PM</p>
+                <p className="text-gray-600 text-sm whitespace-pre-line">{getPickupHoursText()}</p>
                 <p className="text-xs text-gray-500">
                   Orders must be picked up during business hours
                 </p>

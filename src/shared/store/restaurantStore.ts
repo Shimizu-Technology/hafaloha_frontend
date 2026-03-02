@@ -34,6 +34,7 @@ export interface Restaurant {
   allowed_origins: string[];
   primary_frontend_url?: string;
   custom_pickup_location?: string;
+  hours?: string;
   // Social media fields
   facebook_url?: string;
   instagram_url?: string;
