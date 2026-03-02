@@ -16,6 +16,7 @@ import { useAuthStore } from '../../auth';
 import toastUtils from '../../utils/toastUtils';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatPhoneNumber } from '../../utils/formatters';
+import { resolvePickupDisplay } from '../../utils/pickupDisplay';
 
 
 // Create a custom hook to safely use the order store
@@ -222,6 +223,8 @@ export function Header() {
   // Active link style
   const activeLinkClass = "text-[#c1902f] font-medium";
   const isActiveLink = (path: string) => location.pathname === path ? activeLinkClass : "";
+  const pickupDisplay = resolvePickupDisplay({ restaurant });
+  const headerHours = pickupDisplay.hoursText;
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-md">
@@ -291,17 +294,21 @@ export function Header() {
             
             {/* Info section with subtle divider */}
             <div className="flex items-center space-x-2 sm:space-x-3 xl:space-x-4 pl-2 border-l border-gray-200">
-              <div className="hidden xl:flex items-center text-gray-600 group">
-                <Clock className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
-                <span className="text-sm">11AM-9PM</span>
-              </div>
+              {headerHours && (
+                <div className="hidden xl:flex items-center text-gray-600 group">
+                  <Clock className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-sm">{headerHours}</span>
+                </div>
+              )}
               
-              <div className="hidden lg:flex xl:flex items-center text-gray-600 group">
-                <MapPin className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
-                <span className="text-sm truncate max-w-[100px] xl:max-w-none">{restaurant?.address ? restaurant.address.split(',')[0] : 'Tamuning'}</span>
-              </div>
+              {restaurant?.address?.trim() && (
+                <div className="hidden lg:flex xl:flex items-center text-gray-600 group">
+                  <MapPin className="h-4 w-4 mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-sm truncate max-w-[100px] xl:max-w-none">{restaurant.address.split(',')[0]}</span>
+                </div>
+              )}
               
-              {restaurant?.phone_number ? (
+              {restaurant?.phone_number?.trim() && (
                 <a
                   href={`tel:${restaurant.phone_number}`}
                   className="flex items-center text-gray-600 hover:text-[#c1902f] 
@@ -309,15 +316,6 @@ export function Header() {
                 >
                   <Phone className="h-4 w-4 mr-1 xl:mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
                   <span className="hidden sm:inline text-sm">{formatPhoneNumber(restaurant.phone_number)}</span>
-                </a>
-              ) : (
-                <a
-                  href="tel:+16719893444"
-                  className="flex items-center text-gray-600 hover:text-[#c1902f] 
-                           transition-colors duration-200 group"
-                >
-                  <Phone className="h-4 w-4 mr-1 xl:mr-1.5 text-[#c1902f] group-hover:scale-110 transition-transform duration-200" />
-                  <span className="hidden sm:inline text-sm">(671) 989-3444</span>
                 </a>
               )}
             </div>
@@ -548,15 +546,19 @@ export function Header() {
           {/* Restaurant Info */}
           <div className="space-y-2 pt-2 border-t border-gray-100">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Restaurant Info</h3>
-            <div className="px-3 py-2 text-base text-gray-700 flex items-center">
-              <Clock className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
-              11AM-9PM
-            </div>
-            <div className="px-3 py-2 text-base text-gray-700 flex items-center">
-              <MapPin className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
-              {restaurant?.address ? restaurant.address.split(',')[0] : 'Tamuning'}
-            </div>
-            {restaurant?.phone_number ? (
+            {headerHours && (
+              <div className="px-3 py-2 text-base text-gray-700 flex items-center">
+                <Clock className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
+                {headerHours}
+              </div>
+            )}
+            {restaurant?.address?.trim() && (
+              <div className="px-3 py-2 text-base text-gray-700 flex items-center">
+                <MapPin className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
+                {restaurant.address.split(',')[0]}
+              </div>
+            )}
+            {restaurant?.phone_number?.trim() && (
               <a
                 href={`tel:${restaurant.phone_number}`}
                 className="flex items-center px-3 py-2 text-base text-gray-700 hover:text-[#c1902f]
@@ -565,16 +567,6 @@ export function Header() {
               >
                 <Phone className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
                 {formatPhoneNumber(restaurant.phone_number)}
-              </a>
-            ) : (
-              <a
-                href="tel:+16719893444"
-                className="flex items-center px-3 py-2 text-base text-gray-700 hover:text-[#c1902f]
-                         hover:bg-gray-50 transition-colors duration-150"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <Phone className="inline-block h-4 w-4 mr-3 text-[#c1902f]" />
-                (671) 989-3444
               </a>
             )}
           </div>

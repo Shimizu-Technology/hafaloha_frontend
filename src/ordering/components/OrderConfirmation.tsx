@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { useRestaurantStore } from '../../shared/store/restaurantStore';
 import { formatPhoneNumber } from '../../shared/utils/formatters';
+import { resolvePickupDisplay } from '../../shared/utils/pickupDisplay';
 
 interface OrderItem {
   id: string;
@@ -118,34 +119,6 @@ export function OrderConfirmation() {
 
   const formatPrice = (price: number) => `$${price.toFixed(2)}`;
 
-  const getGoogleMapsUrl = () => {
-    const customMapsUrl = restaurant?.admin_settings?.custom_pickup_google_maps_url;
-    if (customMapsUrl && String(customMapsUrl).trim().length > 0) {
-      return String(customMapsUrl).trim();
-    }
-
-    const addressForSearch =
-      restaurant?.custom_pickup_location ||
-      orderDetails.location_address ||
-      restaurant?.address ||
-      "Barrigada, Guam";
-
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressForSearch)}`;
-  };
-
-  const getPickupHoursText = () => {
-    const customPickupHours = restaurant?.admin_settings?.custom_pickup_hours;
-    if (customPickupHours && String(customPickupHours).trim().length > 0) {
-      return String(customPickupHours).trim();
-    }
-
-    if (restaurant?.hours && restaurant.hours.trim().length > 0) {
-      return restaurant.hours;
-    }
-
-    return "Open Daily: 11AM - 9PM";
-  };
-
   const formatDateTime = (dateString?: string) => {
     if (!dateString) return null;
     
@@ -203,6 +176,14 @@ export function OrderConfirmation() {
   const orderDate = formatDateTime(orderDetails.created_at);
   const estimatedPickup = formatDateTime(orderDetails.estimated_pickup_time);
   const hasAdvanceNotice = orderDetails.requires_advance_notice || orderDetails.max_advance_notice_hours;
+  const pickupDisplay = resolvePickupDisplay({
+    restaurant,
+    fallbackLocationName: orderDetails.location_name,
+    fallbackAddress: orderDetails.location_address,
+  });
+  const contactPhone = pickupDisplay.phoneNumber
+    ? formatPhoneNumber(pickupDisplay.phoneNumber)
+    : '';
   
   // Calculate totals
   const foodItemsTotal = orderDetails.items.reduce((sum, item) => sum + calculateItemSubtotal(item.price, item.quantity), 0);
@@ -280,19 +261,18 @@ export function OrderConfirmation() {
               <MapPin className="h-5 w-5 text-[#c1902f] mt-1 mr-3 flex-shrink-0" />
               <div className="flex-1">
                 <h3 className="font-semibold text-gray-900 mb-1">
-                  {restaurant?.custom_pickup_location ? 'Special Pickup Location' : 
-                   orderDetails.location_name || restaurant?.name || 'Pickup Location'}
+                  {pickupDisplay.title}
                 </h3>
                 <p className="text-gray-600 text-sm">
-                  {restaurant?.custom_pickup_location || orderDetails.location_address || restaurant?.address || "Barrigada, Guam"}
+                  {pickupDisplay.address}
                 </p>
-                {restaurant?.custom_pickup_location && (
+                {pickupDisplay.usingOverride && (
                   <p className="text-amber-600 text-sm font-medium mt-1">
                     ⚠️ Special pickup location - please note this is not our usual address
                   </p>
                 )}
                 <a
-                  href={getGoogleMapsUrl()}
+                  href={pickupDisplay.googleMapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[#c1902f] hover:text-[#d4a43f] text-sm mt-1 inline-block"
@@ -307,7 +287,7 @@ export function OrderConfirmation() {
               <Clock className="h-5 w-5 text-[#c1902f] mt-1 mr-3 flex-shrink-0" />
               <div>
                 <h4 className="font-medium text-gray-900 mb-1">Hours</h4>
-                <p className="text-gray-600 text-sm whitespace-pre-line">{getPickupHoursText()}</p>
+                <p className="text-gray-600 text-sm whitespace-pre-line">{pickupDisplay.hoursText}</p>
                 <p className="text-xs text-gray-500">
                   Orders must be picked up during business hours
                 </p>
@@ -315,42 +295,33 @@ export function OrderConfirmation() {
             </div>
 
             {/* Contact */}
-            <div className="flex items-start">
-              <Phone className="h-5 w-5 text-[#c1902f] mt-1 mr-3 flex-shrink-0" />
-              <div>
-                <h4 className="font-medium text-gray-900 mb-1">Contact</h4>
-                <p className="text-gray-600 text-sm">
-                  {formatPhoneNumber(restaurant?.phone_number) || "+1 (671) 989-3444"}
-                </p>
-                <p className="text-xs text-gray-500">
-                  Call us if you need to modify your order
-                </p>
+            {contactPhone && (
+              <div className="flex items-start">
+                <Phone className="h-5 w-5 text-[#c1902f] mt-1 mr-3 flex-shrink-0" />
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-1">Contact</h4>
+                  <p className="text-gray-600 text-sm">{contactPhone}</p>
+                  <p className="text-xs text-gray-500">
+                    Call us if you need to modify your order
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Pickup Instructions */}
-            <div className="mt-4 p-3 bg-gray-50 rounded-md">
-              <h4 className="font-medium text-gray-900 mb-2">
-                Pickup Instructions
-                {restaurant?.admin_settings?.custom_pickup_instructions && (
+            {pickupDisplay.instructions && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-md">
+                <h4 className="font-medium text-gray-900 mb-2">
+                  Pickup Instructions
                   <span className="ml-2 text-xs text-amber-600 font-normal">
                     (Special Instructions)
                   </span>
-                )}
-              </h4>
-              
-              {restaurant?.admin_settings?.custom_pickup_instructions ? (
+                </h4>
                 <div className="text-gray-600 text-sm whitespace-pre-line">
-                  {restaurant.admin_settings.custom_pickup_instructions}
+                  {pickupDisplay.instructions}
                 </div>
-              ) : (
-                <ol className="list-decimal list-inside text-gray-600 text-sm space-y-1">
-                  <li>Park in the designated pickup spots</li>
-                  <li>Come inside and show your order number at the counter</li>
-                  <li>Your order will be ready at the time indicated</li>
-                </ol>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
