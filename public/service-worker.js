@@ -1,11 +1,11 @@
 // Service Worker for Hafaloha Web App
 // Handles push notifications and offline functionality
 
-const CACHE_NAME = 'hafaloha-cache-v2';
-const ADMIN_CACHE_NAME = 'hafaloha-admin-cache-v1';
-const API_CACHE_NAME = 'hafaloha-api-cache-v1';
+const CACHE_NAME = 'hafaloha-cache-v3';
+const ADMIN_CACHE_NAME = 'hafaloha-admin-cache-v2';
+const API_CACHE_NAME = 'hafaloha-api-cache-v2';
 const OFFLINE_URL = '/offline.html';
-const VERSION = '1.1.0'; // Increment this when you update the service worker
+const VERSION = '1.2.0'; // Increment this when you update the service worker
 
 console.log(`[Service Worker] Initializing service worker version ${VERSION}`);
 
@@ -109,8 +109,15 @@ self.addEventListener('activate', event => {
 // Helper function to determine cache strategy based on request
 function getCacheStrategy(request) {
   const url = new URL(request.url);
+
+  // Scripts and styles should be network-first to avoid stale hashed chunks after deploy.
+  // This still keeps an offline fallback in cache when network is unavailable.
+  if (request.destination === 'script' || request.destination === 'style') {
+    return { cacheName: CACHE_NAME, strategy: 'network-first' };
+  }
   
-  // Admin routes - cache admin chunks aggressively
+  // Admin navigation routes (HTML/doc requests) can stay cache-first.
+  // Admin JS/CSS assets are handled by the script/style network-first rule above.
   if (url.pathname.startsWith('/admin') || 
       url.pathname.includes('admin-') ||
       url.pathname.includes('Admin')) {
@@ -123,9 +130,7 @@ function getCacheStrategy(request) {
   }
   
   // Static assets - cache-first
-  if (request.destination === 'script' || 
-      request.destination === 'style' || 
-      request.destination === 'image') {
+  if (request.destination === 'image') {
     return { cacheName: CACHE_NAME, strategy: 'cache-first' };
   }
   
