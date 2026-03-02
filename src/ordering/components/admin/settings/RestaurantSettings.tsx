@@ -106,6 +106,65 @@ interface RestaurantSettingsProps {
   restaurantId?: string;
 }
 
+interface PickupDisplaySettings {
+  override_enabled: boolean;
+  name: string;
+  address: string;
+  google_maps_url: string;
+  hours_text: string;
+  instructions: string;
+}
+
+const getPickupDisplaySettings = (restaurant: Restaurant | null): PickupDisplaySettings => {
+  const adminSettings = restaurant?.admin_settings || {};
+  const pickupDisplay = (adminSettings.pickup_display || {}) as Record<string, unknown>;
+  const hasPickupDisplayConfig = Object.keys(pickupDisplay).length > 0;
+
+  const legacyAddress = String(restaurant?.custom_pickup_location || '').trim();
+  const legacyMapsUrl = String(adminSettings.custom_pickup_google_maps_url || '').trim();
+  const legacyHours = String(adminSettings.custom_pickup_hours || '').trim();
+  const legacyInstructions = String(adminSettings.custom_pickup_instructions || '').trim();
+  const hasLegacyOverride = Boolean(
+    legacyAddress || legacyMapsUrl || legacyHours || legacyInstructions
+  );
+
+  return {
+    override_enabled:
+      typeof pickupDisplay.override_enabled === 'boolean'
+        ? pickupDisplay.override_enabled
+        : hasLegacyOverride,
+    name: String(pickupDisplay.name || 'Special Pickup Location'),
+    address: String(
+      pickupDisplay.address || (!hasPickupDisplayConfig ? legacyAddress : '')
+    ),
+    google_maps_url: String(
+      pickupDisplay.google_maps_url || (!hasPickupDisplayConfig ? legacyMapsUrl : '')
+    ),
+    hours_text: String(
+      pickupDisplay.hours_text || (!hasPickupDisplayConfig ? legacyHours : '')
+    ),
+    instructions: String(
+      pickupDisplay.instructions || (!hasPickupDisplayConfig ? legacyInstructions : '')
+    ),
+  };
+};
+
+const normalizeRestaurantPickupDisplay = (restaurantData: Restaurant): Restaurant => {
+  const settings = getPickupDisplaySettings(restaurantData);
+
+  return {
+    ...restaurantData,
+    custom_pickup_location: settings.address,
+    admin_settings: {
+      ...(restaurantData.admin_settings || {}),
+      custom_pickup_google_maps_url: settings.google_maps_url,
+      custom_pickup_hours: settings.hours_text,
+      custom_pickup_instructions: settings.instructions,
+      pickup_display: settings,
+    },
+  };
+};
+
 export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): JSX.Element {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [heroFile, setHeroFile] = useState<File | null>(null);
@@ -140,6 +199,25 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
           }
         }
       }
+    });
+  }
+
+  function updatePickupDisplay(patch: Partial<PickupDisplaySettings>) {
+    if (!restaurant) return;
+
+    const current = getPickupDisplaySettings(restaurant);
+    const next = { ...current, ...patch };
+
+    setRestaurant({
+      ...restaurant,
+      custom_pickup_location: next.address,
+      admin_settings: {
+        ...restaurant.admin_settings,
+        custom_pickup_google_maps_url: next.google_maps_url,
+        custom_pickup_hours: next.hours_text,
+        custom_pickup_instructions: next.instructions,
+        pickup_display: next,
+      },
     });
   }
 
@@ -256,7 +334,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
         const singleRestaurant = await response.json();
         if (singleRestaurant) {
           console.log(`Successfully fetched restaurant data for ID: ${targetRestaurantId}`, singleRestaurant);
-          setRestaurant(singleRestaurant as Restaurant);
+          setRestaurant(normalizeRestaurantPickupDisplay(singleRestaurant as Restaurant));
           
           // Clear loading state
           clearTimeout(loadingTimer);
@@ -481,6 +559,10 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
     );
   }
 
+  const pickupSettings = getPickupDisplaySettings(restaurant);
+  const missingOverrideInstructions =
+    pickupSettings.override_enabled && pickupSettings.instructions.trim().length === 0;
+
   return (
     <div>
       <SettingsHeader 
@@ -526,40 +608,54 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
               />
               
               <Input
-                label="Custom Pickup Location"
-                value={restaurant.custom_pickup_location || ''}
-                onChange={(e) => setRestaurant({...restaurant, custom_pickup_location: e.target.value})}
-                placeholder="Enter special pickup location (e.g., Concert Venue, Beach Event)"
+                label="Override Pickup Address"
+                value={pickupSettings.address}
+                onChange={(e) => updatePickupDisplay({ address: e.target.value })}
+                placeholder="Enter temporary pickup address override"
+                disabled={!pickupSettings.override_enabled}
               />
-              <p className="mt-1 text-sm text-gray-500 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                Only set this when pickup is not at the usual restaurant address. Leave empty to use regular address.
-              </p>
+              <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-900">Temporary Pickup Override</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Turn this on only when pickup details should be different from your active location.
+                    </p>
+                  </div>
+                  <label className="inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={pickupSettings.override_enabled}
+                      onChange={(e) => updatePickupDisplay({ override_enabled: e.target.checked })}
+                    />
+                    <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-[#c1902f] transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:w-5 after:h-5 after:rounded-full after:transition-transform peer-checked:after:translate-x-5" />
+                  </label>
+                </div>
+                {missingOverrideInstructions && (
+                  <p className="text-amber-700 text-sm mt-3">
+                    Override is enabled but pickup instructions are blank. The instructions section will be hidden for customers.
+                  </p>
+                )}
+              </div>
 
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Custom Pickup Instructions
                 </label>
                 <textarea
-                  value={restaurant.admin_settings?.custom_pickup_instructions || ''}
-                  onChange={(e) => setRestaurant({
-                    ...restaurant, 
-                    admin_settings: {
-                      ...restaurant.admin_settings,
-                      custom_pickup_instructions: e.target.value
-                    }
-                  })}
-                  placeholder="Enter custom pickup instructions for special events or temporary changes..."
+                  value={pickupSettings.instructions}
+                  onChange={(e) => updatePickupDisplay({ instructions: e.target.value })}
+                  placeholder="Instructions used only when override is enabled"
                   rows={3}
+                  disabled={!pickupSettings.override_enabled}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
                 />
                 <p className="mt-1 text-sm text-gray-500 flex items-center">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
-                  When set, these instructions will override the default pickup instructions. Leave empty to use default instructions.
+                  Leave blank to hide pickup instructions.
                 </p>
               </div>
 
@@ -569,38 +665,27 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
                 </label>
                 <input
                   type="url"
-                  value={restaurant.admin_settings?.custom_pickup_google_maps_url || ''}
-                  onChange={(e) => setRestaurant({
-                    ...restaurant,
-                    admin_settings: {
-                      ...restaurant.admin_settings,
-                      custom_pickup_google_maps_url: e.target.value
-                    }
-                  })}
+                  value={pickupSettings.google_maps_url}
+                  onChange={(e) => updatePickupDisplay({ google_maps_url: e.target.value })}
                   placeholder="https://maps.google.com/?q=..."
+                  disabled={!pickupSettings.override_enabled}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
                 />
                 <p className="mt-1 text-sm text-gray-500 flex items-center">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
-                  Optional. If provided, confirmation pages use this exact Google Maps link instead of generating one from the address.
+                  Optional. If provided, override uses this exact Google Maps link.
                 </p>
               </div>
 
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Custom Pickup Hours
+                  Pickup Hours
                 </label>
                 <textarea
-                  value={restaurant.admin_settings?.custom_pickup_hours || ''}
-                  onChange={(e) => setRestaurant({
-                    ...restaurant,
-                    admin_settings: {
-                      ...restaurant.admin_settings,
-                      custom_pickup_hours: e.target.value
-                    }
-                  })}
+                  value={pickupSettings.hours_text}
+                  onChange={(e) => updatePickupDisplay({ hours_text: e.target.value })}
                   placeholder="Open Daily: 8:30AM - 4:00PM"
                   rows={2}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#c1902f] focus:border-[#c1902f] sm:text-sm transition-all duration-200"
@@ -609,7 +694,7 @@ export function RestaurantSettings({ restaurantId }: RestaurantSettingsProps): J
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
-                  Optional. Overrides the pickup hours text shown on order confirmations. Leave empty to use operating hours.
+                  Used as the main pickup-hours display. Leave blank to fall back to operating-hours data.
                 </p>
               </div>
 
