@@ -116,7 +116,8 @@ function getCacheStrategy(request) {
     return { cacheName: CACHE_NAME, strategy: 'network-first' };
   }
   
-  // Admin routes - cache admin chunks aggressively
+  // Admin navigation routes (HTML/doc requests) can stay cache-first.
+  // Admin JS/CSS assets are handled by the script/style network-first rule above.
   if (url.pathname.startsWith('/admin') || 
       url.pathname.includes('admin-') ||
       url.pathname.includes('Admin')) {
