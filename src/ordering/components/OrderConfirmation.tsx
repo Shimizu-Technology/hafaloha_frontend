@@ -121,7 +121,7 @@ export function OrderConfirmation() {
   const getGoogleMapsUrl = () => {
     const customMapsUrl = restaurant?.admin_settings?.custom_pickup_google_maps_url;
     if (customMapsUrl && String(customMapsUrl).trim().length > 0) {
-      return customMapsUrl;
+      return String(customMapsUrl).trim();
     }
 
     const addressForSearch =
@@ -136,7 +136,7 @@ export function OrderConfirmation() {
   const getPickupHoursText = () => {
     const customPickupHours = restaurant?.admin_settings?.custom_pickup_hours;
     if (customPickupHours && String(customPickupHours).trim().length > 0) {
-      return customPickupHours;
+      return String(customPickupHours).trim();
     }
 
     if (restaurant?.hours && restaurant.hours.trim().length > 0) {

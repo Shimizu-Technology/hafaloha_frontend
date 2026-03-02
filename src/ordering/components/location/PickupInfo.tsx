@@ -83,13 +83,13 @@ export function PickupInfo({ locationId }: PickupInfoProps = {}) {
   const customMapsUrl = restaurant?.admin_settings?.custom_pickup_google_maps_url;
   const googleMapsUrl =
     customMapsUrl && String(customMapsUrl).trim().length > 0
-      ? customMapsUrl
+      ? String(customMapsUrl).trim()
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
   const customPickupHours = restaurant?.admin_settings?.custom_pickup_hours;
   const pickupHours =
     customPickupHours && String(customPickupHours).trim().length > 0
-      ? customPickupHours
+      ? String(customPickupHours).trim()
       : (restaurant?.hours?.trim() || "Open Daily: 11AM - 9PM");
   
   // Get custom pickup instructions or use defaults
