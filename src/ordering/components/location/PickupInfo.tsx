@@ -80,7 +80,17 @@ export function PickupInfo({ locationId }: PickupInfoProps = {}) {
     locationTitle = restaurant?.name || 'Location';
   }
   
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  const customMapsUrl = restaurant?.admin_settings?.custom_pickup_google_maps_url;
+  const googleMapsUrl =
+    customMapsUrl && String(customMapsUrl).trim().length > 0
+      ? String(customMapsUrl).trim()
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+
+  const customPickupHours = restaurant?.admin_settings?.custom_pickup_hours;
+  const pickupHours =
+    customPickupHours && String(customPickupHours).trim().length > 0
+      ? String(customPickupHours).trim()
+      : (restaurant?.hours?.trim() || "Open Daily: 11AM - 9PM");
   
   // Get custom pickup instructions or use defaults
   const customInstructions = restaurant?.admin_settings?.custom_pickup_instructions;
@@ -126,7 +136,7 @@ export function PickupInfo({ locationId }: PickupInfoProps = {}) {
               <Clock className="h-5 w-5 text-[#c1902f] mt-1 mr-3" />
               <div>
                 <p className="font-medium">Hours</p>
-                <p className="text-gray-600">Open Daily: 11AM - 9PM</p>
+                <p className="text-gray-600 whitespace-pre-line">{pickupHours}</p>
                 <p className="text-sm text-gray-500">
                   Orders must be picked up during business hours
                 </p>

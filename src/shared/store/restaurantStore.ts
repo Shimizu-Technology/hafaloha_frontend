@@ -34,6 +34,14 @@ export interface Restaurant {
   allowed_origins: string[];
   primary_frontend_url?: string;
   custom_pickup_location?: string;
+  hours?: string;
+  operating_hours?: Array<{
+    day_of_week: number;
+    day_name: string;
+    open_time: string | null;
+    close_time: string | null;
+    closed: boolean;
+  }>;
   // Social media fields
   facebook_url?: string;
   instagram_url?: string;
