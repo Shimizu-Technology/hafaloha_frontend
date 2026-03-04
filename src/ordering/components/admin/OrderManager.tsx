@@ -1146,7 +1146,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const orderNumber = escapeHtml(String(order.order_number || `#${order.id}`));
     const locationRaw = String(order.location?.name || order.location_name || 'Restaurant');
     const restaurantName = escapeHtml(locationRaw);
-    const items = Array.isArray(order.items) ? order.items : [];
+    const items = [
+      ...(Array.isArray(order.items) ? order.items : []),
+      ...(Array.isArray(order.merchandise_items) ? order.merchandise_items : []),
+    ];
     const originalTotal = Number(order.total || 0);
     const totalRefunded = Number(order.total_refunded || 0);
     const netTotal = Math.max(0, originalTotal - totalRefunded).toFixed(2);
@@ -1309,9 +1312,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             .customer-only { display: none; }
             body.mode-kitchen .kitchen-only { display: block; }
             body.mode-customer .customer-only { display: block; }
-            .checklist { margin-top: 8px; padding: 8px; border: 1px dashed #cbd5e1; border-radius: 6px; font-size: 12px; }
-            .checklist-row { display: flex; justify-content: space-between; margin-top: 6px; }
-            .line { border-bottom: 1px solid #9ca3af; min-width: 120px; display: inline-block; height: 16px; }
+            .checklist { margin-top: 8px; padding: 8px; border: 1px dashed #94a3b8; border-radius: 6px; font-size: 12px; }
+            .checklist-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 12px; }
+            .line { border-bottom: 2px solid #334155; min-width: 180px; display: inline-block; height: 16px; opacity: 1; }
             .actions { display: flex; gap: 8px; padding: 0 16px 14px; }
             .btn { flex: 1; border: none; border-radius: 8px; padding: 10px 12px; font-weight: 600; cursor: pointer; }
             .btn-print-kitchen { background: #111827; color: white; }
@@ -1387,7 +1390,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 <div class="customer-only checklist">
                   <strong>Pickup Verification</strong>
                   <div class="checklist-row"><span>Received by:</span><span class="line"></span></div>
-                  <div class="checklist-row"><span>Time:</span><span class="line"></span></div>
+                  <div class="checklist-row"><span>Received at (Date &amp; Time):</span><span class="line"></span></div>
                 </div>
               </div>
 
