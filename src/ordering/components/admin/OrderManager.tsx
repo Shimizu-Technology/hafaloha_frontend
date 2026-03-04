@@ -1214,12 +1214,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       </html>
     `);
 
-    printWindow.document.close();
-    printWindow.focus();
     printWindow.onload = () => {
       printWindow.print();
       printWindow.onafterprint = () => printWindow.close();
     };
+    printWindow.document.close();
+    printWindow.focus();
   };
 
   // These functions are called directly in the JSX
