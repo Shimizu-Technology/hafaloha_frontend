@@ -1146,7 +1146,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const orderNumber = escapeHtml(String(order.order_number || `#${order.id}`));
     const restaurantName = escapeHtml(String(order.restaurant_name || 'Hafaloha'));
     const items = Array.isArray(order.items) ? order.items : [];
-    const total = Number(order.total || 0).toFixed(2);
+    const originalTotal = Number(order.total || 0);
+    const totalRefunded = Number(order.total_refunded || 0);
+    const netTotal = Math.max(0, originalTotal - totalRefunded).toFixed(2);
+    const total = netTotal;
 
     const itemsHtml = items.length
       ? items
@@ -1242,6 +1245,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           </table>
 
           <hr style="border:none;border-top:1px dashed #999;margin:10px 0;" />
+
+          ${totalRefunded > 0 ? `
+            <div style="display:flex;justify-content:space-between;font-size:13px;color:#b91c1c;margin-bottom:4px;">
+              <span>Refunded</span>
+              <span>-$${totalRefunded.toFixed(2)}</span>
+            </div>
+          ` : ''}
 
           <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;">
             <span>Total</span>
