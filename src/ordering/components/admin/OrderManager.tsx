@@ -1225,9 +1225,24 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const pickupTime = escapeHtml(
       String((order.pickup_time || order.created_at) ? formatDate(order.pickup_time || order.created_at) : 'N/A')
     );
+    const placedTime = escapeHtml(String(order.created_at ? formatDate(order.created_at) : 'N/A'));
     const contactName = escapeHtml(String(order.contact_name || 'N/A'));
     const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
     const status = escapeHtml(String(order.status || 'pending'));
+    const locationName = escapeHtml(String(order.location?.name || order.location_name || 'Default'));
+    const orderSource = escapeHtml(String(order.staff_created ? 'Staff POS' : 'Online'));
+
+    const latestPayment = Array.isArray(order.order_payments) && order.order_payments.length > 0
+      ? order.order_payments[order.order_payments.length - 1]
+      : null;
+
+    const paymentMethod = escapeHtml(
+      String(order.payment_method || latestPayment?.payment_method || (order.staff_created ? 'In-Store' : 'Online'))
+    );
+    const paymentStatus = escapeHtml(
+      String(order.payment_status || latestPayment?.status || (order.status === 'refunded' ? 'refunded' : 'paid'))
+    );
+
     const specialInstructions = order.special_instructions
       ? `<div style="margin-top:6px;padding:6px;background:#fffbeb;border:1px solid #fcd34d;border-radius:4px;"><strong>Special Instructions:</strong> ${escapeHtml(String(order.special_instructions))}</div>`
       : '';
@@ -1248,8 +1263,12 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           <div style="font-size:13px; margin-bottom:10px;">
             <div><strong>Customer:</strong> ${contactName}</div>
             <div><strong>Phone:</strong> ${contactPhone}</div>
+            <div><strong>Placed:</strong> ${placedTime}</div>
             <div><strong>Pickup:</strong> ${pickupTime}</div>
             <div><strong>Status:</strong> ${status}</div>
+            <div><strong>Source:</strong> ${orderSource}</div>
+            <div><strong>Location:</strong> ${locationName}</div>
+            <div><strong>Payment:</strong> ${paymentMethod} (${paymentStatus})</div>
             ${specialInstructions}
           </div>
 
