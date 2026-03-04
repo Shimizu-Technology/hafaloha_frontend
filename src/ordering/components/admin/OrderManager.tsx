@@ -1284,22 +1284,38 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             .amount { text-align: right; white-space: nowrap; font-weight: 600; }
             .refund { display: flex; justify-content: space-between; font-size: 13px; color: #b91c1c; margin-bottom: 6px; }
             .total { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; margin-top: 2px; }
+            .copy-toggle { display: flex; gap: 8px; margin-top: 10px; }
+            .toggle-btn { flex: 1; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; background: #fff; }
+            body.mode-kitchen .toggle-btn-kitchen,
+            body.mode-customer .toggle-btn-customer { background: #111827; color: #fff; border-color: #111827; }
+            .kitchen-only { display: none; }
+            .customer-only { display: none; }
+            body.mode-kitchen .kitchen-only { display: block; }
+            body.mode-customer .customer-only { display: block; }
+            .checklist { margin-top: 8px; padding: 8px; border: 1px dashed #cbd5e1; border-radius: 6px; font-size: 12px; }
+            .checklist-row { display: flex; justify-content: space-between; margin-top: 6px; }
+            .line { border-bottom: 1px solid #9ca3af; min-width: 120px; display: inline-block; height: 16px; }
             .actions { display: flex; gap: 8px; padding: 0 16px 14px; }
             .btn { flex: 1; border: none; border-radius: 8px; padding: 10px 12px; font-weight: 600; cursor: pointer; }
-            .btn-print { background: #111827; color: white; }
+            .btn-print-kitchen { background: #111827; color: white; }
+            .btn-print-customer { background: #374151; color: white; }
             .btn-close { background: #e5e7eb; color: #111827; }
             @media print {
               body { background: #fff; }
               .sheet { margin: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; }
-              .actions { display: none; }
+              .actions, .copy-toggle { display: none; }
             }
           </style>
         </head>
-        <body>
+        <body class="mode-kitchen">
           <div class="sheet">
             <div class="head">
               <div class="brand">${restaurantName}</div>
               <div class="order-id">Order ${orderNumber}</div>
+              <div class="copy-toggle">
+                <button class="toggle-btn toggle-btn-kitchen" onclick="setMode('kitchen')">Kitchen Preview</button>
+                <button class="toggle-btn toggle-btn-customer" onclick="setMode('customer')">Customer Preview</button>
+              </div>
             </div>
 
             <div class="body">
@@ -1309,6 +1325,19 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 <div class="meta-row"><span><strong>Placed:</strong> ${placedTime}</span><span><strong>Pickup:</strong> ${pickupTime}</span></div>
                 <div class="meta-row"><span><strong>Location:</strong> ${locationName}</span><span><strong>Payment:</strong> ${paymentMethod} (${paymentStatus})</span></div>
                 ${specialInstructions}
+
+                <div class="kitchen-only checklist">
+                  <strong>Kitchen Checklist</strong>
+                  <div class="checklist-row"><span>Packed by:</span><span class="line"></span></div>
+                  <div class="checklist-row"><span>Checked by:</span><span class="line"></span></div>
+                  <div class="checklist-row"><span>Ready at:</span><span class="line"></span></div>
+                </div>
+
+                <div class="customer-only checklist">
+                  <strong>Pickup Verification</strong>
+                  <div class="checklist-row"><span>Received by:</span><span class="line"></span></div>
+                  <div class="checklist-row"><span>Time:</span><span class="line"></span></div>
+                </div>
               </div>
 
               <hr class="divider" />
@@ -1334,9 +1363,25 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
             <div class="actions">
               <button class="btn btn-close" onclick="window.close()">Close</button>
-              <button class="btn btn-print" onclick="window.print()">Print</button>
+              <button class="btn btn-print-customer" onclick="setModeAndPrint('customer')">Print Customer Copy</button>
+              <button class="btn btn-print-kitchen" onclick="setModeAndPrint('kitchen')">Print Kitchen Copy</button>
             </div>
           </div>
+
+          <script>
+            function setMode(mode) {
+              document.body.classList.remove('mode-kitchen', 'mode-customer');
+              document.body.classList.add(mode === 'customer' ? 'mode-customer' : 'mode-kitchen');
+            }
+
+            function setModeAndPrint(mode) {
+              setMode(mode);
+              window.print();
+            }
+
+            window.setMode = setMode;
+            window.setModeAndPrint = setModeAndPrint;
+          </script>
         </body>
       </html>
     `);
