@@ -1144,7 +1144,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
         .replace(/'/g, '&#39;');
 
     const orderNumber = escapeHtml(String(order.order_number || `#${order.id}`));
-    const restaurantName = escapeHtml(String(order.restaurant_name || 'Hafaloha'));
+    const locationRaw = String(order.location?.name || order.location_name || 'Restaurant');
+    const restaurantName = escapeHtml(locationRaw);
     const items = Array.isArray(order.items) ? order.items : [];
     const originalTotal = Number(order.total || 0);
     const totalRefunded = Number(order.total_refunded || 0);
@@ -1243,7 +1244,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const contactName = escapeHtml(String(order.contact_name || 'N/A'));
     const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
     const status = escapeHtml(String(order.status || 'pending'));
-    const locationName = escapeHtml(String(order.location?.name || order.location_name || 'Default'));
+    const locationName = escapeHtml(locationRaw);
     const orderSource = escapeHtml(String(order.staff_created ? 'Staff POS' : 'Online'));
 
     const latestPayment = Array.isArray(order.order_payments) && order.order_payments.length > 0
@@ -1284,8 +1285,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             .order-id { font-size: 14px; color: #4b5563; }
             .body { padding: 14px 16px; }
             .meta { font-size: 13px; line-height: 1.45; }
-            .meta-row { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0; }
-            .meta-row strong { color: #111827; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 2px; }
+            .meta-item { min-width: 0; }
+            .meta-label { font-size: 11px; text-transform: uppercase; letter-spacing: .45px; color: #6b7280; font-weight: 700; }
+            .meta-value { font-size: 15px; font-weight: 600; color: #111827; margin-top: 1px; overflow-wrap: anywhere; }
             .status-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f3f4f6; text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
             .divider { border: none; border-top: 1px dashed #cbd5e1; margin: 14px 0; }
             table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1334,10 +1337,44 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
             <div class="body">
               <div class="meta">
-                <div class="meta-row"><span><strong>Customer:</strong> ${contactName}</span><span class="status-pill">${status}</span></div>
-                <div class="meta-row"><span><strong>Phone:</strong> ${contactPhone}</span><span><strong>Source:</strong> ${orderSource}</span></div>
-                <div class="meta-row"><span><strong>Placed:</strong> ${placedTime}</span><span><strong>Pickup:</strong> ${pickupTime}</span></div>
-                <div class="meta-row"><span><strong>Location:</strong> ${locationName}</span><span><strong>Payment:</strong> ${paymentMethod} (${paymentStatus})</span></div>
+                <div class="meta-grid">
+                  <div class="meta-item">
+                    <div class="meta-label">Customer</div>
+                    <div class="meta-value">${contactName}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Status</div>
+                    <div class="meta-value"><span class="status-pill">${status}</span></div>
+                  </div>
+
+                  <div class="meta-item">
+                    <div class="meta-label">Phone</div>
+                    <div class="meta-value">${contactPhone}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Source</div>
+                    <div class="meta-value">${orderSource}</div>
+                  </div>
+
+                  <div class="meta-item">
+                    <div class="meta-label">Placed</div>
+                    <div class="meta-value">${placedTime}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Pickup</div>
+                    <div class="meta-value">${pickupTime}</div>
+                  </div>
+
+                  <div class="meta-item">
+                    <div class="meta-label">Location</div>
+                    <div class="meta-value">${locationName}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Payment</div>
+                    <div class="meta-value">${paymentMethod} (${paymentStatus})</div>
+                  </div>
+                </div>
+
                 ${specialInstructions}
 
                 <div class="kitchen-only checklist">
@@ -1392,6 +1429,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               setMode(mode);
               setTimeout(function () { window.print(); }, 0);
             }
+
+            window.onafterprint = function () {
+              window.close();
+            };
 
             window.setMode = setMode;
             window.setModeAndPrint = setModeAndPrint;
