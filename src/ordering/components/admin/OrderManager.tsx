@@ -1165,7 +1165,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               if (Array.isArray(item.customizations)) {
                 if (item.customizations.length === 0) return '';
                 return item.customizations
-                  .map((c: any) => `<div style="font-size:12px;color:#555;margin-top:2px;">• ${escapeHtml(String(c?.name || c))}</div>`)
+                  .map((c: any) => {
+                    const rendered =
+                      typeof c === 'object'
+                        ? (c?.name ?? c?.label ?? c?.value ?? JSON.stringify(c))
+                        : c;
+                    return `<div style="font-size:12px;color:#555;margin-top:2px;">• ${escapeHtml(String(rendered))}</div>`;
+                  })
                   .join('');
               }
 
@@ -1175,7 +1181,14 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 return entries
                   .map(([group, opts]: [string, any]) => {
                     const renderedOpts = Array.isArray(opts)
-                      ? opts.map((o: any) => escapeHtml(String(o))).join(', ')
+                      ? opts
+                          .map((o: any) => {
+                            if (typeof o === 'object') {
+                              return escapeHtml(String(o?.name ?? o?.label ?? o?.value ?? JSON.stringify(o)));
+                            }
+                            return escapeHtml(String(o));
+                          })
+                          .join(', ')
                       : escapeHtml(String(opts));
                     return `<div style="font-size:12px;color:#555;margin-top:2px;">${escapeHtml(group)}: ${renderedOpts}</div>`;
                   })
