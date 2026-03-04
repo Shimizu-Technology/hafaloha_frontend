@@ -1170,7 +1170,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                       typeof c === 'object'
                         ? (c?.name ?? c?.label ?? c?.value ?? JSON.stringify(c))
                         : c;
-                    return `<div style="font-size:12px;color:#555;margin-top:2px;">• ${escapeHtml(String(rendered))}</div>`;
+                    return `<div>• ${escapeHtml(String(rendered))}</div>`;
                   })
                   .join('');
               }
@@ -1190,7 +1190,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                           })
                           .join(', ')
                       : escapeHtml(String(opts));
-                    return `<div style="font-size:12px;color:#555;margin-top:2px;">${escapeHtml(group)}: ${renderedOpts}</div>`;
+                    return `<div>${escapeHtml(group)}: ${renderedOpts}</div>`;
                   })
                   .join('');
               }
@@ -1199,17 +1199,17 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             })();
 
             const note = item.notes
-              ? `<div style="font-size:12px;color:#555;margin-top:2px;">Note: ${escapeHtml(String(item.notes))}</div>`
+              ? escapeHtml(String(item.notes))
               : '';
 
             return `
-              <tr>
+              <tr class="item-row">
                 <td style="padding:8px 0;vertical-align:top;">
-                  <div>${qty}x ${itemName}</div>
-                  ${customizationsHtml}
-                  ${note}
+                  <div class="item-name">${qty}x ${itemName}</div>
+                  ${customizationsHtml ? `<div class="item-meta">${customizationsHtml}</div>` : ''}
+                  ${note ? `<div class="item-note"><strong>Note:</strong> ${note}</div>` : ''}
                 </td>
-                <td style="padding:8px 0;text-align:right;vertical-align:top;">$${lineTotal}</td>
+                <td class="amount" style="padding:8px 0;vertical-align:top;">$${lineTotal}</td>
               </tr>
             `;
           })
@@ -1273,10 +1273,15 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             .meta-row { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0; }
             .meta-row strong { color: #111827; }
             .status-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f3f4f6; text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
-            .divider { border: none; border-top: 1px dashed #cbd5e1; margin: 12px 0; }
+            .divider { border: none; border-top: 1px dashed #cbd5e1; margin: 14px 0; }
             table { width: 100%; border-collapse: collapse; font-size: 13px; }
+            tr.item-row td { padding: 10px 0; border-bottom: 1px dashed #e5e7eb; }
+            tr.item-row:last-of-type td { border-bottom: 0; }
             td { padding: 8px 0; vertical-align: top; }
-            .amount { text-align: right; white-space: nowrap; }
+            .item-name { font-size: 14px; font-weight: 700; color: #111827; }
+            .item-meta { font-size: 12px; color: #374151; margin-top: 3px; padding-left: 8px; border-left: 2px solid #d1d5db; }
+            .item-note { font-size: 12px; color: #1f2937; margin-top: 4px; padding: 4px 6px; background: #f9fafb; border-radius: 4px; }
+            .amount { text-align: right; white-space: nowrap; font-weight: 600; }
             .refund { display: flex; justify-content: space-between; font-size: 13px; color: #b91c1c; margin-bottom: 6px; }
             .total { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; margin-top: 2px; }
             .actions { display: flex; gap: 8px; padding: 0 16px 14px; }
