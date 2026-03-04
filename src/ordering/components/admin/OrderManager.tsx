@@ -1261,7 +1261,6 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const contactName = escapeHtml(String(order.contact_name || 'N/A'));
     const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
     const status = escapeHtml(String(order.status || 'pending'));
-    const locationName = escapeHtml(locationRaw);
     const orderSource = escapeHtml(String(order.staff_created ? 'Staff POS' : 'Online'));
 
     const latestPayment = Array.isArray(order.order_payments) && order.order_payments.length > 0
@@ -1286,7 +1285,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       ? `<div style="margin-top:8px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;"><strong>Special Instructions:</strong> ${escapeHtml(String(order.special_instructions))}</div>`
       : '';
 
-    const subtotalLine = order.subtotal != null
+    const subtotalLine = order.subtotal != null && Number(order.subtotal) > 0
       ? `<div class="breakdown-line"><span>Subtotal</span><span>$${Number(order.subtotal).toFixed(2)}</span></div>`
       : '';
     const taxLine = order.tax != null && Number(order.tax) > 0
@@ -1395,7 +1394,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
                   <div class="meta-item">
                     <div class="meta-label">Location</div>
-                    <div class="meta-value">${locationName}</div>
+                    <div class="meta-value">${restaurantName}</div>
                   </div>
                   <div class="meta-item">
                     <div class="meta-label">Payment</div>
