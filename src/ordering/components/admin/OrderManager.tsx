@@ -21,6 +21,7 @@ import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
 import { api } from '../../../shared/api';
 import toastUtils from '../../../shared/utils/toastUtils';
+import type { Order } from '../../types/order';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded';
 
@@ -1134,7 +1135,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setEditingOrder(null);
   }
 
-  const handlePrintOrder = (order: any) => {
+  const handlePrintOrder = (order: Order) => {
     const escapeHtml = (value: string) =>
       value
         .replace(/&/g, '&amp;')
@@ -1234,12 +1235,6 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           .join('')
       : '<tr><td colspan="2" style="padding:8px 0;color:#666;">No items found</td></tr>';
 
-    const printWindow = window.open('', '_blank', 'width=420,height=700');
-    if (!printWindow) {
-      toastUtils.error('Could not open print window. Please allow popups and try again.');
-      return;
-    }
-
     const formatPrintDateTime = (dateString: string | null | undefined) => {
       if (!dateString) return 'N/A';
       const date = new Date(dateString);
@@ -1300,7 +1295,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       ? `<div class="breakdown-line"><span>Tip</span><span>$${Number(order.tip).toFixed(2)}</span></div>`
       : '';
 
-    printWindow.document.write(`
+    const receiptHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -1475,8 +1470,15 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
           </script>
         </body>
       </html>
-    `);
+    `;
 
+    const printWindow = window.open('', '_blank', 'width=420,height=700');
+    if (!printWindow) {
+      toastUtils.error('Could not open print window. Please allow popups and try again.');
+      return;
+    }
+
+    printWindow.document.write(receiptHtml);
     printWindow.document.close();
     printWindow.focus();
   };

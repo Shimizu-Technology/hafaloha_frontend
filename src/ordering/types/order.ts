@@ -8,7 +8,14 @@ export interface OrderItem {
   quantity: number;
   options?: string[];
   notes?: string;
-  customizations?: any[];
+  customizations?: any[] | Record<string, any>;
+}
+
+export interface OrderPayment {
+  id: string | number;
+  payment_method?: string;
+  status?: string;
+  created_at?: string;
 }
 
 export interface MerchandiseOrderItem {
@@ -42,6 +49,10 @@ export interface Order {
   contact_email?: string;
   pickup_time?: string;
   payment_method?: string;
+  payment_status?: string;
+  total_refunded?: number;
+  order_payments?: OrderPayment[];
+  location_name?: string;
   transaction_id?: string;
   restaurant_id?: string;
   staff_created?: boolean; // Flag to indicate if order was created by staff
