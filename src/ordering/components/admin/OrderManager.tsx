@@ -1135,8 +1135,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
   }
 
   const handlePrintOrder = (order: any) => {
-    const orderNumber = order.order_number || `#${order.id}`;
-    const restaurantName = order.restaurant_name || 'Hafaloha';
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const orderNumber = escapeHtml(String(order.order_number || `#${order.id}`));
+    const restaurantName = escapeHtml(String(order.restaurant_name || 'Hafaloha'));
     const items = Array.isArray(order.items) ? order.items : [];
     const total = Number(order.total || 0).toFixed(2);
 
@@ -1146,10 +1154,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             const qty = Number(item.quantity || 0);
             const price = Number(item.price || 0);
             const lineTotal = (qty * price).toFixed(2);
-            const note = item.notes ? `<div style="font-size:12px;color:#555;margin-top:2px;">Note: ${String(item.notes)}</div>` : '';
+            const itemName = escapeHtml(String(item.name || 'Item'));
+            const note = item.notes
+              ? `<div style="font-size:12px;color:#555;margin-top:2px;">Note: ${escapeHtml(String(item.notes))}</div>`
+              : '';
             return `
               <tr>
-                <td style="padding:8px 0;vertical-align:top;">${qty}x ${String(item.name || 'Item')}</td>
+                <td style="padding:8px 0;vertical-align:top;">${qty}x ${itemName}</td>
                 <td style="padding:8px 0;text-align:right;vertical-align:top;">$${lineTotal}</td>
               </tr>
               ${note ? `<tr><td colspan="2" style="padding:0 0 6px 0;">${note}</td></tr>` : ''}
@@ -1164,9 +1175,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       return;
     }
 
-    const pickupTime = formatDate(order.pickup_time || order.created_at);
-    const contactName = order.contact_name || 'N/A';
-    const contactPhone = order.contact_phone || 'N/A';
+    const pickupTime = escapeHtml(String(formatDate(order.pickup_time || order.created_at)));
+    const contactName = escapeHtml(String(order.contact_name || 'N/A'));
+    const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
+    const status = escapeHtml(String(order.status || 'pending'));
 
     printWindow.document.write(`
       <html>
@@ -1183,7 +1195,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             <div><strong>Customer:</strong> ${contactName}</div>
             <div><strong>Phone:</strong> ${contactPhone}</div>
             <div><strong>Pickup:</strong> ${pickupTime}</div>
-            <div><strong>Status:</strong> ${String(order.status || 'pending')}</div>
+            <div><strong>Status:</strong> ${status}</div>
           </div>
 
           <hr style="border:none;border-top:1px dashed #999;margin:10px 0;" />
@@ -1204,9 +1216,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => {
+    printWindow.onload = () => {
       printWindow.print();
-    }, 250);
+      printWindow.onafterprint = () => printWindow.close();
+    };
   };
 
   // These functions are called directly in the JSX
