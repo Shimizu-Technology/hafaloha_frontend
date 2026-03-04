@@ -1135,7 +1135,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setEditingOrder(null);
   }
 
-  const handlePrintOrder = (order: Order) => {
+  const handlePrintOrder = useCallback((order: Order) => {
     const escapeHtml = (value: string) =>
       value
         .replace(/&/g, '&amp;')
@@ -1483,7 +1483,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     printWindow.document.write(receiptHtml);
     printWindow.document.close();
     printWindow.focus();
-  };
+  }, []);
 
   // These functions are called directly in the JSX
 
