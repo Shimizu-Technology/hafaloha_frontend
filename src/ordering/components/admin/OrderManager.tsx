@@ -1159,8 +1159,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       ? items
           .map((item: any) => {
             const qty = Number(item.quantity || 0);
-            const price = Number(item.price || 0);
-            const lineTotal = (qty * price).toFixed(2);
+            const price = item.price != null ? Number(item.price) : null;
+            const lineTotal = price != null ? (qty * price).toFixed(2) : null;
             const itemName = escapeHtml(String(item.name || 'Item'));
 
             const customizationsHtml = (() => {
@@ -1202,6 +1202,13 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               return '';
             })();
 
+            const optionsHtml = (() => {
+              if (!Array.isArray(item.options) || item.options.length === 0) return '';
+              return item.options
+                .map((o: any) => `<div>• ${escapeHtml(String(o))}</div>`)
+                .join('');
+            })();
+
             const variantDetails = [item.size, item.color]
               .filter(Boolean)
               .map((v: any) => escapeHtml(String(v)))
@@ -1217,9 +1224,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                   <div class="item-name">${qty}x ${itemName}</div>
                   ${variantDetails ? `<div class="item-meta">${variantDetails}</div>` : ''}
                   ${customizationsHtml ? `<div class="item-meta">${customizationsHtml}</div>` : ''}
+                  ${(!customizationsHtml && optionsHtml) ? `<div class="item-meta">${optionsHtml}</div>` : ''}
                   ${note ? `<div class="item-note"><strong>Note:</strong> ${note}</div>` : ''}
                 </td>
-                <td class="amount" style="padding:8px 0;vertical-align:top;">$${lineTotal}</td>
+                <td class="amount" style="padding:8px 0;vertical-align:top;">${lineTotal != null ? `$${lineTotal}` : '—'}</td>
               </tr>
             `;
           })
