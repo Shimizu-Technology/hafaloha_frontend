@@ -1134,6 +1134,81 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setEditingOrder(null);
   }
 
+  const handlePrintOrder = (order: any) => {
+    const orderNumber = order.order_number || `#${order.id}`;
+    const restaurantName = order.restaurant_name || 'Hafaloha';
+    const items = Array.isArray(order.items) ? order.items : [];
+    const total = Number(order.total || 0).toFixed(2);
+
+    const itemsHtml = items.length
+      ? items
+          .map((item: any) => {
+            const qty = Number(item.quantity || 0);
+            const price = Number(item.price || 0);
+            const lineTotal = (qty * price).toFixed(2);
+            const note = item.notes ? `<div style="font-size:12px;color:#555;margin-top:2px;">Note: ${String(item.notes)}</div>` : '';
+            return `
+              <tr>
+                <td style="padding:8px 0;vertical-align:top;">${qty}x ${String(item.name || 'Item')}</td>
+                <td style="padding:8px 0;text-align:right;vertical-align:top;">$${lineTotal}</td>
+              </tr>
+              ${note ? `<tr><td colspan="2" style="padding:0 0 6px 0;">${note}</td></tr>` : ''}
+            `;
+          })
+          .join('')
+      : '<tr><td colspan="2" style="padding:8px 0;color:#666;">No items found</td></tr>';
+
+    const printWindow = window.open('', '_blank', 'width=420,height=700');
+    if (!printWindow) {
+      toastUtils.error('Could not open print window. Please allow popups and try again.');
+      return;
+    }
+
+    const pickupTime = formatDate(order.pickup_time || order.created_at);
+    const contactName = order.contact_name || 'N/A';
+    const contactPhone = order.contact_phone || 'N/A';
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Order ${orderNumber}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; margin: 16px; color: #111;">
+          <div style="text-align:center;margin-bottom:14px;">
+            <div style="font-size:18px;font-weight:700;">${restaurantName}</div>
+            <div style="font-size:14px;">Order ${orderNumber}</div>
+          </div>
+
+          <div style="font-size:13px; margin-bottom:10px;">
+            <div><strong>Customer:</strong> ${contactName}</div>
+            <div><strong>Phone:</strong> ${contactPhone}</div>
+            <div><strong>Pickup:</strong> ${pickupTime}</div>
+            <div><strong>Status:</strong> ${String(order.status || 'pending')}</div>
+          </div>
+
+          <hr style="border:none;border-top:1px dashed #999;margin:10px 0;" />
+
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            ${itemsHtml}
+          </table>
+
+          <hr style="border:none;border-top:1px dashed #999;margin:10px 0;" />
+
+          <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;">
+            <span>Total</span>
+            <span>$${total}</span>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
   // These functions are called directly in the JSX
 
   // Single-order action buttons for CollapsibleOrderCard
@@ -1308,6 +1383,21 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             </>
           )}
           
+          {/* Print button - always available */}
+          <button
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-md"
+            onClick={() => handlePrintOrder(order)}
+            aria-label="Print order"
+            title="Print order"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z"
+              />
+            </svg>
+          </button>
+
           {/* Edit button - always available */}
           <button
             className="p-2 text-gray-400 hover:text-gray-600 rounded-md"
