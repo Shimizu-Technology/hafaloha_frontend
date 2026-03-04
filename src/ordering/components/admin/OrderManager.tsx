@@ -1261,8 +1261,8 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const latestPayment = (() => {
       if (!Array.isArray(order.order_payments) || order.order_payments.length === 0) return null;
       return [...order.order_payments].sort((a: any, b: any) => {
-        const aTime = new Date(a?.created_at ?? 0).getTime();
-        const bTime = new Date(b?.created_at ?? 0).getTime();
+        const aTime = a?.created_at ? (new Date(a.created_at).getTime() || 0) : 0;
+        const bTime = b?.created_at ? (new Date(b.created_at).getTime() || 0) : 0;
         return bTime - aTime;
       })[0];
     })();
