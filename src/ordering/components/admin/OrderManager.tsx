@@ -1222,7 +1222,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       return;
     }
 
-    const pickupTime = escapeHtml(String(formatDate(order.pickup_time || order.created_at)));
+    const pickupTime = escapeHtml(
+      String((order.pickup_time || order.created_at) ? formatDate(order.pickup_time || order.created_at) : 'N/A')
+    );
     const contactName = escapeHtml(String(order.contact_name || 'N/A'));
     const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
     const status = escapeHtml(String(order.status || 'pending'));
