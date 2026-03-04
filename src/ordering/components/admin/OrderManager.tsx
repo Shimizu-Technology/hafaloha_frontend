@@ -1263,9 +1263,14 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const status = escapeHtml(String(order.status || 'pending'));
     const orderSource = escapeHtml(String(order.staff_created ? 'Staff POS' : 'Online'));
 
-    const latestPayment = Array.isArray(order.order_payments) && order.order_payments.length > 0
-      ? order.order_payments[order.order_payments.length - 1]
-      : null;
+    const latestPayment = (() => {
+      if (!Array.isArray(order.order_payments) || order.order_payments.length === 0) return null;
+      return [...order.order_payments].sort((a: any, b: any) => {
+        const aTime = new Date(a?.created_at ?? 0).getTime();
+        const bTime = new Date(b?.created_at ?? 0).getTime();
+        return bTime - aTime;
+      })[0];
+    })();
 
     const paymentMethod = escapeHtml(
       String(order.payment_method || latestPayment?.payment_method || (order.staff_created ? 'In-Store' : 'Online'))
