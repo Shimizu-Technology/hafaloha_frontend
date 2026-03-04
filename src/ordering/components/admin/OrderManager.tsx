@@ -1202,6 +1202,11 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               return '';
             })();
 
+            const variantDetails = [item.size, item.color]
+              .filter(Boolean)
+              .map((v: any) => escapeHtml(String(v)))
+              .join(' / ');
+
             const note = item.notes
               ? escapeHtml(String(item.notes))
               : '';
@@ -1210,6 +1215,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               <tr class="item-row">
                 <td style="padding:8px 0;vertical-align:top;">
                   <div class="item-name">${qty}x ${itemName}</div>
+                  ${variantDetails ? `<div class="item-meta">${variantDetails}</div>` : ''}
                   ${customizationsHtml ? `<div class="item-meta">${customizationsHtml}</div>` : ''}
                   ${note ? `<div class="item-note"><strong>Note:</strong> ${note}</div>` : ''}
                 </td>
@@ -1272,6 +1278,16 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       ? `<div style="margin-top:8px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;"><strong>Special Instructions:</strong> ${escapeHtml(String(order.special_instructions))}</div>`
       : '';
 
+    const subtotalLine = order.subtotal != null
+      ? `<div class="breakdown-line"><span>Subtotal</span><span>$${Number(order.subtotal).toFixed(2)}</span></div>`
+      : '';
+    const taxLine = order.tax != null && Number(order.tax) > 0
+      ? `<div class="breakdown-line"><span>Tax</span><span>$${Number(order.tax).toFixed(2)}</span></div>`
+      : '';
+    const tipLine = order.tip != null && Number(order.tip) > 0
+      ? `<div class="breakdown-line"><span>Tip</span><span>$${Number(order.tip).toFixed(2)}</span></div>`
+      : '';
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -1285,7 +1301,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             .sheet { max-width: 420px; margin: 16px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; }
             .head { padding: 14px 16px; border-bottom: 1px solid #e5e7eb; text-align: center; }
             .brand { font-size: 26px; font-weight: 800; letter-spacing: .2px; margin-bottom: 2px; }
-            .order-id { font-size: 14px; color: #4b5563; }
+            .order-id { font-size: 15px; color: #0f172a; font-weight: 800; letter-spacing: .25px; }
             .body { padding: 14px 16px; }
             .meta { font-size: 13px; line-height: 1.45; }
             .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 2px; }
@@ -1302,8 +1318,9 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             .item-meta { font-size: 12px; color: #374151; margin-top: 3px; padding-left: 8px; border-left: 2px solid #d1d5db; }
             .item-note { font-size: 12px; color: #1f2937; margin-top: 4px; padding: 4px 6px; background: #f9fafb; border-radius: 4px; }
             .amount { text-align: right; white-space: nowrap; font-weight: 600; }
+            .breakdown-line { display: flex; justify-content: space-between; font-size: 13px; color: #374151; margin-bottom: 4px; }
             .refund { display: flex; justify-content: space-between; font-size: 13px; color: #b91c1c; margin-bottom: 6px; }
-            .total { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; margin-top: 2px; }
+            .total { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; margin-top: 4px; }
             .copy-toggle { display: flex; gap: 8px; margin-top: 10px; }
             .toggle-btn { flex: 1; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; background: #fff; }
             body.mode-kitchen .toggle-btn-kitchen,
@@ -1401,6 +1418,10 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               </table>
 
               <hr class="divider" />
+
+              ${subtotalLine}
+              ${taxLine}
+              ${tipLine}
 
               ${totalRefunded > 0 ? `
                 <div class="refund">
