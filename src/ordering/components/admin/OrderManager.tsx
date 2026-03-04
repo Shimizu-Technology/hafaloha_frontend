@@ -1357,7 +1357,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
               <div class="brand">${restaurantName}</div>
               <div class="order-id">Order ${orderNumber}</div>
               <div class="copy-toggle">
-                <button class="toggle-btn toggle-btn-kitchen" onclick="setMode('kitchen')">Kitchen Preview</button>
+                <button class="toggle-btn toggle-btn-kitchen" onclick="setMode('kitchen')">FOH Preview</button>
                 <button class="toggle-btn toggle-btn-customer" onclick="setMode('customer')">Customer Preview</button>
               </div>
             </div>
@@ -1405,7 +1405,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
                 ${specialInstructions}
 
                 <div class="kitchen-only checklist">
-                  <strong>Kitchen Checklist</strong>
+                  <strong>FOH Checklist</strong>
                   <div class="checklist-row"><span>Packed by:</span><span class="line"></span></div>
                   <div class="checklist-row"><span>Checked by:</span><span class="line"></span></div>
                   <div class="checklist-row"><span>Ready at:</span><span class="line"></span></div>
@@ -1446,7 +1446,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             <div class="actions">
               <button class="btn btn-close" onclick="window.close()">Close</button>
               <button class="btn btn-print-customer" onclick="setModeAndPrint('customer')">Print Customer Copy</button>
-              <button class="btn btn-print-kitchen" onclick="setModeAndPrint('kitchen')">Print Kitchen Copy</button>
+              <button class="btn btn-print-kitchen" onclick="setModeAndPrint('kitchen')">Print FOH Copy</button>
             </div>
           </div>
 
