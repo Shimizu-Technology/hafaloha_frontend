@@ -1222,10 +1222,24 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
       return;
     }
 
-    const pickupTime = escapeHtml(
-      String((order.pickup_time || order.created_at) ? formatDate(order.pickup_time || order.created_at) : 'N/A')
-    );
-    const placedTime = escapeHtml(String(order.created_at ? formatDate(order.created_at) : 'N/A'));
+    const formatPrintDateTime = (dateString: string | null | undefined) => {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    };
+
+    const pickupTime = order.pickup_time
+      ? escapeHtml(String(formatPrintDateTime(order.pickup_time)))
+      : 'N/A';
+    const placedTime = escapeHtml(String(formatPrintDateTime(order.created_at)));
     const contactName = escapeHtml(String(order.contact_name || 'N/A'));
     const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
     const status = escapeHtml(String(order.status || 'pending'));
@@ -1307,7 +1321,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             }
           </style>
         </head>
-        <body class="mode-kitchen">
+        <body class="mode-customer">
           <div class="sheet">
             <div class="head">
               <div class="brand">${restaurantName}</div>
@@ -1376,7 +1390,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
             function setModeAndPrint(mode) {
               setMode(mode);
-              window.print();
+              setTimeout(function () { window.print(); }, 0);
             }
 
             window.setMode = setMode;
