@@ -1458,12 +1458,14 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
 
             function setModeAndPrint(mode) {
               setMode(mode);
-              setTimeout(function () { window.print(); }, 0);
+              setTimeout(function () {
+                window.onafterprint = function () {
+                  window.onafterprint = null;
+                  window.close();
+                };
+                window.print();
+              }, 0);
             }
-
-            window.onafterprint = function () {
-              window.close();
-            };
 
             window.setMode = setMode;
             window.setModeAndPrint = setModeAndPrint;
