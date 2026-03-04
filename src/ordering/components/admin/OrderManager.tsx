@@ -21,6 +21,7 @@ import { orderPaymentsApi } from '../../../shared/api/endpoints/orderPayments';
 import { orderPaymentOperationsApi } from '../../../shared/api/endpoints/orderPaymentOperations';
 import { api } from '../../../shared/api';
 import toastUtils from '../../../shared/utils/toastUtils';
+import type { Order } from '../../types/order';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'confirmed' | 'refunded';
 
@@ -1134,6 +1135,356 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     setEditingOrder(null);
   }
 
+  const handlePrintOrder = useCallback((order: Order) => {
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const orderNumber = escapeHtml(String(order.order_number || `#${order.id}`));
+    const locationRaw = String(order.location?.name || order.location_name || 'Restaurant');
+    const restaurantName = escapeHtml(locationRaw);
+    const items = [
+      ...(Array.isArray(order.items) ? order.items : []),
+      ...(Array.isArray(order.merchandise_items) ? order.merchandise_items : []),
+    ];
+    const originalTotal = Number(order.total || 0);
+    const totalRefunded = Number(order.total_refunded || 0);
+    const netTotal = Math.max(0, originalTotal - totalRefunded).toFixed(2);
+    const total = netTotal;
+
+    const itemsHtml = items.length
+      ? items
+          .map((item: any) => {
+            const qty = Number(item.quantity || 0);
+            const price = item.price != null ? Number(item.price) : null;
+            const lineTotal = price != null ? (qty * price).toFixed(2) : null;
+            const itemName = escapeHtml(String(item.name || 'Item'));
+
+            const customizationsHtml = (() => {
+              if (!item.customizations) return '';
+
+              if (Array.isArray(item.customizations)) {
+                if (item.customizations.length === 0) return '';
+                return item.customizations
+                  .map((c: any) => {
+                    const rendered =
+                      typeof c === 'object'
+                        ? (c?.name ?? c?.label ?? c?.value ?? JSON.stringify(c))
+                        : c;
+                    return `<div>• ${escapeHtml(String(rendered))}</div>`;
+                  })
+                  .join('');
+              }
+
+              if (typeof item.customizations === 'object') {
+                const entries = Object.entries(item.customizations);
+                if (entries.length === 0) return '';
+                return entries
+                  .map(([group, opts]: [string, any]) => {
+                    const renderedOpts = Array.isArray(opts)
+                      ? opts
+                          .map((o: any) => {
+                            if (typeof o === 'object') {
+                              return escapeHtml(String(o?.name ?? o?.label ?? o?.value ?? JSON.stringify(o)));
+                            }
+                            return escapeHtml(String(o));
+                          })
+                          .join(', ')
+                      : escapeHtml(String(opts));
+                    return `<div>${escapeHtml(group)}: ${renderedOpts}</div>`;
+                  })
+                  .join('');
+              }
+
+              return '';
+            })();
+
+            const optionsHtml = (() => {
+              if (!Array.isArray(item.options) || item.options.length === 0) return '';
+              return item.options
+                .map((o: any) => `<div>• ${escapeHtml(String(o))}</div>`)
+                .join('');
+            })();
+
+            const variantDetails = [item.size, item.color]
+              .filter(Boolean)
+              .map((v: any) => escapeHtml(String(v)))
+              .join(' / ');
+
+            const note = item.notes
+              ? escapeHtml(String(item.notes))
+              : '';
+
+            return `
+              <tr class="item-row">
+                <td style="padding:8px 0;vertical-align:top;">
+                  <div class="item-name">${qty}x ${itemName}</div>
+                  ${variantDetails ? `<div class="item-meta">${variantDetails}</div>` : ''}
+                  ${customizationsHtml ? `<div class="item-meta">${customizationsHtml}</div>` : ''}
+                  ${(!customizationsHtml && optionsHtml) ? `<div class="item-meta">${optionsHtml}</div>` : ''}
+                  ${note ? `<div class="item-note"><strong>Note:</strong> ${note}</div>` : ''}
+                </td>
+                <td class="amount" style="padding:8px 0;vertical-align:top;">${lineTotal != null ? `$${lineTotal}` : '—'}</td>
+              </tr>
+            `;
+          })
+          .join('')
+      : '<tr><td colspan="2" style="padding:8px 0;color:#666;">No items found</td></tr>';
+
+    const formatPrintDateTime = (dateString: string | null | undefined) => {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    };
+
+    const pickupTime = order.pickup_time
+      ? escapeHtml(String(formatPrintDateTime(order.pickup_time)))
+      : 'N/A';
+    const placedTime = escapeHtml(String(formatPrintDateTime(order.created_at)));
+    const contactName = escapeHtml(String(order.contact_name || 'N/A'));
+    const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
+    const status = escapeHtml(String(order.status || 'pending'));
+    const orderSource = escapeHtml(String(order.staff_created ? 'Staff POS' : 'Online'));
+
+    const latestPayment = (() => {
+      if (!Array.isArray(order.order_payments) || order.order_payments.length === 0) return null;
+      return [...order.order_payments].sort((a: any, b: any) => {
+        const aTime = a?.created_at ? (new Date(a.created_at).getTime() || 0) : 0;
+        const bTime = b?.created_at ? (new Date(b.created_at).getTime() || 0) : 0;
+        return bTime - aTime;
+      })[0];
+    })();
+
+    const paymentMethod = escapeHtml(
+      String(order.payment_method || latestPayment?.payment_method || (order.staff_created ? 'In-Store' : 'Online'))
+    );
+    const inferredPaymentStatus =
+      order.status === 'refunded'
+        ? 'refunded'
+        : order.status === 'pending'
+          ? 'pending'
+          : 'unknown';
+
+    const paymentStatus = escapeHtml(
+      String(order.payment_status || latestPayment?.status || inferredPaymentStatus)
+    );
+
+    const specialInstructions = order.special_instructions
+      ? `<div style="margin-top:8px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;"><strong>Special Instructions:</strong> ${escapeHtml(String(order.special_instructions))}</div>`
+      : '';
+
+    const subtotalLine = order.subtotal != null && Number(order.subtotal) > 0
+      ? `<div class="breakdown-line"><span>Subtotal</span><span>$${Number(order.subtotal).toFixed(2)}</span></div>`
+      : '';
+    const taxLine = order.tax != null && Number(order.tax) > 0
+      ? `<div class="breakdown-line"><span>Tax</span><span>$${Number(order.tax).toFixed(2)}</span></div>`
+      : '';
+    const tipLine = order.tip != null && Number(order.tip) > 0
+      ? `<div class="breakdown-line"><span>Tip</span><span>$${Number(order.tip).toFixed(2)}</span></div>`
+      : '';
+
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Order ${orderNumber}</title>
+          <style>
+            :root { color-scheme: light; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; margin: 0; background: #f8fafc; color: #111827; }
+            .sheet { max-width: 420px; margin: 16px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; }
+            .head { padding: 14px 16px; border-bottom: 1px solid #e5e7eb; text-align: center; }
+            .brand { font-size: 26px; font-weight: 800; letter-spacing: .2px; margin-bottom: 2px; }
+            .order-id { font-size: 15px; color: #0f172a; font-weight: 800; letter-spacing: .25px; }
+            .body { padding: 14px 16px; }
+            .meta { font-size: 13px; line-height: 1.45; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 2px; }
+            .meta-item { min-width: 0; }
+            .meta-label { font-size: 11px; text-transform: uppercase; letter-spacing: .45px; color: #6b7280; font-weight: 700; }
+            .meta-value { font-size: 15px; font-weight: 600; color: #111827; margin-top: 1px; overflow-wrap: anywhere; }
+            .status-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f3f4f6; text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+            .divider { border: none; border-top: 1px dashed #cbd5e1; margin: 14px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; }
+            tr.item-row td { padding: 10px 0; border-bottom: 1px dashed #e5e7eb; }
+            tr.item-row:last-of-type td { border-bottom: 0; }
+            td { padding: 8px 0; vertical-align: top; }
+            .item-name { font-size: 14px; font-weight: 700; color: #111827; }
+            .item-meta { font-size: 12px; color: #374151; margin-top: 3px; padding-left: 8px; border-left: 2px solid #d1d5db; }
+            .item-note { font-size: 12px; color: #1f2937; margin-top: 4px; padding: 4px 6px; background: #f9fafb; border-radius: 4px; }
+            .amount { text-align: right; white-space: nowrap; font-weight: 600; }
+            .breakdown-line { display: flex; justify-content: space-between; font-size: 13px; color: #374151; margin-bottom: 4px; }
+            .refund { display: flex; justify-content: space-between; font-size: 13px; color: #b91c1c; margin-bottom: 6px; }
+            .total { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; margin-top: 4px; }
+            .copy-toggle { display: flex; gap: 8px; margin-top: 10px; }
+            .toggle-btn { flex: 1; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; background: #fff; }
+            body.mode-kitchen .toggle-btn-kitchen,
+            body.mode-customer .toggle-btn-customer { background: #111827; color: #fff; border-color: #111827; }
+            .kitchen-only { display: none; }
+            .customer-only { display: none; }
+            body.mode-kitchen .kitchen-only { display: block; }
+            body.mode-customer .customer-only { display: block; }
+            .checklist { margin-top: 8px; padding: 8px; border: 1px dashed #94a3b8; border-radius: 6px; font-size: 12px; }
+            .checklist-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 12px; }
+            .line { border-bottom: 2px solid #334155; min-width: 180px; display: inline-block; height: 16px; opacity: 1; }
+            .actions { display: flex; gap: 8px; padding: 0 16px 14px; }
+            .btn { flex: 1; border: none; border-radius: 8px; padding: 10px 12px; font-weight: 600; cursor: pointer; }
+            .btn-print-kitchen { background: #111827; color: white; }
+            .btn-print-customer { background: #374151; color: white; }
+            .btn-close { background: #e5e7eb; color: #111827; }
+            @media print {
+              body { background: #fff; }
+              .sheet { margin: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; }
+              .actions, .copy-toggle { display: none; }
+            }
+          </style>
+        </head>
+        <body class="mode-customer">
+          <div class="sheet">
+            <div class="head">
+              <div class="brand">${restaurantName}</div>
+              <div class="order-id">Order ${orderNumber}</div>
+              <div class="copy-toggle">
+                <button class="toggle-btn toggle-btn-kitchen" onclick="setMode('kitchen')">FOH Preview</button>
+                <button class="toggle-btn toggle-btn-customer" onclick="setMode('customer')">Customer Preview</button>
+              </div>
+            </div>
+
+            <div class="body">
+              <div class="meta">
+                <div class="meta-grid">
+                  <div class="meta-item">
+                    <div class="meta-label">Customer</div>
+                    <div class="meta-value">${contactName}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Status</div>
+                    <div class="meta-value"><span class="status-pill">${status}</span></div>
+                  </div>
+
+                  <div class="meta-item">
+                    <div class="meta-label">Phone</div>
+                    <div class="meta-value">${contactPhone}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Source</div>
+                    <div class="meta-value">${orderSource}</div>
+                  </div>
+
+                  <div class="meta-item">
+                    <div class="meta-label">Placed</div>
+                    <div class="meta-value">${placedTime}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Pickup</div>
+                    <div class="meta-value">${pickupTime}</div>
+                  </div>
+
+                  <div class="meta-item">
+                    <div class="meta-label">Location</div>
+                    <div class="meta-value">${restaurantName}</div>
+                  </div>
+                  <div class="meta-item">
+                    <div class="meta-label">Payment</div>
+                    <div class="meta-value">${paymentMethod} (${paymentStatus})</div>
+                  </div>
+                </div>
+
+                ${specialInstructions}
+
+                <div class="kitchen-only checklist">
+                  <strong>FOH Checklist</strong>
+                  <div class="checklist-row"><span>Packed by:</span><span class="line"></span></div>
+                  <div class="checklist-row"><span>Checked by:</span><span class="line"></span></div>
+                  <div class="checklist-row"><span>Ready at:</span><span class="line"></span></div>
+                </div>
+
+                <div class="customer-only checklist">
+                  <strong>Pickup Verification</strong>
+                  <div class="checklist-row"><span>Received by:</span><span class="line"></span></div>
+                  <div class="checklist-row"><span>Received at (Date &amp; Time):</span><span class="line"></span></div>
+                </div>
+              </div>
+
+              <hr class="divider" />
+
+              <table>
+                ${itemsHtml}
+              </table>
+
+              <hr class="divider" />
+
+              ${subtotalLine}
+              ${taxLine}
+              ${tipLine}
+
+              ${totalRefunded > 0 ? `
+                <div class="refund">
+                  <span>Refunded</span>
+                  <span>-$${totalRefunded.toFixed(2)}</span>
+                </div>
+              ` : ''}
+
+              <div class="total">
+                <span>Total</span>
+                <span>$${total}</span>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="btn btn-close" onclick="window.close()">Close</button>
+              <button class="btn btn-print-customer" onclick="setModeAndPrint('customer')">Print Customer Copy</button>
+              <button class="btn btn-print-kitchen" onclick="setModeAndPrint('kitchen')">Print FOH Copy</button>
+            </div>
+          </div>
+
+          <script>
+            function setMode(mode) {
+              document.body.classList.remove('mode-kitchen', 'mode-customer');
+              document.body.classList.add(mode === 'customer' ? 'mode-customer' : 'mode-kitchen');
+            }
+
+            function setModeAndPrint(mode) {
+              setMode(mode);
+              setTimeout(function () {
+                window.onafterprint = function () {
+                  window.onafterprint = null;
+                  window.close();
+                };
+                window.print();
+              }, 0);
+            }
+
+            window.setMode = setMode;
+            window.setModeAndPrint = setModeAndPrint;
+          </script>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=420,height=700');
+    if (!printWindow) {
+      toastUtils.error('Could not open print window. Please allow popups and try again.');
+      return;
+    }
+
+    printWindow.document.write(receiptHtml);
+    printWindow.document.close();
+    printWindow.focus();
+  }, []);
+
   // These functions are called directly in the JSX
 
   // Single-order action buttons for CollapsibleOrderCard
@@ -1308,6 +1659,21 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             </>
           )}
           
+          {/* Print button - always available */}
+          <button
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-md"
+            onClick={() => handlePrintOrder(order)}
+            aria-label="Print order"
+            title="Print order"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z"
+              />
+            </svg>
+          </button>
+
           {/* Edit button - always available */}
           <button
             className="p-2 text-gray-400 hover:text-gray-600 rounded-md"
