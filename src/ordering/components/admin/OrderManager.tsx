@@ -1155,15 +1155,46 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             const price = Number(item.price || 0);
             const lineTotal = (qty * price).toFixed(2);
             const itemName = escapeHtml(String(item.name || 'Item'));
+
+            const customizationsHtml = (() => {
+              if (!item.customizations) return '';
+
+              if (Array.isArray(item.customizations)) {
+                if (item.customizations.length === 0) return '';
+                return item.customizations
+                  .map((c: any) => `<div style="font-size:12px;color:#555;margin-top:2px;">• ${escapeHtml(String(c?.name || c))}</div>`)
+                  .join('');
+              }
+
+              if (typeof item.customizations === 'object') {
+                const entries = Object.entries(item.customizations);
+                if (entries.length === 0) return '';
+                return entries
+                  .map(([group, opts]: [string, any]) => {
+                    const renderedOpts = Array.isArray(opts)
+                      ? opts.map((o: any) => escapeHtml(String(o))).join(', ')
+                      : escapeHtml(String(opts));
+                    return `<div style="font-size:12px;color:#555;margin-top:2px;">${escapeHtml(group)}: ${renderedOpts}</div>`;
+                  })
+                  .join('');
+              }
+
+              return '';
+            })();
+
             const note = item.notes
               ? `<div style="font-size:12px;color:#555;margin-top:2px;">Note: ${escapeHtml(String(item.notes))}</div>`
               : '';
+
             return `
               <tr>
-                <td style="padding:8px 0;vertical-align:top;">${qty}x ${itemName}</td>
+                <td style="padding:8px 0;vertical-align:top;">
+                  <div>${qty}x ${itemName}</div>
+                  ${customizationsHtml}
+                  ${note}
+                </td>
                 <td style="padding:8px 0;text-align:right;vertical-align:top;">$${lineTotal}</td>
               </tr>
-              ${note ? `<tr><td colspan="2" style="padding:0 0 6px 0;">${note}</td></tr>` : ''}
             `;
           })
           .join('')
@@ -1179,10 +1210,15 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
     const contactName = escapeHtml(String(order.contact_name || 'N/A'));
     const contactPhone = escapeHtml(String(order.contact_phone || 'N/A'));
     const status = escapeHtml(String(order.status || 'pending'));
+    const specialInstructions = order.special_instructions
+      ? `<div style="margin-top:6px;padding:6px;background:#fffbeb;border:1px solid #fcd34d;border-radius:4px;"><strong>Special Instructions:</strong> ${escapeHtml(String(order.special_instructions))}</div>`
+      : '';
 
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8" />
           <title>Order ${orderNumber}</title>
         </head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; margin: 16px; color: #111;">
@@ -1196,6 +1232,7 @@ export function OrderManager({ selectedOrderId, setSelectedOrderId, restaurantId
             <div><strong>Phone:</strong> ${contactPhone}</div>
             <div><strong>Pickup:</strong> ${pickupTime}</div>
             <div><strong>Status:</strong> ${status}</div>
+            ${specialInstructions}
           </div>
 
           <hr style="border:none;border-top:1px dashed #999;margin:10px 0;" />
