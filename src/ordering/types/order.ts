@@ -36,7 +36,7 @@ export interface Order {
   updated_at?: string;
   createdAt?: string;
   updatedAt?: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'error';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'refunded' | 'error';
   items: OrderItem[];
   merchandise_items?: MerchandiseOrderItem[];
   total: number;
