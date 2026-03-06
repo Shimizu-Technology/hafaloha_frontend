@@ -52,6 +52,7 @@ interface OrderStore {
   orders: Order[];
   metadata: OrdersMetadata;
   loading: boolean;
+  isPlacingOrder: boolean;
   error: string | null;
   websocketConnected: boolean;
   pollingInterval: number | null;
@@ -122,6 +123,7 @@ export const useOrderStore = create<OrderStore>()(
         total_pages: 0
       },
       loading: false,
+      isPlacingOrder: false,
       error: null,
       websocketConnected: false,
       pollingInterval: null,
@@ -710,9 +712,18 @@ export const useOrderStore = create<OrderStore>()(
         paymentDetails = null,
         locationId = null
       ) => {
+        // Guard against duplicate submit taps/clicks
+        if (get().isPlacingOrder) {
+          return {
+            id: `duplicate-${Date.now()}`,
+            status: 'error',
+            error: 'Order is already being submitted. Please wait.'
+          } as any;
+        }
+
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
-        set({ error: null });
+        set({ error: null, isPlacingOrder: true });
         try {
           // Separate food vs merchandise
           const foodItems = [];
@@ -814,6 +825,8 @@ export const useOrderStore = create<OrderStore>()(
             status: 'error',
             error: err.message
           } as any;
+        } finally {
+          set({ isPlacingOrder: false });
         }
       },
 
