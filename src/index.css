@@ -22,8 +22,8 @@
 
 /* Ensure datepicker calendar is not cut off */
 .react-datepicker-popper {
-  z-index: 999 !important;
-  position: fixed !important;
+  z-index: 999;
+  position: fixed;
 }
 
 .react-datepicker__month-container {
@@ -34,46 +34,120 @@
 }
 
 .react-datepicker__triangle {
-  display: none !important;
+  display: none;
 }
 
 /* If Reservations had any special classes, add them here too, or move them
    into domain-specific .css if you prefer. */
 
-/* Scrollable toast container styles */
+/* Scrollable toast container styles - reduce !important usage */
 .scrollable-toast-container {
-  max-height: 100vh !important;
-  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS devices */
-  overscroll-behavior: contain; /* Prevent scroll chaining */
-  touch-action: pan-y; /* Enable vertical touch scrolling */
+  max-height: 100vh;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
-/* Desktop scrollbar styles */
-@media (min-width: 768px) {
-  .scrollable-toast-container::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .scrollable-toast-container::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 3px;
-  }
-
-  .scrollable-toast-container::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-  }
-
-  .scrollable-toast-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.3);
-  }
+/* Base styles for all devices */
+:root {
+  --primary-color: #c1902f;
+  --text-color: #111827;
+  --background-color: #f9fafb;
+  --card-background: #ffffff;
+  --border-color: #e5e7eb;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --border-radius: 0.5rem;
+  --transition-standard: all 0.2s ease;
 }
 
-/* Hide scrollbar on mobile but keep functionality */
+/* optimize 100vh for ios */
+.full-height {
+  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100);
+}
+
+/* responsive container */
+.responsive-container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Mobile styles */
 @media (max-width: 767px) {
-  .scrollable-toast-container::-webkit-scrollbar {
+  /* Improve touch targets */
+  button, a, input[type="button"], input[type="submit"], [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Prevent text zoom on iOS */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  
+  /* Optimize scrolling */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Hide scrollbars on mobile but keep functionality */
+  .custom-scrollbar::-webkit-scrollbar {
     width: 0px;
     background: transparent;
+  }
+  
+  /* Adjust spacing for mobile */
+  .responsive-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  /* Fix fixed positioning issues with iOS keyboard */
+  .fixed-bottom {
+    position: sticky;
+    bottom: 0;
+  }
+}
+
+/* Tablet styles */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .responsive-container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+/* Desktop styles */
+@media (min-width: 1024px) {
+  .responsive-container {
+    max-width: 1280px;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+  
+  /* desktop-specific scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -82,9 +156,9 @@
   margin-bottom: 8px;
 }
 
-/* Adjust toast width for different screen sizes */
-@media (max-width: 480px) {
-  /* Mobile phones */
+/* Adjust toast width for different screen sizes - use consistent breakpoints */
+@media (max-width: 767px) {
+  /* Mobile phones - changed from 480px to match other breakpoints */
   .scrollable-toast-container > div > div {
     width: 95% !important;
     max-width: 95vw !important;
@@ -93,8 +167,8 @@
   }
 }
 
-@media (min-width: 481px) and (max-width: 768px) {
-  /* Tablets and iPad mini */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Tablets - changed from 768px to match other breakpoints */
   .scrollable-toast-container > div > div {
     width: 90% !important;
     max-width: 400px !important;
