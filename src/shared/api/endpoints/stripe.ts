@@ -88,7 +88,7 @@ export const stripeApi = {
     paymentIntentClientSecret: string
   ): Promise<OrderByTransactionResponse | null> => {
     try {
-      const response = await api.get<OrderByTransactionResponse>('/orders/by_transaction', {
+      const response = await api.post<OrderByTransactionResponse>('/orders/by_transaction', {
         transaction_id: transactionId,
         restaurant_id: restaurantId,
         payment_intent_client_secret: paymentIntentClientSecret,
