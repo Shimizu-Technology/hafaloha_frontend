@@ -124,7 +124,7 @@ export function CheckoutReturn() {
     const finalizeOrder = async () => {
       const paymentIntentId = searchParams.get('payment_intent');
       const redirectStatus = searchParams.get('redirect_status');
-      const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
+      const redirectPaymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
       const draft = loadPendingCheckoutDraft();
       const restaurantId = localStorage.getItem('restaurant_id') || import.meta.env.VITE_RESTAURANT_ID || '1';
 
@@ -147,11 +147,12 @@ export function CheckoutReturn() {
           return;
         }
 
-        if (paymentIntentClientSecret) {
+        const lookupClientSecret = redirectPaymentIntentClientSecret || paymentIntent.client_secret;
+        if (lookupClientSecret) {
           const existingOrder = await stripeApi.findOrderByTransaction(
             paymentIntent.id,
             restaurantId,
-            paymentIntentClientSecret
+            lookupClientSecret
           );
           if (existingOrder) {
             await navigateToConfirmation(normalizeRecoveredOrder(existingOrder, draft), draft);

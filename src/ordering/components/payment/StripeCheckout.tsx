@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import type { Stripe, StripeCardElement, StripeCardElementChangeEvent, StripeElements } from '@stripe/stripe-js';
 
 import { api } from '../../../shared/api/apiClient';
 import { LoadingSpinner } from '../../../shared/components/ui';
@@ -33,6 +34,23 @@ export interface StripeCheckoutRef {
   processPayment: () => Promise<boolean>;
 }
 
+declare global {
+  interface Window {
+    Stripe?: (publishableKey: string) => Stripe;
+  }
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+  }
+
+  return fallback;
+}
+
 export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckoutProps>((props, ref) => {
   const {
     amount,
@@ -46,9 +64,9 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [stripe, setStripe] = useState<any>(null);
-  const [elements, setElements] = useState<any>(null);
-  const [cardElement, setCardElement] = useState<any>(null);
+  const [stripe, setStripe] = useState<Stripe | null>(null);
+  const [elements, setElements] = useState<StripeElements | null>(null);
+  const [cardElement, setCardElement] = useState<StripeCardElement | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isFreeOrder, setIsFreeOrder] = useState(false);
   const [isSmallOrder, setIsSmallOrder] = useState(false);
@@ -74,8 +92,8 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       return;
     }
 
-    if ((window as any).Stripe) {
-      setStripe((window as any).Stripe(publishableKey));
+    if (window.Stripe) {
+      setStripe(window.Stripe(publishableKey));
       setLoading(false);
       return;
     }
@@ -84,7 +102,13 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
     script.src = 'https://js.stripe.com/v3/';
     script.async = true;
     script.onload = () => {
-      setStripe((window as any).Stripe(publishableKey));
+      if (!window.Stripe) {
+        setError('Stripe.js loaded without initializing correctly');
+        setLoading(false);
+        return;
+      }
+
+      setStripe(window.Stripe(publishableKey));
       setLoading(false);
     };
     script.onerror = () => {
@@ -128,9 +152,10 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         }
 
         setClientSecret(response.client_secret);
-      } catch (err: any) {
-        setError(err.message || 'Failed to create payment intent');
-        onPaymentError(err);
+      } catch (err: unknown) {
+        const message = errorMessage(err, 'Failed to create payment intent');
+        setError(message);
+        onPaymentError(err instanceof Error ? err : new Error(message));
       }
     };
 
@@ -158,19 +183,20 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       });
 
       setElements(elementsInstance);
-    } catch (err: any) {
-      setError(err.message || 'Failed to initialize Stripe Elements');
-      onPaymentError(err);
+    } catch (err: unknown) {
+      const message = errorMessage(err, 'Failed to initialize Stripe Elements');
+      setError(message);
+      onPaymentError(err instanceof Error ? err : new Error(message));
     }
   }, [error, isFreeOrder, isSmallOrder, onPaymentError, stripe, testMode]);
 
   useEffect(() => {
-    if (testMode || !elements || !cardElementRef.current || cardElementMounted.current || isFreeOrder || isSmallOrder) {
+    if (testMode || !elements || !clientSecret || !cardElementRef.current || cardElementMounted.current || isFreeOrder || isSmallOrder) {
       return;
     }
 
     cardElementMounted.current = true;
-    let card: any = null;
+    let card: StripeCardElement | null = null;
 
     try {
       card = elements.create('card', {
@@ -192,16 +218,17 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       card.mount(cardElementRef.current);
       setCardElement(card);
 
-      card.on('change', (event: any) => {
+      card.on('change', (event: StripeCardElementChangeEvent) => {
         if (event.error) {
           setError(event.error.message);
         } else {
           setError(null);
         }
       });
-    } catch (err: any) {
-      setError(err.message || 'Failed to mount card input');
-      onPaymentError(err);
+    } catch (err: unknown) {
+      const message = errorMessage(err, 'Failed to mount card input');
+      setError(message);
+      onPaymentError(err instanceof Error ? err : new Error(message));
     }
 
     return () => {
@@ -214,7 +241,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       }
       cardElementMounted.current = false;
     };
-  }, [elements, isFreeOrder, isSmallOrder, onPaymentError, testMode]);
+  }, [clientSecret, elements, isFreeOrder, isSmallOrder, onPaymentError, testMode]);
 
   const processPayment = async (): Promise<boolean> => {
     if (processing) return false;
@@ -282,9 +309,10 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
       });
 
       return true;
-    } catch (err: any) {
-      setError(err.message || 'Payment failed');
-      onPaymentError(err);
+    } catch (err: unknown) {
+      const message = errorMessage(err, 'Payment failed');
+      setError(message);
+      onPaymentError(err instanceof Error ? err : new Error(message));
       return false;
     } finally {
       setProcessing(false);
