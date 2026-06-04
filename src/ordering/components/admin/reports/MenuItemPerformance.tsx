@@ -1,7 +1,7 @@
 // src/ordering/components/admin/reports/MenuItemPerformance.tsx
 import React, { useState, useMemo } from 'react';
 import { MenuItemReport, CategoryReport, MenuItemOrderDetail } from '../../../../shared/api';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../../../../shared/utils/simpleSpreadsheet';
 
 interface MenuItemPerformanceProps {
   menuItems: MenuItemReport[];

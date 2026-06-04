@@ -1,7 +1,7 @@
 // src/ordering/components/admin/reports/VipCustomerReport.tsx
 import React, { useState, useMemo } from 'react';
 import { VipCustomerReport as VipCustomerReportType, VipReportSummary } from '../../../../shared/api';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../../../../shared/utils/simpleSpreadsheet';
 
 interface VipCustomerReportProps {
   vipCustomers: VipCustomerReportType[];

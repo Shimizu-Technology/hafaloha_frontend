@@ -12,7 +12,7 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../../../../shared/utils/simpleSpreadsheet';
 import {
   RefundDetail,
   RefundsByMethod,

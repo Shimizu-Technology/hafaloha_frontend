@@ -14,18 +14,18 @@ export const brandColors = {
 
 // Shared button styles for both Stripe and PayPal components
 export const ButtonStyles = {
-  primary: `px-4 py-3 w-full bg-[${brandColors.primary}] text-white font-medium rounded-md 
-            hover:bg-[${brandColors.primaryHover}] focus:outline-none focus:ring-2 
-            focus:ring-[${brandColors.primary}] focus:ring-opacity-50 transition-colors duration-200`,
-  secondary: `px-4 py-3 w-full bg-gray-100 text-gray-700 font-medium rounded-md 
-              hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 
+  primary: `px-4 py-3 w-full bg-[#c1902f] text-white font-medium rounded-md
+            hover:bg-[#d4a43f] focus:outline-none focus:ring-2
+            focus:ring-[#c1902f] focus:ring-opacity-50 transition-colors duration-200`,
+  secondary: `px-4 py-3 w-full bg-gray-100 text-gray-700 font-medium rounded-md
+              hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500
               focus:ring-opacity-50 transition-colors duration-200`,
 };
 
 // Shared input field styles
 export const InputStyles = {
   base: `w-full px-4 py-2 border border-gray-300 rounded-md
-         focus:ring-[${brandColors.primary}] focus:border-[${brandColors.primary}]`,
+         focus:ring-[#c1902f] focus:border-[#c1902f]`,
   disabled: `w-full px-4 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500`,
 };
 
@@ -55,7 +55,7 @@ export const PaymentMethodSelector: React.FC<{
           type="button"
           className={`flex-1 py-2 text-center ${
             paymentMethod === option.id
-              ? `bg-[${brandColors.primary}] text-white`
+              ? 'bg-[#c1902f] text-white'
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
           onClick={() => onChange(option.id)}

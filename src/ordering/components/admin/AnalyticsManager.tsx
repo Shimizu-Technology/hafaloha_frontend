@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../../../shared/utils/simpleSpreadsheet';
 import {
   api,
   getCustomerOrdersReport,

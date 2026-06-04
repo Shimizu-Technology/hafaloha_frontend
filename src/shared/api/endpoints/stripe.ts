@@ -7,8 +7,12 @@ interface PaymentIntentResponse {
 interface PaymentIntentDetailsResponse {
   id: string;
   amount: number;
+  amount_received?: number;
   status: string;
   client_secret: string;
+  currency?: string;
+  payment_method?: string;
+  payment_method_types?: string[];
 }
 
 /**
@@ -37,8 +41,13 @@ export const stripeApi = {
    * @param id - The ID of the payment intent
    * @returns A promise that resolves to the payment intent details
    */
-  getPaymentIntent: async (id: string): Promise<PaymentIntentDetailsResponse> => {
-    const response = await api.get<PaymentIntentDetailsResponse>(`/stripe/payment_intent/${id}`);
+  getPaymentIntent: async (
+    id: string,
+    restaurantId: string
+  ): Promise<PaymentIntentDetailsResponse> => {
+    const response = await api.get<PaymentIntentDetailsResponse>(`/stripe/payment_intent/${id}`, {
+      restaurant_id: restaurantId,
+    });
     return response;
   },
 

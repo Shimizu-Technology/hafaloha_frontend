@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { PaymentMethodReport as PaymentMethodReportType, PaymentMethodOrderDetail } from '../../../../shared/api';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../../../../shared/utils/simpleSpreadsheet';
 
 // Simplified color palette
 const COLORS = [

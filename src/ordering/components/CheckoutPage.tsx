@@ -19,6 +19,7 @@ import { VipCodeInput } from './VipCodeInput';
 import { PayPalCheckout, PayPalCheckoutRef } from './payment/PayPalCheckout';
 import { StripeCheckout, StripeCheckoutRef } from './payment/StripeCheckout';
 import LocationSelector from './customer/LocationSelector';
+import { clearPendingCheckoutDraft, savePendingCheckoutDraft } from '../utils/pendingCheckout';
 
 interface CheckoutFormData {
   name: string;
@@ -28,6 +29,28 @@ interface CheckoutFormData {
   promoCode: string;
   vipCode: string;
 }
+
+interface CheckoutPaymentDetails {
+  status?: string;
+  payment_method?: string;
+  transaction_id?: string;
+  payment_date?: string;
+  payment_intent_id?: string;
+  processor?: string;
+  notes?: string;
+  staffOrderParams?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+type CheckoutApiError = {
+  response?: {
+    data?: {
+      error?: string;
+      details?: unknown;
+    };
+  };
+  message?: string;
+};
 
 /**
  * Allows a plus sign, then 3 or 4 digits for "area code," then exactly 7 more digits.
@@ -151,6 +174,18 @@ export function CheckoutPage() {
     setVipCodeValid(valid);
   };
 
+  const persistPendingStripeCheckout = () => {
+    const restaurantId = localStorage.getItem('restaurant_id') || import.meta.env.VITE_RESTAURANT_ID || '1';
+
+    savePendingCheckoutDraft({
+      restaurantId,
+      cartItems: cartItems.map((item) => ({ ...item })),
+      finalTotal,
+      formData: { ...formData },
+      locationId,
+    });
+  };
+
   // Handler for when payment completes successfully
   const handlePaymentSuccess = (details: {
     status: string;
@@ -179,7 +214,7 @@ export function CheckoutPage() {
     };
     
     // Submit the order with the transaction ID and payment details
-    submitOrder(details.transaction_id, paymentDetails);
+    void submitOrder(details.transaction_id, paymentDetails);
   };
 
   // Handler for payment errors
@@ -188,9 +223,10 @@ export function CheckoutPage() {
     toastUtils.error(`Payment failed: ${error.message}`);
     setPaymentProcessing(false);
     setIsSubmitting(false);
+    clearPendingCheckoutDraft();
   };
 
-  async function submitOrder(transactionId: string, paymentDetails?: any) {
+  async function submitOrder(transactionId: string, paymentDetails?: CheckoutPaymentDetails) {
     try {
       // Check if any item needs 24-hr notice
       const hasAny24hrItem = cartItems.some(
@@ -236,6 +272,7 @@ export function CheckoutPage() {
         locationId // Include the selected location ID
       );
 
+      clearPendingCheckoutDraft();
       toastUtils.success('Order placed successfully!');
 
       const estimatedTime = hasAny24hrItem ? '24 hours' : '20–25 min';
@@ -253,7 +290,7 @@ export function CheckoutPage() {
         }
       }
       
-      navigate('/order-confirmation', {
+      navigate(`/order-confirmation/${newOrder.id}`, {
         state: {
           orderDetails: {
             ...newOrder,
@@ -262,7 +299,7 @@ export function CheckoutPage() {
             requires_advance_notice: hasAny24hrItem,
             max_advance_notice_hours: hasAny24hrItem ? 24 : undefined,
           },
-          orderId: newOrder.order_number || newOrder.id || '12345',
+          orderId: newOrder.id,
           total: finalTotal,
           estimatedTime,
           hasAny24hrItem,
@@ -270,20 +307,28 @@ export function CheckoutPage() {
           locationAddress,
         },
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to create order:', err);
+      const apiError = err as CheckoutApiError;
 
       // Parse backend error details (e.g., stock insufficient, items not found)
-      const backendError = err?.response?.data?.error;
-      const backendDetails = err?.response?.data?.details;
+      const backendError = apiError.response?.data?.error;
+      const backendDetails = apiError.response?.data?.details;
 
-      if (backendDetails && Array.isArray(backendDetails)) {
+      if (Array.isArray(backendDetails)) {
         // Show each detail as a separate toast (e.g., "T-Shirt: only 2 available")
-        backendDetails.forEach((detail: string) => toastUtils.error(detail));
+        backendDetails.forEach((detail) => toastUtils.error(String(detail)));
       } else if (backendError) {
         toastUtils.error(backendError);
       } else {
-        toastUtils.error(err.message || 'Failed to place order. Please try again.');
+        toastUtils.error(apiError.message || 'Failed to place order. Please try again.');
+      }
+
+      if (paymentDetails?.processor === 'stripe' && paymentDetails?.payment_intent_id) {
+        navigate(`/checkout/return?payment_intent=${encodeURIComponent(paymentDetails.payment_intent_id)}`, {
+          replace: true,
+        });
+        return;
       }
 
       setIsSubmitting(false);
@@ -314,7 +359,7 @@ export function CheckoutPage() {
           // Code is valid, update state and continue
           setVipCodeValid(true);
           toastUtils.success('VIP code validated successfully!');
-        } catch (error) {
+        } catch {
           if (validationToast) validationToast.dismiss();
           toastUtils.error('Failed to validate VIP code');
           setIsSubmitting(false);
@@ -351,11 +396,13 @@ export function CheckoutPage() {
       setPaymentProcessing(true);
       
       if (isStripe && stripeRef.current) {
+        persistPendingStripeCheckout();
         // Process with Stripe
         const success = await stripeRef.current.processPayment();
         if (!success) {
           setPaymentProcessing(false);
           setIsSubmitting(false);
+          clearPendingCheckoutDraft();
         }
       } else if (paypalRef.current) {
         // Process with PayPal
@@ -371,7 +418,7 @@ export function CheckoutPage() {
         setIsSubmitting(false);
       }
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed during checkout process:', err);
       toastUtils.error('Failed to process checkout. Please try again.');
       setIsSubmitting(false);
@@ -490,6 +537,7 @@ export function CheckoutPage() {
                 {/* Conditionally render PayPal or Stripe checkout based on payment processor setting */}
                 {restaurant?.admin_settings?.payment_gateway?.payment_processor === 'stripe' ? (
                   <StripeCheckout
+                    key={`stripe-${finalTotal}`}
                     ref={stripeRef}
                     amount={finalTotal.toString()}
                     publishableKey={(restaurant?.admin_settings?.payment_gateway?.publishable_key as string) || ""}
@@ -615,8 +663,8 @@ export function CheckoutPage() {
                       <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
                       {item.customizations && Object.keys(item.customizations).length > 0 && (
                         <p className="text-xs text-gray-500">
-                          {Object.entries(item.customizations)
-                            .map(([_, options]) => `${options.join(', ')}`)
+                          {Object.values(item.customizations)
+                            .map((options) => (Array.isArray(options) ? options.join(', ') : String(options)))
                             .join('; ')}
                         </p>
                       )}

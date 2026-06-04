@@ -714,16 +714,13 @@ export const useOrderStore = create<OrderStore>()(
       ) => {
         // Guard against duplicate submit taps/clicks
         if (get().isPlacingOrder) {
-          return {
-            id: `duplicate-${Date.now()}`,
-            status: 'error',
-            error: 'Order is already being submitted. Please wait.'
-          } as any;
+          throw new Error('Order is already being submitted. Please wait.');
         }
 
         // Skip setting loading state since we're showing a payment processing overlay already
         // This avoids unnecessary UI updates that can slow down the process
         set({ error: null, isPlacingOrder: true });
+        const tempId = `temp-${Date.now()}`;
         try {
           // Separate food vs merchandise
           const foodItems = [];
@@ -737,6 +734,7 @@ export const useOrderStore = create<OrderStore>()(
                 name: item.name,
                 quantity: item.quantity,
                 price: item.price,
+                merchandise_variant_id: item.variant_id,
                 variant_id: item.variant_id,
                 size: item.size,
                 color: item.color,
@@ -779,7 +777,6 @@ export const useOrderStore = create<OrderStore>()(
           };
 
           // Optimistic UI: create a temporary order
-          const tempId = `temp-${Date.now()}`;
           const optimisticOrder: Order = {
             id: tempId,
             status: 'pending',
@@ -820,11 +817,7 @@ export const useOrderStore = create<OrderStore>()(
             orders: get().orders.filter(order => order.id !== tempId)
           });
           console.error('Failed to create order:', err);
-          return {
-            id: `error-${Date.now()}`,
-            status: 'error',
-            error: err.message
-          } as any;
+          throw err;
         } finally {
           set({ isPlacingOrder: false });
         }

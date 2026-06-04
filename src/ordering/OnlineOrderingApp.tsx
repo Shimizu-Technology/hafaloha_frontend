@@ -7,6 +7,7 @@ import { Hero } from './components/Hero';
 import { MenuPage } from './components/MenuPage';
 import { CartPage } from './components/CartPage';
 import { CheckoutPage } from './components/CheckoutPage';
+import { CheckoutReturn } from './components/CheckoutReturn';
 import { OrderConfirmation } from './components/OrderConfirmation';
 import MerchandisePage from './components/MerchandisePage';
 // Lazy load AdminDashboard to reduce initial bundle size
@@ -337,6 +338,7 @@ export default function OnlineOrderingApp() {
         {/* /cart => Cart */}
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
+        <Route path="checkout/return" element={<CheckoutReturn />} />
         <Route path="order-confirmation" element={<OrderConfirmation />} />
         <Route path="order-confirmation/:orderId" element={<OrderConfirmation />} />
 

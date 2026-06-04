@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import posthog from 'posthog-js';
 import { PostHogProvider as OriginalPostHogProvider } from 'posthog-js/react';
 import { useAuthStore } from '../../auth';
@@ -10,7 +10,7 @@ const posthogOptions = {
   autocapture: true,
   capture_pageview: true,
   capture_pageleave: true,
-  disable_session_recording: false, // Enable session recording
+  disable_session_recording: true, // Avoid recording checkout/admin PII in this legacy app
   // Add safe localStorage handling for incognito mode
   persistence: "memory" as const, // Use memory persistence in incognito mode
   bootstrap: {
@@ -24,29 +24,19 @@ const isIncognitoMode = () => {
     localStorage.setItem('test', 'test');
     localStorage.removeItem('test');
     return false;
-  } catch (e) {
+  } catch {
     return true;
   }
 };
 
 // Create wrapper component to handle restaurant context
 const PostHogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Use state to track if we've initialized safely
-  const [isInitialized, setIsInitialized] = useState(false);
-  
-  // Only use these hooks if we're not in incognito mode
-  const authStore = !isIncognitoMode() ? useAuthStore() : { user: null };
-  const restaurantStore = !isIncognitoMode() ? useRestaurantStore() : { restaurant: null };
-  
-  const { user } = authStore;
-  const { restaurant } = restaurantStore;
+  const { user } = useAuthStore();
+  const { restaurant } = useRestaurantStore();
   
   // Initialize PostHog safely
   useEffect(() => {
     try {
-      // Mark as initialized
-      setIsInitialized(true);
-      
       // In incognito mode, use an anonymous ID
       const inIncognito = isIncognitoMode();
       if (inIncognito) {
@@ -77,8 +67,7 @@ const PostHogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) 
           vip_enabled: restaurant.vip_enabled
         });
       }
-    } catch (error) {
-      // Continue rendering the app even if PostHog fails
+    } catch {
       // Continue rendering the app even if PostHog fails
     }
   }, [user, restaurant]);

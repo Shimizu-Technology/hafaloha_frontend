@@ -45,21 +45,23 @@ export async function resendVerificationCode(): Promise<{ message: string }> {
  * Request a password reset for a user
  */
 export async function requestPasswordReset(email: string): Promise<{ message: string }> {
-  return api.post<{ message: string }>('/password/reset', { email });
+  return api.post<{ message: string }>('/password/forgot', { email });
 }
 
 /**
  * Reset a user's password with a token
  */
 export async function resetPassword(
+  email: string,
   token: string,
   password: string,
   passwordConfirmation: string
-): Promise<{ message: string }> {
-  return api.post<{ message: string }>('/password/update', {
+): Promise<AuthResponse> {
+  return api.patch<AuthResponse>('/password/reset', {
+    email,
     token,
-    password,
-    password_confirmation: passwordConfirmation,
+    new_password: password,
+    new_password_confirmation: passwordConfirmation,
   });
 }
 

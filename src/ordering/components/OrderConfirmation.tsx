@@ -87,7 +87,7 @@ export function OrderConfirmation() {
         setLoading(true);
         const response = await api.get<OrderDetails>(`/orders/${orderId}`);
         setOrderDetails(response);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to fetch order details:', err);
         setError('Unable to load order details');
       } finally {
@@ -156,9 +156,11 @@ export function OrderConfirmation() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="max-w-2xl mx-auto text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">Order Confirmation</h1>
-          <p className="text-lg text-red-600 mb-4">{error || 'Order details not available'}</p>
+          <p className="text-lg text-red-600 mb-4">{error || 'We could not verify your order details'}</p>
           <p className="text-gray-600 mb-8">
-            Order #{orderId} {error ? 'could not be loaded' : 'has been received'}
+            {orderId !== 'N/A'
+              ? `Order #${orderId} could not be verified.`
+              : 'We do not have a confirmed order reference for this checkout.'}
           </p>
           <Link
             to="/menu"
