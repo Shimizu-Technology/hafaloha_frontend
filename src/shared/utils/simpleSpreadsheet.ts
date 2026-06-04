@@ -21,9 +21,26 @@ interface ZipEntry {
 const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const encoder = new TextEncoder();
 
+function isValidXmlTextCodePoint(codePoint: number): boolean {
+  return codePoint === 0x09 ||
+    codePoint === 0x0a ||
+    codePoint === 0x0d ||
+    (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+    (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+    (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+}
+
+function sanitizeXmlText(value: string): string {
+  // XML 1.0 forbids most C0 control characters. Strip them so one bad
+  // report value cannot make the generated XLSX unreadable.
+  return Array.from(value)
+    .filter((character) => isValidXmlTextCodePoint(character.codePointAt(0) || 0))
+    .join('');
+}
+
 function escapeXml(value: SpreadsheetValue): string {
   const normalized = value instanceof Date ? value.toISOString() : value ?? '';
-  return String(normalized)
+  return sanitizeXmlText(String(normalized))
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
