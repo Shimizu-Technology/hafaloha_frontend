@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LoadingSpinner } from '../../shared/components/ui';
 import { locationsApi } from '../../shared/api/endpoints/locations';
 import { stripeApi } from '../../shared/api/endpoints/stripe';
+import type { OrderByTransactionResponse } from '../../shared/api/endpoints/stripe';
 import { useOrderStore } from '../store/orderStore';
 import type { Order } from '../types/order';
 import { clearPendingCheckoutDraft, loadPendingCheckoutDraft } from '../utils/pendingCheckout';
@@ -23,6 +24,47 @@ type ApiErrorLike = {
 function checkoutErrorMessage(error: unknown) {
   const apiError = error as ApiErrorLike;
   return apiError.response?.data?.error || apiError.message || 'We could not finalize your order.';
+}
+
+const ORDER_STATUSES: ReadonlySet<Order['status']> = new Set([
+  'pending',
+  'confirmed',
+  'preparing',
+  'ready',
+  'completed',
+  'cancelled',
+  'refunded',
+  'error',
+]);
+
+function isOrderStatus(value: unknown): value is Order['status'] {
+  return typeof value === 'string' && ORDER_STATUSES.has(value as Order['status']);
+}
+
+function numericValue(value: unknown, fallback: number) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeRecoveredOrder(order: OrderByTransactionResponse, draft: PendingCheckoutDraft | null): Order {
+  return {
+    id: String(order.id),
+    order_number: typeof order.order_number === 'string' ? order.order_number : undefined,
+    status: isOrderStatus(order.status) ? order.status : 'pending',
+    total: numericValue(order.total, draft?.finalTotal ?? 0),
+    subtotal: order.subtotal === undefined ? undefined : numericValue(order.subtotal, 0),
+    tax: order.tax === undefined ? undefined : numericValue(order.tax, 0),
+    items: Array.isArray(order.items) ? (order.items as Order['items']) : [],
+    merchandise_items: Array.isArray(order.merchandise_items)
+      ? (order.merchandise_items as Order['merchandise_items'])
+      : [],
+    created_at: typeof order.created_at === 'string' ? order.created_at : undefined,
+    updated_at: typeof order.updated_at === 'string' ? order.updated_at : undefined,
+    estimated_pickup_time: typeof order.estimated_pickup_time === 'string' ? order.estimated_pickup_time : undefined,
+    location_name: typeof order.location_name === 'string' ? order.location_name : undefined,
+    location_address: typeof order.location_address === 'string' ? order.location_address : undefined,
+    location_id: typeof order.location_id === 'number' ? order.location_id : undefined,
+  };
 }
 
 export function CheckoutReturn() {
@@ -82,6 +124,7 @@ export function CheckoutReturn() {
     const finalizeOrder = async () => {
       const paymentIntentId = searchParams.get('payment_intent');
       const redirectStatus = searchParams.get('redirect_status');
+      const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
       const draft = loadPendingCheckoutDraft();
       const restaurantId = localStorage.getItem('restaurant_id') || import.meta.env.VITE_RESTAURANT_ID || '1';
 
@@ -104,10 +147,16 @@ export function CheckoutReturn() {
           return;
         }
 
-        const existingOrder = await stripeApi.findOrderByTransaction(paymentIntent.id, restaurantId);
-        if (existingOrder) {
-          await navigateToConfirmation(existingOrder as unknown as Order, draft);
-          return;
+        if (paymentIntentClientSecret) {
+          const existingOrder = await stripeApi.findOrderByTransaction(
+            paymentIntent.id,
+            restaurantId,
+            paymentIntentClientSecret
+          );
+          if (existingOrder) {
+            await navigateToConfirmation(normalizeRecoveredOrder(existingOrder, draft), draft);
+            return;
+          }
         }
 
         if (!draft) {

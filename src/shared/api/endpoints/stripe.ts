@@ -15,7 +15,7 @@ interface PaymentIntentDetailsResponse {
   payment_method_types?: string[];
 }
 
-interface OrderByTransactionResponse {
+export interface OrderByTransactionResponse {
   id: string;
   [key: string]: unknown;
 }
@@ -68,10 +68,12 @@ export const stripeApi = {
    * @returns A promise that resolves to the confirmed payment intent
    */
   confirmPaymentIntent: async (
-    paymentIntentId: string
+    paymentIntentId: string,
+    restaurantId: string = localStorage.getItem('restaurant_id') || import.meta.env.VITE_RESTAURANT_ID || '1'
   ): Promise<PaymentIntentDetailsResponse> => {
     const response = await api.post<PaymentIntentDetailsResponse>('/stripe/confirm_intent', {
       payment_intent_id: paymentIntentId,
+      restaurant_id: restaurantId,
     });
     return response;
   },
@@ -82,12 +84,14 @@ export const stripeApi = {
    */
   findOrderByTransaction: async (
     transactionId: string,
-    restaurantId: string
+    restaurantId: string,
+    paymentIntentClientSecret: string
   ): Promise<OrderByTransactionResponse | null> => {
     try {
       const response = await api.get<OrderByTransactionResponse>('/orders/by_transaction', {
         transaction_id: transactionId,
         restaurant_id: restaurantId,
+        payment_intent_client_secret: paymentIntentClientSecret,
       }, { silent: true });
       return response;
     } catch (error: unknown) {

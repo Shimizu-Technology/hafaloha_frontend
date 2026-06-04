@@ -94,11 +94,11 @@ export const utils = {
 
 export function writeFile(workbook: Workbook, filename: string): void {
   const xml = workbookToSpreadsheetXml(workbook);
-  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const blob = new Blob([xml], { type: 'application/xml;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = filename.replace(/\.(xlsx|csv)$/i, '.xls');
+  link.download = filename.replace(/\.(xlsx|xls|csv)$/i, '.xml');
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

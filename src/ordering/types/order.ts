@@ -8,7 +8,7 @@ export interface OrderItem {
   quantity: number;
   options?: string[];
   notes?: string;
-  customizations?: any[] | Record<string, any>;
+  customizations?: unknown[] | Record<string, unknown>;
 }
 
 export interface OrderPayment {
@@ -48,11 +48,13 @@ export interface Order {
   contact_phone?: string;
   contact_email?: string;
   pickup_time?: string;
+  estimated_pickup_time?: string;
   payment_method?: string;
   payment_status?: string;
   total_refunded?: number;
   order_payments?: OrderPayment[];
   location_name?: string;
+  location_address?: string;
   transaction_id?: string;
   restaurant_id?: string;
   staff_created?: boolean; // Flag to indicate if order was created by staff
