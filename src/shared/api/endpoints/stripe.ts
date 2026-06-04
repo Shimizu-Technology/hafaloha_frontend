@@ -15,6 +15,17 @@ interface PaymentIntentDetailsResponse {
   payment_method_types?: string[];
 }
 
+interface OrderByTransactionResponse {
+  id: string;
+  [key: string]: unknown;
+}
+
+type ApiErrorLike = {
+  response?: {
+    status?: number;
+  };
+};
+
 /**
  * API client for Stripe-related endpoints
  */
@@ -63,5 +74,26 @@ export const stripeApi = {
       payment_intent_id: paymentIntentId,
     });
     return response;
+  },
+
+  /**
+   * Find an existing order by Stripe payment intent/transaction ID.
+   * Used by checkout recovery before re-submitting an already-paid order.
+   */
+  findOrderByTransaction: async (
+    transactionId: string,
+    restaurantId: string
+  ): Promise<OrderByTransactionResponse | null> => {
+    try {
+      const response = await api.get<OrderByTransactionResponse>('/orders/by_transaction', {
+        transaction_id: transactionId,
+        restaurant_id: restaurantId,
+      }, { silent: true });
+      return response;
+    } catch (error: unknown) {
+      const apiError = error as ApiErrorLike;
+      if (apiError.response?.status === 404) return null;
+      throw error;
+    }
   },
 };

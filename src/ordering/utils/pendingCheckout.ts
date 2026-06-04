@@ -8,7 +8,6 @@ export interface PendingCheckoutFormData {
   email: string;
   phone: string;
   specialInstructions: string;
-  promoCode: string;
   vipCode: string;
 }
 

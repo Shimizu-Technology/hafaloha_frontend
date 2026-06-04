@@ -11,31 +11,71 @@ interface Workbook {
   sheets: WorkbookSheet[];
 }
 
-function escapeCsvValue(value: SpreadsheetValue): string {
+function escapeXml(value: SpreadsheetValue): string {
   const normalized = value instanceof Date ? value.toISOString() : value ?? '';
-  const stringValue = String(normalized);
-
-  if (/[",\n\r]/.test(stringValue)) {
-    return `"${stringValue.replace(/"/g, '""')}"`;
-  }
-
-  return stringValue;
+  return String(normalized)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
-function worksheetToCsv(rows: Worksheet): string {
-  if (!rows.length) return '';
+function spreadsheetType(value: SpreadsheetValue): 'String' | 'Number' | 'Boolean' | 'DateTime' {
+  if (value instanceof Date) return 'DateTime';
+  if (typeof value === 'number') return 'Number';
+  if (typeof value === 'boolean') return 'Boolean';
+  return 'String';
+}
 
-  const headers = Array.from(
+function cellXml(value: SpreadsheetValue): string {
+  const type = spreadsheetType(value);
+  const normalized = typeof value === 'boolean' ? (value ? '1' : '0') : value;
+  return `<Cell><Data ss:Type="${type}">${escapeXml(normalized)}</Data></Cell>`;
+}
+
+function worksheetHeaders(rows: Worksheet): string[] {
+  return Array.from(
     rows.reduce<Set<string>>((set, row) => {
       Object.keys(row).forEach((key) => set.add(key));
       return set;
     }, new Set())
   );
+}
 
-  return [
-    headers.map(escapeCsvValue).join(','),
-    ...rows.map((row) => headers.map((header) => escapeCsvValue(row[header])).join(',')),
-  ].join('\n');
+function sanitizeSheetName(name: string, index: number): string {
+  const sanitized = name
+    .replace(/[\\/?*:]/g, ' ')
+    .replace(/\[/g, ' ')
+    .replace(/\]/g, ' ')
+    .trim() || `Sheet ${index + 1}`;
+  return sanitized.slice(0, 31);
+}
+
+function worksheetToXml(sheet: WorkbookSheet, index: number): string {
+  const headers = worksheetHeaders(sheet.rows);
+  const headerRow = `<Row>${headers.map(cellXml).join('')}</Row>`;
+  const dataRows = sheet.rows
+    .map((row) => `<Row>${headers.map((header) => cellXml(row[header])).join('')}</Row>`)
+    .join('');
+
+  return `
+    <Worksheet ss:Name="${escapeXml(sanitizeSheetName(sheet.name, index))}">
+      <Table>${headerRow}${dataRows}</Table>
+    </Worksheet>`;
+}
+
+function workbookToSpreadsheetXml(workbook: Workbook): string {
+  const sheets = workbook.sheets.length ? workbook.sheets : [{ name: 'Sheet 1', rows: [] }];
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  ${sheets.map(worksheetToXml).join('')}
+</Workbook>`;
 }
 
 export const utils = {
@@ -53,15 +93,12 @@ export const utils = {
 };
 
 export function writeFile(workbook: Workbook, filename: string): void {
-  const csv = workbook.sheets
-    .map((sheet) => [`# ${sheet.name}`, worksheetToCsv(sheet.rows)].filter(Boolean).join('\n'))
-    .join('\n\n');
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const xml = workbookToSpreadsheetXml(workbook);
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = filename.replace(/\.xlsx$/i, '.csv');
+  link.download = filename.replace(/\.(xlsx|csv)$/i, '.xls');
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

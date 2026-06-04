@@ -5,7 +5,9 @@ import { LoadingSpinner } from '../../shared/components/ui';
 import { locationsApi } from '../../shared/api/endpoints/locations';
 import { stripeApi } from '../../shared/api/endpoints/stripe';
 import { useOrderStore } from '../store/orderStore';
+import type { Order } from '../types/order';
 import { clearPendingCheckoutDraft, loadPendingCheckoutDraft } from '../utils/pendingCheckout';
+import type { PendingCheckoutDraft } from '../utils/pendingCheckout';
 
 type FinalizeState = 'processing' | 'error';
 
@@ -27,11 +29,55 @@ export function CheckoutReturn() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const addOrder = useOrderStore((state) => state.addOrder);
+  const clearCart = useOrderStore((state) => state.clearCart);
   const [state, setState] = useState<FinalizeState>('processing');
   const [message, setMessage] = useState('Finalizing your order...');
 
   useEffect(() => {
     let cancelled = false;
+
+    const navigateToConfirmation = async (order: Order, draft: PendingCheckoutDraft | null) => {
+      let locationName = '';
+      let locationAddress = '';
+      const hasAny24hrItem = draft?.cartItems.some((item) => (item.advance_notice_hours ?? 0) >= 24) ?? false;
+
+      if (draft?.locationId) {
+        try {
+          const location = await locationsApi.getLocation(draft.locationId);
+          locationName = location.name;
+          locationAddress = location.address;
+        } catch (error) {
+          console.error('Error fetching location details for recovered confirmation:', error);
+        }
+      }
+
+      clearPendingCheckoutDraft();
+      clearCart();
+
+      if (!cancelled) {
+        navigate(`/order-confirmation/${order.id}`, {
+          replace: true,
+          state: {
+            orderDetails: {
+              ...order,
+              ...(draft
+                ? {
+                    location_name: locationName,
+                    location_address: locationAddress,
+                    requires_advance_notice: hasAny24hrItem,
+                    max_advance_notice_hours: hasAny24hrItem ? 24 : undefined,
+                  }
+                : {}),
+            },
+            orderId: order.id,
+            total: draft?.finalTotal ?? order.total,
+            hasAny24hrItem,
+            locationName,
+            locationAddress,
+          },
+        });
+      }
+    };
 
     const finalizeOrder = async () => {
       const paymentIntentId = searchParams.get('payment_intent');
@@ -45,12 +91,6 @@ export function CheckoutReturn() {
         return;
       }
 
-      if (!draft) {
-        setState('error');
-        setMessage('We could not recover your checkout details. Please contact support before trying again.');
-        return;
-      }
-
       try {
         const paymentIntent = await stripeApi.getPaymentIntent(paymentIntentId, restaurantId);
 
@@ -61,6 +101,18 @@ export function CheckoutReturn() {
               ? 'Your payment was not completed.'
               : `Your payment is currently ${paymentIntent.status}.`
           );
+          return;
+        }
+
+        const existingOrder = await stripeApi.findOrderByTransaction(paymentIntent.id, restaurantId);
+        if (existingOrder) {
+          await navigateToConfirmation(existingOrder as unknown as Order, draft);
+          return;
+        }
+
+        if (!draft) {
+          setState('error');
+          setMessage('We could not recover your checkout details. Please contact support before trying again.');
           return;
         }
 
@@ -89,41 +141,7 @@ export function CheckoutReturn() {
           draft.locationId ?? null
         );
 
-        let locationName = '';
-        let locationAddress = '';
-        const hasAny24hrItem = draft.cartItems.some((item) => (item.advance_notice_hours ?? 0) >= 24);
-
-        if (draft.locationId) {
-          try {
-            const location = await locationsApi.getLocation(draft.locationId);
-            locationName = location.name;
-            locationAddress = location.address;
-          } catch (error) {
-            console.error('Error fetching location details for recovered confirmation:', error);
-          }
-        }
-
-        clearPendingCheckoutDraft();
-
-        if (!cancelled) {
-          navigate(`/order-confirmation/${newOrder.id}`, {
-            replace: true,
-            state: {
-              orderDetails: {
-                ...newOrder,
-                location_name: locationName,
-                location_address: locationAddress,
-                requires_advance_notice: hasAny24hrItem,
-                max_advance_notice_hours: hasAny24hrItem ? 24 : undefined,
-              },
-              orderId: newOrder.id,
-              total: draft.finalTotal,
-              hasAny24hrItem,
-              locationName,
-              locationAddress,
-            },
-          });
-        }
+        await navigateToConfirmation(newOrder, draft);
       } catch (error: unknown) {
         console.error('Failed to finalize Stripe checkout return:', error);
         setState('error');
@@ -136,7 +154,7 @@ export function CheckoutReturn() {
     return () => {
       cancelled = true;
     };
-  }, [addOrder, navigate, searchParams]);
+  }, [addOrder, clearCart, navigate, searchParams]);
 
   if (state === 'processing') {
     return (

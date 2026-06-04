@@ -181,7 +181,13 @@ export function CheckoutPage() {
       restaurantId,
       cartItems: cartItems.map((item) => ({ ...item })),
       finalTotal,
-      formData: { ...formData },
+      formData: {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        specialInstructions: formData.specialInstructions,
+        vipCode: formData.vipCode,
+      },
       locationId,
     });
   };
