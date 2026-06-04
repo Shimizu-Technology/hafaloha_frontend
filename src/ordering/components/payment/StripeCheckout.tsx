@@ -290,6 +290,7 @@ export const StripeCheckout = React.forwardRef<StripeCheckoutRef, StripeCheckout
         payment_method: {
           card: cardElement,
         },
+        return_url: `${window.location.origin}/checkout/return`,
       });
 
       if (confirmError) {
