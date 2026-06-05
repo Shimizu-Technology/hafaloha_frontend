@@ -30,6 +30,19 @@ export interface OrdersMetadata {
   total_pages: number;
 }
 
+function earliestAdvanceNoticePickupTime(items: CartItem[]): string | undefined {
+  const maxAdvanceNoticeHours = Math.max(
+    0,
+    ...items.map((item) => item.advance_notice_hours ?? 0)
+  );
+
+  if (maxAdvanceNoticeHours < 24) return undefined;
+
+  // Add a small buffer so the backend's "now + notice" validation cannot fail
+  // because a few seconds elapsed between building the payload and validation.
+  return new Date(Date.now() + (maxAdvanceNoticeHours * 60 + 5) * 60 * 1000).toISOString();
+}
+
 export interface OrderQueryParams {
   page?: number;
   perPage?: number;
@@ -755,6 +768,7 @@ export const useOrderStore = create<OrderStore>()(
           // Extract staffOrderParams from paymentDetails if present
           const staffOrderParams = paymentDetails?.staffOrderParams || {};
           
+          const advanceNoticePickupTime = earliestAdvanceNoticePickupTime(items);
           const payload = {
             order: {
               items: foodItems,
@@ -769,6 +783,7 @@ export const useOrderStore = create<OrderStore>()(
               vip_code: vipCode,
               staff_modal: staffModal,
               payment_details: paymentDetails,
+              estimated_pickup_time: advanceNoticePickupTime,
               // Include location_id if provided
               location_id: locationId,
               // Include staff order parameters, especially created_by_staff_id
@@ -789,6 +804,7 @@ export const useOrderStore = create<OrderStore>()(
             contact_email: contactEmail || '',
             transaction_id: transactionId || '',
             payment_method: paymentMethod,
+            estimated_pickup_time: advanceNoticePickupTime,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
