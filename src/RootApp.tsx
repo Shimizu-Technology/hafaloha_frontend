@@ -1,66 +1,23 @@
-// src/RootApp.tsx
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider, ScrollToTop, RestaurantProvider } from './shared';
-import PostHogProvider from './shared/components/analytics/PostHogProvider';
-import { ToastContainer } from './shared/components/ToastContainer';
-import { PaymentScriptPreloader } from './shared/components/payment/PaymentScriptPreloader';
+import { lazy, Suspense } from 'react';
+import { AvailabilityLoading, ServiceStatusPage } from './components/ServiceStatusPage';
+import { useServiceAvailability } from './hooks/useServiceAvailability';
 
-import GlobalLayout from './GlobalLayout';
-import ReservationsApp from './reservations/ReservationsApp';
-import OnlineOrderingApp from './ordering/OnlineOrderingApp';
-import WholesaleApp from './wholesale/WholesaleApp';
+const LiveApp = lazy(() => import('./LiveApp'));
 
 export default function RootApp() {
+  const { status, retry } = useServiceAvailability();
+
+  if (status === 'checking') {
+    return <AvailabilityLoading />;
+  }
+
+  if (status === 'unavailable') {
+    return <ServiceStatusPage onRetry={() => void retry()} />;
+  }
+
   return (
-    <AuthProvider>
-      <RestaurantProvider>
-        {/* Preload payment scripts based on restaurant settings */}
-        <PaymentScriptPreloader />
-        
-        {/* Move PostHogProvider inside AuthProvider and RestaurantProvider */}
-        <PostHogProvider>
-          <BrowserRouter>
-            <ScrollToTop />
-            <ToastContainer
-              position="top-right"
-              reverseOrder={false}
-              containerStyle={{
-                maxHeight: '100vh',
-                overflow: 'auto',
-                paddingRight: '10px',
-                scrollBehavior: 'smooth'
-              }}
-              containerClassName="scrollable-toast-container"
-              gutter={8}
-              toastOptions={{
-                // Customize for different screen sizes
-                className: '',
-                style: {
-                  maxWidth: '100%',
-                  width: 'auto'
-                },
-                // Default duration of 5 seconds for regular toasts
-                // Order notifications in AdminDashboard will override this with their own duration: Infinity
-                duration: 5000
-              }}
-            />
-
-            <Routes>
-              <Route element={<GlobalLayout />}>
-                {/* Serve Reservations at /reservations/* */}
-                <Route path="/reservations/*" element={<ReservationsApp />} />
-                
-                {/* Serve Wholesale at /wholesale/* */}
-                <Route path="/wholesale/*" element={<WholesaleApp />} />
-
-                {/* Everything else => OnlineOrderingApp at the root */}
-                <Route path="/*" element={<OnlineOrderingApp />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
-        </PostHogProvider>
-      </RestaurantProvider>
-    </AuthProvider>
+    <Suspense fallback={<AvailabilityLoading />}>
+      <LiveApp />
+    </Suspense>
   );
 }
