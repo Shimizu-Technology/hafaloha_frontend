@@ -55,6 +55,61 @@ export function AvailabilityLoading() {
   );
 }
 
+interface LiveAppLoadErrorPageProps {
+  onReload: () => void;
+}
+
+export function LiveAppLoadErrorPage({ onReload }: LiveAppLoadErrorPageProps) {
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Reload ordering | Håfaloha';
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
+  return (
+    <main className="min-h-screen bg-[#f4efe5] px-6 py-12 text-[#153c32] sm:py-20">
+      <div className="mx-auto max-w-xl overflow-hidden rounded-[2rem] border border-[#153c32]/10 bg-white shadow-[0_30px_90px_rgba(21,60,50,0.15)]">
+        <div className="h-2 bg-[linear-gradient(90deg,#eb578c_0_25%,#45c0b5_25%_50%,#ffd84c_50%_75%,#ff7f6a_75%)]" aria-hidden="true" />
+        <div className="px-7 py-10 text-center sm:px-12 sm:py-14">
+          <img
+            src={circleLogo}
+            alt="Håfaloha"
+            className="mx-auto h-24 w-24 rounded-full object-contain shadow-[0_14px_36px_rgba(21,60,50,0.15)]"
+          />
+          <p className="mt-7 text-xs font-bold uppercase tracking-[0.2em] text-[#153c32]/55">
+            Connection interrupted
+          </p>
+          <h1 className="mt-3 text-3xl font-black tracking-[-0.035em] sm:text-4xl">
+            The ordering page didn&apos;t finish loading.
+          </h1>
+          <p className="mx-auto mt-4 max-w-md leading-relaxed text-[#153c32]/70">
+            Refresh the page to try loading it again. If the problem continues, call Håfaloha and the team will be happy to help.
+          </p>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={onReload}
+              className="inline-flex min-h-12 items-center justify-center rounded-full bg-[#153c32] px-6 font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#0d2f27] focus:outline-none focus:ring-2 focus:ring-[#153c32] focus:ring-offset-2"
+            >
+              Reload ordering
+            </button>
+            <a
+              href="tel:+16719893444"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#153c32]/20 px-6 font-bold transition hover:-translate-y-0.5 hover:border-[#153c32]/40 focus:outline-none focus:ring-2 focus:ring-[#153c32] focus:ring-offset-2"
+            >
+              <PhoneIcon />
+              (671) 989-3444
+            </a>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 interface ServiceStatusPageProps {
   onRetry: () => void;
 }

@@ -24,14 +24,19 @@ export function useServiceAvailability() {
   useEffect(() => {
     void retry();
 
-    const handleOnline = () => void retry();
-    window.addEventListener('online', handleOnline);
-
     return () => {
-      window.removeEventListener('online', handleOnline);
       activeCheck.current?.abort();
     };
   }, [retry]);
+
+  useEffect(() => {
+    if (status !== 'unavailable') return;
+
+    const handleOnline = () => void retry();
+    window.addEventListener('online', handleOnline);
+
+    return () => window.removeEventListener('online', handleOnline);
+  }, [retry, status]);
 
   return { status, retry };
 }

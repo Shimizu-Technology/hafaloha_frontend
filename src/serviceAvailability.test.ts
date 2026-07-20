@@ -62,4 +62,19 @@ describe('checkServiceAvailability', () => {
       timeoutMs: 5
     })).resolves.toBe(false);
   });
+
+  it('does not start a request when the caller signal is already aborted', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(async () => jsonResponse({ status: 'available', restaurant_id: 7 }));
+    controller.abort();
+
+    await expect(checkServiceAvailability({
+      apiBaseUrl: 'https://api.example.com',
+      restaurantId: '7',
+      fetchImpl,
+      signal: controller.signal
+    })).resolves.toBe(false);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

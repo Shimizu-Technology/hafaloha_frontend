@@ -32,6 +32,8 @@ export async function checkServiceAvailability({
   signal,
   timeoutMs = DEFAULT_TIMEOUT_MS
 }: CheckServiceAvailabilityOptions = {}): Promise<boolean> {
+  if (signal?.aborted) return false;
+
   const controller = new AbortController();
   const abortCheck = () => controller.abort();
   const timeout = globalThis.setTimeout(abortCheck, timeoutMs);
